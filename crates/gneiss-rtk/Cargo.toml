@@ -1,0 +1,13 @@
+[package]
+name = "gneiss-rtk"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+gneiss-core.workspace = true
+gneiss-geodesy = { version = "0.1.0", path = "../gneiss-geodesy" }
+libm = "0.2.16"
+nalgebra = { version = "0.32", default-features = false, features = ["alloc"] }
+serde = { version = "1.0.228", features = ["derive"] }
+tracing = "0.1.44"

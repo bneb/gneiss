@@ -1,0 +1,12 @@
+[package]
+name = "gneiss-tests"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+publish = false
+
+[dependencies]
+gneiss-core.workspace = true
+gneiss-rtk.workspace = true
+gneiss-parsers.workspace = true
+nalgebra = { version = "0.32", default-features = false, features = ["alloc"] }

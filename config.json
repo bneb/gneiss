@@ -1,0 +1,13 @@
+{
+    "base_position": [-1283434.6250, -4713071.9830, 4090105.0479],
+    "imu_to_antenna_lever_arm": [0.0, 0.0, 0.0],
+    "enable_imu_fusion": false,
+    "enable_nhc": false,
+    "enable_backward_smoothing": false,
+    "lambda_min_ratio": 3.0,
+    "lambda_min_subset": 7,
+    "raim_pseudorange_outlier_m": 50.0,
+    "chi_square_pr_threshold": 30.0,
+    "chi_square_cp_threshold": 30.0,
+    "nominal_snr_dbhz": 45.0
+}

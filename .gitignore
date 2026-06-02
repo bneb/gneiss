@@ -1,0 +1,16 @@
+/target/
+*.log
+*.pos
+*.rtcm3
+test_parse
+test_parse.rs
+.DS_Store
+
+# Ignore all downloaded data and archives
+datasets/*
+!datasets/README.md
+evaluate_static
+evaluate_static.rs
+find_errors
+find_errors.rs
+.env

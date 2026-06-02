@@ -1,0 +1,11 @@
+[package]
+name = "gneiss-geodesy"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+nalgebra = { version = "0.32", default-features = false, features = ["alloc"] }
+libm = "0.2"
+serde = { version = "1.0.228", features = ["derive"] }
+gneiss-core = { version = "0.1.0", path = "../gneiss-core" }

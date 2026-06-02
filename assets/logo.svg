@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#00F2FE;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#4FACFE;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="grad2" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#FF0844;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#FFB199;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <rect width="512" height="512" fill="#0B0C10" rx="100" />
+  
+  <!-- Outer GNSS orbits -->
+  <ellipse cx="256" cy="256" rx="180" ry="80" fill="none" stroke="#1F2833" stroke-width="4" transform="rotate(30 256 256)" />
+  <ellipse cx="256" cy="256" rx="180" ry="80" fill="none" stroke="#1F2833" stroke-width="4" transform="rotate(-30 256 256)" />
+  <ellipse cx="256" cy="256" rx="180" ry="80" fill="none" stroke="#1F2833" stroke-width="4" transform="rotate(90 256 256)" />
+
+  <!-- Center Hexagon (representing Gneiss rock structure / INS integration) -->
+  <polygon points="256,156 342.6,206 342.6,306 256,356 169.4,306 169.4,206" fill="none" stroke="url(#grad1)" stroke-width="16" stroke-linejoin="round"/>
+  
+  <!-- Inner precision pinpoint -->
+  <circle cx="256" cy="256" r="24" fill="url(#grad2)" />
+  
+  <!-- Precision axes -->
+  <line x1="256" y1="180" x2="256" y2="232" stroke="url(#grad2)" stroke-width="6" stroke-linecap="round" />
+  <line x1="256" y1="280" x2="256" y2="332" stroke="url(#grad2)" stroke-width="6" stroke-linecap="round" />
+  <line x1="180" y1="256" x2="232" y2="256" stroke="url(#grad2)" stroke-width="6" stroke-linecap="round" />
+  <line x1="280" y1="256" x2="332" y2="256" stroke="url(#grad2)" stroke-width="6" stroke-linecap="round" />
+</svg>

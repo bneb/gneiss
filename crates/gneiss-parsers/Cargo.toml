@@ -1,0 +1,10 @@
+[package]
+name = "gneiss-parsers"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+gneiss-core.workspace = true
+nom = "7.1"
+bitvec = "1.0" # useful for RTCM and UBX binary parsing
