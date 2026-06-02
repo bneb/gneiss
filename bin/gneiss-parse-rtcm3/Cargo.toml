@@ -1,0 +1,9 @@
+[package]
+name = "gneiss-parse-rtcm3"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+gneiss-parsers.workspace = true
+tokio = { version = "1.37", features = ["full"] }

@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#00F2FE;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#4FACFE;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="grad2" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#FF0844;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#FFB199;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <rect width="1200" height="630" fill="#0B0C10" />
+  
+  <g transform="translate(180, 65)">
+      <!-- Logo scaled -->
+      <g transform="scale(0.95)">
+          <ellipse cx="256" cy="256" rx="180" ry="80" fill="none" stroke="#1F2833" stroke-width="4" transform="rotate(30 256 256)" />
+          <ellipse cx="256" cy="256" rx="180" ry="80" fill="none" stroke="#1F2833" stroke-width="4" transform="rotate(-30 256 256)" />
+          <ellipse cx="256" cy="256" rx="180" ry="80" fill="none" stroke="#1F2833" stroke-width="4" transform="rotate(90 256 256)" />
+
+          <polygon points="256,156 342.6,206 342.6,306 256,356 169.4,306 169.4,206" fill="none" stroke="url(#grad1)" stroke-width="16" stroke-linejoin="round"/>
+          
+          <circle cx="256" cy="256" r="24" fill="url(#grad2)" />
+          
+          <line x1="256" y1="180" x2="256" y2="232" stroke="url(#grad2)" stroke-width="6" stroke-linecap="round" />
+          <line x1="256" y1="280" x2="256" y2="332" stroke="url(#grad2)" stroke-width="6" stroke-linecap="round" />
+          <line x1="180" y1="256" x2="232" y2="256" stroke="url(#grad2)" stroke-width="6" stroke-linecap="round" />
+          <line x1="280" y1="256" x2="332" y2="256" stroke="url(#grad2)" stroke-width="6" stroke-linecap="round" />
+      </g>
+  </g>
+  
+  <text x="650" y="320" font-family="Arial" font-size="110" font-weight="bold" fill="#FFFFFF" text-anchor="start" alignment-baseline="middle">Gneiss</text>
+  <text x="650" y="410" font-family="Arial" font-size="34" fill="#C5C6C7" text-anchor="start" letter-spacing="4">STATE-OF-THE-ART NAVIGATION</text>
+</svg>

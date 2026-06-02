@@ -1,0 +1,25 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/*",
+    "bin/*",
+    "tests"
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Gemini CLI <gemini@example.com>"]
+
+[workspace.dependencies]
+gneiss-core = { path = "crates/gneiss-core" }
+gneiss-rtk = { path = "crates/gneiss-rtk" }
+gneiss-parsers = { path = "crates/gneiss-parsers" }
+gneiss-ntrip = { path = "crates/gneiss-ntrip" }
+gneiss-geodesy = { path = "crates/gneiss-geodesy" }
+gneiss-fetch = { path = "crates/gneiss-fetch" }
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+panic = "abort"

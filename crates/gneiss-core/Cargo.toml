@@ -1,0 +1,9 @@
+[package]
+name = "gneiss-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+nalgebra = { version = "0.32", default-features = false, features = ["alloc", "libm"] } # Linear algebra, #![no_std] compatible with alloc
+libm = "0.2" # Math functions for #![no_std]
