@@ -87,8 +87,8 @@ fn decorrelate(a: &DVector<f64>, q: &DMatrix<f64>) -> Result<(DVector<f64>, DMat
     let mut q_z = q.clone();
     for i in 0..n { q_z[(i, i)] += 1e-10; }
 
-    let mut l = DMatrix::<f64>::identity(n, n);
-    let mut d = DVector::<f64>::zeros(n);
+    let mut l;
+    let mut d;
 
     let mut k = (n - 2) as isize;
     let mut iter = 0;

@@ -14,3 +14,6 @@ pub mod sun;
 pub mod windup;
 mod geodetic_tests;
 pub mod tides;
+pub mod dop;
+pub mod variance;
+pub mod metrics;

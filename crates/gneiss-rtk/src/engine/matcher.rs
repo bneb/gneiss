@@ -1,9 +1,12 @@
 use crate::filter::DdObservation;
 use gneiss_core::obs::{EpochObs, ObsType};
 
-pub fn match_observations(rover_obs: &EpochObs, base_obs: &EpochObs) -> Vec<(DdObservation, DdObservation)> {
+pub fn match_observations(rover_obs: &EpochObs, base_obs: &EpochObs, ephemerides: &[gneiss_core::ephemeris::Ephemeris]) -> Vec<(DdObservation, DdObservation)> {
     let mut matched_obs = Vec::new();
     for r_sat in &rover_obs.satellites {
+        if ephemerides.iter().find(|e| e.sat() == r_sat.sat).is_none() {
+            continue;
+        }
         if let Some(b_sat) = base_obs.satellites.iter().find(|s| s.sat == r_sat.sat) {
             let r_pr_l1 = r_sat.observations.iter().find(|o| o.code.obs_type == ObsType::Pseudorange && o.code.signal.freq_band == 1);
             let r_pr_l2 = r_sat.observations.iter().find(|o| o.code.obs_type == ObsType::Pseudorange && o.code.signal.freq_band == 2);

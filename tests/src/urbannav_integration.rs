@@ -16,8 +16,10 @@ fn test_urbannav_tst_replay_skeleton() {
         return;
     }
 
-    let mut config = EngineConfig::default();
-    config.mode = gneiss_rtk::engine::EngineMode::RtkIns;
+    let config = EngineConfig {
+        mode: gneiss_rtk::engine::EngineMode::RtkIns,
+        ..Default::default()
+    };
     let _engine = ProcessingEngine::new(config);
 
     let mut file = File::open(dataset_path).unwrap();

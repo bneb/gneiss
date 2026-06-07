@@ -4,12 +4,12 @@ Gneiss is a tightly-coupled GNSS/INS processing engine built in Rust. To make us
 
 ## The 6 Core Engine Modes
 
-At its heart, Gneiss is a massive math engine capable of fusing different types of sensor data depending on what is available. The Engine Mode dictates what algorithms are used to solve the position.
+At its core, Gneiss is a navigation engine capable of fusing different types of sensor data depending on what is available. The Engine Mode dictates what algorithms are used to solve the position.
 
 1. **SPP (Standalone Point Positioning):** Uses only the rover's GNSS receiver and broadcast satellite ephemerides. Expected accuracy: 2-5 meters.
 2. **SPP-INS:** Fuses the SPP solution with IMU data in the Extended Kalman Filter (EKF) to bridge short gaps and smooth the trajectory.
 3. **RTK (Real-Time Kinematic):** Fuses the rover's GNSS data with a local stationary base station to cancel out atmospheric errors. Uses integer ambiguity resolution (LAMBDA). Expected accuracy: 1-3 centimeters.
-4. **RTK-INS:** Tightly couples the RTK solution with IMU measurements, providing incredible resilience in urban canyons and tunnels.
+4. **RTK-INS:** Tightly couples the RTK solution with IMU measurements, improving resilience in urban canyons and tunnels.
 5. **PPP (Precise Point Positioning):** Uses global high-precision ephemerides and clock corrections (instead of a local base station). Takes time to converge. Expected accuracy: 10-30 centimeters.
 6. **PPP-INS:** Tightly couples the PPP solution with IMU measurements.
 
@@ -28,21 +28,21 @@ The Live Pipeline is for physical deployment. It streams real-time data directly
 
 The Process Pipeline is for analyzing historical data. It reads from static files on your hard drive and processes them as fast as your CPU allows.
 - Reads standard formats: `.obs` / `.ubx` for rover, `.rtcm3` / `.obs` for base, and `.nav` / `.rnx` for ephemerides.
-- **Backward Smoothing:** Because all the data is available locally, the Post-Processing pipeline can optionally run the EKF backward in time (Rauch-Tung-Striebel smoothing) at the very end. This fixes errors and bridges gaps that the forward-running filter couldn't see coming.
+- **Backward Smoothing:** Because all the data is available locally, the Post-Processing pipeline can optionally run the EKF backward in time (Rauch-Tung-Striebel smoothing) at the very end. This can bridge gaps and reduce errors that the forward-running filter could not predict.
 
 ---
 
 ## The Data Fetcher (`gneiss-cli fetch`)
 
-Running RTK or PPP post-processing requires base station data or high-precision global ephemerides. Gathering this data manually is tedious. We provide a built-in `fetch` tool to automate this.
+Running RTK or PPP post-processing requires base station data or high-precision global ephemerides. We provide a built-in `fetch` tool to automate gathering this data.
 
 ```bash
 # Provide your rover observation file, and Gneiss will automatically figure out where and when you were
 gneiss-cli fetch --rover-obs ./rover.obs --source all --out-dir ./downloads/
 ```
 
-- **NOAA CORS:** Automatically finds the nearest physical base station to your rover's trajectory and downloads its Hatanaka-compressed observation file. It even invokes `crx2rnx` to seamlessly convert it to a standard RINEX `.obs` file.
-- **CDDIS:** Automatically downloads the precise global broadcast ephemerides (`BRDC`) for your specific day to enable multi-constellation processing and PPP.
+- **NOAA CORS:** Finds the nearest physical base station to your rover's trajectory and downloads its Hatanaka-compressed observation file, converting it via `crx2rnx` to a standard RINEX `.obs` file.
+- **CDDIS:** Downloads the precise global broadcast ephemerides (`BRDC`) for your specific day to enable multi-constellation processing and PPP.
 
 ## Example E2E Workflow: Urban Canyon Post-Processing
 

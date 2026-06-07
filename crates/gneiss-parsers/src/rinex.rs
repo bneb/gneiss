@@ -458,23 +458,51 @@ pub fn parse_rinex_nav<R: BufRead>(reader: R) -> Result<Vec<gneiss_core::ephemer
 
             current_prn = if is_rinex_3 {
                 if line.len() >= 3 { line[1..3].trim().parse::<u8>().unwrap_or(0) } else { 0 }
+            } else if line.len() >= 2 {
+                line[0..2].trim().parse::<u8>().unwrap_or(0)
             } else {
-                if line.len() >= 2 { line[0..2].trim().parse::<u8>().unwrap_or(0) } else { 0 }
+                0
             };
 
             let year_str = if is_rinex_3 { 
                 if line.len() >= 8 { &line[4..8] } else { "" }
-            } else { 
-                if line.len() >= 5 { &line[3..5] } else { "" }
+            } else if line.len() >= 5 {
+                &line[3..5]
+            } else {
+                ""
             };
             let mut year = year_str.trim().parse::<i32>().unwrap_or(0);
             if year < 100 { year += if year > 80 { 1900 } else { 2000 }; }
             
-            let month = if line.len() >= 11 { line[9..11].trim().parse::<i32>().unwrap_or(0) } else { 0 };
-            let day = if line.len() >= 14 { line[12..14].trim().parse::<i32>().unwrap_or(0) } else { 0 };
-            let hour = if line.len() >= 17 { line[15..17].trim().parse::<i32>().unwrap_or(0) } else { 0 };
-            let min = if line.len() >= 20 { line[18..20].trim().parse::<i32>().unwrap_or(0) } else { 0 };
-            let sec = if line.len() >= 22 { line[20..22].trim().parse::<f64>().unwrap_or(0.0) } else { 0.0 };
+            let month = if is_rinex_3 {
+                if line.len() >= 11 { line[9..11].trim().parse::<i32>().unwrap_or(0) } else { 0 }
+            } else if line.len() >= 8 {
+                line[5..8].trim().parse::<i32>().unwrap_or(0)
+            } else { 0 };
+            
+            let day = if is_rinex_3 {
+                if line.len() >= 14 { line[12..14].trim().parse::<i32>().unwrap_or(0) } else { 0 }
+            } else if line.len() >= 11 {
+                line[8..11].trim().parse::<i32>().unwrap_or(0)
+            } else { 0 };
+            
+            let hour = if is_rinex_3 {
+                if line.len() >= 17 { line[15..17].trim().parse::<i32>().unwrap_or(0) } else { 0 }
+            } else if line.len() >= 14 {
+                line[11..14].trim().parse::<i32>().unwrap_or(0)
+            } else { 0 };
+            
+            let min = if is_rinex_3 {
+                if line.len() >= 20 { line[18..20].trim().parse::<i32>().unwrap_or(0) } else { 0 }
+            } else if line.len() >= 17 {
+                line[14..17].trim().parse::<i32>().unwrap_or(0)
+            } else { 0 };
+            
+            let sec = if is_rinex_3 {
+                if line.len() >= 23 { line[21..23].trim().parse::<f64>().unwrap_or(0.0) } else { 0.0 }
+            } else if line.len() >= 22 {
+                line[17..22].trim().parse::<f64>().unwrap_or(0.0)
+            } else { 0.0 };
 
             let mut toc_gpst = GpsTime::from_calendar(year, month, day, hour, min, sec);
             match current_constellation {
@@ -493,7 +521,7 @@ pub fn parse_rinex_nav<R: BufRead>(reader: R) -> Result<Vec<gneiss_core::ephemer
             current_af1 = parse_rinex_f64(if line.len() >= idx_af1 + 19 { &line[idx_af1..idx_af1+19] } else { "" })?;
             current_af2 = parse_rinex_f64(if line.len() >= idx_af2 + 19 { &line[idx_af2..idx_af2+19] } else { "" })?;
             line_idx = 1;
-            for i in 0..32 { vals[i] = 0.0; }
+            vals.fill(0.0);
         } else {
             if (1..=8).contains(&line_idx) {
                 let offset = (line_idx - 1) * 4;
@@ -533,5 +561,57 @@ mod test_nav_parser {
         let eph = parse_rinex_nav(reader).unwrap();
         println!("Loaded {} ephemerides", eph.len());
         assert!(!eph.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_rinex_2_nav_date() {
+        // Simple mock to parse just one ephemeris header line
+        let file_contents = "     2.11           N: GPS NAV DATA                         RINEX VERSION / TYPE
+                                                            END OF HEADER
+ 6 20  5 14 22  0  0.0-2.715480513871D-04-6.821210263297D-12 0.000000000000D+00
+    7.000000000000D+01-8.000000000000D+00 4.321251426038D-09 2.456182385192D+00
+   -1.769512891769D-07 1.934998203069D-03 4.604458808899D-06 5.153539648056D+03
+    4.248000000000D+05 1.359730958939D-07-2.968124618807D+00-3.911554813385D-08
+    9.798670864830D-01 2.980937500000D+02-1.061584443985D+00-8.075693527908D-09
+    4.571618997710D-11 0.000000000000D+00 2.105000000000D+03 0.000000000000D+00
+    0.000000000000D+00 0.000000000000D+00 0.000000000000D+00 7.000000000000D+01
+    4.248000000000D+05 4.000000000000D+00
+";
+        use std::io::BufReader;
+        let mut reader = BufReader::new(file_contents.as_bytes());
+        let ephemerides = parse_rinex_nav(&mut reader).unwrap();
+        
+        assert_eq!(ephemerides.len(), 1);
+        let eph = &ephemerides[0];
+        
+        // Year 2020, Month 5, Day 14, Hour 22
+        // Thursday 22:00 -> Week 2105, TOW 424800
+        assert_eq!(eph.toe().week, 2105);
+        assert_eq!(eph.toe().tow, 424800.0);
+    }
+
+    #[test]
+    fn test_parse_rinex_3_nav_date() {
+        let file_contents = "     3.03           N: GNSS NAV DATA    M: MIXED            RINEX VERSION / TYPE
+                                                            END OF HEADER
+R 6 2020 12 24 21 15  0  .189751386642E-03  .000000000000E+00  .422910000000E+06
+     -.740158740234E+04 -.212037086487E+00  .000000000000E+00  .000000000000E+00
+     -.206682856445E+05 -.176755714417E+01  .931322574615E-09 -.400000000000E+01
+      .129489067383E+05 -.294115734100E+01 -.186264514923E-08  .000000000000E+00
+";
+        use std::io::BufReader;
+        let mut reader = BufReader::new(file_contents.as_bytes());
+        let ephemerides = parse_rinex_nav(&mut reader).unwrap();
+        
+        assert_eq!(ephemerides.len(), 1);
+        let eph = &ephemerides[0];
+        
+        // Year 2020, Month 12, Day 24, Hour 21, Min 15
+        assert_eq!(eph.toe().week, 2137);
     }
 }

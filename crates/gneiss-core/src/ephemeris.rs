@@ -177,11 +177,12 @@ impl GlonassEphemeris {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn calc_keplerian(
     t: GpsTime, toe: GpsTime, toc: GpsTime,
     af0: f64, af1: f64, af2: f64, crs: f64, crc: f64, cuc: f64, cus: f64, cic: f64, cis: f64,
     m0: f64, e: f64, sqrt_a: f64, delta_n: f64, omega0: f64, omega_dot: f64, i0: f64, idot: f64, omega: f64, tgd: f64,
-    mu: f64, omega_e: f64
+    mu: f64, omega_e: f64, is_bds_geo: bool
 ) -> (Vector3<f64>, Vector3<f64>, f64, f64) {
     let tk = t - toe;
     let a = sqrt_a * sqrt_a;
@@ -214,15 +215,20 @@ fn calc_keplerian(
     let xk_prime = r * libm::cos(u);
     let yk_prime = r * libm::sin(u);
 
-    let omegak = omega0 + (omega_dot - omega_e) * tk - omega_e * toe.tow;
+    let omegak = if is_bds_geo {
+        omega0 + omega_dot * tk - omega_e * toe.tow
+    } else {
+        omega0 + (omega_dot - omega_e) * tk - omega_e * toe.tow
+    };
+
     let cos_omegak = libm::cos(omegak);
     let sin_omegak = libm::sin(omegak);
     let sin_ik = libm::sin(i);
     let cos_ik = libm::cos(i);
 
-    let x = xk_prime * cos_omegak - yk_prime * cos_ik * sin_omegak;
-    let y = xk_prime * sin_omegak + yk_prime * cos_ik * cos_omegak;
-    let z = yk_prime * sin_ik;
+    let x_orb = xk_prime * cos_omegak - yk_prime * cos_ik * sin_omegak;
+    let y_orb = xk_prime * sin_omegak + yk_prime * cos_ik * cos_omegak;
+    let z_orb = yk_prime * sin_ik;
 
     let rk_dot = sqrt_a * sqrt_a * e * sin_ek * n / (1.0 - e * cos_ek);
     let uk_dot = (libm::sqrt(1.0 - e * e) / (1.0 - e * cos_ek)) * n;
@@ -230,11 +236,36 @@ fn calc_keplerian(
     let xk_prime_dot = rk_dot * libm::cos(u) - r * libm::sin(u) * uk_dot;
     let yk_prime_dot = rk_dot * libm::sin(u) + r * libm::cos(u) * uk_dot;
     
-    let omegak_dot = omega_dot - omega_e;
+    let omegak_dot = if is_bds_geo { omega_dot } else { omega_dot - omega_e };
     
-    let vx = xk_prime_dot * cos_omegak - yk_prime_dot * cos_ik * sin_omegak - y * omegak_dot - yk_prime * sin_ik * idot * sin_omegak;
-    let vy = xk_prime_dot * sin_omegak + yk_prime_dot * cos_ik * cos_omegak + x * omegak_dot + yk_prime * sin_ik * idot * cos_omegak;
-    let vz = yk_prime_dot * sin_ik + yk_prime * cos_ik * idot;
+    let x_orb_dot = xk_prime_dot * cos_omegak - yk_prime_dot * cos_ik * sin_omegak - y_orb * omegak_dot - yk_prime * sin_ik * idot * sin_omegak;
+    let y_orb_dot = xk_prime_dot * sin_omegak + yk_prime_dot * cos_ik * cos_omegak + x_orb * omegak_dot + yk_prime * sin_ik * idot * cos_omegak;
+    let z_orb_dot = yk_prime_dot * sin_ik + yk_prime * cos_ik * idot;
+
+    let (x, y, z, vx, vy, vz) = if is_bds_geo {
+        let sin_5 = libm::sin(-5.0f64.to_radians());
+        let cos_5 = libm::cos(-5.0f64.to_radians());
+        let sin_oet = libm::sin(omega_e * tk);
+        let cos_oet = libm::cos(omega_e * tk);
+        
+        let xg = x_orb * cos_oet + y_orb * sin_oet * cos_5 + z_orb * sin_oet * sin_5;
+        let yg = -x_orb * sin_oet + y_orb * cos_oet * cos_5 + z_orb * cos_oet * sin_5;
+        let zg = -y_orb * sin_5 + z_orb * cos_5;
+
+        let vxg = x_orb_dot * cos_oet - x_orb * omega_e * sin_oet 
+                  + y_orb_dot * sin_oet * cos_5 + y_orb * omega_e * cos_oet * cos_5 
+                  + z_orb_dot * sin_oet * sin_5 + z_orb * omega_e * cos_oet * sin_5;
+        
+        let vyg = -x_orb_dot * sin_oet - x_orb * omega_e * cos_oet 
+                  + y_orb_dot * cos_oet * cos_5 - y_orb * omega_e * sin_oet * cos_5 
+                  + z_orb_dot * cos_oet * sin_5 - z_orb * omega_e * sin_oet * sin_5;
+        
+        let vzg = -y_orb_dot * sin_5 + z_orb_dot * cos_5;
+        
+        (xg, yg, zg, vxg, vyg, vzg)
+    } else {
+        (x_orb, y_orb, z_orb, x_orb_dot, y_orb_dot, z_orb_dot)
+    };
 
     let tc = t - toc;
     let dt_rel = F * e * sqrt_a * sin_ek;
@@ -246,13 +277,13 @@ fn calc_keplerian(
 
 impl GpsEphemeris {
     pub fn position(&self, t: GpsTime) -> (Vector3<f64>, Vector3<f64>, f64, f64) {
-        calc_keplerian(t, self.toe, self.toc, self.af0, self.af1, self.af2, self.crs, self.crc, self.cuc, self.cus, self.cic, self.cis, self.m0, self.e, self.sqrt_a, self.delta_n, self.omega0, self.omega_dot, self.i0, self.idot, self.omega, self.tgd, MU_GPS, OMEGA_E_GPS)
+        calc_keplerian(t, self.toe, self.toc, self.af0, self.af1, self.af2, self.crs, self.crc, self.cuc, self.cus, self.cic, self.cis, self.m0, self.e, self.sqrt_a, self.delta_n, self.omega0, self.omega_dot, self.i0, self.idot, self.omega, self.tgd, MU_GPS, OMEGA_E_GPS, false)
     }
 }
 
 impl GalileoEphemeris {
     pub fn position(&self, t: GpsTime) -> (Vector3<f64>, Vector3<f64>, f64, f64) {
-        calc_keplerian(t, self.toe, self.toc, self.af0, self.af1, self.af2, self.crs, self.crc, self.cuc, self.cus, self.cic, self.cis, self.m0, self.e, self.sqrt_a, self.delta_n, self.omega0, self.omega_dot, self.i0, self.idot, self.omega, self.bgd_e1_e5a, MU_GAL, OMEGA_E_GAL)
+        calc_keplerian(t, self.toe, self.toc, self.af0, self.af1, self.af2, self.crs, self.crc, self.cuc, self.cus, self.cic, self.cis, self.m0, self.e, self.sqrt_a, self.delta_n, self.omega0, self.omega_dot, self.i0, self.idot, self.omega, self.bgd_e1_e5a, MU_GAL, OMEGA_E_GAL, false)
     }
 }
 
@@ -261,15 +292,16 @@ impl BeidouEphemeris {
         // BDT is 14 seconds behind GPS Time (GPST = BDT + 14s).
         // Since t is passed in GPST, we convert it to BDT for keplerian projection.
         let t_bdt = GpsTime::new(t.week, t.tow - 14.0);
-        // Note: BDS GEO satellites (typically PRN <= 5 or >= 59) require an additional rotation.
-        // For this baseline, we treat all BDS as MEO/IGSO.
-        calc_keplerian(t_bdt, self.toe, self.toc, self.af0, self.af1, self.af2, self.crs, self.crc, self.cuc, self.cus, self.cic, self.cis, self.m0, self.e, self.sqrt_a, self.delta_n, self.omega0, self.omega_dot, self.i0, self.idot, self.omega, self.tgd1, MU_BDS, OMEGA_E_BDS)
+        
+        let is_bds_geo = self.sat.prn <= 5 || self.sat.prn >= 59;
+        
+        calc_keplerian(t_bdt, self.toe, self.toc, self.af0, self.af1, self.af2, self.crs, self.crc, self.cuc, self.cus, self.cic, self.cis, self.m0, self.e, self.sqrt_a, self.delta_n, self.omega0, self.omega_dot, self.i0, self.idot, self.omega, self.tgd1, MU_BDS, OMEGA_E_BDS, is_bds_geo)
     }
 }
 
 impl QzssEphemeris {
     pub fn position(&self, t: GpsTime) -> (Vector3<f64>, Vector3<f64>, f64, f64) {
-        calc_keplerian(t, self.toe, self.toc, self.af0, self.af1, self.af2, self.crs, self.crc, self.cuc, self.cus, self.cic, self.cis, self.m0, self.e, self.sqrt_a, self.delta_n, self.omega0, self.omega_dot, self.i0, self.idot, self.omega, self.tgd, MU_GPS, OMEGA_E_GPS)
+        calc_keplerian(t, self.toe, self.toc, self.af0, self.af1, self.af2, self.crs, self.crc, self.cuc, self.cus, self.cic, self.cis, self.m0, self.e, self.sqrt_a, self.delta_n, self.omega0, self.omega_dot, self.i0, self.idot, self.omega, self.tgd, MU_GPS, OMEGA_E_GPS, false)
     }
 }
 

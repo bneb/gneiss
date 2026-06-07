@@ -1,12 +1,9 @@
 use tracing::{info, error};
 use nalgebra::Vector3;
 use clap::{Parser, Subcommand};
-use gneiss_rtk::filter::RtkState;
 use gneiss_core::coords::{Coordinate, Datum, Frame};
-use nalgebra::{UnitQuaternion};
 use gneiss_rtk::engine::{ProcessingEngine, EngineConfig};
 use tokio::io::{AsyncWriteExt};
-use gneiss_core::time::GpsTime;
 
 mod evaluator;
 mod live;
@@ -77,6 +74,8 @@ enum Commands {
         nominal_snr: Option<f64>,
         #[arg(long, help = "Surveyed base station ECEF coordinate override (x,y,z in meters)")]
         base_position: Option<String>,
+        #[arg(long, help = "Enabled constellations (e.g. G,R,E,C). Default: all")]
+        systems: Option<String>,
     },
     /// Evaluate the error CDFs against a ground truth RTKLIB POS file
     Eval {
@@ -115,8 +114,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 engine_config.mode = match m.to_lowercase().as_str() {
                     "spp" => gneiss_rtk::engine::EngineMode::Spp,
                     "spp-ins" => gneiss_rtk::engine::EngineMode::SppIns,
+                    "spp-ins-loosely-coupled" => gneiss_rtk::engine::EngineMode::SppInsLooselyCoupled,
                     "rtk" => gneiss_rtk::engine::EngineMode::Rtk,
                     "rtk-ins" => gneiss_rtk::engine::EngineMode::RtkIns,
+                    "rtk-ins-loosely-coupled" => gneiss_rtk::engine::EngineMode::RtkInsLooselyCoupled,
                     "ppp" => gneiss_rtk::engine::EngineMode::Ppp,
                     "ppp-ins" => gneiss_rtk::engine::EngineMode::PppIns,
                     _ => return Err("Invalid engine mode specified".into()),
@@ -132,7 +133,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             lambda_ratio, lambda_subset, max_epochs, 
             lever_arm, calibrate_imu,
             raim_outlier_m, chi_square_pr, chi_square_cp, nominal_snr,
-            base_position
+            base_position,
+            systems
         } => {
             info!("Starting PPK Processing Pipeline...");
             
@@ -153,18 +155,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let file = std::fs::File::open(base_file)?;
                     let reader = std::io::BufReader::new(file);
                     use std::io::BufRead;
-                    for line_res in reader.lines() {
-                        if let Ok(line) = line_res {
-                            if line.contains("APPROX POSITION XYZ") {
-                                let parts: Vec<&str> = line[0..60].split_whitespace().collect();
-                                if parts.len() >= 3 {
-                                    approx_base_pos = Some([parts[0].parse()?, parts[1].parse()?, parts[2].parse()?]);
-                                }
-                                break;
+                    for line in reader.lines().map_while(Result::ok) {
+                        if line.contains("APPROX POSITION XYZ") {
+                            let parts: Vec<&str> = line[0..60].split_whitespace().collect();
+                            if parts.len() >= 3 {
+                                approx_base_pos = Some([parts[0].parse()?, parts[1].parse()?, parts[2].parse()?]);
                             }
-                            if line.contains("END OF HEADER") {
-                                break;
-                            }
+                            break;
+                        }
+                        if line.contains("END OF HEADER") {
+                            break;
                         }
                     }
                     
@@ -194,13 +194,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 EngineConfig::default()
             };
 
+            if let Some(sys_str) = systems {
+                let mut enabled = Vec::new();
+                for c in sys_str.chars() {
+                    match c {
+                        'G' => enabled.push(gneiss_core::sat::Constellation::Gps),
+                        'R' => enabled.push(gneiss_core::sat::Constellation::Glonass),
+                        'E' => enabled.push(gneiss_core::sat::Constellation::Galileo),
+                        'C' => enabled.push(gneiss_core::sat::Constellation::Beidou),
+                        _ => {}
+                    }
+                }
+                engine_config.enabled_constellations = Some(enabled);
+            }
+
             engine_config.enable_backward_smoothing = enable_backward_smoothing;
             if let Some(m) = mode {
                 engine_config.mode = match m.to_lowercase().as_str() {
                     "spp" => gneiss_rtk::engine::EngineMode::Spp,
                     "spp-ins" => gneiss_rtk::engine::EngineMode::SppIns,
+                    "spp-ins-loosely-coupled" => gneiss_rtk::engine::EngineMode::SppInsLooselyCoupled,
                     "rtk" => gneiss_rtk::engine::EngineMode::Rtk,
                     "rtk-ins" => gneiss_rtk::engine::EngineMode::RtkIns,
+                    "rtk-ins-loosely-coupled" => gneiss_rtk::engine::EngineMode::RtkInsLooselyCoupled,
                     "ppp" => gneiss_rtk::engine::EngineMode::Ppp,
                     "ppp-ins" => gneiss_rtk::engine::EngineMode::PppIns,
                     _ => return Err("Invalid engine mode specified".into()),
@@ -229,16 +245,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let parent_dir = std::path::Path::new(&rover).parent().unwrap();
             
             let mut time_offset = 0.098;
-            let mut initial_truth = None;
-            let mut ref_gyro = Vec::new();
+            let initial_truth: Option<(f64, gneiss_rtk::filter::RtkState)> = None;
+            let mut ref_gyro: Vec<(f64, Vector3<f64>)> = Vec::new();
 
-            // Truth Seeding
             let ref_file_path = parent_dir.join("reference.csv");
             if ref_file_path.exists() {
                 if let Ok(content) = std::fs::read_to_string(&ref_file_path) {
                     let mut lines = content.lines();
-                    lines.next(); // Skip header
-                    
+                    lines.next();
                     for line in lines {
                         let p: Vec<&str> = line.split(',').collect();
                         if p.len() >= 20 {
@@ -247,31 +261,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             let gy = p[18].trim().parse::<f64>().unwrap_or(0.0);
                             let gz = p[19].trim().parse::<f64>().unwrap_or(0.0);
                             ref_gyro.push((tow, Vector3::new(gx, gy, gz)));
-                            
-                            if initial_truth.is_none() {
-                                let week = p[1].trim().parse::<u16>().unwrap_or(0);
-                                let time = GpsTime::new(week.into(), tow);
-                                let pos_ecef = Vector3::new(p[5].trim().parse()?, p[6].trim().parse()?, p[7].trim().parse()?);
-                                let roll = p[8].trim().parse::<f64>()?.to_radians();
-                                let pitch = p[9].trim().parse::<f64>()?.to_radians();
-                                let head = p[10].trim().parse::<f64>()?.to_radians();
-                                let vel_east = p[11].trim().parse::<f64>()?;
-                                let vel_north = p[12].trim().parse::<f64>()?;
-                                let vel_up = p[13].trim().parse::<f64>()?;
-                                let vel_ned = Vector3::new(vel_north, vel_east, -vel_up);
-                                
-                                let pos_llh = gneiss_core::coords::ecef_to_llh(pos_ecef);
-                                let r_n_e = gneiss_core::coords::ecef_to_ned_matrix(pos_llh).transpose();
-                                
-                                let r_b_n = nalgebra::Rotation3::from_euler_angles(roll, pitch, head);
-                                let r_b_e = r_n_e * r_b_n.matrix();
-                                let vel_ecef = r_n_e * vel_ned;
-                                
-                                let mut state = RtkState::new(time, Coordinate::new(pos_ecef, Datum::WGS84, Frame::ECEF, time), 10000.0);
-                                state.velocity = vel_ecef;
-                                state.attitude = UnitQuaternion::from_rotation_matrix(&nalgebra::Rotation3::from_matrix(&r_b_e));
-                                initial_truth = Some((tow, state));
-                            }
                         }
                     }
                 }
@@ -359,42 +348,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 info!("IMU Re-alignment Complete.");
             }
 
-            let mut truth_map = std::collections::HashMap::new();
-            if ref_file_path.exists() {
-                if let Ok(content) = std::fs::read_to_string(&ref_file_path) {
-                    let mut lines = content.lines();
-                    lines.next(); // Skip header
-                    
-                    for line in lines {
-                        let p: Vec<&str> = line.split(',').collect();
-                        if p.len() >= 20 {
-                            let tow = p[0].trim().parse::<f64>().unwrap_or(0.0);
-                            let week = p[1].trim().parse::<u16>().unwrap_or(0);
-                            let time = GpsTime::new(week.into(), tow);
-                            let pos_ecef = Vector3::new(p[5].trim().parse().unwrap_or(0.0), p[6].trim().parse().unwrap_or(0.0), p[7].trim().parse().unwrap_or(0.0));
-                            let vel_body = Vector3::new(p[11].trim().parse().unwrap_or(0.0), p[12].trim().parse().unwrap_or(0.0), p[13].trim().parse().unwrap_or(0.0));
-                            let roll = p[8].trim().parse::<f64>().unwrap_or(0.0).to_radians();
-                            let pitch = p[9].trim().parse::<f64>().unwrap_or(0.0).to_radians();
-                            let head = p[10].trim().parse::<f64>().unwrap_or(0.0).to_radians();
-                            
-                            let pos_llh = gneiss_core::coords::ecef_to_llh(pos_ecef);
-                            let r_n_e = gneiss_core::coords::ecef_to_ned_matrix(pos_llh).transpose();
-                            let r_b_n = nalgebra::Rotation3::from_euler_angles(roll, pitch, head);
-                            let r_b_e = r_n_e * r_b_n.matrix();
-                            let vel_ecef = r_b_e * vel_body;
-                            
-                            let mut state = RtkState::new(time, Coordinate::new(pos_ecef, Datum::WGS84, Frame::ECEF, time), 0.0001);
-                            state.velocity = vel_ecef;
-                            state.attitude = UnitQuaternion::from_rotation_matrix(&nalgebra::Rotation3::from_matrix(&r_b_e));
-                            
-                            // Truncate TOW to 1 decimal place for matching
-                            let key = (tow * 10.0).round() as i64;
-                            truth_map.insert(key, state);
-                        }
-                    }
-                }
-            }
-
             let mut imu_idx = 0;
             let mut processed_epochs = 0;
 
@@ -423,15 +376,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         imu_idx += 1;
                     }
                     
-                    // CLINICAL SEEDING PASS: Force the state to ground truth before the GNSS update
-                    // This isolates the mathematical fidelity of the update loop and covariance convergence.
-                    let key = (current_tow * 10.0).round() as i64;
-                    if let Some(true_state) = truth_map.get(&key) {
-                        let mut seeded = true_state.clone();
-                        seeded.time = r.time; // Align with GNSS observation time
-                        engine.current_state = Some(seeded);
-                    }
-                    
                     if let Err(e) = engine.process_epoch(&r, b) { error!("Fail: {}", e); }
                     else { processed_epochs += 1; }
                 }
@@ -446,7 +390,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mut file = tokio::fs::File::create(&output).await?;
             file.write_all(b"% Gneiss Solution\n").await?;
             for s in results {
-                let line = format!("{} {:.3} {:.4} {:.4} {:.4} {}\n", s.time.week, s.time.tow, s.position.vector.x, s.position.vector.y, s.position.vector.z, if s.is_fixed {1} else {2});
+                let out_state = s.fixed_state.as_deref().unwrap_or(&s);
+                let line = format!("{} {:.3} {:.4} {:.4} {:.4} {}\n", out_state.time.week, out_state.time.tow, out_state.position.vector.x, out_state.position.vector.y, out_state.position.vector.z, if out_state.is_fixed {1} else {2});
                 file.write_all(line.as_bytes()).await?;
             }
             info!("Wrote {} epochs to {}", processed_epochs, output);

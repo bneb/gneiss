@@ -457,16 +457,16 @@ mod tests {
 
     #[test]
     fn test_parse_rxm_sfrbx() {
-        let mut payload = Vec::new();
-        // 8 byte header
-        payload.push(0); // gnssId = GPS
-        payload.push(12); // svId = 12
-        payload.push(0); // sigId = L1C/A
-        payload.push(0); // freqId
-        payload.push(2); // numWords = 2
-        payload.push(1); // chn = 1
-        payload.push(2); // version = 2
-        payload.push(0); // reserved
+        let mut payload = vec![
+            0,  // gnssId = GPS
+            12, // svId = 12
+            0,  // sigId = L1C/A
+            0,  // freqId
+            2,  // numWords = 2
+            1,  // chn = 1
+            2,  // version = 2
+            0,  // reserved
+        ];
 
         // Words
         payload.extend_from_slice(&0xDEADBEEFu32.to_le_bytes());

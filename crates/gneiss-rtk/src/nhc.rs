@@ -36,7 +36,8 @@ pub fn apply_nhc(state: &mut RtkState, sigma_lateral: f64, sigma_vertical: f64) 
         sigma_vertical * sigma_vertical
     ]));
 
-    updater::update(state, &z, &h, &r).map_err(|_| "NHC update failed")
+    updater::update(state, &z, &h, &r, 1e9, None).map_err(|_| "NHC update failed")?;
+    Ok(())
 }
 
 pub fn apply_zupt(state: &mut RtkState, sigma: f64) -> Result<(), &'static str> {
@@ -46,5 +47,5 @@ pub fn apply_zupt(state: &mut RtkState, sigma: f64) -> Result<(), &'static str> 
     for i in 0..3 { h[(i, 3 + i)] = 1.0; }
     
     let r = DMatrix::from_diagonal(&DVector::from_element(3, sigma * sigma));
-    updater::update(state, &z, &h, &r).map_err(|_| "ZUPT update failed")
-}
+    updater::update(state, &z, &h, &r, 1e9, None).map_err(|_| "ZUPT update failed")?;
+    Ok(())}

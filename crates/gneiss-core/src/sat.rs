@@ -2,7 +2,7 @@ use core::fmt;
 use core::str::FromStr;
 
 /// Represents a GNSS constellation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 pub enum Constellation {
     Gps,
     Glonass,
