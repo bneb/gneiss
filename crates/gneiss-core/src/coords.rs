@@ -92,16 +92,33 @@ pub fn ecef_to_llh_with_model<M: GeodeticModel>(model: &M, ecef: Vector3<f64>) -
     let sin_theta = libm::sin(theta);
     let cos_theta = libm::cos(theta);
 
-    let lat = libm::atan2(
+    let mut lat = libm::atan2(
         ecef.z + ep2 * b * sin_theta * sin_theta * sin_theta,
         p - e2 * a * cos_theta * cos_theta * cos_theta,
     );
 
     let lon = libm::atan2(ecef.y, ecef.x);
 
-    let sin_lat = libm::sin(lat);
-    let n = a / libm::sqrt(1.0 - e2 * sin_lat * sin_lat);
-    
+    // Iterative refinement for high-altitude precision
+    let mut sin_lat = libm::sin(lat);
+    let mut n = a / libm::sqrt(1.0 - e2 * sin_lat * sin_lat);
+    let mut i = 0;
+    while i < 10 {
+        let lat_prev = lat;
+        let height = if libm::fabs(lat) < core::f64::consts::FRAC_PI_4 {
+            p / libm::cos(lat) - n
+        } else {
+            ecef.z / sin_lat - n * (1.0 - e2)
+        };
+        lat = libm::atan2(ecef.z, p * (1.0 - e2 * n / (n + height)));
+        sin_lat = libm::sin(lat);
+        n = a / libm::sqrt(1.0 - e2 * sin_lat * sin_lat);
+        if libm::fabs(lat - lat_prev) < 1e-14 {
+            break;
+        }
+        i += 1;
+    }
+
     let height = if libm::fabs(lat) < core::f64::consts::FRAC_PI_4 {
         p / libm::cos(lat) - n
     } else {

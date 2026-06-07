@@ -7,6 +7,8 @@ pub mod engine;
 pub mod hatch;
 pub mod combinations;
 pub mod calibration;
+#[cfg(feature = "doppler-velocity")]
+pub mod doppler;
 mod tests_ekf;
 mod tests_predictor;
 mod tests_updater;

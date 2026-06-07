@@ -21,7 +21,7 @@ mod tests {
         predictor::predict(&mut state, 1.0, 0.1, &vec![imu_meas; 100]);
         
         let (_, _, yaw): (f64, f64, f64) = state.attitude.euler_angles();
-        assert!((yaw.abs() - 1.570796).abs() < 0.1);
+        assert!((yaw.abs() - core::f64::consts::FRAC_PI_2).abs() < 0.1);
     }
 
     #[test]

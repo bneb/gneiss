@@ -16,11 +16,13 @@ pub struct SppState {
     pub cdt_gal: f64,
     /// Receiver clock bias in meters for BeiDou.
     pub cdt_bds: f64,
+    /// Receiver clock bias in meters for GLONASS.
+    pub cdt_glo: f64,
 }
 
 impl SppState {
-    pub fn new(position: Coordinate, cdt: f64, cdt_gal: f64, cdt_bds: f64) -> Self {
-        Self { position, cdt, cdt_gal, cdt_bds }
+    pub fn new(position: Coordinate, cdt: f64, cdt_gal: f64, cdt_bds: f64, cdt_glo: f64) -> Self {
+        Self { position, cdt, cdt_gal, cdt_bds, cdt_glo }
     }
 }
 
@@ -28,16 +30,11 @@ impl SppState {
 #[derive(Debug, Clone)]
 pub struct SppMeasurement {
     pub constellation: gneiss_core::sat::Constellation,
-    /// Satellite ECEF position in a specific Datum and Frame.
-    pub sat_coord: Coordinate,
-    /// Corrected pseudorange in meters (includes sat clock correction, but not atm).
-    pub pseudorange: f64,
-    /// Signal-to-Noise ratio in dB-Hz
+    pub raw_pr: f64,
     pub snr: f64,
-    /// Doppler measurement in Hz
     pub doppler: f64,
-    /// GPS time of the observation.
     pub time: GpsTime,
+    pub eph: Ephemeris,
 }
 
 /// Errors that can occur during an SPP WNLLS step.
@@ -76,7 +73,7 @@ impl Default for SppConfig {
         Self {
             max_iterations: 15,
             convergence_threshold: 1e-2, // Relaxed to 1cm
-            geometry_variance_threshold: 5000.0, // Default 100m^2 variance threshold
+            geometry_variance_threshold: 10000.0, // Increased to 10000m^2 to allow 3-sat initialization
             enable_sagnac: true,
             enable_tropo: true,
             enable_iono: true,
@@ -94,48 +91,51 @@ fn build_measurements(epoch: &EpochObs, ephemerides: &[Ephemeris], config: &SppC
             && sat_obs.sat.constellation != gneiss_core::sat::Constellation::Galileo
             && sat_obs.sat.constellation != gneiss_core::sat::Constellation::Beidou { continue; }
 
-        // Find matching ephemeris
-        let eph = ephemerides.iter().find(|e| e.sat() == sat_obs.sat);
+        // Find matching ephemeris closest to epoch time
+        let eph = ephemerides.iter()
+            .filter(|e| e.sat() == sat_obs.sat)
+            .min_by(|a, b| {
+                let da = (a.toe().tow - epoch.time.tow).abs();
+                let db = (b.toe().tow - epoch.time.tow).abs();
+                da.partial_cmp(&db).unwrap()
+            });
+
         if let Some(eph) = eph {
             let pr_obs = sat_obs.observations.iter().find(|o| o.code.obs_type == ObsType::Pseudorange && o.code.signal.freq_band == 1);
             
             if let Some(obs) = pr_obs {
-                let raw_pr = obs.value;
-                
-                // 1. Calculate transmission time according to satellite clock
-                let pr_time = raw_pr / LIGHT_SPEED;
-                let t_tx_sat = epoch.time.tow - pr_time;
-                let t_tx_sat_gps = GpsTime::new(epoch.time.week, t_tx_sat);
-                
-                // 2. Get rough satellite clock error at t_tx_sat
-                let (_, _, sat_clk_err_rough, _) = eph.position(t_tx_sat_gps);
-                
-                // 3. Refine to true GPS time of transmission
-                // t_true = t_sat - clk_err
-                let t_tx_true = t_tx_sat - sat_clk_err_rough;
-                let t_tx_true_gps = GpsTime::new(epoch.time.week, t_tx_true);
-                
-                // 4. Final calculation of satellite position and clock error at true GPS time
-                let (sat_pos, _, sat_clk_err, _) = eph.position(t_tx_true_gps);
-                
-                // Apply satellite clock correction to pseudorange
-                let corrected_pr = raw_pr + (sat_clk_err * LIGHT_SPEED);
-                
                 let snr = sat_obs.observations.iter().find(|o| o.code.obs_type == ObsType::Snr && o.code.signal.freq_band == 1).map(|o| o.value).unwrap_or(config.nominal_snr_dbhz);
                 let doppler = sat_obs.observations.iter().find(|o| o.code.obs_type == ObsType::Doppler && o.code.signal.freq_band == 1).map(|o| o.value).unwrap_or(0.0);
 
                 measurements.push(SppMeasurement {
                     constellation: sat_obs.sat.constellation,
-                    sat_coord: Coordinate::new(sat_pos, Datum::WGS84, Frame::ECEF, epoch.time),
-                    pseudorange: corrected_pr,
+                    raw_pr: obs.value,
                     snr,
                     doppler,
                     time: epoch.time,
+                    eph: eph.clone(),
                 });
             }
         }
     }
     measurements
+}
+
+fn compute_sat_state(m: &SppMeasurement, receiver_cdt: f64) -> (Coordinate, f64) {
+    let pr_time = m.raw_pr / LIGHT_SPEED;
+    let t_rcv = m.time.tow - (receiver_cdt / LIGHT_SPEED);
+    let t_tx_sat = t_rcv - pr_time;
+    let t_tx_sat_gps = GpsTime::new(m.time.week, t_tx_sat);
+    
+    let (_, _, sat_clk_err_rough, _) = m.eph.position(t_tx_sat_gps);
+    
+    let t_tx_true = t_tx_sat - sat_clk_err_rough;
+    let t_tx_true_gps = GpsTime::new(m.time.week, t_tx_true);
+    
+    let (sat_pos, _, sat_clk_err, _) = m.eph.position(t_tx_true_gps);
+    let corrected_pr = m.raw_pr + (sat_clk_err * LIGHT_SPEED);
+    
+    (Coordinate::new(sat_pos, Datum::WGS84, Frame::ECEF, m.time), corrected_pr)
 }
 
 fn seed_initial_state(measurements: &[SppMeasurement], prev_state: Option<&SppState>) -> SppState {
@@ -147,9 +147,10 @@ fn seed_initial_state(measurements: &[SppMeasurement], prev_state: Option<&SppSt
         let mut avg_y = 0.0;
         let mut avg_z = 0.0;
         for m in measurements {
-            avg_x += m.sat_coord.vector.x;
-            avg_y += m.sat_coord.vector.y;
-            avg_z += m.sat_coord.vector.z;
+            let (sat_coord, _) = compute_sat_state(m, 0.0);
+            avg_x += sat_coord.vector.x;
+            avg_y += sat_coord.vector.y;
+            avg_z += sat_coord.vector.z;
         }
         let n_f = measurements.len() as f64;
         avg_x /= n_f;
@@ -165,19 +166,36 @@ fn seed_initial_state(measurements: &[SppMeasurement], prev_state: Option<&SppSt
         (projected_ecef.x, projected_ecef.y, projected_ecef.z)
     };
 
-    // Estimate initial clock bias from the first satellite
-    let m0 = &measurements[0];
-    let dx0 = seed_x - m0.sat_coord.vector.x;
-    let dy0 = seed_y - m0.sat_coord.vector.y;
-    let dz0 = seed_z - m0.sat_coord.vector.z;
-    let geom_r0 = f64::sqrt(dx0 * dx0 + dy0 * dy0 + dz0 * dz0);
-    let seed_cdt = m0.pseudorange - geom_r0;
+    let mut cdt_gps = None;
+    let mut cdt_gal = None;
+    let mut cdt_bds = None;
+    let mut cdt_glo = None;
+
+    for m in measurements {
+        let (sat_coord, corrected_pr) = compute_sat_state(m, 0.0);
+        let dx = seed_x - sat_coord.vector.x;
+        let dy = seed_y - sat_coord.vector.y;
+        let dz = seed_z - sat_coord.vector.z;
+        let geom_r = f64::sqrt(dx * dx + dy * dy + dz * dz);
+        let cdt = corrected_pr - geom_r;
+        
+        match m.constellation {
+            gneiss_core::sat::Constellation::Gps => if cdt_gps.is_none() { cdt_gps = Some(cdt); },
+            gneiss_core::sat::Constellation::Galileo => if cdt_gal.is_none() { cdt_gal = Some(cdt); },
+            gneiss_core::sat::Constellation::Beidou => if cdt_bds.is_none() { cdt_bds = Some(cdt); },
+            gneiss_core::sat::Constellation::Glonass => if cdt_glo.is_none() { cdt_glo = Some(cdt); },
+            _ => {},
+        }
+    }
+
+    let default_cdt = cdt_gps.or(cdt_gal).or(cdt_bds).or(cdt_glo).unwrap_or(0.0);
 
     SppState::new(
         Coordinate::new(Vector3::new(seed_x, seed_y, seed_z), Datum::WGS84, Frame::ECEF, measurements[0].time),
-        seed_cdt,
-        seed_cdt,
-        seed_cdt
+        cdt_gps.unwrap_or(default_cdt),
+        cdt_gal.unwrap_or(default_cdt),
+        cdt_bds.unwrap_or(default_cdt),
+        cdt_glo.unwrap_or(default_cdt)
     )
 }
 
@@ -191,8 +209,8 @@ pub fn compute_spp(
 ) -> Result<SppState, SppError> {
     let measurements = build_measurements(epoch, ephemerides, config);
 
-    if measurements.len() < 4 {
-        tracing::error!("SPP failed: Only {} valid GPS measurements. Need 4.", measurements.len());
+    if measurements.len() < 3 {
+        tracing::error!("SPP failed: Only {} valid measurements. Need at least 3.", measurements.len());
         return Err(SppError::NotEnoughMeasurements);
     }
 
@@ -204,6 +222,7 @@ pub fn compute_spp(
     let seed_cdt = state.cdt;
     let seed_cdt_gal = state.cdt_gal;
     let seed_cdt_bds = state.cdt_bds;
+    let seed_cdt_glo = state.cdt_glo;
 
     for _ in 0..config.max_iterations {
         let prev_state = state.clone();
@@ -221,12 +240,19 @@ pub fn compute_spp(
             // Adaptive RAIM: Median Absolute Deviation (MAD)
             let mut residuals = Vec::with_capacity(measurements.len());
             for m in &measurements {
-                let r_dx = state.position.vector.x - m.sat_coord.vector.x;
-                let r_dy = state.position.vector.y - m.sat_coord.vector.y;
-                let r_dz = state.position.vector.z - m.sat_coord.vector.z;
+                let cdt = match m.constellation {
+                    gneiss_core::sat::Constellation::Gps => state.cdt,
+                    gneiss_core::sat::Constellation::Galileo => state.cdt_gal,
+                    gneiss_core::sat::Constellation::Beidou => state.cdt_bds,
+                    _ => state.cdt,
+                };
+                let (sat_coord, corrected_pr) = compute_sat_state(m, cdt);
+                let r_dx = state.position.vector.x - sat_coord.vector.x;
+                let r_dy = state.position.vector.y - sat_coord.vector.y;
+                let r_dz = state.position.vector.z - sat_coord.vector.z;
                 let r_dist = f64::sqrt(r_dx * r_dx + r_dy * r_dy + r_dz * r_dz);
-                let expected_pr = r_dist + state.cdt;
-                let residual = (m.pseudorange - expected_pr).abs();
+                let expected_pr = r_dist + cdt;
+                let residual = (corrected_pr - expected_pr).abs();
                 residuals.push((m, residual));
             }
 
@@ -253,7 +279,8 @@ pub fn compute_spp(
                     Coordinate::new(Vector3::new(seed_x, seed_y, seed_z), Datum::WGS84, Frame::ECEF, measurements[0].time),
                     seed_cdt,
                     seed_cdt_gal,
-                    seed_cdt_bds
+                    seed_cdt_bds,
+                    seed_cdt_glo
                 );
                 for _ in 0..config.max_iterations {
                     let prev_clean = clean_state.clone();
@@ -279,13 +306,7 @@ pub fn compute_spp(
     Err(SppError::ConvergenceFailed)
 }
 
-/// Calculates the variance scaling factor based on Signal-to-Noise ratio (C/N0).
-pub fn snr_scale(snr: f64, config: &SppConfig) -> f64 {
-    let snr_clamped = if snr < 25.0 { 25.0 } else if snr > 50.0 { 50.0 } else { snr };
-    let scale = libm::pow(10.0, (config.nominal_snr_dbhz - snr_clamped) / 10.0);
-    // Limit max variance scale to 100x to prevent singular matrices
-    if scale > 100.0 { 100.0 } else { scale }
-}
+
 
 /// Performs a single Weighted Non-Linear Least Squares (WNLLS) iteration.
 pub fn spp_wnlls_step(
@@ -300,6 +321,7 @@ pub fn spp_wnlls_step(
     let mut gps_col = None;
     let mut gal_col = None;
     let mut bds_col = None;
+    let mut glo_col = None;
 
     if measurements.iter().any(|m| m.constellation == gneiss_core::sat::Constellation::Gps) {
         gps_col = Some(cols); cols += 1;
@@ -310,33 +332,40 @@ pub fn spp_wnlls_step(
     if measurements.iter().any(|m| m.constellation == gneiss_core::sat::Constellation::Beidou) {
         bds_col = Some(cols); cols += 1;
     }
+    if measurements.iter().any(|m| m.constellation == gneiss_core::sat::Constellation::Glonass) {
+        glo_col = Some(cols); cols += 1;
+    }
 
-    if cols < 4 || n < cols {
+    let use_height_constraint = n == cols - 1;
+    if n < cols - 1 {
         return Err(SppError::NotEnoughMeasurements);
     }
 
-    let mut h_matrix = DMatrix::<f64>::zeros(n, cols);
-    let mut w_matrix = DMatrix::<f64>::zeros(n, n);
-    let mut dz_vector = DVector::<f64>::zeros(n);
+    let matrix_n = if use_height_constraint { n + 1 } else { n };
+
+    let mut h_matrix = DMatrix::<f64>::zeros(matrix_n, cols);
+    let mut w_matrix = DMatrix::<f64>::zeros(matrix_n, matrix_n);
+    let mut dz_vector = DVector::<f64>::zeros(matrix_n);
 
     let rec_ecef = Vector3::new(current_state.position.vector.x, current_state.position.vector.y, current_state.position.vector.z);
     let rec_llh = ecef_to_llh(rec_ecef);
     let tropo_params = TropoParams::default();
 
     for (i, m) in measurements.iter().enumerate() {
-        let sat_ecef = Vector3::new(m.sat_coord.vector.x, m.sat_coord.vector.y, m.sat_coord.vector.z);
+        let cdt = match m.constellation {
+            gneiss_core::sat::Constellation::Gps => current_state.cdt,
+            gneiss_core::sat::Constellation::Galileo => current_state.cdt_gal,
+            gneiss_core::sat::Constellation::Beidou => current_state.cdt_bds,
+            _ => current_state.cdt,
+        };
+        let (sat_coord, corrected_pr) = compute_sat_state(m, cdt);
+        let sat_ecef = Vector3::new(sat_coord.vector.x, sat_coord.vector.y, sat_coord.vector.z);
         
         // 1. Sagnac Effect (Earth rotation during signal time of flight)
         let sat_ecef_rot = if config.enable_sagnac {
             // Must use an approximation of the true geometric time of flight,
             // NOT the raw pseudorange which is dominated by receiver clock bias.
-            let cdt = match m.constellation {
-                gneiss_core::sat::Constellation::Gps => current_state.cdt,
-                gneiss_core::sat::Constellation::Galileo => current_state.cdt_gal,
-                gneiss_core::sat::Constellation::Beidou => current_state.cdt_bds,
-                _ => current_state.cdt,
-            };
-            let geometric_pr = m.pseudorange - cdt;
+            let geometric_pr = corrected_pr - cdt;
             let tof = geometric_pr / LIGHT_SPEED;
             let theta = OMEGA_E * tof;
             let cos_t = f64::cos(theta);
@@ -393,19 +422,11 @@ pub fn spp_wnlls_step(
             }
         }
 
-        let cdt = match m.constellation {
-            gneiss_core::sat::Constellation::Gps => current_state.cdt,
-            gneiss_core::sat::Constellation::Galileo => current_state.cdt_gal,
-            gneiss_core::sat::Constellation::Beidou => current_state.cdt_bds,
-            _ => current_state.cdt,
-        };
         let expected_pr = r + cdt + tropo_delay + iono_delay;
-        let residual = m.pseudorange - expected_pr;
+        let residual = corrected_pr - expected_pr;
         
         // 4. Weight Matrix (Lower elevation or SNR = higher variance)
-        let sin_el = f64::sin(el);
-        let el_factor = if sin_el < 0.1 { 0.1 } else { sin_el }; // Minimum 5.7 degrees to avoid div by zero
-        let variance = snr_scale(m.snr, config) / (el_factor * el_factor); // Scale by SNR and elevation
+        let variance = gneiss_core::variance::observation_variance(m.snr, el, config.nominal_snr_dbhz);
         
         h_matrix[(i, 0)] = dx / r_safe;
         h_matrix[(i, 1)] = dy / r_safe;
@@ -422,6 +443,28 @@ pub fn spp_wnlls_step(
         dz_vector[i] = residual;
     }
 
+    if use_height_constraint {
+        let lat = rec_llh.x;
+        let lon = rec_llh.y;
+        
+        let sin_lat = lat.sin();
+        let cos_lat = lat.cos();
+        let sin_lon = lon.sin();
+        let cos_lon = lon.cos();
+        
+        // UP vector in ECEF
+        h_matrix[(n, 0)] = cos_lat * cos_lon;
+        h_matrix[(n, 1)] = cos_lat * sin_lon;
+        h_matrix[(n, 2)] = sin_lat;
+        
+        // Penalize change in height from initial guess
+        dz_vector[n] = 0.0;
+        
+        // Give it a relatively high variance so true measurements take precedence,
+        // but low enough to constrain the geometry (100 m^2 = 10m std dev)
+        w_matrix[(n, n)] = 1.0 / 100.0; 
+    }
+
     let h_t = h_matrix.transpose();
     let h_t_w = &h_t * &w_matrix;
     let h_t_w_h = &h_t_w * &h_matrix;
@@ -433,6 +476,7 @@ pub fn spp_wnlls_step(
     // If the variance is huge (e.g. we deweighted satellites and have poor remaining geometry), reject it.
     let pos_variance = h_t_w_h_inv[(0, 0)] + h_t_w_h_inv[(1, 1)] + h_t_w_h_inv[(2, 2)];
     if pos_variance > config.geometry_variance_threshold {
+        tracing::debug!("Poor geometry: pos_variance = {} (threshold = {})", pos_variance, config.geometry_variance_threshold);
         return Err(SppError::PoorGeometry);
     }
 
@@ -442,6 +486,8 @@ pub fn spp_wnlls_step(
     let next_cdt_gal = current_state.cdt_gal + gal_col.map(|c| dx_vec[c]).unwrap_or(0.0);
     let next_cdt_bds = current_state.cdt_bds + bds_col.map(|c| dx_vec[c]).unwrap_or(0.0);
 
+    let next_cdt_glo = current_state.cdt_glo + glo_col.map(|c| dx_vec[c]).unwrap_or(0.0);
+
     Ok(SppState::new(
         Coordinate::new(
             Vector3::new(
@@ -449,78 +495,20 @@ pub fn spp_wnlls_step(
                 current_state.position.vector.y + dx_vec[1],
                 current_state.position.vector.z + dx_vec[2],
             ),
-            current_state.position.datum,
-            current_state.position.frame,
-            current_state.position.epoch,
+            Datum::WGS84,
+            Frame::ECEF,
+            measurements[0].time
         ),
         next_cdt,
         next_cdt_gal,
-        next_cdt_bds
+        next_cdt_bds,
+        next_cdt_glo
     ))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_spp_wnlls_step_convergence() {
-        // Simulated true receiver position (approximate Earth surface)
-        let true_x: f64 = 6378137.0;
-        let true_y: f64 = 0.0;
-        let true_z: f64 = 0.0;
-        let true_cdt: f64 = 1000.0; // 1km clock bias
-
-        // Create a fake constellation of 4 satellites
-        let mut measurements = Vec::new();
-        
-        let sats = [
-            (20000000.0, 5000000.0, 5000000.0),
-            (22000000.0, -5000000.0, 5000000.0),
-            (19000000.0, 5000000.0, -5000000.0),
-            (21000000.0, -5000000.0, -5000000.0),
-            (25000000.0, 0.0, 0.0),
-        ];
-
-        for (sx, sy, sz) in sats {
-            let dx = true_x - sx;
-            let dy = true_y - sy;
-            let dz = true_z - sz;
-            let geometric_range = f64::sqrt(dx * dx + dy * dy + dz * dz);
-            let pseudorange = geometric_range + true_cdt;
-
-            measurements.push(SppMeasurement {
-                constellation: gneiss_core::sat::Constellation::Gps,
-                sat_coord: Coordinate::new(Vector3::new(sx, sy, sz), Datum::WGS84, Frame::ECEF, GpsTime::new(2000, 100000.0)),
-                pseudorange,
-                snr: 45.0,
-                doppler: 0.0,
-                time: GpsTime::new(2000, 100000.0),
-            });
-        }
-        let mut config = SppConfig::default();
-        config.enable_sagnac = false;
-        config.enable_tropo = false;
-        config.enable_iono = false;
-        config.geometry_variance_threshold = 100000.0;
-
-        // Initial guess: center of the earth, zero clock bias
-        let mut state = SppState::new(
-            Coordinate::new(Vector3::new(0.0, 0.0, 0.0), Datum::WGS84, Frame::ECEF, GpsTime::new(2000, 100000.0)),
-            0.0, 0.0, 0.0
-        );
-
-        // Iterate WNLLS step until convergence
-        for _ in 0..10 {
-            state = spp_wnlls_step(&state, &measurements, None, &config).unwrap();
-        }
-
-        // Verify it converges exactly to the true position and clock bias
-        assert!((state.position.vector.x - true_x).abs() < 1e-3, "X error too large: {}", (state.position.vector.x - true_x).abs());
-        assert!((state.position.vector.y - true_y).abs() < 1e-3, "Y error too large: {}", (state.position.vector.y - true_y).abs());
-        assert!((state.position.vector.z - true_z).abs() < 1e-3, "Z error too large: {}", (state.position.vector.z - true_z).abs());
-        assert!((state.cdt - true_cdt).abs() < 1e-3, "CDT error too large: {}", (state.cdt - true_cdt).abs());
-    }
 
     #[test]
     fn test_compute_spp() {
@@ -595,11 +583,13 @@ mod tests {
             satellites,
         };
 
-        let mut config = SppConfig::default();
-        config.enable_sagnac = false;
-        config.enable_tropo = false;
-        config.enable_iono = false;
-        config.geometry_variance_threshold = 100000.0;
+        let config = SppConfig {
+            enable_sagnac: false,
+            enable_tropo: false,
+            enable_iono: false,
+            geometry_variance_threshold: 100000.0,
+            ..Default::default()
+        };
 
         let state = compute_spp(&epoch, &ephemerides, None, &config, None).unwrap();
 

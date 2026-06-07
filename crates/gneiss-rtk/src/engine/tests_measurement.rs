@@ -66,13 +66,13 @@ mod tests {
 
         println!("Z: {:?}", z);
         
-        // Lock in the golden Z vector
-        assert!((z[0] - 0.66968).abs() < 1e-3);
-        assert!((z[1] - 0.64686).abs() < 1e-3);
-        assert!((z[2] - -4.25979).abs() < 1e-3);
-        assert!((z[3] - 7.67753).abs() < 1e-3);
-        assert!((z[4] - 7.64841).abs() < 1e-3);
-        assert!((z[5] - -2.23244).abs() < 1e-3);
+        // Lock in the golden Z vector (updated for iterative ecef_to_llh refinement)
+        assert!((z[0] - 0.70573).abs() < 1e-3, "z[0]={}", z[0]);
+        assert!((z[1] - 0.70623).abs() < 1e-3, "z[1]={}", z[1]);
+        assert!((z[2] - -4.29582).abs() < 1e-3, "z[2]={}", z[2]);
+        assert!((z[3] - 7.72370).abs() < 1e-3, "z[3]={}", z[3]);
+        assert!((z[4] - 7.72444).abs() < 1e-3, "z[4]={}", z[4]);
+        assert!((z[5] - -2.27859).abs() < 1e-3, "z[5]={}", z[5]);
 
         // Lock in the golden R diagonal
         assert!(r[0] >= 16.0); // Now scales with elevation

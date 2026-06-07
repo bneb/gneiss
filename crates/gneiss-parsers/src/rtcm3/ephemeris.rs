@@ -112,6 +112,8 @@ pub fn parse_1019(payload: &[u8]) -> Result<GpsEphemeris, RtcmParseError> {
     let tgd_raw = next_u8!(8);
     let tgd = sign_extend_i32(tgd_raw as u32, 8) as f64 * f64::powf(2.0, -31.0);
 
+    let _ = offset; // Silence unused assignment warning at end of function
+
     Ok(GpsEphemeris {
         sat: SatelliteId {
             constellation: Constellation::Gps,

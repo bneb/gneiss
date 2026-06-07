@@ -19,6 +19,7 @@ pub struct RtkState {
     pub rcv_clk_drift: f64,
     pub zwd: f64,
     pub gf_values: std::collections::HashMap<SatelliteId, f64>,
+    pub phase_history: std::collections::HashMap<(SatelliteId, u8), (f64, f64, GpsTime)>,
     
     pub ambiguities: Vec<f64>,
     pub ambiguity_keys: Vec<(SatelliteId, u8)>, // (Sat, Freq Band 1 or 2)
@@ -37,6 +38,7 @@ pub struct RtkState {
     // RTS Smoother matrices (15x15 core blocks)
     pub core_phi: Option<DMatrix<f64>>,       // State transition from k-1 to k
     pub core_p_predict: Option<DMatrix<f64>>, // Predicted covariance P_{k|k-1}
+    pub fixed_state: Option<Box<RtkState>>,
 }
 
 impl RtkState {
@@ -60,6 +62,7 @@ impl RtkState {
             rcv_clk_drift: 0.0,
             zwd: 0.1,
             gf_values: std::collections::HashMap::new(),
+            phase_history: std::collections::HashMap::new(),
             ambiguities: Vec::new(),
             ambiguity_keys: Vec::new(),
             mw_sd_ema: std::collections::HashMap::new(),
@@ -75,6 +78,7 @@ impl RtkState {
             covariance: cov,
             core_phi: None,
             core_p_predict: None,
+            fixed_state: None,
         }
     }
 
@@ -86,17 +90,15 @@ impl RtkState {
         *count += 1;
     }
 
-    pub fn resolve_ambiguities(&mut self, ephemerides: &[gneiss_core::ephemeris::Ephemeris], min_subset: usize) -> Result<(), &'static str> {
-        self.is_fixed = false;
-
+    pub fn resolve_ambiguities(&self, ephemerides: &[gneiss_core::ephemeris::Ephemeris], min_subset: usize) -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> {
         let num_amb = self.ambiguities.len();
-        if num_amb < 6 || self.epoch_count <= 50 { return Ok(()); }
+        if num_amb < 6 || self.epoch_count <= 50 { return Err("Insufficient data"); }
         
         let a_sd = nalgebra::DVector::from_vec(self.ambiguities.clone());
         let q_sd = self.covariance.view((CORE_STATE_SIZE, CORE_STATE_SIZE), (num_amb, num_amb)).into_owned();
         
         use gneiss_core::sat::Constellation;
-        let constellations = [Constellation::Gps, Constellation::Galileo, Constellation::Beidou, Constellation::Qzss];
+        let constellations = [Constellation::Gps, Constellation::Galileo];
         
         let mut candidates = Vec::new();
 
@@ -125,7 +127,7 @@ impl RtkState {
                     if rov_sat.constellation != constell { continue; }
                     let lock = *self.locktimes.get(&(rov_sat, freq)).unwrap_or(&0);
                     
-                    if lock >= 5 {
+                    if lock >= 3 {
                         if freq == 1 {
                             candidates.push((i, ref_idx, lock));
                         } else if let Some(r2_idx) = l2_ref_idx {
@@ -156,14 +158,14 @@ impl RtkState {
             candidate_vars.push((rov, r_idx, lock, var_cycles));
         }
         
-        // Sort primarily by variance in cycles (ascending - lower is better), fallback to lock time
+        // Sort candidates by lowest variance first (drops noisy/low-elevation multipath satellites first in PAR)
         candidate_vars.sort_by(|a, b| {
             a.3.partial_cmp(&b.3).unwrap_or(std::cmp::Ordering::Equal)
         });
 
-        // Prevent LAMBDA search from exploding by only passing highly converged ambiguities
-        candidate_vars.retain(|c| c.3 < 1.0);
-
+        // Prevent LAMBDA search from exploding by only passing reasonably converged ambiguities
+        candidate_vars.retain(|c| c.3 < 10.0);
+        
         if candidate_vars.len() >= min_subset {
             let max_subset = candidate_vars.len().min(24);
             
@@ -209,16 +211,13 @@ impl RtkState {
                     }
                 }
                 
-                // Removed debug print
                 if let Ok(res) = crate::lambda::resolve_lambda(&a_cycles, &q_cycles) {
-                    // Removed debug print
-                    // Dynamic Ratio Threshold (FF-RT)
-                    // We rely purely on LAMBDA Ratio Test and FF-RT for validation
-                    let dynamic_threshold = crate::ffrt::calculate_threshold(subset_size, 0.001);
+                    let dynamic_threshold = crate::ffrt::calculate_threshold(subset_size, 0.001).max(3.0);
                     if res.ratio >= dynamic_threshold {
                         tracing::info!("Multi-Const PAR Fixed & Validated (subset {}/{})! Ratio={:.2}, Ps={:.4}", subset_size, max_subset, res.ratio, res.success_rate);
 
                         let mut da_meters = DVector::zeros(subset_size);
+                        let mut z_meters = DVector::zeros(subset_size);
                         for row in 0..subset_size {
                             let (rov, _, _, _) = candidate_vars[row];
                             let (rov_sat_id, freq_band) = self.ambiguity_keys[rov];
@@ -226,6 +225,7 @@ impl RtkState {
                             let (f1, f2) = gneiss_core::signal::satellite_frequencies(rov_sat_id, freq_num);
                             let lam = 299792458.0 / if freq_band == 1 { f1 } else { f2 };
                             da_meters[row] = (res.best_integers[row] - a_cycles[row]) * lam;
+                            z_meters[row] = res.best_integers[row] * lam;
                         }
 
                         let state_size = self.covariance.nrows();
@@ -239,8 +239,7 @@ impl RtkState {
                         let s = &d_full * &self.covariance * d_full.transpose();
                         let s_inv = s.clone().try_inverse().ok_or("Fix covariance inversion failed")?;
                         let k_full = &self.covariance * d_full.transpose() * &s_inv;
-                        
-                        let dx = &k_full * da_meters;
+                        let dx = &k_full * &da_meters;
                         let mut fixed_state = self.clone();
                         fixed_state.position.vector += dx.rows(0, 3).into_owned();
                         fixed_state.velocity += dx.rows(3, 3).into_owned();
@@ -262,21 +261,14 @@ impl RtkState {
                         }
                         fixed_state.covariance = p_fixed;
                         fixed_state.is_fixed = true;
-                        
-                        // Re-apply update to self
-                        self.position = fixed_state.position;
-                        self.velocity = fixed_state.velocity;
-                        self.ambiguities = fixed_state.ambiguities;
-                        self.covariance = fixed_state.covariance.clone();
-                        self.is_fixed = true;
 
-                        return Ok(());
+                        return Ok((fixed_state, da_meters, d_full, res.ratio, subset_size));
                     }
                 }
             }
         }
 
-        Ok(())
+        Err("AR failed to resolve")
     }
 
 
@@ -294,6 +286,7 @@ impl RtkState {
             self.remove_ambiguity(sat, freq);
             self.last_observed.remove(&(sat, freq));
             self.locktimes.remove(&(sat, freq));
+            self.phase_history.remove(&(sat, freq));
         }
     }
     pub fn add_ambiguity(&mut self, sat: SatelliteId, freq: u8, initial_estimate: f64, initial_variance: f64) {
@@ -326,6 +319,14 @@ impl RtkState {
             }
             self.covariance = new_cov;
         }
+    }
+    
+    pub fn clear_ambiguities(&mut self) {
+        self.ambiguities.clear();
+        self.ambiguity_keys.clear();
+        let mut new_cov = DMatrix::zeros(CORE_STATE_SIZE, CORE_STATE_SIZE);
+        new_cov.copy_from(&self.covariance.view((0, 0), (CORE_STATE_SIZE, CORE_STATE_SIZE)));
+        self.covariance = new_cov;
     }
 }
 
@@ -437,18 +438,17 @@ mod tests {
             }),
         ];
 
-        state.resolve_ambiguities(&ephemerides, 4).expect("AR should run");
-
-        assert!(state.is_fixed, "Should achieve fix with multi-constellation support");
+        let (fixed_state, _, _, _, _) = state.resolve_ambiguities(&ephemerides, 4).expect("AR should run");
+        assert!(fixed_state.is_fixed, "Should achieve fix with multi-constellation support");
         
-        let idx_ref = state.ambiguity_keys.iter().position(|&(s, f)| s == gps_ref && f == 1).unwrap();
-        let idx_rov = state.ambiguity_keys.iter().position(|&(s, f)| s == gps_rov1 && f == 1).unwrap();
-        let dd_gps = (state.ambiguities[idx_rov] - state.ambiguities[idx_ref]) / lam;
+        let idx_ref = fixed_state.ambiguity_keys.iter().position(|&(s, f)| s == gps_ref && f == 1).unwrap();
+        let idx_rov = fixed_state.ambiguity_keys.iter().position(|&(s, f)| s == gps_rov1 && f == 1).unwrap();
+        let dd_gps = (fixed_state.ambiguities[idx_rov] - fixed_state.ambiguities[idx_ref]) / lam;
         assert!((dd_gps.round() - 5.0).abs() < 1e-6);
 
-        let idx_ref_gal = state.ambiguity_keys.iter().position(|&(s, f)| s == gal_ref && f == 1).unwrap();
-        let idx_rov_gal = state.ambiguity_keys.iter().position(|&(s, f)| s == gal_rov && f == 1).unwrap();
-        let dd_gal = (state.ambiguities[idx_rov_gal] - state.ambiguities[idx_ref_gal]) / lam;
+        let idx_ref_gal = fixed_state.ambiguity_keys.iter().position(|&(s, f)| s == gal_ref && f == 1).unwrap();
+        let idx_rov_gal = fixed_state.ambiguity_keys.iter().position(|&(s, f)| s == gal_rov && f == 1).unwrap();
+        let dd_gal = (fixed_state.ambiguities[idx_rov_gal] - fixed_state.ambiguities[idx_ref_gal]) / lam;
         assert!((dd_gal.round() - 6.0).abs() < 1e-6);
     }
 

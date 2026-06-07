@@ -51,7 +51,7 @@ For global standalone accuracy, Gneiss incorporates advanced physical models to 
 - **Ionosphere-Free (IF) Combinations**: Dual-frequency code and phase measurements are linearly combined to eliminate first-order ionospheric delay. Dynamic variance estimators automatically scale the IF noise inflation based on frequency separation.
 - **Geophysical Tides**: Corrects Earth-Centered, Earth-Fixed (ECEF) coordinates dynamically for Solid Earth Tides (SET) based on lunisolar gravitational pull using IERS conventions.
 - **Satellite Phase Wind-Up**: Corrects fractional carrier phase cycles induced by the geometric rotation of the emitting satellite antennas as they orbit and maintain solar panel alignment.
-- **Intelligent Clock Jumps**: Automatically detects and isolates 1ms+ clock jump resets (common in low-cost TCXO receivers), shifting both the state and phase ambiguities seamlessly to prevent EKF covariance tearing.
+- **Clock Jump Detection**: Detects and isolates 1ms+ clock jump resets, shifting both the state and phase ambiguities to prevent EKF covariance tearing.
 
 ## Tightly-Coupled Update
 

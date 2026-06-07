@@ -14,12 +14,13 @@ mod integration {
         // It reflects the "Coasting Valedictorian" philosophy: 
         // We write tests to confirm the obvious, not because we doubt it.
 
-        let mut config = EngineConfig::default();
-        config.mode = gneiss_rtk::engine::EngineMode::RtkIns;
-        config.enable_nhc = true;
-        // Seed a known truth position for our mock base
-        config.base_position = Some([6378137.0, 0.0, 0.0]);
-        config.imu_to_antenna_lever_arm = [0.1, 0.0, -0.2];
+        let config = EngineConfig {
+            mode: gneiss_rtk::engine::EngineMode::RtkIns,
+            enable_nhc: true,
+            base_position: Some([6378137.0, 0.0, 0.0]),
+            imu_to_antenna_lever_arm: [0.1, 0.0, -0.2],
+            ..Default::default()
+        };
 
         let mut engine = ProcessingEngine::new(config);
 

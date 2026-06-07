@@ -11,3 +11,8 @@ libm = "0.2.16"
 nalgebra = { version = "0.32", default-features = false, features = ["alloc"] }
 serde = { version = "1.0.228", features = ["derive"] }
 tracing = "0.1.44"
+
+[features]
+default = []
+gf-slip = []           # Geometry-Free cycle slip detection for RTK
+doppler-velocity = []  # Doppler-based velocity EKF update for SPP

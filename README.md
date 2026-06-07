@@ -29,9 +29,9 @@ The engine's architecture provides a mathematical scaffold for multiple GNSS pro
 **Features Included:**
   - Ionosphere-Free Linear Combinations for multi-frequency correction.
   - Zenith Wet Delay (ZWD) tropospheric estimation.
-  - Advanced geophysical corrections (Solid Earth Tides, Satellite Phase Wind-Up).
+  - Geophysical corrections (Solid Earth Tides, Satellite Phase Wind-Up).
   - CDDIS SP3 and precise clock (.clk) parsing via 10th-order Lagrange interpolation.
-  - Intelligent Clock Jump State Preservation algorithms to prevent EKF divergence during TCXO adjustments.
+  - Clock Jump State Preservation algorithms to prevent EKF divergence during TCXO adjustments.
 
 ## Architecture
 

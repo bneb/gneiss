@@ -32,27 +32,19 @@ pub fn process_ppp<'a>(engine: &'a mut ProcessingEngine, rover_obs: &EpochObs) -
     for (_idx, sat_obs) in rover_obs.satellites.iter().enumerate() {
         let pr1 = sat_obs.get_observable(1);
         let pr2 = sat_obs.get_observable(2);
-        let cp1 = sat_obs.get_observable_phase(1);
-        let cp2 = sat_obs.get_observable_phase(2);
         
         if pr1.is_none() || pr2.is_none() { continue; }
         let eph = match engine.ephemerides.iter().find(|e| e.sat() == sat_obs.sat) {
             Some(e) => e,
             None => continue,
         };
-        
-        let pr1 = sat_obs.get_observable(1);
-        let pr2 = sat_obs.get_observable(2);
-        let cp1 = sat_obs.get_observable_phase(1);
-        let cp2 = sat_obs.get_observable_phase(2);
-
-        if pr1.is_none() || pr2.is_none() || cp1.is_none() || cp2.is_none() {
-            continue;
-        }
 
         let f1 = gneiss_core::signal::satellite_frequencies(sat_obs.sat, eph.freq_num()).0;
         let f2 = gneiss_core::signal::satellite_frequencies(sat_obs.sat, eph.freq_num()).1;
         let p_if = crate::combinations::iono_free(pr1.unwrap(), pr2.unwrap(), f1, f2);
+        
+        let cp1 = sat_obs.get_observable_phase(1);
+        let cp2 = sat_obs.get_observable_phase(2);
 
         let mut rcv_pos_ecef = Vector3::new(state.position.vector.x, state.position.vector.y, state.position.vector.z);
         let set_disp = gneiss_core::tides::solid_earth_tides_ecef(rover_obs.time, rcv_pos_ecef);
@@ -108,7 +100,7 @@ pub fn process_ppp<'a>(engine: &'a mut ProcessingEngine, rover_obs: &EpochObs) -
                 let prev_l1 = *state.locktimes.get(&(sat_obs.sat, 1)).unwrap_or(&0);
                 let mut new_l1 = prev_l1.saturating_add(1);
                 if let Some(lk) = l1_lock {
-                    if lk == 0 || (lk as u16) < prev_l1 { slip = true; new_l1 = lk as u16; } else { new_l1 = lk as u16; }
+                    if lk == 0 || lk < prev_l1 { slip = true; new_l1 = lk; } else { new_l1 = lk; }
                 } else if new_l1 == 0 && state.locktimes.contains_key(&(sat_obs.sat, 1)) { slip = true; }
                 state.locktimes.insert((sat_obs.sat, 1), new_l1);
                 
@@ -116,7 +108,7 @@ pub fn process_ppp<'a>(engine: &'a mut ProcessingEngine, rover_obs: &EpochObs) -
                 let prev_l2 = *state.locktimes.get(&(sat_obs.sat, 2)).unwrap_or(&0);
                 let mut new_l2 = prev_l2.saturating_add(1);
                 if let Some(lk) = l2_lock {
-                    if lk == 0 || (lk as u16) < prev_l2 { slip = true; new_l2 = lk as u16; } else { new_l2 = lk as u16; }
+                    if lk == 0 || lk < prev_l2 { slip = true; new_l2 = lk; } else { new_l2 = lk; }
                 } else if new_l2 == 0 && state.locktimes.contains_key(&(sat_obs.sat, 2)) { slip = true; }
                 state.locktimes.insert((sat_obs.sat, 2), new_l2);
 
@@ -236,8 +228,8 @@ pub fn process_ppp<'a>(engine: &'a mut ProcessingEngine, rover_obs: &EpochObs) -
         r_mat[(i, i)] = r_vec[i];
     }
 
-    crate::engine::updater::update(state, &z, &h, &r_mat).map_err(|e| {
-        tracing::error!("PPP Update Error: {:?}", e);
+    crate::engine::updater::update(state, &z, &h, &r_mat, 15.0, None).map_err(|e| {
+        tracing::error!("PPP EKF Update failed: {:?}", e);
         EngineError::StateDisappeared
     })?;
 

@@ -8,18 +8,50 @@ pub fn evaluate(solution: &str, truth: &str) -> Result<(), String> {
     let truth_data = std::fs::read_to_string(truth).map_err(|e| format!("Failed to read truth file: {}", e))?;
     let mut truth_epochs = Vec::new();
 
-    let is_llh = truth_data.lines().any(|l| l.contains("latitude(deg) longitude(deg)"));
+    let is_llh = truth_data.lines().any(|l| l.contains("latitude(deg)"));
 
     if truth.ends_with(".csv") {
-        for line in truth_data.lines().skip(1) {
-            if line.trim().is_empty() { continue; }
-            let parts: Vec<&str> = line.split(',').collect();
-            if parts.len() >= 8 {
-                let tow: f64 = parts[0].trim().parse().unwrap_or(0.0);
-                let x: f64 = parts[5].trim().parse().unwrap_or(0.0);
-                let y: f64 = parts[6].trim().parse().unwrap_or(0.0);
-                let z: f64 = parts[7].trim().parse().unwrap_or(0.0);
-                truth_epochs.push((tow, nalgebra::Vector3::new(x, y, z)));
+        let mut lines = truth_data.lines();
+        if let Some(header) = lines.next() {
+            let headers: Vec<&str> = header.split(',').map(|s| s.trim()).collect();
+            
+            let is_gsdc = headers.contains(&"millisSinceGpsEpoch");
+            
+            if is_gsdc {
+                let time_idx = headers.iter().position(|h| *h == "millisSinceGpsEpoch").unwrap_or(2);
+                let lat_idx = headers.iter().position(|h| *h == "latDeg").unwrap_or(3);
+                let lon_idx = headers.iter().position(|h| *h == "lngDeg").unwrap_or(4);
+                let hgt_idx = headers.iter().position(|h| *h == "heightAboveWgs84EllipsoidM").unwrap_or(5);
+                
+                for line in lines {
+                    if line.trim().is_empty() { continue; }
+                    let parts: Vec<&str> = line.split(',').collect();
+                    if parts.len() > hgt_idx {
+                        let millis: u64 = parts[time_idx].trim().parse().unwrap_or(0);
+                        if millis > 0 {
+                            let tow = (millis % 604_800_000) as f64 / 1000.0;
+                            
+                            let lat: f64 = parts[lat_idx].trim().parse().unwrap_or(0.0);
+                            let lon: f64 = parts[lon_idx].trim().parse().unwrap_or(0.0);
+                            let hgt: f64 = parts[hgt_idx].trim().parse().unwrap_or(0.0);
+                            
+                            let ecef = llh_to_ecef(nalgebra::Vector3::new(lat.to_radians(), lon.to_radians(), hgt));
+                            truth_epochs.push((tow, ecef));
+                        }
+                    }
+                }
+            } else {
+                for line in lines {
+                    if line.trim().is_empty() { continue; }
+                    let parts: Vec<&str> = line.split(',').collect();
+                    if parts.len() >= 8 {
+                        let tow: f64 = parts[0].trim().parse().unwrap_or(0.0);
+                        let x: f64 = parts[5].trim().parse().unwrap_or(0.0);
+                        let y: f64 = parts[6].trim().parse().unwrap_or(0.0);
+                        let z: f64 = parts[7].trim().parse().unwrap_or(0.0);
+                        truth_epochs.push((tow, nalgebra::Vector3::new(x, y, z)));
+                    }
+                }
             }
         }
     } else {
@@ -152,6 +184,10 @@ pub fn evaluate(solution: &str, truth: &str) -> Result<(), String> {
             horiz_errors.push(h_err);
             vert_errors.push(v_err);
             err_3d.push(d3);
+            
+            if horiz_errors.len() % 100 == 0 {
+                println!("Epoch {} (tow {:.1}): h_err={:.3}m v_err={:.3}m dx={:.3} dy={:.3} dz={:.3}", horiz_errors.len(), sol_tow, h_err, v_err, dx, dy, dz);
+            }
 
             if let (Some(p_true_ecef), Some(p_sol_ecef)) = (prev_true_ecef, prev_sol_ecef) {
                 let v_true_ecef = true_ecef - p_true_ecef;

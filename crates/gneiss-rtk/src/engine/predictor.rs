@@ -99,8 +99,8 @@ pub fn predict(state: &mut RtkState, dt: f64, _q_var: f64, imu_buffer: &[gneiss_
     
     let dt_abs = dt.abs();
     if imu_buffer.is_empty() {
-        // Standard GNSS-only kinematic model
-        let q_acc = 10.0;
+        // Standard GNSS-only dynamic model (predicts position using velocity)
+        let q_acc = _q_var;
         let q_pos = q_acc * dt_abs.powi(3) / 3.0; 
         let q_vel = q_acc * dt_abs;
         let q_pos_vel = q_acc * dt_abs.powi(2) / 2.0;
@@ -148,7 +148,7 @@ pub fn predict(state: &mut RtkState, dt: f64, _q_var: f64, imu_buffer: &[gneiss_
 
     // Ambiguity noise
     for i in crate::filter::CORE_STATE_SIZE..n {
-        if state.is_fixed { q[(i, i)] = 1e-12; } else { q[(i, i)] = 1e-10 * dt_abs; }
+        if state.is_fixed { q[(i, i)] = 1e-12; } else { q[(i, i)] = 1e-8 * dt_abs; }
     }
     
     state.core_phi = Some(phi.view((0, 0), (crate::filter::CORE_STATE_SIZE, crate::filter::CORE_STATE_SIZE)).into_owned());

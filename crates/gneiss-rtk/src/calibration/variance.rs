@@ -5,8 +5,8 @@
 /// `elevation_rad`: Elevation angle of the satellite in radians
 /// `base_variance`: The theoretical minimum variance of the measurement (e.g., 0.0001 for Carrier Phase, 9.0 for Pseudorange)
 pub fn dynamic_variance(snr_dbhz: f64, elevation_rad: f64, base_variance: f64) -> f64 {
-    let snr_clamped = snr_dbhz.max(25.0).min(50.0);
-    let snr_scale = libm::pow(10.0, (45.0 - snr_clamped) / 10.0).max(1.0).min(100.0);
+    let snr_clamped = snr_dbhz.clamp(25.0, 50.0);
+    let snr_scale = libm::pow(10.0, (45.0 - snr_clamped) / 10.0).clamp(1.0, 100.0);
     
     let sin_el = elevation_rad.sin().max(0.1);
     let el_scale = 1.0 / (sin_el * sin_el);

@@ -3,6 +3,7 @@ pub mod predictor;
 pub mod updater;
 pub mod measurement;
 pub mod ppp;
+pub mod ambiguity;
 
 use nalgebra::{Vector3, DMatrix, DVector};
 use gneiss_core::obs::EpochObs;
@@ -13,24 +14,22 @@ use crate::filter::RtkState;
 use crate::engine::matcher::match_observations;
 
 /// Defines the core positioning mode
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 pub enum EngineMode {
     Spp,
     SppIns,
+    SppInsLooselyCoupled,
+    #[default]
     Rtk,
     RtkIns,
+    RtkInsLooselyCoupled,
     Ppp,
     PppIns,
 }
 
-impl Default for EngineMode {
-    fn default() -> Self {
-        EngineMode::Rtk
-    }
-}
-
 /// Configuration for the RTK processing engine.
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+#[serde(default)]
 pub struct EngineConfig {
     pub mode: EngineMode,
     pub initial_position: Option<[f64; 3]>,
@@ -42,12 +41,14 @@ pub struct EngineConfig {
     pub enable_backward_smoothing: bool,
     pub lambda_min_ratio: f64,
     pub lambda_min_subset: usize,
+    pub enabled_constellations: Option<Vec<gneiss_core::sat::Constellation>>,
     
     // Tuning Parameters
     pub raim_pseudorange_outlier_m: f64,
     pub chi_square_pr_threshold: f64,
     pub chi_square_cp_threshold: f64,
     pub nominal_snr_dbhz: f64,
+    pub gnss_process_noise_var: f64,
 }
 
 impl Default for EngineConfig {
@@ -59,14 +60,16 @@ impl Default for EngineConfig {
             base_datum_transform: None,
             imu_to_antenna_lever_arm: [0.0, 0.0, 0.0],
             imu_mounting_angles: None,
-            enable_nhc: true,
+            enable_nhc: false,
             enable_backward_smoothing: false,
             lambda_min_ratio: 3.0,
             lambda_min_subset: 5,
+            enabled_constellations: None,
             raim_pseudorange_outlier_m: 25.0,
             chi_square_pr_threshold: 15.0,
             chi_square_cp_threshold: 1000000.0,
             nominal_snr_dbhz: 40.0,
+            gnss_process_noise_var: 1.0,
         }
     }
 }
@@ -99,6 +102,7 @@ impl std::error::Error for EngineError {}
 pub struct ProcessingEngine {
     pub config: EngineConfig,
     pub current_state: Option<RtkState>,
+    pub gnss_only_state: Option<RtkState>, // For loosely coupled modes
     pub ephemerides: Vec<Ephemeris>,
     pub state_history: Vec<RtkState>,
     pub obs_history: Vec<(EpochObs, Option<EpochObs>)>,
@@ -112,6 +116,7 @@ impl ProcessingEngine {
         Self {
             config,
             current_state: None,
+            gnss_only_state: None,
             ephemerides: Vec::new(),
             state_history: Vec::new(),
             obs_history: Vec::new(),
@@ -137,18 +142,35 @@ impl ProcessingEngine {
 
     pub fn predict_state(&mut self, dt: f64) {
         if let Some(state) = self.current_state.as_mut() {
-            let enable_imu = matches!(self.config.mode, EngineMode::SppIns | EngineMode::RtkIns | EngineMode::PppIns);
-            crate::engine::predictor::predict(state, dt, if enable_imu { 0.1 } else { 10.0 }, &self.imu_buffer);
+            let enable_imu = matches!(self.config.mode, EngineMode::SppIns | EngineMode::RtkIns | EngineMode::PppIns | EngineMode::RtkInsLooselyCoupled | EngineMode::SppInsLooselyCoupled);
+            crate::engine::predictor::predict(state, dt, if enable_imu { 0.1 } else { self.config.gnss_process_noise_var }, &self.imu_buffer);
         }
         self.imu_history.push(self.imu_buffer.clone());
         self.imu_buffer.clear();
     }
 
     pub fn process_epoch(&mut self, rover_obs: &EpochObs, base_obs: Option<&EpochObs>) -> Result<&RtkState, EngineError> {
+        let mut filtered_rover = rover_obs.clone();
+        if let Some(enabled) = &self.config.enabled_constellations {
+            filtered_rover.satellites.retain(|s| enabled.contains(&s.sat.constellation));
+        }
+
+        let mut filtered_base_storage = None;
+        if let Some(b) = base_obs {
+            let mut clone = b.clone();
+            if let Some(enabled) = &self.config.enabled_constellations {
+                clone.satellites.retain(|s| enabled.contains(&s.sat.constellation));
+            }
+            filtered_base_storage = Some(clone);
+        }
+        let filtered_base = filtered_base_storage.as_ref();
+
         let err = match self.config.mode {
-            EngineMode::Spp | EngineMode::SppIns => self.process_spp(rover_obs).err(),
-            EngineMode::Rtk | EngineMode::RtkIns => self.process_rtk(rover_obs, base_obs).err(),
-            EngineMode::Ppp | EngineMode::PppIns => crate::engine::ppp::process_ppp(self, rover_obs).err(),
+            EngineMode::Spp | EngineMode::SppIns => self.process_spp(&filtered_rover).err(),
+            EngineMode::SppInsLooselyCoupled => self.process_spp_loosely_coupled(&filtered_rover).err(),
+            EngineMode::Rtk | EngineMode::RtkIns => self.process_rtk(&filtered_rover, filtered_base).err(),
+            EngineMode::RtkInsLooselyCoupled => self.process_rtk_loosely_coupled(&filtered_rover, filtered_base).err(),
+            EngineMode::Ppp | EngineMode::PppIns => crate::engine::ppp::process_ppp(self, &filtered_rover).err(),
         };
         if let Some(e) = err {
             if let EngineError::StateDisappeared = e {
@@ -163,12 +185,82 @@ impl ProcessingEngine {
         }
     }
 
+    pub fn process_spp_loosely_coupled(&mut self, rover_obs: &EpochObs) -> Result<&RtkState, EngineError> {
+        // Run SPP as normal, which natively acts loosely coupled already
+        self.process_spp(rover_obs)
+    }
+
+    pub fn process_rtk_loosely_coupled(&mut self, rover_obs: &EpochObs, base_obs: Option<&EpochObs>) -> Result<&RtkState, EngineError> {
+        let prev_state = self.current_state.clone(); // preserve INS state
+        let prev_config = self.config.mode;
+        
+        // 1. Run standard RTK purely for GNSS (swap states)
+        self.current_state = self.gnss_only_state.take();
+        self.config.mode = EngineMode::Rtk; // temporarily act as pure RTK
+        let gnss_res_cloned = self.process_rtk(rover_obs, base_obs).cloned();
+        self.gnss_only_state = self.current_state.take(); // save GNSS ambiguity state
+        self.config.mode = prev_config; // restore
+        self.current_state = prev_state; // restore INS state
+
+        let gnss_state = gnss_res_cloned?;
+
+        if self.current_state.is_none() {
+            // Seed INS filter with first RTK fix
+            let mut ins_state = RtkState::new(rover_obs.time, gnss_state.position, 0.1);
+            ins_state.velocity = gnss_state.velocity;
+            ins_state.is_fixed = gnss_state.is_fixed;
+            self.current_state = Some(ins_state);
+        }
+
+        let dt = rover_obs.time - self.current_state.as_ref().unwrap().time;
+        self.predict_state(dt);
+        let state = self.current_state.as_mut().unwrap();
+        state.time = rover_obs.time;
+        state.position.epoch = rover_obs.time;
+
+        // 2. Perform loosely coupled measurement update using RTK position & velocity
+        let mut z_vec = DVector::zeros(6);
+        z_vec.rows_mut(0, 3).copy_from(&(gnss_state.position.vector - state.position.vector));
+        z_vec.rows_mut(3, 3).copy_from(&(gnss_state.velocity - state.velocity));
+        
+        let mut h_mat = DMatrix::zeros(6, state.covariance.ncols());
+        h_mat.view_mut((0, 0), (6, 6)).fill_diagonal(1.0); // Identity for Pos & Vel
+        
+        // Use GNSS state covariance for R
+        let mut r_mat = DMatrix::zeros(6, 6);
+        r_mat.copy_from(&gnss_state.covariance.view((0, 0), (6, 6)));
+
+        if let Err(e) = crate::engine::updater::update(state, &z_vec, &h_mat, &r_mat, 15.0, None) {
+            tracing::debug!("RTK loosely coupled EKF update failed: {:?}", e);
+        }
+        
+        state.is_fixed = gnss_state.is_fixed;
+
+        // We already pushed history in the inner process_rtk if we let it, but actually process_rtk 
+        // pushes to state_history. To prevent duplicates or mixed histories, we should pop the last ones
+        // or just rely on this wrapper for the *final* history.
+        // Wait, `process_rtk` pushes to `self.state_history` and `self.obs_history`. 
+        // We will pop them here and push the true INS state.
+        self.state_history.pop();
+        self.obs_history.pop();
+        
+        self.state_history.push(state.clone());
+        self.obs_history.push((rover_obs.clone(), base_obs.cloned()));
+        
+        Ok(self.current_state.as_ref().unwrap())
+    }
+
     pub fn process_spp(&mut self, rover_obs: &EpochObs) -> Result<&RtkState, EngineError> {
         let mut spp_pos = None;
         let mut spp_cdt = 0.0;
-        if let Ok(spp_res) = crate::spp::compute_spp(rover_obs, &self.ephemerides, None, &crate::spp::SppConfig::default(), None) {
-            spp_pos = Some(spp_res.position);
-            spp_cdt = spp_res.cdt;
+        match crate::spp::compute_spp(rover_obs, &self.ephemerides, Some(&gneiss_core::atmosphere::KlobucharParams::default()), &crate::spp::SppConfig::default(), None) {
+            Ok(spp_res) => {
+                spp_pos = Some(spp_res.position);
+                spp_cdt = spp_res.cdt;
+            },
+            Err(e) => {
+                tracing::warn!("Initial SPP compute failed: {:?}", e);
+            }
         }
 
         if self.current_state.is_none() {
@@ -186,6 +278,31 @@ impl ProcessingEngine {
         let dt = rover_obs.time - self.current_state.as_ref().ok_or(EngineError::StateDisappeared)?.time;
         self.predict_state(dt);
         
+        if let Some(pos) = spp_pos {
+            if matches!(self.config.mode, EngineMode::Spp) {
+                // Pure SPP is an epoch-by-epoch solution. Do not filter.
+                let state = self.current_state.as_mut().unwrap();
+                state.time = rover_obs.time;
+                state.position = pos;
+                state.position.epoch = rover_obs.time;
+                state.velocity = nalgebra::Vector3::zeros();
+                self.state_history.push(state.clone());
+                self.obs_history.push((rover_obs.clone(), None));
+                return Ok(self.current_state.as_ref().unwrap());
+            }
+        } else {
+            // SPP failed for this epoch.
+            if matches!(self.config.mode, EngineMode::Spp) {
+                // We preserve the state so the next epoch has a good seed, 
+                // but we return an error so no output is produced for this epoch.
+                if let Some(state) = self.current_state.as_mut() {
+                    state.time = rover_obs.time;
+                    state.position.epoch = rover_obs.time;
+                }
+                return Err(EngineError::InitialSppFailed);
+            }
+        }
+
         let state = self.current_state.as_mut().ok_or(EngineError::StateDisappeared)?;
         state.time = rover_obs.time;
         state.position.epoch = rover_obs.time;
@@ -201,7 +318,7 @@ impl ProcessingEngine {
             let mut r_mat = nalgebra::DMatrix::zeros(3, 3);
             r_mat.fill_diagonal(25.0);
 
-            if let Err(e) = crate::engine::updater::update(state, &z_vec, &h_mat, &r_mat) {
+            if let Err(e) = crate::engine::updater::update(state, &z_vec, &h_mat, &r_mat, 15.0, None) {
                 tracing::debug!("SPP EKF update failed: {:?}", e);
             }
         }
@@ -225,8 +342,10 @@ impl ProcessingEngine {
     pub fn process_rtk(&mut self, rover_obs: &EpochObs, base_obs: Option<&EpochObs>) -> Result<&RtkState, EngineError> {
 
         let mut spp_pos = None;
-        if let Ok(spp_res) = crate::spp::compute_spp(rover_obs, &self.ephemerides, None, &crate::spp::SppConfig::default(), None) {
+        if let Ok(spp_res) = crate::spp::compute_spp(rover_obs, &self.ephemerides, Some(&gneiss_core::atmosphere::KlobucharParams::default()), &crate::spp::SppConfig::default(), None) {
             spp_pos = Some(spp_res.position);
+        } else {
+            tracing::warn!("compute_spp failed in process_rtk!");
         }
 
         if self.current_state.is_none() {
@@ -243,6 +362,35 @@ impl ProcessingEngine {
         let state = self.current_state.as_mut().ok_or(EngineError::StateDisappeared)?;
         state.time = rover_obs.time;
         state.position.epoch = rover_obs.time;
+
+        if matches!(self.config.mode, EngineMode::Rtk | EngineMode::Ppp) {
+            if let Some(pos) = spp_pos {
+                state.position = pos;
+                // Reset positional covariance to 100.0 m^2 and decouple from ambiguities
+                for i in 0..3 {
+                    for j in 0..state.covariance.ncols() {
+                        if i == j {
+                            state.covariance[(i, j)] = 100.0;
+                        } else {
+                            state.covariance[(i, j)] = 0.0;
+                            state.covariance[(j, i)] = 0.0;
+                        }
+                    }
+                }
+                
+                // Also decouple velocity
+                for i in 3..6 {
+                    for j in 0..state.covariance.ncols() {
+                        if i == j {
+                            state.covariance[(i, j)] = 10.0;
+                        } else {
+                            state.covariance[(i, j)] = 0.0;
+                            state.covariance[(j, i)] = 0.0;
+                        }
+                    }
+                }
+            }
+        }
 
         let valid_base = base_obs.filter(|b| {
             let age = (rover_obs.time.tow - b.time.tow).abs();
@@ -268,177 +416,79 @@ impl ProcessingEngine {
                 base_coord = Coordinate::new(transformed_vec, Datum::WGS84, Frame::ECEF, rover_obs.time);
             }
             
-            let matched_obs = match_observations(rover_obs, base);
+            let matched_obs = match_observations(rover_obs, base, &self.ephemerides);
             
             if state.epoch_count < 5 || state.epoch_count % 100 == 0 {
                 tracing::info!("Epoch {}: Matched {} satellites", state.epoch_count, matched_obs.len());
             }
 
             if matched_obs.len() >= 5 {
-                for (r, b) in &matched_obs {
-                    let mut slip = false;
-                    let prev_lock = *state.locktimes.get(&(r.sat, 1)).unwrap_or(&0);
-                    let mut new_lock = prev_lock + 1;
+                crate::engine::ambiguity::manage_ambiguities_and_slips(state, &matched_obs, &self.ephemerides, &base_coord, rover_obs.time, base.time);
+
+                    if let Some((z_safe, h_safe, r_safe, type_safe)) = crate::engine::measurement::build_measurement_model(
+                        state,
+                        &matched_obs,
+                        &self.ephemerides,
+                        &base_coord,
+                        rover_obs.time,
+                        base.time,
+                        Vector3::from_column_slice(&self.config.imu_to_antenna_lever_arm),
+                        self.config.chi_square_pr_threshold,
+                        self.config.chi_square_cp_threshold,
+                    ) {
                     
-                    if let Some(r_lock) = r.locktime {
-                        if r_lock == 0 {
-                            slip = true;
-                            new_lock = 0;
-                        } else if r_lock < prev_lock {
-                            slip = true;
-                            new_lock = r_lock;
+                    let mut diverged = false;
+                    if let Some(pos) = spp_pos {
+                        let diff = pos.vector - state.position.vector;
+                        tracing::debug!("SPP vs RTK pos diff: {:.1}m", diff.norm());
+                        if diff.norm() > 50.0 {
+                            tracing::warn!("EKF DIVERGENCE DETECTED! Difference from SPP is {:.1}m (> 50m). Forcing reset.", diff.norm());
+                            diverged = true;
+                        }
+                    }
+                    
+                    if diverged || crate::engine::updater::update(state, &z_safe, &h_safe, &r_safe, self.config.chi_square_pr_threshold, Some(&type_safe)).is_err() { 
+                        if diverged {
+                            tracing::warn!("EKF update bypassed due to divergence.");
                         } else {
-                            new_lock = r_lock;
+                            tracing::error!("EKF update fail");
                         }
-                    }
-
-                    if new_lock == 0 && state.locktimes.contains_key(&(r.sat, 1)) {
-                        slip = true;
-                    }
-
-                    state.locktimes.insert((r.sat, 1), new_lock);
-                    state.locktimes.insert((r.sat, 2), new_lock);
-                    
-                    let r_freq_num = self.ephemerides.iter().find(|e| e.sat() == r.sat).map(|e| e.freq_num()).unwrap_or(0);
-                    let b_freq_num = self.ephemerides.iter().find(|e| e.sat() == b.sat).map(|e| e.freq_num()).unwrap_or(0);
-                    
-                    let (r_f1, r_f2) = gneiss_core::signal::satellite_frequencies(r.sat, r_freq_num);
-                    let (b_f1, b_f2) = gneiss_core::signal::satellite_frequencies(b.sat, b_freq_num);
-
-                    let mut slip_l1 = slip;
-                    let mut slip_l2 = slip;
-                    if *state.reject_counts.get(&(r.sat, 1)).unwrap_or(&0) > 3 { slip_l1 = true; }
-                    if *state.reject_counts.get(&(r.sat, 2)).unwrap_or(&0) > 3 { slip_l2 = true; }
-
-                    if !state.ambiguity_keys.contains(&(r.sat, 1)) || slip_l1 || slip_l2 {
-                        if slip_l1 || slip_l2 { 
-                            state.remove_ambiguity(r.sat, 1); 
-                            state.remove_ambiguity(r.sat, 2);
-                            state.reject_counts.insert((r.sat, 1), 0);
-                            state.reject_counts.insert((r.sat, 2), 0);
-                        }
-                        
-                        if let (Some(r_cp1), Some(b_cp1)) = (r.cp_l1, b.cp_l1) {
-                            let lam_r1 = 299792458.0 / r_f1;
-                            let lam_b1 = 299792458.0 / b_f1;
-                            let cp_l1_rov = r_cp1 * lam_r1;
-                            let cp_l1_base = b_cp1 * lam_b1;
-
-                            let mut initialized = false;
-                            if state.covariance[(0,0)] < 0.1 {
-                                // Try to find an anchor satellite to cancel the clock bias
-                                for (anchor_r, anchor_b) in matched_obs.iter() {
-                                    if anchor_r.sat == r.sat { continue; }
-                                    if let Some(anchor_idx) = state.ambiguity_keys.iter().position(|&(s, f)| s == anchor_r.sat && f == 1) {
-                                        if state.covariance[(15 + anchor_idx, 15 + anchor_idx)] < 0.05 {
-                                            if let (Some(ar_cp), Some(ab_cp)) = (anchor_r.cp_l1, anchor_b.cp_l1) {
-                                                let (ar_sat_vec, _, _, _) = self.ephemerides.iter().find(|e| e.sat() == anchor_r.sat).unwrap().position(rover_obs.time);
-                                                let (ab_sat_vec, _, _, _) = self.ephemerides.iter().find(|e| e.sat() == anchor_b.sat).unwrap().position(base.time);
-                                                let ar_dist_rov = (state.position.vector - ar_sat_vec).norm();
-                                                let ar_dist_base = (base_coord.vector - ab_sat_vec).norm();
-                                                
-                                                let a_lam_r = 299792458.0 / r_f1;
-                                                let a_lam_b = 299792458.0 / b_f1;
-                                                let a_cp_rov = ar_cp * a_lam_r;
-                                                let a_cp_base = ab_cp * a_lam_b;
-                                                
-                                                let anchor_sd = state.ambiguities[anchor_idx];
-                                                let b_clock_rov = a_cp_rov - ar_dist_rov - anchor_sd;
-                                                let b_clock_base = a_cp_base - ar_dist_base; // Base has no ambiguity in SD, assuming SD = rov - base
-
-                                                let (r_sat_vec, _, _, _) = self.ephemerides.iter().find(|e| e.sat() == r.sat).unwrap().position(rover_obs.time);
-                                                let (b_sat_vec, _, _, _) = self.ephemerides.iter().find(|e| e.sat() == b.sat).unwrap().position(base.time);
-                                                let dist_rov = (state.position.vector - r_sat_vec).norm();
-                                                let dist_base = (base_coord.vector - b_sat_vec).norm();
-                                                
-                                                let initial_est_l1 = (cp_l1_rov - dist_rov - b_clock_rov) - (cp_l1_base - dist_base - b_clock_base);
-                                                state.add_ambiguity(r.sat, 1, initial_est_l1, 100.0);
-                                                initialized = true;
-                                                break;
-                                            }
-                                        }
-                                    }
-                                }
+                        if let Some(pos) = spp_pos {
+                            tracing::warn!("Resetting EKF position, velocity, and IMU states to SPP due to update failure.");
+                            state.position = pos;
+                            state.velocity = nalgebra::Vector3::zeros();
+                            state.accel_bias = nalgebra::Vector3::zeros();
+                            state.gyro_bias = nalgebra::Vector3::zeros();
+                            state.attitude = nalgebra::UnitQuaternion::identity();
+                            state.clear_ambiguities();
+                            for i in 0..6 {
+                                state.covariance[(i, i)] = if i < 3 { 100.0 } else { 10.0 };
                             }
-                            
-                            if !initialized {
-                                let initial_est_l1 = (cp_l1_rov - r.pr_l1) - (cp_l1_base - b.pr_l1);
-                                state.add_ambiguity(r.sat, 1, initial_est_l1, 10000.0);
+                            let n = crate::filter::CORE_STATE_SIZE;
+                            for i in 6..n {
+                                state.covariance[(i, i)] = 1e-4;
                             }
                         }
-                        
-                        if let (Some(r_pr2), Some(r_cp2), Some(b_pr2), Some(b_cp2)) = (r.pr_l2, r.cp_l2, b.pr_l2, b.cp_l2) {
-                            let lam_r2 = 299792458.0 / r_f2;
-                            let lam_b2 = 299792458.0 / b_f2;
-                            let cp_l2_rov = r_cp2 * lam_r2;
-                            let cp_l2_base = b_cp2 * lam_b2;
-                            
-                            let mut initialized = false;
-                            if state.covariance[(0,0)] < 0.1 {
-                                for (anchor_r, anchor_b) in matched_obs.iter() {
-                                    if anchor_r.sat == r.sat { continue; }
-                                    if let Some(anchor_idx) = state.ambiguity_keys.iter().position(|&(s, f)| s == anchor_r.sat && f == 2) {
-                                        if state.covariance[(15 + anchor_idx, 15 + anchor_idx)] < 0.05 {
-                                            if let (Some(ar_cp), Some(ab_cp)) = (anchor_r.cp_l2, anchor_b.cp_l2) {
-                                                let (ar_sat_vec, _, _, _) = self.ephemerides.iter().find(|e| e.sat() == anchor_r.sat).unwrap().position(rover_obs.time);
-                                                let (ab_sat_vec, _, _, _) = self.ephemerides.iter().find(|e| e.sat() == anchor_b.sat).unwrap().position(base.time);
-                                                let ar_dist_rov = (state.position.vector - ar_sat_vec).norm();
-                                                let ar_dist_base = (base_coord.vector - ab_sat_vec).norm();
-                                                
-                                                let a_lam_r = 299792458.0 / r_f2;
-                                                let a_lam_b = 299792458.0 / b_f2;
-                                                let a_cp_rov = ar_cp * a_lam_r;
-                                                let a_cp_base = ab_cp * a_lam_b;
-                                                
-                                                let anchor_sd = state.ambiguities[anchor_idx];
-                                                let b_clock_rov = a_cp_rov - ar_dist_rov - anchor_sd;
-                                                let b_clock_base = a_cp_base - ar_dist_base;
-
-                                                let (r_sat_vec, _, _, _) = self.ephemerides.iter().find(|e| e.sat() == r.sat).unwrap().position(rover_obs.time);
-                                                let (b_sat_vec, _, _, _) = self.ephemerides.iter().find(|e| e.sat() == b.sat).unwrap().position(base.time);
-                                                let dist_rov = (state.position.vector - r_sat_vec).norm();
-                                                let dist_base = (base_coord.vector - b_sat_vec).norm();
-                                                
-                                                let initial_est_l2 = (cp_l2_rov - dist_rov - b_clock_rov) - (cp_l2_base - dist_base - b_clock_base);
-                                                state.add_ambiguity(r.sat, 2, initial_est_l2, 100.0);
-                                                initialized = true;
-                                                break;
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            
-                            if !initialized {
-                                let initial_est_l2 = (cp_l2_rov - r_pr2) - (cp_l2_base - b_pr2);
-                                state.add_ambiguity(r.sat, 2, initial_est_l2, 10000.0);
-                            }
-                        }
-                    }
-                    if let (Some(r_pr2), Some(r_cp2), Some(b_pr2), Some(b_cp2), Some(r_cp1), Some(b_cp1)) = (r.pr_l2, r.cp_l2, b.pr_l2, b.cp_l2, r.cp_l1, b.cp_l1) {
-                        let r_cp1_m = r_cp1 * (299792458.0 / r_f1);
-                        let r_cp2_m = r_cp2 * (299792458.0 / r_f2);
-                        let b_cp1_m = b_cp1 * (299792458.0 / b_f1);
-                        let b_cp2_m = b_cp2 * (299792458.0 / b_f2);
-                        let mw_sd = crate::combinations::melbourne_wubbena(r_cp1_m, r_cp2_m, r.pr_l1, r_pr2, r_f1, r_f2) - 
-                                    crate::combinations::melbourne_wubbena(b_cp1_m, b_cp2_m, b.pr_l1, b_pr2, b_f1, b_f2);
-                        state.update_mw(r.sat, mw_sd / crate::combinations::lambda_wl(r_f1, r_f2));
-                    }
-                }
-
-                if let Some((z_safe, h_safe, r_safe)) = crate::engine::measurement::build_measurement_model(
-                    state,
-                    &matched_obs,
-                    &self.ephemerides,
-                    &base_coord,
-                    rover_obs.time,
-                    base.time,
-                    Vector3::from_column_slice(&self.config.imu_to_antenna_lever_arm),
-                ) {
-                    if let Err(e) = crate::engine::updater::update(state, &z_safe, &h_safe, &r_safe) { 
-                        tracing::error!("EKF update fail: {:?}", e); 
                     } else if let Err(e) = state.resolve_ambiguities(&self.ephemerides, self.config.lambda_min_subset) {
                         tracing::debug!("AR Failed: {}", e);
+                    }
+                } else {
+                    tracing::warn!("Not enough valid measurements for EKF update.");
+                    if let Some(pos) = spp_pos {
+                        tracing::warn!("Resetting EKF position, velocity, and IMU states to SPP due to insufficient measurements.");
+                        state.position = pos;
+                        state.velocity = nalgebra::Vector3::zeros();
+                        state.accel_bias = nalgebra::Vector3::zeros();
+                        state.gyro_bias = nalgebra::Vector3::zeros();
+                        state.attitude = nalgebra::UnitQuaternion::identity();
+                        state.clear_ambiguities();
+                        let n = crate::filter::CORE_STATE_SIZE;
+                        for i in 0..6 {
+                            state.covariance[(i, i)] = if i < 3 { 100.0 } else { 10.0 };
+                        }
+                        for i in 6..n {
+                            state.covariance[(i, i)] = 1e-4;
+                        }
                     }
                 }
             }
@@ -454,12 +504,13 @@ impl ProcessingEngine {
             let mut r_mat = nalgebra::DMatrix::zeros(3, 3);
             r_mat.fill_diagonal(25.0);
 
-            if let Err(e) = crate::engine::updater::update(state, &z_vec, &h_mat, &r_mat) {
+            if let Err(e) = crate::engine::updater::update(state, &z_vec, &h_mat, &r_mat, 15.0, None) {
                 tracing::debug!("SPP Fallback update failed: {:?}", e);
             }
         }
         
-        if self.config.enable_nhc {
+        let is_ins = matches!(self.config.mode, EngineMode::SppIns | EngineMode::RtkIns | EngineMode::PppIns);
+        if self.config.enable_nhc && is_ins {
             if let Some(state) = self.current_state.as_mut() {
                 // Determine if stationary for ZUPT
                 let stationary = state.velocity.norm() < 0.1 && state.accel_bias.norm() < 10.0; // Heuristic
@@ -541,7 +592,7 @@ impl ProcessingEngine {
     }
 }
 
-pub fn snr_scale(snr: f64) -> f64 { libm::pow(10.0, (45.0 - snr.clamp(25.0, 50.0)) / 10.0).min(100.0) }
+pub fn snr_scale(snr: f64) -> f64 { gneiss_core::variance::snr_variance_scale(snr, 45.0) }
 
 #[cfg(test)]
 mod tests {
@@ -581,3 +632,4 @@ mod tests {
 }
 mod tests_measurement;
 mod tests_predictor;
+pub mod jacobian_verify;

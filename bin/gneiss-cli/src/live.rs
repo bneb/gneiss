@@ -7,7 +7,7 @@ use gneiss_core::time::GpsTime;
 use gneiss_core::obs::{EpochObs, SatObs, Observation, ObsCode, ObsType, SignalCode};
 use gneiss_core::sat::{SatelliteId, Constellation};
 use gneiss_parsers::ubx::UbxRxmRawx;
-use gneiss_parsers::rtcm3::msm::MsmMessage;
+
 
 pub async fn run_live(
     port: String,
@@ -89,7 +89,7 @@ pub async fn run_live(
                             match gneiss_parsers::ubx::parse_ubx_frame(&buffer) {
                                 Ok((rem, frame)) => {
                                     if frame.class == 0x02 && frame.id == 0x15 {
-                                        if let Ok(rawx) = gneiss_parsers::ubx::parse_rxm_rawx(&frame.payload) {
+                                        if let Ok(rawx) = gneiss_parsers::ubx::parse_rxm_rawx(frame.payload) {
                                             let rinex = rawx_to_epoch(&rawx);
                                             let _ = engine.process_epoch(&rinex, base_meas_cache.as_ref());
                                             
