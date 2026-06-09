@@ -23,6 +23,9 @@ pub struct RtkState {
     
     pub ambiguities: Vec<f64>,
     pub ambiguity_keys: Vec<(SatelliteId, u8)>, // (Sat, Freq Band 1 or 2)
+    pub ambiguity_track_ids: Vec<u32>, // Unique ID for each continuous ambiguity track
+    pub next_track_id: u32,
+
     pub mw_sd_ema: std::collections::HashMap<SatelliteId, f64>,
     pub mw_sd_counts: std::collections::HashMap<SatelliteId, usize>,
     pub locktimes: std::collections::HashMap<(SatelliteId, u8), u16>,
@@ -73,6 +76,9 @@ impl RtkState {
             phase_history: std::collections::HashMap::new(),
             ambiguities: Vec::new(),
             ambiguity_keys: Vec::new(),
+            ambiguity_track_ids: Vec::new(),
+            next_track_id: 1,
+
             mw_sd_ema: std::collections::HashMap::new(),
             mw_sd_counts: std::collections::HashMap::new(),
             locktimes: std::collections::HashMap::new(),
@@ -133,9 +139,10 @@ impl RtkState {
         *count += 1;
     }
 
-    pub fn resolve_ambiguities(&self, ephemerides: &[gneiss_core::ephemeris::Ephemeris], min_subset: usize) -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> {
+    pub fn resolve_ambiguities(&self, ephemerides: &[gneiss_core::ephemeris::Ephemeris], min_subset: usize, ar_min_epoch_count: u32, ar_min_lock: u32, lambda_min_ratio: f64) -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> {
         let num_amb = self.ambiguities.len();
-        if num_amb < 6 || self.epoch_count <= 50 { return Err("Insufficient data"); }
+        tracing::debug!("resolve_ambiguities check: num_amb={} (min_subset={}), epoch_count={} (ar_min_epoch={}), ar_min_lock={}", num_amb, min_subset, self.epoch_count, ar_min_epoch_count, ar_min_lock);
+        if num_amb < min_subset || self.epoch_count <= ar_min_epoch_count as usize { return Err("Insufficient data"); }
         
         let a_sd = nalgebra::DVector::from_vec(self.ambiguities.clone());
         let q_sd = self.covariance.view((CORE_STATE_SIZE, CORE_STATE_SIZE), (num_amb, num_amb)).into_owned();
@@ -154,7 +161,7 @@ impl RtkState {
                 let (sat, freq) = self.ambiguity_keys[i];
                 if sat.constellation != constell || freq != 1 { continue; }
                 let lock = *self.locktimes.get(&(sat, freq)).unwrap_or(&0);
-                if lock > max_lock {
+                if lock >= ar_min_lock as u16 && lock > max_lock {
                     max_lock = lock;
                     best_ref_idx = Some(i);
                 }
@@ -170,7 +177,7 @@ impl RtkState {
                     if rov_sat.constellation != constell { continue; }
                     let lock = *self.locktimes.get(&(rov_sat, freq)).unwrap_or(&0);
                     
-                    if lock >= 3 {
+                    if lock >= ar_min_lock as u16 {
                         if freq == 1 {
                             candidates.push((i, ref_idx, lock));
                         } else if let Some(r2_idx) = l2_ref_idx {
@@ -207,8 +214,10 @@ impl RtkState {
         });
 
         // Prevent LAMBDA search from exploding by only passing reasonably converged ambiguities.
-        // A variance of 0.5 cycles^2 (stddev ~0.7 cycles) ensures the search ellipsoid remains small.
-        candidate_vars.retain(|c| c.3 < 0.5);
+        // GSDC has very high noise, we need to allow higher variance.
+        candidate_vars.retain(|c| c.3 < 10000.0);
+        
+        tracing::debug!("AR candidates: {}, retained: {}", candidates.len(), candidate_vars.len());
         
         if candidate_vars.len() >= min_subset {
             let max_subset = candidate_vars.len().min(24);
@@ -256,7 +265,8 @@ impl RtkState {
                 }
                 
                 if let Ok(res) = crate::lambda::resolve_lambda(&a_cycles, &q_cycles) {
-                    let dynamic_threshold = crate::ffrt::calculate_threshold(subset_size, 0.001).max(3.0);
+                    let dynamic_threshold = crate::ffrt::calculate_threshold(subset_size, 0.001).max(lambda_min_ratio);
+                    tracing::debug!("LAMBDA res ratio: {:.2}, threshold: {:.2}", res.ratio, dynamic_threshold);
                     if res.ratio >= dynamic_threshold {
                         tracing::info!("Multi-Const PAR Fixed & Validated (subset {}/{})! Ratio={:.2}, Ps={:.4}", subset_size, max_subset, res.ratio, res.success_rate);
 
@@ -334,8 +344,12 @@ impl RtkState {
         }
     }
     pub fn add_ambiguity(&mut self, sat: SatelliteId, freq: u8, initial_estimate: f64, initial_variance: f64) {
+        tracing::debug!("Adding ambiguity for {:?} L{} val={} var={}", sat, freq, initial_estimate, initial_variance);
         self.ambiguities.push(initial_estimate);
         self.ambiguity_keys.push((sat, freq));
+        self.ambiguity_track_ids.push(self.next_track_id);
+        self.next_track_id += 1;
+
 
         let n_old = self.covariance.nrows();
         let n_new = n_old + 1;
@@ -349,6 +363,8 @@ impl RtkState {
         if let Some(idx) = self.ambiguity_keys.iter().position(|&(s, f)| s == sat && f == freq) {
             self.ambiguities.remove(idx);
             self.ambiguity_keys.remove(idx);
+            self.ambiguity_track_ids.remove(idx);
+
             
             let n_old = self.covariance.nrows();
             let n_new = n_old - 1;
@@ -368,6 +384,8 @@ impl RtkState {
     pub fn clear_ambiguities(&mut self) {
         self.ambiguities.clear();
         self.ambiguity_keys.clear();
+        self.ambiguity_track_ids.clear();
+
         let mut new_cov = DMatrix::zeros(CORE_STATE_SIZE, CORE_STATE_SIZE);
         new_cov.copy_from(&self.covariance.view((0, 0), (CORE_STATE_SIZE, CORE_STATE_SIZE)));
         self.covariance = new_cov;
@@ -482,7 +500,7 @@ mod tests {
             }),
         ];
 
-        let (fixed_state, _, _, _, _) = state.resolve_ambiguities(&ephemerides, 4).expect("AR should run");
+        let (fixed_state, _, _, _, _) = state.resolve_ambiguities(&ephemerides, 4, 5, 3, 3.0).expect("AR should run");
         assert!(fixed_state.is_fixed, "Should achieve fix with multi-constellation support");
         
         let idx_ref = fixed_state.ambiguity_keys.iter().position(|&(s, f)| s == gps_ref && f == 1).unwrap();

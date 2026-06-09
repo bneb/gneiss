@@ -19,9 +19,11 @@ pub fn manage_ambiguities_and_slips(
         
         if let Some(r_lock) = r.locktime {
             if r_lock == 0 {
+                tracing::debug!("slip=true because r_lock == 0 for {:?}", r.sat);
                 slip = true;
                 new_lock = 0;
             } else if r_lock < prev_lock {
+                tracing::debug!("slip=true because r_lock < prev_lock for {:?}", r.sat);
                 slip = true;
                 new_lock = r_lock;
             } else {
@@ -30,6 +32,7 @@ pub fn manage_ambiguities_and_slips(
         }
 
         if new_lock == 0 && state.locktimes.contains_key(&(r.sat, 1)) {
+            tracing::debug!("slip=true because new_lock == 0 for {:?}", r.sat);
             slip = true;
         }
 
@@ -98,6 +101,7 @@ pub fn manage_ambiguities_and_slips(
 
         if !state.ambiguity_keys.contains(&(r.sat, 1)) || slip_l1 || slip_l2 {
             if slip_l1 || slip_l2 { 
+                tracing::debug!("Cycle slip detected for {:?}: slip_l1={}, slip_l2={}", r.sat, slip_l1, slip_l2);
                 state.remove_ambiguity(r.sat, 1); 
                 state.remove_ambiguity(r.sat, 2);
                 state.reject_counts.insert((r.sat, 1), 0);
@@ -138,7 +142,7 @@ pub fn manage_ambiguities_and_slips(
                                     let dist_base = (base_coord.vector - b_sat_vec).norm();
                                     
                                     let initial_est_l1 = (cp_l1_rov - dist_rov - b_clock_rov) - (cp_l1_base - dist_base - b_clock_base);
-                                    state.add_ambiguity(r.sat, 1, initial_est_l1, 10000.0);
+                                    state.add_ambiguity(r.sat, 1, initial_est_l1, config.initial_ambiguity_variance);
                                     initialized = true;
                                     break;
                                 }
@@ -149,7 +153,7 @@ pub fn manage_ambiguities_and_slips(
                 
                 if !initialized {
                     let initial_est_l1 = (cp_l1_rov - r.pr_l1) - (cp_l1_base - b.pr_l1);
-                    state.add_ambiguity(r.sat, 1, initial_est_l1, 10000.0);
+                    state.add_ambiguity(r.sat, 1, initial_est_l1, config.initial_ambiguity_variance);
                 }
             }
             
@@ -186,7 +190,7 @@ pub fn manage_ambiguities_and_slips(
                                     let dist_base = (base_coord.vector - b_sat_vec).norm();
                                     
                                     let initial_est_l2 = (cp_l2_rov - dist_rov - b_clock_rov) - (cp_l2_base - dist_base - b_clock_base);
-                                    state.add_ambiguity(r.sat, 2, initial_est_l2, 10000.0);
+                                    state.add_ambiguity(r.sat, 2, initial_est_l2, config.initial_ambiguity_variance);
                                     initialized = true;
                                     break;
                                 }
@@ -197,7 +201,7 @@ pub fn manage_ambiguities_and_slips(
                 
                 if !initialized {
                     let initial_est_l2 = (cp_l2_rov - r_pr2) - (cp_l2_base - b_pr2);
-                    state.add_ambiguity(r.sat, 2, initial_est_l2, 10000.0);
+                    state.add_ambiguity(r.sat, 2, initial_est_l2, config.initial_ambiguity_variance);
                 }
             }
         }
@@ -222,7 +226,11 @@ pub fn check_doppler_phase_slip(
     threshold: f64,
 ) -> bool {
     let expected_change = -0.5 * (doppler + prev_doppler) * dt;
-    (cp - prev_cp - expected_change).abs() > threshold
+    let diff = (cp - prev_cp - expected_change).abs();
+    if diff > threshold {
+        tracing::debug!("Doppler slip: cp={} prev_cp={} dop={} prev_dop={} exp={} diff={}", cp, prev_cp, doppler, prev_doppler, expected_change, diff);
+    }
+    diff > threshold
 }
 
 #[cfg(test)]

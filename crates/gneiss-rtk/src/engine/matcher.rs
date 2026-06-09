@@ -21,8 +21,10 @@ pub fn match_observations(rover_obs: &EpochObs, base_obs: &EpochObs, ephemerides
             let r_snr = r_sat.observations.iter().find(|o| o.code.obs_type == ObsType::Snr && o.code.signal.freq_band == 1).map(|o| o.value).unwrap_or(25.0);
             let r_lock = r_sat.observations.iter().find(|o| o.code.obs_type == ObsType::CarrierPhase && o.code.signal.freq_band == 1).and_then(|o| o.lock_time);
 
-            if r_pr_l1.is_none() { tracing::debug!("Sat {:?} missing rover PR1", r_sat.sat); }
-            if b_pr_l1.is_none() { tracing::debug!("Sat {:?} missing base PR1", b_sat.sat); }
+            if r_pr_l1.is_none() { tracing::debug!("Sat {:?} missing rover PR1. Rover Obs: {:?}", r_sat.sat, r_sat.observations.iter().map(|o| o.code).collect::<Vec<_>>()); }
+            if b_pr_l1.is_none() { tracing::debug!("Sat {:?} missing base PR1. Base Obs: {:?}", b_sat.sat, b_sat.observations.iter().map(|o| o.code).collect::<Vec<_>>()); }
+            if r_cp_l1.is_none() { tracing::debug!("Sat {:?} missing rover CP1", r_sat.sat); }
+            if b_cp_l1.is_none() { tracing::debug!("Sat {:?} missing base CP1. Base Obs: {:?}", b_sat.sat, b_sat.observations.iter().map(|o| o.code).collect::<Vec<_>>()); }
 
             if let (Some(r_pr1), Some(b_pr1)) = (r_pr_l1, b_pr_l1) {
                 tracing::debug!("Sat {:?} L1 PR: Rover {} (val: {}), Base {} (val: {})", 

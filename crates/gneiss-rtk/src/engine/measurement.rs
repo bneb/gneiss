@@ -185,8 +185,13 @@ fn compute_dd_carrier_phase(
             h_cp1[crate::filter::CORE_STATE_SIZE + sat_idx] = 1.0; 
             h_cp1[crate::filter::CORE_STATE_SIZE + ref_idx] = -1.0;
             
+            tracing::debug!("CP1 DD computed for {:?}", rov_sat.sat);
             updates.push((cp_dd_l1 - (comp_pr_dd - iono_dd_l1 + n_dd_l1), h_cp1, r_val, 1));
+        } else {
+            tracing::debug!("Missing CP1 obs for {:?}! rr={:?} rs={:?} br={:?} bs={:?}", rov_sat.sat, rov_ref.cp_l1, rov_sat.cp_l1, ref_base.cp_l1, base_sat.cp_l1);
         }
+    } else {
+        tracing::debug!("Missing ambiguity for {:?}! sat_idx={:?} ref_idx={:?}", rov_sat.sat, state.ambiguity_keys.iter().position(|&(s, f)| s == rov_sat.sat && f == 1), ref_idx_l1);
     }
 
     if let (Some(sat_idx), Some(ref_idx)) = (state.ambiguity_keys.iter().position(|&(s, f)| s == rov_sat.sat && f == 2), ref_idx_l2) {
@@ -484,7 +489,7 @@ pub fn build_measurement_model(
                 }
             }
         } else {
-            tracing::trace!("Rejected meas type {} with inn: {:.3}, chi2: {:.1}, threshold: {:.1}, s_ii: {:.1}", type_all[i].1, z_all[i], chi2, threshold, s_ii);
+            tracing::debug!("Rejected meas type {} with inn: {:.3}, chi2: {:.1}, threshold: {:.1}, s_ii: {:.1}", type_all[i].1, z_all[i], chi2, threshold, s_ii);
             if type_all[i].1 == 1 || type_all[i].1 == 2 {
                 for c in crate::filter::CORE_STATE_SIZE..state_size {
                     if h_row[(0, c)] > 0.5 {
