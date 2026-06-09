@@ -1,0 +1,17 @@
+--- crates/gneiss-rtk/src/engine/updater.rs
++++ crates/gneiss-rtk/src/engine/updater.rs
+@@ -134,3 +134,55 @@
+     Ok(rejected_indices)
+ }
++
++pub fn apply_fix_and_hold(state: &mut RtkState, fixed_state: &RtkState, var: f64) -> Result<(), UpdateError> {
++    // Find which ambiguities were actually fixed in the fixed_state
++    // Since fixed_state has the same ambiguities as state, but the fixed ones are rounded to integers.
++    // Wait, fixed_state.ambiguities are the integers for the subset!
++    // But wait, the float state ambiguities are also there.
++    // We only want to constrain the ambiguities that are in the fixed subset!
++    // Wait, the fixed_state doesn't tell us WHICH ones were fixed!
++    // Ah! fixed_state.ambiguities contains integers for the fixed ones, and float for the others.
++    // But comparing floating point is risky.
++    // Better: pass the integers and indices directly to apply_fix_and_hold!
++EOF

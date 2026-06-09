@@ -4,7 +4,7 @@ The precise geographer of Gneiss. This crate provides advanced geodetic transfor
 
 ## Overview
 
-Accuracy is relative—specifically, it is relative to a datum. `gneiss-geodesy` ensures that we are always pointing at the right spot on the earth, accounting for its imperfect shape and local variations.
+Accuracy is relative—specifically, it is relative to a datum. `gneiss-geodesy` ensures that we are always pointing at the right spot on the earth, accounting for its geoid shape and local variations.
 
 ### Key Capabilities
 
@@ -35,5 +35,3 @@ We move between worlds using a rotation, a translation, and a scale.
 ```
 
 ---
-
-*Gneiss-geodesy: Mapping the imperfect.*

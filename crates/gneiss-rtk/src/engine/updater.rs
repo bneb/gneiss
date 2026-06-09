@@ -8,6 +8,103 @@ pub enum UpdateError {
     InvalidMeasurement,
 }
 
+pub fn update_loosely_coupled(
+    state: &mut RtkState,
+    gnss_state: &RtkState,
+    lever_arm: Vector3<f64>,
+    omega_b: Vector3<f64>,
+) -> Result<(), UpdateError> {
+    let p_6x6 = state.covariance.view((0, 0), (6, 6));
+    let r_6x6 = gnss_state.covariance.view((0, 0), (6, 6));
+    
+    let s = p_6x6 + r_6x6;
+    let s_inv = match s.clone().cholesky() {
+        Some(chol) => chol.inverse(),
+        None => {
+            let reg = DMatrix::identity(6, 6) * 1e-6;
+            match (s.clone() + reg).cholesky() {
+                Some(chol) => chol.inverse(),
+                None => return Err(UpdateError::SingularMatrix),
+            }
+        }
+    };
+    
+    let r_b_e = state.attitude.to_rotation_matrix();
+    let l_e = r_b_e * lever_arm;
+    let pos_apc = state.position.vector + l_e;
+    let v_apc = state.velocity + r_b_e * omega_b.cross(&lever_arm);
+
+    let mut z = DVector::zeros(6);
+    z.rows_mut(0, 3).copy_from(&(gnss_state.position.vector - pos_apc));
+    z.rows_mut(3, 3).copy_from(&(gnss_state.velocity - v_apc));
+    
+    let mahalanobis_sq = (&z.transpose() * &s_inv * &z)[(0, 0)];
+    
+    // 6 DOF chi-square 99.9% is 22.46. 
+    // We use a generous threshold because SPP covariance can be overly optimistic
+    if mahalanobis_sq > 250.0 {
+        return Err(UpdateError::InvalidMeasurement); // Trigger reset
+    }
+    
+    let mut h_mat = DMatrix::zeros(6, state.covariance.ncols());
+    h_mat.view_mut((0, 0), (6, 6)).fill_diagonal(1.0);
+
+    if state.covariance.nrows() >= crate::filter::CORE_STATE_SIZE {
+        let h_pos_att = -l_e.cross_matrix();
+        for i in 0..3 {
+            for j in 0..3 {
+                h_mat[(i, 6 + j)] = h_pos_att[(i, j)];
+            }
+        }
+        
+        let a_b = omega_b.cross(&lever_arm);
+        let a_e = r_b_e * a_b;
+        let h_vel_att = -a_e.cross_matrix();
+        for i in 0..3 {
+            for j in 0..3 {
+                h_mat[(3 + i, 6 + j)] = h_vel_att[(i, j)];
+            }
+        }
+        
+        let h_vel_bg = r_b_e.matrix() * lever_arm.cross_matrix();
+        for i in 0..3 {
+            for j in 0..3 {
+                h_mat[(3 + i, 12 + j)] = h_vel_bg[(i, j)];
+            }
+        }
+    }
+    
+    let k = &state.covariance * h_mat.transpose() * s_inv;
+    let dx = &k * &z;
+    
+    if dx.iter().any(|x| x.is_nan()) {
+        return Err(UpdateError::SingularMatrix);
+    }
+    
+    state.position.vector += dx.rows(0, 3);
+    state.velocity += dx.rows(3, 3);
+    
+    if state.covariance.nrows() >= crate::filter::CORE_STATE_SIZE {
+        state.accel_bias += dx.rows(6, 3);
+        state.gyro_bias += dx.rows(9, 3);
+        
+        let d_theta = dx.rows(12, 3);
+        let angle = d_theta.norm();
+        if angle > 1e-8 {
+            let axis_vec3 = nalgebra::Vector3::new(d_theta[0], d_theta[1], d_theta[2]);
+            let axis = nalgebra::Unit::new_normalize(axis_vec3);
+            let d_quat = nalgebra::UnitQuaternion::from_axis_angle(&axis, angle);
+            state.attitude = d_quat * state.attitude;
+        }
+    }
+    
+    let id = DMatrix::identity(state.covariance.nrows(), state.covariance.ncols());
+    let ikh = id - &k * h_mat;
+    state.covariance = &ikh * &state.covariance * ikh.transpose() + &k * r_6x6 * k.transpose();
+    
+    Ok(())
+}
+
 pub fn update(state: &mut RtkState, z: &DVector<f64>, h: &DMatrix<f64>, r: &DMatrix<f64>, max_innovation: f64, meas_types: Option<&[(gneiss_core::sat::SatelliteId, u8)]>) -> Result<Vec<usize>, UpdateError> {
     if z.len() != h.nrows() || h.ncols() != state.covariance.nrows() {
         return Err(UpdateError::DimensionMismatch);
@@ -29,19 +126,17 @@ pub fn update(state: &mut RtkState, z: &DVector<f64>, h: &DMatrix<f64>, r: &DMat
             _ => max_innovation * max_innovation,      // PR
         };
         
-        let mut is_valid = nu * nu / s_ii < threshold;
-        if meas_type == 0 && nu.abs() > max_innovation * 2.0 { // Enforce absolute limit (e.g. 30.0m) for PR to reject massive multipath even if P_pos is large
-            is_valid = false;
-        }
+        let is_valid = nu * nu / s_ii < threshold;
+
         
         if is_valid {
             valid_indices.push(i);
         } else {
             let r_ii = r[(i, i)];
             if meas_type != 1 && meas_type != 2 && nu.abs() < 1000.0 && r_ii < 1.0 {
-                tracing::warn!("EKF rejected Doppler/PR measurement! type={}, nu={:.2}, s_ii={:.2}, r_ii={:.4}", meas_type, nu, s_ii, r_ii);
+                tracing::debug!("EKF rejected Doppler/PR measurement! type={}, nu={:.2}, s_ii={:.2}, r_ii={:.4}", meas_type, nu, s_ii, r_ii);
             } else {
-                tracing::trace!("EKF rejected meas: type={}, nu={:.2}, s_ii={:.2}, r_ii={:.4}", meas_type, nu, s_ii, r_ii);
+                tracing::debug!("EKF rejected meas: type={}, nu={:.2}, s_ii={:.2}, r_ii={:.4}", meas_type, nu, s_ii, r_ii);
             }
         }
     }
@@ -90,8 +185,17 @@ pub fn update(state: &mut RtkState, z: &DVector<f64>, h: &DMatrix<f64>, r: &DMat
     for _iter in 0..21 {
         let hp = &current_h * &state.covariance;
         let s = &hp * current_h.transpose() + &current_r;
-        let s_inv = nalgebra::linalg::SVD::new(s.clone(), true, true).pseudo_inverse(1e-6)
-            .unwrap_or_else(|_| s.clone().try_inverse().unwrap_or_else(|| DMatrix::identity(s.nrows(), s.ncols())));
+        if s.iter().any(|x| x.is_nan() || x.is_infinite() || x.abs() > 1e15) {
+            tracing::error!("EKF error: Non-finite values in innovation covariance matrix S.");
+            return Err(UpdateError::SingularMatrix);
+        }
+        let s_inv = match s.clone().cholesky() {
+            Some(chol) => chol.inverse(),
+            None => {
+                let reg = DMatrix::identity(s.nrows(), s.ncols()) * 1e-6;
+                (s.clone() + reg).try_inverse().unwrap_or_else(|| DMatrix::identity(s.nrows(), s.ncols()))
+            }
+        };
         k = &state.covariance * current_h.transpose() * &s_inv;
         dx = &k * &current_z;
         
@@ -149,7 +253,7 @@ pub fn update(state: &mut RtkState, z: &DVector<f64>, h: &DMatrix<f64>, r: &DMat
 
     let pos_change = (dx[0]*dx[0] + dx[1]*dx[1] + dx[2]*dx[2]).sqrt();
     if pos_change > 250.0 {
-        tracing::warn!("EKF large state correction: dx_pos = {:.1}m, z_max = {:.1}. Allowing update for convergence.", pos_change, z.abs().max());
+        tracing::debug!("EKF large state correction: dx_pos = {:.1}m, z_max = {:.1}. Allowing update for convergence.", pos_change, z.abs().max());
     }
 
     if state.epoch_count < 5 || state.epoch_count.is_multiple_of(100) {
@@ -198,7 +302,7 @@ pub fn update(state: &mut RtkState, z: &DVector<f64>, h: &DMatrix<f64>, r: &DMat
     let i_kh = identity - &k * h_filt;
     let mut p_new = &i_kh * &state.covariance * i_kh.transpose() + &k * r_filt * k.transpose();
     
-    // Force perfect symmetry to prevent numerical divergence
+    // Force symmetry to prevent numerical divergence
     for r in 0..p_new.nrows() {
         for c in 0..r {
             let avg = (p_new[(r, c)] + p_new[(c, r)]) * 0.5;

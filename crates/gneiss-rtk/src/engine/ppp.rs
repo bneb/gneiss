@@ -196,8 +196,8 @@ pub fn process_ppp<'a>(engine: &'a mut ProcessingEngine, rover_obs: &EpochObs) -
         pr_residuals.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
         let median_res = pr_residuals[pr_residuals.len() / 2];
         
-        if median_res.abs() > 100_000.0 {
-            tracing::warn!("Clock jump detected! Median residual = {:.2}m", median_res);
+        if median_res.abs() > 300_000.0 {
+            tracing::debug!("Clock jump detected! Median residual = {:.2}m", median_res);
             
             // Shift clock bias
             state.rcv_clk_bias += median_res;

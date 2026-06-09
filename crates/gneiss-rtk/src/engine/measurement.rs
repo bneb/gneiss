@@ -224,6 +224,8 @@ fn compute_dd_doppler(
     sat_f1: f64,
     ref_f1: f64,
     h_r: Vector3<f64>,
+    lever_arm: Vector3<f64>,
+    omega_b: Vector3<f64>,
     state_size: usize,
     var_factor: f64,
 ) -> Option<(f64, Vec<f64>, f64, u8)> {
@@ -236,9 +238,12 @@ fn compute_dd_doppler(
         let e_sat_bas = (sat_vec_bas - base_coord_vec).normalize();
         let e_ref_bas = (ref_sat_vec_bas - base_coord_vec).normalize();
         
+        let r_b_e = state.attitude.to_rotation_matrix();
+        let v_ant = state.velocity + r_b_e * omega_b.cross(&lever_arm);
+        
         // dr/dt = e_los · (v_sat - v_rcv)
-        let rr_rov_sat = e_sat_rov.dot(&(sat_vel_rov - state.velocity));
-        let rr_rov_ref = e_ref_rov.dot(&(ref_sat_vel_rov - state.velocity));
+        let rr_rov_sat = e_sat_rov.dot(&(sat_vel_rov - v_ant));
+        let rr_rov_ref = e_ref_rov.dot(&(ref_sat_vel_rov - v_ant));
         let rr_bas_sat = e_sat_bas.dot(&(sat_vel_bas));
         let rr_bas_ref = e_ref_bas.dot(&(ref_sat_vel_bas));
         
@@ -253,11 +258,19 @@ fn compute_dd_doppler(
         let innov = observed_dd_rr - predicted_dd_rr;
         
         if innov.abs() > 10.0 {
-            tracing::warn!("DD Doppler Innov huge! sat={} innov={:.3} obs={:.3} pred={:.3}", rov_sat.sat.to_string(), innov, observed_dd_rr, predicted_dd_rr);
+            tracing::debug!("DD Doppler Innov huge! sat={} innov={:.3} obs={:.3} pred={:.3}", rov_sat.sat.to_string(), innov, observed_dd_rr, predicted_dd_rr);
         }
         
         let mut h_dop = vec![0.0; state_size]; 
         h_dop[3] = h_r.x; h_dop[4] = h_r.y; h_dop[5] = h_r.z;
+        
+        let a = r_b_e * omega_b.cross(&lever_arm);
+        let h_dop_att = a.cross(&h_r);
+        h_dop[6] = h_dop_att.x; h_dop[7] = h_dop_att.y; h_dop[8] = h_dop_att.z;
+        
+        let h_dop_bg = r_b_e.matrix() * lever_arm.cross_matrix();
+        let h_dop_bg = h_r.transpose() * h_dop_bg;
+        h_dop[12] = h_dop_bg[0]; h_dop[13] = h_dop_bg[1]; h_dop[14] = h_dop_bg[2];
         
         let dop_base_var = 0.1;
         return Some((innov, h_dop, dop_base_var * var_factor, 3));
@@ -274,6 +287,7 @@ pub fn compute_innovations(
     ref_rover_orig: &DdObservation,
     ref_base_orig: &DdObservation,
     lever_arm: Vector3<f64>,
+    omega_b: Vector3<f64>,
 ) -> Option<(Vec<f64>, Vec<Vec<f64>>, Vec<f64>, Vec<(gneiss_core::sat::SatelliteId, u8)>)> {
     let mut z_vals = Vec::new();
     let mut h_rows = Vec::new();
@@ -366,7 +380,7 @@ pub fn compute_innovations(
                 z_vals.push(update.0); h_rows.push(update.1); r_vals.push(update.2); meas_type.push((rov_sat.sat, update.3));
             }
             
-            if let Some(update) = compute_dd_doppler(state, &rov_sat, &bas_sat, &rov_ref, &bas_ref, sat_vec_rov, sat_vel_rov, ref_sat_vec_rov, ref_sat_vel_rov, sat_vec_bas, sat_vel_bas, ref_sat_vec_bas, ref_sat_vel_bas, pos_apc, base_coord_vec, sat_f1, ref_f1, h_r, state_size, var_factor) {
+            if let Some(update) = compute_dd_doppler(state, &rov_sat, &bas_sat, &rov_ref, &bas_ref, sat_vec_rov, sat_vel_rov, ref_sat_vec_rov, ref_sat_vel_rov, sat_vec_bas, sat_vel_bas, ref_sat_vec_bas, ref_sat_vel_bas, pos_apc, base_coord_vec, sat_f1, ref_f1, h_r, lever_arm, omega_b, state_size, var_factor) {
                 z_vals.push(update.0); h_rows.push(update.1); r_vals.push(update.2); meas_type.push((rov_sat.sat, update.3));
             }
         }
@@ -383,6 +397,7 @@ pub fn build_measurement_model(
     _rover_time: GpsTime,
     base_time: GpsTime,
     lever_arm: Vector3<f64>,
+    omega_b: Vector3<f64>,
     chi_square_pr_threshold: f64,
     chi_square_cp_threshold: f64,
 ) -> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>, Vec<(gneiss_core::sat::SatelliteId, u8)>)> {
@@ -429,7 +444,7 @@ pub fn build_measurement_model(
         let mut group_clone = group.clone();
         let (ref_rover, ref_base) = group_clone.remove(ref_idx);
 
-        if let Some((z, h, r, mt)) = compute_innovations(state, &group_clone, ephemerides, base_coord, base_time, &ref_rover, &ref_base, lever_arm) {
+        if let Some((z, h, r, mt)) = compute_innovations(state, &group_clone, ephemerides, base_coord, base_time, &ref_rover, &ref_base, lever_arm, omega_b) {
             z_all.extend(z);
             h_all.extend(h);
             r_all.extend(r);
@@ -439,6 +454,8 @@ pub fn build_measurement_model(
 
     let state_size = crate::filter::CORE_STATE_SIZE + state.ambiguities.len();
     let mut safe_indices = Vec::new();
+    
+    tracing::trace!("Pre-filter z_all len: {}", z_all.len());
     
     for i in 0..z_all.len() {
         let mut h_row = DMatrix::zeros(1, state_size);
@@ -467,7 +484,7 @@ pub fn build_measurement_model(
                 }
             }
         } else {
-            // tracing::debug!("Rejected meas type {:?} with inn: {:.3}, chi2: {:.1}", type_all[i], z_all[i], chi2);
+            tracing::trace!("Rejected meas type {} with inn: {:.3}, chi2: {:.1}, threshold: {:.1}, s_ii: {:.1}", type_all[i].1, z_all[i], chi2, threshold, s_ii);
             if type_all[i].1 == 1 || type_all[i].1 == 2 {
                 for c in crate::filter::CORE_STATE_SIZE..state_size {
                     if h_row[(0, c)] > 0.5 {

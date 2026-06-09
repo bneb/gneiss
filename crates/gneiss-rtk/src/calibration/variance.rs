@@ -20,7 +20,7 @@ mod tests {
 
     #[test]
     fn test_dynamic_variance_high_quality() {
-        let snr = 50.0; // Excellent SNR
+        let snr = 50.0; // High SNR
         let el = core::f64::consts::FRAC_PI_2; // 90 degrees (Zenith)
         let base_var = 0.0001; // 1 cm^2 for Carrier Phase
 

@@ -92,7 +92,7 @@ fn decorrelate(a: &DVector<f64>, q: &DMatrix<f64>) -> Result<(DVector<f64>, DMat
 
     let mut k = (n - 2) as isize;
     let mut iter = 0;
-    while k >= 0 && iter < 10000 {
+    while k >= 0 && iter < 100 {
         iter += 1;
         let k_u = k as usize;
         let k1 = k_u + 1;
