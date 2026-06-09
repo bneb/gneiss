@@ -1,0 +1,14 @@
+--- crates/gneiss-rtk/src/spp.rs
++++ crates/gneiss-rtk/src/spp.rs
+@@ -367,6 +367,11 @@
+         let expected_pr = r_safe + current_state.cdt + tropo_delay + iono_delay;
+         let residual = m.pseudorange - expected_pr;
+ 
++        if m.sat.prn == 5 && (measurements[0].time.tow > 425562.0 && measurements[0].time.tow < 425563.0 || measurements[0].time.tow > 426462.0 && measurements[0].time.tow < 426463.0) {
++            tracing::error!("DEBUG PRN5 tow={:.1}: pr={:.3} expected={:.3} r={:.3} cdt={:.3} tropo={:.3} iono={:.3} sat_z={:.3} rec_z={:.3}",
++                measurements[0].time.tow, m.pseudorange, expected_pr, r_safe, current_state.cdt, tropo_delay, iono_delay, sat_ecef_rot.z, current_state.position.vector.z);
++        }
++
+         dz_vector[i] = residual;
+ 
+         // 3. H matrix (Geometry Matrix)

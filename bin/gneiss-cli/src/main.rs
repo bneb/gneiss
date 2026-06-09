@@ -241,6 +241,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
             
+            // Force NHC for Automotive/Pedestrian
+            if matches!(engine_config.dynamics_model, gneiss_rtk::engine::DynamicsModel::Automotive | gneiss_rtk::engine::DynamicsModel::Pedestrian) {
+                engine_config.enable_nhc = true;
+            }
+
             let mut engine = ProcessingEngine::new(engine_config.clone());
             let parent_dir = std::path::Path::new(&rover).parent().unwrap();
             

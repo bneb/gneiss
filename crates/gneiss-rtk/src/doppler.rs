@@ -181,7 +181,7 @@ mod tests {
         assert!(result.is_some(), "Should compute Doppler update with 5 sats");
 
         let (z, _h, _r) = result.unwrap();
-        // For a perfectly consistent stationary scenario, innovations should be near zero
+        // For a consistent stationary scenario, innovations should be near zero
         for i in 0..z.len() {
             assert!(z[i].abs() < 0.1,
                 "Doppler innovation[{}] should be near zero for stationary, got {}", i, z[i]);

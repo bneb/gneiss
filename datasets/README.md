@@ -7,8 +7,8 @@ Instead, we provide automated shell scripts in the `../scripts/` directory to fe
 
 ## Directory Structure
 
-*   `rtkexplorer/`: Sample datasets from the RTK Explorer community, primarily focusing on u-blox ZED-F9P dual-frequency kinematic and static scenarios. Excellent for validating the core LAMBDA integer resolution.
-*   `urbannav/`: Complex, multi-sensor datasets recorded in harsh urban environments (high multipath, severe signal blockage) with SPAN-CPT ground truth. Excellent for stress-testing the Extended Kalman Filter (EKF).
+*   `rtkexplorer/`: Sample datasets from the RTK Explorer community, primarily focusing on u-blox ZED-F9P dual-frequency kinematic and static scenarios. Used for validating the core LAMBDA integer resolution.
+*   `urbannav/`: Complex, multi-sensor datasets recorded in harsh urban environments (high multipath, severe signal blockage) with SPAN-CPT ground truth. Used for testing the Extended Kalman Filter (EKF).
 *   `cache/`: Temporary directory for unzipping and processing large intermediate files.
 
 ## Recommended Data Sources

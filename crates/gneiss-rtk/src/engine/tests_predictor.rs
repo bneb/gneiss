@@ -18,7 +18,7 @@ mod tests {
         let accel = Vector3::new(0.0, 0.0, 0.0); 
         
         let imu_meas = ImuMeasurement::new(0, accel, gyro);
-        predictor::predict(&mut state, 1.0, 0.1, &vec![imu_meas; 100]);
+        predictor::predict(&mut state, 1.0, crate::engine::DynamicsModel::Automotive, &vec![imu_meas; 100]);
         
         let (_, _, yaw): (f64, f64, f64) = state.attitude.euler_angles();
         assert!((yaw.abs() - core::f64::consts::FRAC_PI_2).abs() < 0.1);
@@ -35,7 +35,7 @@ mod tests {
         let accel = -g; 
         
         let imu_meas = ImuMeasurement::new(0, accel, Vector3::zeros());
-        predictor::predict(&mut state, 1.0, 0.01, &vec![imu_meas; 100]);
+        predictor::predict(&mut state, 1.0, crate::engine::DynamicsModel::Automotive, &vec![imu_meas; 100]);
         
         assert!(state.velocity.norm() < 1e-3, "Stationary IMU should not gain velocity, got {}", state.velocity.norm());
         assert!((state.position.vector - pos.vector).norm() < 1e-3);
@@ -55,7 +55,7 @@ mod tests {
         let accel_body = state.attitude.inverse() * f_e;
         
         let imu_meas = ImuMeasurement::new(0, accel_body, Vector3::zeros());
-        predictor::predict(&mut state, 1.0, 0.01, &vec![imu_meas; 100]);
+        predictor::predict(&mut state, 1.0, crate::engine::DynamicsModel::Automotive, &vec![imu_meas; 100]);
         
         assert!(state.velocity.norm() < 1e-3, "Equatorial stationary IMU should be stable, got {}", state.velocity.norm());
     }

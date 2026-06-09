@@ -31,14 +31,22 @@ pub struct RtkState {
     pub innovation_cov: std::collections::HashMap<(SatelliteId, u8), f64>, // For IAE
     pub innovation_counts: std::collections::HashMap<(SatelliteId, u8), usize>,
     pub reject_counts: std::collections::HashMap<(SatelliteId, u8), usize>,
+    pub consecutive_rejections: usize,
     pub is_fixed: bool,
     pub epoch_count: usize,
     pub covariance: DMatrix<f64>,
     
-    // RTS Smoother matrices (15x15 core blocks)
+    // RTS Smoother matrices (15x15/18x18 core blocks)
     pub core_phi: Option<DMatrix<f64>>,       // State transition from k-1 to k
-    pub core_p_predict: Option<DMatrix<f64>>, // Predicted covariance P_{k|k-1}
+    pub full_p_predict: Option<DMatrix<f64>>, // Predicted covariance P_{k|k-1}
+    pub full_x_predict: Option<DVector<f64>>, // Predicted nominal state x_{k|k-1}
+    pub predicted_position: Option<Coordinate>,
+    pub predicted_velocity: Option<Vector3<f64>>,
+    pub predicted_attitude: Option<UnitQuaternion<f64>>,
+    pub predicted_accel_bias: Option<Vector3<f64>>,
+    pub predicted_gyro_bias: Option<Vector3<f64>>,
     pub fixed_state: Option<Box<RtkState>>,
+    pub is_reset: bool,
 }
 
 impl RtkState {
@@ -73,12 +81,47 @@ impl RtkState {
             innovation_cov: std::collections::HashMap::new(),
             innovation_counts: std::collections::HashMap::new(),
             reject_counts: std::collections::HashMap::new(),
+            consecutive_rejections: 0,
             is_fixed: false,
             epoch_count: 0,
             covariance: cov,
             core_phi: None,
-            core_p_predict: None,
+            full_p_predict: None,
+            full_x_predict: None,
+            predicted_position: None,
+            predicted_velocity: None,
+            predicted_attitude: None,
+            predicted_accel_bias: None,
+            predicted_gyro_bias: None,
             fixed_state: None,
+            is_reset: false,
+        }
+    }
+
+    /// Decouples the position states (indices 0..3) from the rest of the EKF state
+    /// by zeroing out the corresponding cross-covariance rows and columns.
+    /// This is mathematically required when teleporting the position state.
+    pub fn decouple_position(&mut self) {
+        let cols = self.covariance.ncols();
+        for i in 0..3 {
+            for j in 3..cols {
+                self.covariance[(i, j)] = 0.0;
+                self.covariance[(j, i)] = 0.0;
+            }
+        }
+    }
+
+    /// Decouples the receiver clock bias state (index 15) from the rest of the EKF state
+    /// by zeroing out the corresponding cross-covariance rows and columns.
+    /// This is mathematically required when teleporting the clock state.
+    pub fn decouple_clock(&mut self) {
+        let cols = self.covariance.ncols();
+        let i = 15; // rcv_clk_bias
+        for j in 0..cols {
+            if i != j {
+                self.covariance[(i, j)] = 0.0;
+                self.covariance[(j, i)] = 0.0;
+            }
         }
     }
 
@@ -163,8 +206,9 @@ impl RtkState {
             a.3.partial_cmp(&b.3).unwrap_or(std::cmp::Ordering::Equal)
         });
 
-        // Prevent LAMBDA search from exploding by only passing reasonably converged ambiguities
-        candidate_vars.retain(|c| c.3 < 10.0);
+        // Prevent LAMBDA search from exploding by only passing reasonably converged ambiguities.
+        // A variance of 0.5 cycles^2 (stddev ~0.7 cycles) ensures the search ellipsoid remains small.
+        candidate_vars.retain(|c| c.3 < 0.5);
         
         if candidate_vars.len() >= min_subset {
             let max_subset = candidate_vars.len().min(24);

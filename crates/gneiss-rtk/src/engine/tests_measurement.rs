@@ -62,7 +62,7 @@ mod tests {
 
         // We explicitly use compute_innovations to avoid the Mahalanobis chi2 filter rejecting dummy data
         let _config = crate::engine::EngineConfig::default();
-        let (z, _h, r, _) = super::super::measurement::compute_innovations(&mut state, &matched_obs, &ephemerides, &base_coord, base_coord.epoch, &ref_rover, &ref_base, Vector3::zeros()).unwrap();
+        let (z, _h, r, _) = super::super::measurement::compute_innovations(&mut state, &matched_obs, &ephemerides, &base_coord, base_coord.epoch, &ref_rover, &ref_base, Vector3::zeros(), Vector3::zeros()).unwrap();
 
         println!("Z: {:?}", z);
         

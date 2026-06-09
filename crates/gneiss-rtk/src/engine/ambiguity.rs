@@ -5,6 +5,7 @@ use crate::filter::{RtkState, DdObservation};
 
 pub fn manage_ambiguities_and_slips(
     state: &mut RtkState,
+    config: &crate::engine::EngineConfig,
     matched_obs: &[(DdObservation, DdObservation)],
     ephemerides: &[Ephemeris],
     base_coord: &Coordinate,
@@ -43,19 +44,19 @@ pub fn manage_ambiguities_and_slips(
 
         let mut slip_l1 = slip;
         let mut slip_l2 = slip;
-        if *state.reject_counts.get(&(r.sat, 1)).unwrap_or(&0) > 3 { slip_l1 = true; }
-        if *state.reject_counts.get(&(r.sat, 2)).unwrap_or(&0) > 3 { slip_l2 = true; }
+        if *state.reject_counts.get(&(r.sat, 1)).unwrap_or(&0) > config.max_reject_count { slip_l1 = true; }
+        if *state.reject_counts.get(&(r.sat, 2)).unwrap_or(&0) > config.max_reject_count { slip_l2 = true; }
 
         if let Some(r_cp1) = r.cp_l1 {
             if let Some(&(prev_cp, prev_doppler, prev_time)) = state.phase_history.get(&(r.sat, 1)) {
                 let dt = rover_time - prev_time;
-                if dt > 0.0 && dt < 10.0 {
-                    if check_doppler_phase_slip(r_cp1, prev_cp, r.doppler, prev_doppler, dt, 5.0) {
+                if dt > 0.0 && dt <= config.max_base_age_s {
+                    if check_doppler_phase_slip(r_cp1, prev_cp, r.doppler, prev_doppler, dt, config.doppler_slip_threshold_cycles) {
                         tracing::debug!("Doppler-Phase cycle slip detected on {:?} L1", r.sat);
                         slip_l1 = true;
                     }
-                } else if dt >= 10.0 {
-                    tracing::debug!("Data gap > 10s on {:?} L1, resetting ambiguity", r.sat);
+                } else if dt > config.max_base_age_s {
+                    tracing::debug!("Data gap > {:.1}s on {:?} L1, resetting ambiguity", config.max_base_age_s, r.sat);
                     slip_l1 = true;
                 }
             }
@@ -66,13 +67,13 @@ pub fn manage_ambiguities_and_slips(
             let doppler_l2 = r.doppler * (r_f2 / r_f1);
             if let Some(&(prev_cp, prev_doppler, prev_time)) = state.phase_history.get(&(r.sat, 2)) {
                 let dt = rover_time - prev_time;
-                if dt > 0.0 && dt < 10.0 {
-                    if check_doppler_phase_slip(r_cp2, prev_cp, doppler_l2, prev_doppler, dt, 5.0) {
+                if dt > 0.0 && dt <= config.max_base_age_s {
+                    if check_doppler_phase_slip(r_cp2, prev_cp, doppler_l2, prev_doppler, dt, config.doppler_slip_threshold_cycles) {
                         tracing::debug!("Doppler-Phase cycle slip detected on {:?} L2", r.sat);
                         slip_l2 = true;
                     }
-                } else if dt >= 10.0 {
-                    tracing::debug!("Data gap > 10s on {:?} L2, resetting ambiguity", r.sat);
+                } else if dt > config.max_base_age_s {
+                    tracing::debug!("Data gap > {:.1}s on {:?} L2, resetting ambiguity", config.max_base_age_s, r.sat);
                     slip_l2 = true;
                 }
             }
@@ -242,7 +243,7 @@ mod tests {
         let cp = 100.0 + expected_change; 
         
         let slip = check_doppler_phase_slip(cp, prev_cp, doppler, prev_doppler, dt, 5.0);
-        assert!(!slip, "No slip should be detected for perfect doppler");
+        assert!(!slip, "No slip should be detected for consistent doppler");
         
         let cp_slip = 100.0 + expected_change + 6.0;
         let slip = check_doppler_phase_slip(cp_slip, prev_cp, doppler, prev_doppler, dt, 5.0);

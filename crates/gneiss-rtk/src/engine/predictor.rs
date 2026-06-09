@@ -1,7 +1,9 @@
 use crate::filter::RtkState;
-use nalgebra::{DMatrix, Vector3, UnitQuaternion, Matrix3};
+use nalgebra::{DMatrix, DVector, Vector3, UnitQuaternion, Matrix3};
 
-pub fn predict(state: &mut RtkState, dt: f64, _q_var: f64, imu_buffer: &[gneiss_core::imu::ImuMeasurement]) {
+use crate::engine::DynamicsModel;
+
+pub fn predict(state: &mut RtkState, dt: f64, dynamics: DynamicsModel, imu_buffer: &[gneiss_core::imu::ImuMeasurement]) {
     let n = state.covariance.nrows();
     let mut phi = DMatrix::<f64>::identity(n, n);
     let omega_ie = Vector3::new(0.0, 0.0, 7.2921151467e-5); // Earth rotation rate
@@ -100,7 +102,13 @@ pub fn predict(state: &mut RtkState, dt: f64, _q_var: f64, imu_buffer: &[gneiss_
     let dt_abs = dt.abs();
     if imu_buffer.is_empty() {
         // Standard GNSS-only dynamic model (predicts position using velocity)
-        let q_acc = _q_var;
+        let q_acc = match dynamics {
+            DynamicsModel::Static => 0.001,
+            DynamicsModel::Pedestrian => 1.0,
+            DynamicsModel::Marine => 2.0,
+            DynamicsModel::Automotive => 1.0,
+            DynamicsModel::Airborne => 50.0,
+        };
         let q_pos = q_acc * dt_abs.powi(3) / 3.0; 
         let q_vel = q_acc * dt_abs;
         let q_pos_vel = q_acc * dt_abs.powi(2) / 2.0;
@@ -171,7 +179,26 @@ pub fn predict(state: &mut RtkState, dt: f64, _q_var: f64, imu_buffer: &[gneiss_
     }
     state.covariance += q;
     
-    state.core_p_predict = Some(state.covariance.view((0, 0), (crate::filter::CORE_STATE_SIZE, crate::filter::CORE_STATE_SIZE)).into_owned());
+    state.full_p_predict = Some(state.covariance.clone());
+    
+    // Save the predicted state vector for the RTS smoother
+    let mut x_pred = DVector::zeros(n);
+    x_pred.rows_mut(0, 3).copy_from(&state.position.vector);
+    x_pred.rows_mut(3, 3).copy_from(&state.velocity);
+    // Attitude error is 0 since the reference attitude was just updated
+    if n > 6 {
+        x_pred.rows_mut(9, 3).copy_from(&state.accel_bias);
+        x_pred.rows_mut(12, 3).copy_from(&state.gyro_bias);
+    }
+    if crate::filter::CORE_STATE_SIZE > 15 {
+        x_pred[15] = state.rcv_clk_bias;
+        x_pred[16] = state.rcv_clk_drift;
+        x_pred[17] = state.zwd;
+    }
+    for i in 0..state.ambiguities.len() {
+        x_pred[crate::filter::CORE_STATE_SIZE + i] = state.ambiguities[i];
+    }
+    state.full_x_predict = Some(x_pred);
 }
 
 pub fn gravity_wgs84(pos_ecef: Vector3<f64>) -> Vector3<f64> {

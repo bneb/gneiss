@@ -199,8 +199,8 @@ mod tests {
                 _ => unreachable!()
             }
 
-            crate::engine::predictor::predict(&mut state_plus, dt, 10.0, &[]);
-            crate::engine::predictor::predict(&mut state_minus, dt, 10.0, &[]);
+            crate::engine::predictor::predict(&mut state_plus, dt, crate::engine::DynamicsModel::Automotive, &[]);
+            crate::engine::predictor::predict(&mut state_minus, dt, crate::engine::DynamicsModel::Automotive, &[]);
 
             let d_pos = state_plus.position.vector - state_minus.position.vector;
             let numerical_dphi = d_pos / (2.0 * eps);
@@ -229,5 +229,86 @@ mod tests {
         let a_dyn = DMatrix::from_row_slice(2, 3, &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
         let err = max_element_error(&jac, &a_dyn);
         assert!(err < 1e-6, "Numerical Jacobian of linear function should match A exactly, error: {:.2e}", err);
+    }
+
+    #[test]
+    fn test_gnss_lever_arm_jacobian() {
+        use nalgebra::UnitQuaternion;
+        
+        let lever_arm = Vector3::new(1.0, 2.0, 3.0);
+        let state_pos = Vector3::new(6378137.0, 0.0, 0.0);
+        let sat_pos = state_pos + Vector3::new(100.0, 100.0, 100.0);
+        let q = UnitQuaternion::from_euler_angles(0.1, -0.2, 0.3);
+        let r_b_e = q.to_rotation_matrix();
+        let pos_apc = state_pos + r_b_e * lever_arm;
+        let e_los = (sat_pos - pos_apc).normalize();
+        
+        let f = |x: &DVector<f64>| -> DVector<f64> {
+            let mut dq = Vector3::zeros();
+            dq[0] = x[0]; dq[1] = x[1]; dq[2] = x[2];
+            let q_pert = UnitQuaternion::from_scaled_axis(dq);
+            let q_new = q_pert * q;
+            let r_new = q_new.to_rotation_matrix();
+            let pos_new = state_pos + r_new * lever_arm;
+            let rho = (sat_pos - pos_new).norm();
+            DVector::from_column_slice(&[-rho]) // h(x) is -rho because innov = obs - rho
+        };
+        
+        let x0 = DVector::zeros(3);
+        let num_jac = numerical_jacobian(&f, &x0, 1e-6);
+        
+        let lever_ecef = r_b_e * lever_arm;
+        let h_att = lever_ecef.cross(&e_los);
+        
+        let diff = (num_jac[(0, 0)] - h_att.x).abs().max((num_jac[(0, 1)] - h_att.y).abs()).max((num_jac[(0, 2)] - h_att.z).abs());
+        assert!(diff < 1e-3, "GNSS Lever Arm Jacobian verification failed: diff={}", diff);
+    }
+
+    #[test]
+    fn test_doppler_lever_arm_jacobian() {
+        use nalgebra::UnitQuaternion;
+        
+        let lever_arm = Vector3::new(1.0, 2.0, 3.0);
+        let omega_b = Vector3::new(0.01, -0.02, 0.05);
+        let state_pos = Vector3::new(6378137.0, 0.0, 0.0);
+        let state_vel = Vector3::new(10.0, 20.0, 30.0);
+        let sat_pos = Vector3::new(20000000.0, 0.0, 0.0);
+        let sat_vel = Vector3::new(100.0, 200.0, 300.0);
+        
+        let q = UnitQuaternion::from_euler_angles(0.1, -0.2, 0.3);
+        let r_b_e = q.to_rotation_matrix();
+        let pos_apc = state_pos + r_b_e * lever_arm;
+        let e_los = (sat_pos - pos_apc).normalize();
+        
+        let f = |x: &DVector<f64>| -> DVector<f64> {
+            let mut dq = Vector3::zeros();
+            dq[0] = x[0]; dq[1] = x[1]; dq[2] = x[2];
+            let q_pert = UnitQuaternion::from_scaled_axis(dq);
+            let q_new = q_pert * q;
+            let r_new = q_new.to_rotation_matrix();
+            
+            let bg_pert = Vector3::new(x[3], x[4], x[5]);
+            let omega_new = omega_b - bg_pert;
+            
+            let v_ant = state_vel + r_new * omega_new.cross(&lever_arm);
+            let rr = e_los.dot(&(sat_vel - v_ant));
+            
+            DVector::from_column_slice(&[-rr])
+        };
+        
+        let x0 = DVector::zeros(6);
+        let num_jac = numerical_jacobian(&f, &x0, 1e-6);
+        
+        let a = r_b_e * omega_b.cross(&lever_arm);
+        let h_att = a.cross(&e_los);
+        
+        let h_bg = r_b_e.matrix() * lever_arm.cross_matrix();
+        let h_bg = e_los.transpose() * h_bg;
+        
+        let diff_att = (num_jac[(0, 0)] - h_att.x).abs().max((num_jac[(0, 1)] - h_att.y).abs()).max((num_jac[(0, 2)] - h_att.z).abs());
+        assert!(diff_att < 1e-5, "Doppler Attitude Lever Arm Jacobian verification failed: diff={}", diff_att);
+        
+        let diff_bg = (num_jac[(0, 3)] - h_bg[0]).abs().max((num_jac[(0, 4)] - h_bg[1]).abs()).max((num_jac[(0, 5)] - h_bg[2]).abs());
+        assert!(diff_bg < 1e-5, "Doppler Gyro Bias Lever Arm Jacobian verification failed: diff={}", diff_bg);
     }
 }

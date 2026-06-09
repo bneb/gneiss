@@ -4,7 +4,7 @@
 # 
 # The GSDC dataset is hosted on Kaggle and is massive (~15GB+).
 # It provides highly degraded smartphone GNSS logs (Broadcom/Qualcomm)
-# which are excellent for testing our Adaptive EKF and MAD RAIM.
+# which are used for testing our Adaptive EKF and MAD RAIM.
 #
 # CRITICAL REQUIREMENTS:
 # 1. Kaggle Authentication: You must have the `kaggle` CLI installed and authenticated.

@@ -322,7 +322,7 @@ fn map_rinex_type(type_str: &str, val: f64, lli: Option<u8>) -> Option<Observati
     let freq_band = freq_char.to_digit(10)? as u8;
     
     let lock_time = if let Some(l) = lli {
-        if l & 1 != 0 || l & 2 != 0 { Some(0) } else { None }
+        if l & 1 != 0 { Some(0) } else { None }
     } else {
         None
     };
