@@ -367,13 +367,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let b = if let Some(b_epochs) = b_epochs {
                         b_epochs.iter().min_by(|a, b| 
                             (a.time.tow - r.time.tow).abs().partial_cmp(&(b.time.tow - r.time.tow).abs()).unwrap()
-                        ).filter(|be| {
-                            let diff = (be.time.tow - r.time.tow).abs();
-                            if processed_epochs < 5 {
-                                tracing::info!("Matching rover {} with base {}: diff = {}", r.time.tow, be.time.tow, diff);
-                            }
-                            diff < 1.0
-                        })
+                        )
                     } else { None };
                     
                     while imu_idx < imu_measurements.len() && (imu_measurements[imu_idx].time_tag as f64 / 1000.0) <= current_tow {

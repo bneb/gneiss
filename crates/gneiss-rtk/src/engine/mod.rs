@@ -64,6 +64,9 @@ pub struct EngineConfig {
     pub max_reject_count: usize,
     pub max_base_age_s: f64,
     pub spp_consistency_threshold_m: f64,
+    pub initial_ambiguity_variance: f64,
+    pub ar_min_epoch_count: u32,
+    pub ar_min_lock: u32,
 }
 
 impl Default for EngineConfig {
@@ -90,6 +93,9 @@ impl Default for EngineConfig {
             max_reject_count: 3,
             max_base_age_s: 5.0,
             spp_consistency_threshold_m: 50.0,
+            initial_ambiguity_variance: 10000.0,
+            ar_min_epoch_count: 5,
+            ar_min_lock: 3,
         }
     }
 }
@@ -249,7 +255,7 @@ impl ProcessingEngine {
 
         if crate::engine::updater::update_loosely_coupled(state, gnss_state, self.config.imu_to_antenna_lever_arm.into(), omega_b).is_err() {
             state.consecutive_rejections += 1;
-            if state.consecutive_rejections > 15 {
+            if state.consecutive_rejections > 5 {
                 tracing::warn!("SPP-INS EKF rejected for {} epochs. Hard resetting INS to SPP.", state.consecutive_rejections);
                 state.position = gnss_state.position;
                 state.velocity = gnss_state.velocity; // Zero out diverged velocity
@@ -316,7 +322,7 @@ impl ProcessingEngine {
 
         if crate::engine::updater::update_loosely_coupled(state, &gnss_state, lever_arm, omega_b).is_err() {
             state.consecutive_rejections += 1;
-            if state.consecutive_rejections > 15 {
+            if state.consecutive_rejections > 5 {
                 tracing::warn!("Loose coupling rejected for {} epochs. Hard resetting INS to GNSS.", state.consecutive_rejections);
                 state.position = gnss_state.position;
                 state.velocity = gnss_state.velocity;
@@ -416,6 +422,21 @@ impl ProcessingEngine {
         state.time = rover_obs.time;
         state.position.epoch = rover_obs.time;
 
+        // Covariance integrity monitor for SPP-INS
+        let pos_var_max = state.covariance[(0,0)].max(state.covariance[(1,1)]).max(state.covariance[(2,2)]);
+        if pos_var_max > 10000.0 {
+            if let Some(pos) = spp_pos {
+                tracing::warn!("SPP-INS position variance {:.0} m² exceeds integrity limit. Resetting.", pos_var_max);
+                state.position = pos;
+                state.velocity = nalgebra::Vector3::zeros();
+                state.decouple_position();
+                for i in 0..3 { state.covariance[(i, i)] = 100.0; }
+                for i in 3..6 { state.covariance[(i, i)] = 10.0; }
+                state.is_reset = true;
+                state.consecutive_rejections = 0;
+            }
+        }
+
         // EKF update for SPP
         if let Some(pos) = spp_pos {
             let z_diff = pos.vector - state.position.vector;
@@ -430,7 +451,7 @@ impl ProcessingEngine {
 
             if crate::engine::updater::update(state, &z_vec, &h_mat, &r_mat, self.config.chi_square_pr_threshold, None).is_err() {
                 state.consecutive_rejections += 1;
-                if state.consecutive_rejections > 15 {
+                if state.consecutive_rejections > 5 {
                     tracing::warn!("SPP EKF rejected for {} epochs. Hard resetting INS to SPP.", state.consecutive_rejections);
                     state.position = pos;
                     state.velocity = nalgebra::Vector3::zeros(); // Zero out diverged velocity
@@ -545,6 +566,9 @@ impl ProcessingEngine {
         }
 
         let dt = rover_obs.time - self.current_state.as_ref().ok_or(EngineError::StateDisappeared)?.time;
+        
+        // Track whether INS prediction actually used IMU data
+        let had_imu_data = !self.imu_buffer.is_empty();
         self.predict_state(dt);
         
         let state = self.current_state.as_mut().ok_or(EngineError::StateDisappeared)?;
@@ -552,47 +576,77 @@ impl ProcessingEngine {
         state.time = rover_obs.time;
         state.position.epoch = rover_obs.time;
 
-        if matches!(self.config.mode, EngineMode::Rtk | EngineMode::Ppp) {
+        // Covariance integrity monitor: if position variance has blown up,
+        // the filter is diverging. Force a hard reset to SPP.
+        let pos_var_max = state.covariance[(0,0)].max(state.covariance[(1,1)]).max(state.covariance[(2,2)]);
+        if pos_var_max > 10000.0 {
             if let Some(pos) = spp_pos {
+                tracing::warn!("Position variance {:.0} m² exceeds integrity limit. Resetting to SPP.", pos_var_max);
                 state.position = pos;
-                // Reset positional covariance to 100.0 m^2 and decouple from ambiguities
-                for i in 0..3 {
-                    for j in 0..state.covariance.ncols() {
-                        if i == j {
-                            state.covariance[(i, j)] = 100.0;
-                        } else {
-                            state.covariance[(i, j)] = 0.0;
-                            state.covariance[(j, i)] = 0.0;
-                        }
-                    }
-                }
-                
-                // Also decouple velocity
-                for i in 3..6 {
-                    for j in 0..state.covariance.ncols() {
-                        if i == j {
-                            state.covariance[(i, j)] = 10.0;
-                        } else {
-                            state.covariance[(i, j)] = 0.0;
-                            state.covariance[(j, i)] = 0.0;
-                        }
-                    }
-                }
+                state.velocity = nalgebra::Vector3::zeros();
+                state.rcv_clk_bias = spp_cdt;
+                state.rcv_clk_drift = 0.0;
+                state.clear_ambiguities();
+                state.decouple_position();
+                for i in 0..3 { state.covariance[(i, i)] = 100.0; }
+                for i in 3..6 { state.covariance[(i, i)] = 10.0; }
+                state.covariance[(15, 15)] = 1e6;
+                state.is_reset = true;
+                state.consecutive_rejections = 0;
             }
         }
+
+        // For GNSS-only modes (Rtk/Ppp without INS), OR for INS modes that had no IMU data:
+        // Use velocity-propagated position as the primary estimate. This provides temporal
+        // filtering like RTKLIB — the position covariance from the prediction model reflects
+        // the actual uncertainty, and carrier phase measurements refine it.
+        // Only fall back to SPP when the prediction has clearly diverged.
+        let use_gnss_only_seed = matches!(self.config.mode, EngineMode::Rtk | EngineMode::Ppp)
+            || (matches!(self.config.mode, EngineMode::RtkIns | EngineMode::PppIns | EngineMode::SppIns) && !had_imu_data);
         
-        if matches!(self.config.mode, EngineMode::Rtk | EngineMode::Ppp) {
-            // Decouple position to model it as white noise for standard Kinematic mode
-            for i in 0..3 {
-                for j in 0..state.covariance.ncols() {
-                    if i == j {
-                        state.covariance[(i, j)] = 10000.0;
-                    } else {
-                        state.covariance[(i, j)] = 0.0;
-                        state.covariance[(j, i)] = 0.0;
+        if use_gnss_only_seed {
+            let need_spp_reset = if let Some(pos) = spp_pos {
+                let diff = (state.position.vector - pos.vector).norm();
+                // Use config threshold (typically 50m) for consistency check
+                // Also reset for early epochs when the filter hasn't converged yet
+                diff > self.config.spp_consistency_threshold_m || state.epoch_count < 3
+            } else {
+                false // No SPP available; keep the predicted position
+            };
+
+            if need_spp_reset {
+                if let Some(pos) = spp_pos {
+                    tracing::warn!("Resetting EKF state to SPP due to divergence/startup.");
+                    state.position = pos;
+                    state.velocity = nalgebra::Vector3::zeros();
+                    state.clear_ambiguities();
+                    state.is_reset = true;
+                    state.consecutive_rejections = 0;
+                    // Reset position covariance when falling back to SPP
+                    for i in 0..3 {
+                        for j in 0..state.covariance.ncols() {
+                            if i == j {
+                                state.covariance[(i, j)] = 100.0;
+                            } else {
+                                state.covariance[(i, j)] = 0.0;
+                                state.covariance[(j, i)] = 0.0;
+                            }
+                        }
+                    }
+                    for i in 3..6 {
+                        for j in 0..state.covariance.ncols() {
+                            if i == j {
+                                state.covariance[(i, j)] = 10.0;
+                            } else {
+                                state.covariance[(i, j)] = 0.0;
+                                state.covariance[(j, i)] = 0.0;
+                            }
+                        }
                     }
                 }
             }
+            // Otherwise: keep velocity-propagated position and covariance from predict_state()
+            // The process noise in the predictor handles position uncertainty growth
         }
 
         let valid_base = base_obs.filter(|b| {
@@ -621,12 +675,24 @@ impl ProcessingEngine {
             
             let matched_obs = match_observations(rover_obs, base, &self.ephemerides);
             
-            if state.epoch_count < 5 || state.epoch_count % 100 == 0 {
-                tracing::info!("Epoch {}: Matched {} satellites", state.epoch_count, matched_obs.len());
+            let epoch_num = state.epoch_count;
+            if epoch_num % 100 == 0 {
+                tracing::info!("Epoch {}: Matched {} satellites, {} ambiguities tracked", epoch_num, matched_obs.len(), state.ambiguity_keys.len());
             }
 
             if matched_obs.len() >= 5 {
                 crate::engine::ambiguity::manage_ambiguities_and_slips(state, &self.config, &matched_obs, &self.ephemerides, &base_coord, rover_obs.time, base.time);
+                
+                // Update last_observed for all active ambiguities that were matched in this epoch
+                let current_epoch = state.epoch_count as u32;
+                for (r_obs, _) in &matched_obs {
+                    if r_obs.cp_l1.is_some() {
+                        state.last_observed.insert((r_obs.sat, 1), current_epoch);
+                    }
+                    if r_obs.cp_l2.is_some() {
+                        state.last_observed.insert((r_obs.sat, 2), current_epoch);
+                    }
+                }
 
                     let omega_b = if let Some(imu_buf) = self.imu_history.last() {
                         if let Some(last_imu) = imu_buf.last() {
@@ -653,7 +719,7 @@ impl ProcessingEngine {
                     
                     if crate::engine::updater::update(state, &z_safe, &h_safe, &r_safe, self.config.chi_square_pr_threshold, Some(&type_safe)).is_err() { 
                         state.consecutive_rejections += 1;
-                        if state.consecutive_rejections > 15 {
+                        if state.consecutive_rejections > 5 {
                             if let Some(pos) = spp_pos {
                                 tracing::warn!("GNSS EKF rejected for {} epochs. Hard resetting INS to SPP.", state.consecutive_rejections);
                                 state.position = pos;
@@ -687,7 +753,10 @@ impl ProcessingEngine {
                         }
                     } else {
                         state.consecutive_rejections = 0;
-                        if let Err(e) = state.resolve_ambiguities(&self.ephemerides, self.config.lambda_min_subset) {
+                        if let Ok((fixed_state, da, _q_fixed, _ratio, _subset_size)) = state.resolve_ambiguities(&self.ephemerides, self.config.lambda_min_subset, self.config.ar_min_epoch_count, self.config.ar_min_lock, self.config.lambda_min_ratio) {
+                            tracing::debug!("Integer ambiguities resolved!");
+                            *state = fixed_state;
+                        } else if let Err(e) = state.resolve_ambiguities(&self.ephemerides, self.config.lambda_min_subset, self.config.ar_min_epoch_count, self.config.ar_min_lock, self.config.lambda_min_ratio) {
                             tracing::debug!("AR Failed: {}", e);
                         }
                     }
@@ -818,17 +887,19 @@ impl ProcessingEngine {
             let state_k1 = &smoothed_states[k+1]; // x_{k+1|N}
 
             // Only smooth the first 15 states (kinematic + IMU biases) + matched ambiguities to avoid clock jump numerical instability
-            let core_size = crate::filter::CORE_STATE_SIZE;
+            let core_size = 15;
             
             // Find matching ambiguities
             let mut matched_k_indices = Vec::new();
             let mut matched_k1_indices = Vec::new();
             for (i, key_k) in state_k.ambiguity_keys.iter().enumerate() {
                 if let Some(j) = state_k1.ambiguity_keys.iter().position(|k| k == key_k) {
-                    let cov_idx = crate::filter::CORE_STATE_SIZE + j;
-                    if state_k1.covariance[(cov_idx, cov_idx)] < 10.0 {
-                        matched_k_indices.push(crate::filter::CORE_STATE_SIZE + i);
-                        matched_k1_indices.push(cov_idx);
+                    if state_k.ambiguity_track_ids[i] == state_k1.ambiguity_track_ids[j] {
+                        let cov_idx = crate::filter::CORE_STATE_SIZE + j;
+                        if state_k1.covariance[(cov_idx, cov_idx)] < 10.0 {
+                            matched_k_indices.push(crate::filter::CORE_STATE_SIZE + i);
+                            matched_k1_indices.push(cov_idx);
+                        }
                     }
                 }
             }
@@ -850,9 +921,6 @@ impl ProcessingEngine {
             x_k1_n.rows_mut(3, 3).copy_from(&state_k1.velocity);
             x_k1_n.rows_mut(9, 3).copy_from(&state_k1.accel_bias);
             x_k1_n.rows_mut(12, 3).copy_from(&state_k1.gyro_bias);
-            x_k1_n[15] = state_k1.rcv_clk_bias;
-            x_k1_n[16] = state_k1.rcv_clk_drift;
-            x_k1_n[17] = state_k1.zwd;
             for i in 0..matched_k1_indices.len() {
                 x_k1_n[core_size + i] = state_k1.ambiguities[matched_k1_indices[i] - crate::filter::CORE_STATE_SIZE];
             }
@@ -966,10 +1034,6 @@ impl ProcessingEngine {
             }
             if pos_corr_norm > 10.0 {
                 tracing::warn!("Smoother huge pos correction: {:.1}m at k={}. x_k1_n pos: {:.1}, x_pred_k1 pos: {:.1}", pos_corr_norm, k, x_k1_n.fixed_rows::<3>(0).norm(), x_pred_k1_sub.fixed_rows::<3>(0).norm());
-                tracing::warn!("P_k: {}", p_k);
-                tracing::warn!("P_pred: {}", p_pred_k1_sub);
-                tracing::warn!("C_k: {}", c_k);
-                tracing::warn!("diff: {}", (x_k1_n.clone() - x_pred_k1_sub.clone()));
             }
             
             let x_k_n = x_k + correction;
@@ -981,9 +1045,7 @@ impl ProcessingEngine {
             s_k_mut.velocity = x_k_n.fixed_rows::<3>(3).into_owned();
             s_k_mut.accel_bias = x_k_n.fixed_rows::<3>(9).into_owned();
             s_k_mut.gyro_bias = x_k_n.fixed_rows::<3>(12).into_owned();
-            s_k_mut.rcv_clk_bias = x_k_n[15];
-            s_k_mut.rcv_clk_drift = x_k_n[16];
-            s_k_mut.zwd = x_k_n[17];
+            // Clock biases remain untouched from the forward filter pass
             
             for i in 0..matched_k_indices.len() {
                 let amb_idx = matched_k_indices[i] - crate::filter::CORE_STATE_SIZE;

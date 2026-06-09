@@ -76,7 +76,7 @@ mod tests {
             }),
         ];
 
-        state.resolve_ambiguities(&ephemerides, 4).expect("AR should run");
+        state.resolve_ambiguities(&ephemerides, 4, 5, 3, 3.0).expect("AR should run");
 
         assert!(state.is_fixed(), "Should achieve fix with multi-constellation support");
         
