@@ -228,7 +228,7 @@ pub fn process_ppp<'a>(engine: &'a mut ProcessingEngine, rover_obs: &EpochObs) -
         r_mat[(i, i)] = r_vec[i];
     }
 
-    crate::engine::updater::update(state, &z, &h, &r_mat, 15.0, None).map_err(|e| {
+    crate::engine::updater::update(state, &z, &h, &r_mat, 15.0, None, engine.config.mode.is_tightly_coupled()).map_err(|e| {
         tracing::error!("PPP EKF Update failed: {:?}", e);
         EngineError::StateDisappeared
     })?;
