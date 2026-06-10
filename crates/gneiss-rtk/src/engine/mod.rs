@@ -612,11 +612,9 @@ impl ProcessingEngine {
             || (matches!(self.config.mode, EngineMode::RtkIns | EngineMode::PppIns | EngineMode::SppIns | EngineMode::RtkInsLooselyCoupled | EngineMode::SppInsLooselyCoupled | EngineMode::PppInsLooselyCoupled) && !had_imu_data);
         
         if use_gnss_only_seed {
-            let need_spp_reset = if let Some(pos) = spp_pos {
-                let diff = (state.position.vector - pos.vector).norm();
-                // Use config threshold (typically 50m) for consistency check
+            let need_spp_reset = if let Some(_pos) = spp_pos {
                 // Also reset for early epochs when the filter hasn't converged yet
-                diff > self.config.spp_consistency_threshold_m || state.epoch_count < 3
+                state.epoch_count < 3
             } else {
                 false // No SPP available; keep the predicted position
             };
@@ -726,60 +724,21 @@ impl ProcessingEngine {
                     
                     if crate::engine::updater::update(state, &z_safe, &h_safe, &r_safe, self.config.chi_square_pr_threshold, Some(&type_safe), self.config.mode.is_tightly_coupled()).is_err() { 
                         state.consecutive_rejections += 1;
-                        if state.consecutive_rejections > 5 {
-                            if let Some(pos) = spp_pos {
-                                tracing::warn!("GNSS EKF rejected for {} epochs. Hard resetting INS to SPP.", state.consecutive_rejections);
-                                state.position = pos;
-                                state.velocity = nalgebra::Vector3::zeros();
-                                state.accel_bias = nalgebra::Vector3::zeros();
-                                state.gyro_bias = nalgebra::Vector3::zeros();
-                                // Preserve attitude as it is far better than identity
-                                state.rcv_clk_bias = spp_cdt;
-                                state.rcv_clk_drift = 0.0;
-                                state.clear_ambiguities();
-                                
-                                state.covariance.fill(0.0);
-                                let n = crate::filter::CORE_STATE_SIZE;
-                                for i in 0..6 {
-                                    state.covariance[(i, i)] = if i < 3 { 100.0 } else { 10.0 };
-                                }
-                                let att_var = (1.0f64.to_radians()).powi(2);
-                                for i in 6..9 { state.covariance[(i, i)] = att_var; }
-                                for i in 9..12 { state.covariance[(i, i)] = 0.01; }
-                                for i in 12..n {
-                                    state.covariance[(i, i)] = 1e-4;
-                                }
-                                state.covariance[(15, 15)] = 1e6;
-                                state.is_reset = true;
-                                state.consecutive_rejections = 0;
-                            } else {
-                                tracing::warn!("GNSS EKF rejected, but SPP is unavailable. Riding through outage.");
-                            }
-                        } else {
-                            tracing::warn!("GNSS EKF update rejected. Riding through outage via INS dead-reckoning.");
-                        }
+                        tracing::warn!("GNSS EKF rejected for {} epochs.", state.consecutive_rejections);
                     } else {
                         state.consecutive_rejections = 0;
                         if let Ok((fixed_state, _da, _q_fixed, _ratio, _subset_size)) = state.resolve_ambiguities(&self.ephemerides, self.config.lambda_min_subset, self.config.ar_min_epoch_count, self.config.ar_min_lock, self.config.lambda_min_ratio) {
                             tracing::debug!("Integer ambiguities resolved!");
-                            *state = fixed_state;
+                            state.fixed_state = Some(Box::new(fixed_state));
                         } else if let Err(e) = state.resolve_ambiguities(&self.ephemerides, self.config.lambda_min_subset, self.config.ar_min_epoch_count, self.config.ar_min_lock, self.config.lambda_min_ratio) {
                             tracing::debug!("AR Failed: {}", e);
+                            state.fixed_state = None;
                         }
                     }
                     state.prune_stale_ambiguities(state.epoch_count as u32, 10);
                 } else {
-                    tracing::warn!("Not enough valid measurements for EKF update.");
-                    if let Some(pos) = spp_pos {
-                        tracing::warn!("Resetting EKF position and velocity to SPP due to insufficient measurements. Preserving attitude and biases.");
-                        state.position = pos;
-                        state.velocity = nalgebra::Vector3::zeros();
-                        state.clear_ambiguities();
-                        for i in 0..6 {
-                            state.covariance[(i, i)] = if i < 3 { 100.0 } else { 10.0 };
-                        }
-                    }
-                    state.is_reset = true;
+                    tracing::warn!("Not enough valid measurements for EKF update. Riding through outage.");
+                    state.consecutive_rejections += 1;
                 }
             }
         } else if let Some(pos) = spp_pos {
@@ -1067,6 +1026,14 @@ impl ProcessingEngine {
             for i in 0..smooth_len {
                 for j in 0..smooth_len {
                     s_k_mut.covariance[(idx_k[i], idx_k[j])] = p_k_n[(i, j)];
+                }
+            }
+            
+            s_k_mut.is_fixed = false;
+            s_k_mut.fixed_state = None;
+            if !matches!(self.config.mode, EngineMode::Spp | EngineMode::SppIns) {
+                if let Ok((fixed_state, _, _, _, _)) = s_k_mut.resolve_ambiguities(&self.ephemerides, self.config.lambda_min_subset, self.config.ar_min_epoch_count, self.config.ar_min_lock, self.config.lambda_min_ratio) {
+                    s_k_mut.fixed_state = Some(Box::new(fixed_state));
                 }
             }
         }
