@@ -312,10 +312,29 @@ pub fn parse_rxm_rawx(payload: &[u8]) -> Result<UbxRxmRawx, UbxParseError> {
 /// Struct representing a single sensor measurement inside UBX-ESF-MEAS.
 #[derive(Debug, Clone, PartialEq)]
 pub struct EsfMeasData {
-    /// Sensor data (24 bits)
-    pub data: u32,
+    /// Sensor data (24-bit signed, sign-extended to 32-bit)
+    pub data: i32,
     /// Type of the data (4 bits, e.g. 5 = z-axis gyro, 14 = x-axis accel)
     pub data_type: u8,
+}
+
+impl EsfMeasData {
+    /// Returns the correctly scaled sensor value in SI units (m/s^2 for accel, rad/s for gyro).
+    /// Returns the raw value for unhandled types.
+    pub fn scaled_value(&self) -> f64 {
+        let val = self.data as f64;
+        match self.data_type {
+            5 | 13 | 14 => {
+                // Gyroscope: 2^-12 deg/s -> convert to rad/s
+                val * 2.0f64.powi(-12) * (std::f64::consts::PI / 180.0)
+            },
+            16 | 17 | 18 => {
+                // Accelerometer: 2^-10 m/s^2
+                val * 2.0f64.powi(-10)
+            },
+            _ => val,
+        }
+    }
 }
 
 /// Raw UBX-ESF-MEAS (External Sensor Fusion Measurements) message.
@@ -352,11 +371,15 @@ pub fn parse_esf_meas(payload: &[u8]) -> Result<UbxEsfMeas, UbxParseError> {
         let offset = 8 + i * 4;
         let raw = u32::from_le_bytes(payload[offset..offset+4].try_into().map_err(|_| UbxParseError::InvalidLength)?);
         
-        let data = raw & 0x00FFFFFF;
+        let mut data = raw & 0x00FFFFFF;
+        if (data & 0x00800000) != 0 {
+            data |= 0xFF000000;
+        }
+        let data_i32 = data as i32;
         let data_type = (raw >> 24) as u8;
         
         measurements.push(EsfMeasData {
-            data,
+            data: data_i32,
             data_type,
         });
     }
@@ -503,7 +526,7 @@ mod tests {
         
         let meas = &esf_meas.measurements[0];
         assert_eq!(meas.data_type, 5);
-        assert_eq!(meas.data, 0xABCDEF);
+        assert_eq!(meas.data, 0xFFABCDEF_u32 as i32);
     }
 
     #[test]

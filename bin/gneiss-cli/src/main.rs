@@ -120,6 +120,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     "rtk-ins-loosely-coupled" => gneiss_rtk::engine::EngineMode::RtkInsLooselyCoupled,
                     "ppp" => gneiss_rtk::engine::EngineMode::Ppp,
                     "ppp-ins" => gneiss_rtk::engine::EngineMode::PppIns,
+                    "ppp-ins-loosely-coupled" => gneiss_rtk::engine::EngineMode::PppInsLooselyCoupled,
                     _ => return Err("Invalid engine mode specified".into()),
                 };
             }
@@ -219,6 +220,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     "rtk-ins-loosely-coupled" => gneiss_rtk::engine::EngineMode::RtkInsLooselyCoupled,
                     "ppp" => gneiss_rtk::engine::EngineMode::Ppp,
                     "ppp-ins" => gneiss_rtk::engine::EngineMode::PppIns,
+                    "ppp-ins-loosely-coupled" => gneiss_rtk::engine::EngineMode::PppInsLooselyCoupled,
                     _ => return Err("Invalid engine mode specified".into()),
                 };
             }
@@ -333,6 +335,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             }
                             
                             // The IMU and Gyro data in this specific dataset are already pre-aligned to the vehicle FRD frame.
+                            // Convert acceleration from g to m/s^2 and gyro from deg/s to rad/s
                             let accel_frd = nalgebra::Vector3::new(ax, ay, az);
                             let gyro_frd = nalgebra::Vector3::new(gx, gy, gz);
                             imu_measurements.push(gneiss_core::imu::ImuMeasurement::new((tow * 1000.0) as u32, accel_frd, gyro_frd));

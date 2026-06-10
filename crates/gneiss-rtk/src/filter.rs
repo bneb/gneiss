@@ -66,7 +66,12 @@ impl RtkState {
             time,
             position: initial_pos,
             velocity: Vector3::zeros(),
-            attitude: UnitQuaternion::identity(),
+            attitude: {
+                let llh = gneiss_core::coords::ecef_to_llh(initial_pos.vector);
+                let ecef_to_ned = gneiss_core::coords::ecef_to_ned_matrix(llh);
+                let ned_to_ecef = ecef_to_ned.transpose();
+                UnitQuaternion::from_rotation_matrix(&nalgebra::Rotation3::from_matrix(&ned_to_ecef))
+            },
             accel_bias: Vector3::zeros(),
             gyro_bias: Vector3::zeros(),
             rcv_clk_bias: 0.0,
@@ -292,12 +297,47 @@ impl RtkState {
 
                         let s = &d_full * &self.covariance * d_full.transpose();
                         let s_inv = s.clone().try_inverse().ok_or("Fix covariance inversion failed")?;
-                        let k_full = &self.covariance * d_full.transpose() * &s_inv;
+                        let mut k_full = &self.covariance * d_full.transpose() * &s_inv;
+                        
+                        // DECOUPLE IMU STATES FROM AR SNAPS:
+                        // GNSS ambiguity resolution should not violently snap the IMU attitude or biases.
+                        // By forcing the Kalman gain to 0 for these states, we prevent mean shifts AND 
+                        // mathematically prevent the Joseph form from over-shrinking their covariance.
+                        if state_size > 15 {
+                            for i in 6..15 {
+                                for j in 0..k_full.ncols() {
+                                    k_full[(i, j)] = 0.0;
+                                }
+                            }
+                        }
+                        
                         let dx = &k_full * &da_meters;
                         let mut fixed_state = self.clone();
                         fixed_state.position.vector += dx.rows(0, 3).into_owned();
                         fixed_state.velocity += dx.rows(3, 3).into_owned();
                         
+                        let d_psi = nalgebra::Vector3::new(dx[6], dx[7], dx[8]);
+                        let angle = d_psi.norm();
+                        if angle > 1e-12 {
+                            let dq = nalgebra::UnitQuaternion::from_axis_angle(&nalgebra::Unit::new_unchecked(d_psi / angle), angle);
+                            fixed_state.attitude = dq * fixed_state.attitude;
+                            fixed_state.attitude.renormalize();
+                        }
+
+                        fixed_state.accel_bias.x += dx[9];
+                        fixed_state.accel_bias.y += dx[10];
+                        fixed_state.accel_bias.z += dx[11];
+                        fixed_state.gyro_bias.x += dx[12];
+                        fixed_state.gyro_bias.y += dx[13];
+                        fixed_state.gyro_bias.z += dx[14];
+                        
+                        if CORE_STATE_SIZE > 15 {
+                            fixed_state.rcv_clk_bias += dx[15];
+                            fixed_state.rcv_clk_drift += dx[16];
+                            fixed_state.zwd += dx[17];
+                            fixed_state.zwd = fixed_state.zwd.max(0.0);
+                        }
+
                         for i in 0..self.ambiguities.len() {
                             fixed_state.ambiguities[i] += dx[CORE_STATE_SIZE + i];
                         }
