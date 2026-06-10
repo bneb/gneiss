@@ -127,6 +127,110 @@ pub fn max_relative_error(a: &DMatrix<f64>, b: &DMatrix<f64>) -> f64 {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn test_updater_jacobian() {
+        use crate::filter::RtkState;
+        use gneiss_core::time::GpsTime;
+        use gneiss_core::coords::{Coordinate, Datum, Frame};
+        use nalgebra::{UnitQuaternion, Vector3, DVector, DMatrix};
+
+        let time = GpsTime::new(2000, 0.0);
+        let pos = Coordinate::new(Vector3::new(6378137.0, 0.0, 0.0), Datum::WGS84, Frame::ECEF, time);
+        let mut state0 = RtkState::new(time, pos, 1.0);
+        state0.velocity = Vector3::new(10.0, 20.0, 30.0);
+        state0.attitude = UnitQuaternion::from_euler_angles(0.1, -0.2, 0.3);
+        state0.accel_bias = Vector3::new(0.01, -0.02, 0.03);
+        state0.gyro_bias = Vector3::new(0.001, -0.002, 0.003);
+        
+        let lever_arm = Vector3::new(1.0, 0.5, 0.2);
+        let omega_b = Vector3::new(0.1, 0.2, 0.3);
+        
+        let r_b_e = state0.attitude.to_rotation_matrix();
+        let l_e = r_b_e * lever_arm;
+        
+        let mut h_analytic = DMatrix::zeros(6, 15);
+        h_analytic.view_mut((0, 0), (6, 6)).fill_diagonal(1.0);
+        let h_pos_att = -l_e.cross_matrix();
+        for i in 0..3 { for j in 0..3 { h_analytic[(i, 6 + j)] = h_pos_att[(i, j)]; } }
+        
+        let a_b = omega_b.cross(&lever_arm);
+        let a_e = r_b_e * a_b;
+        let h_vel_att = -a_e.cross_matrix();
+        for i in 0..3 { for j in 0..3 { h_analytic[(3 + i, 6 + j)] = h_vel_att[(i, j)]; } }
+        
+        let h_vel_bg = r_b_e.matrix() * lever_arm.cross_matrix();
+        for i in 0..3 { for j in 0..3 { h_analytic[(3 + i, 12 + j)] = h_vel_bg[(i, j)]; } }
+
+        let f = |x: &DVector<f64>| -> DVector<f64> {
+            let mut s = state0.clone();
+            s.position.vector.x += x[0];
+            s.position.vector.y += x[1];
+            s.position.vector.z += x[2];
+            s.velocity.x += x[3];
+            s.velocity.y += x[4];
+            s.velocity.z += x[5];
+            
+            let d_psi = Vector3::new(x[6], x[7], x[8]);
+            let angle = d_psi.norm();
+            if angle > 1e-12 {
+                let dq = UnitQuaternion::from_axis_angle(&nalgebra::Unit::new_unchecked(d_psi / angle), angle);
+                s.attitude = dq * s.attitude;
+            }
+            
+            s.gyro_bias.x += x[12];
+            s.gyro_bias.y += x[13];
+            s.gyro_bias.z += x[14];
+            
+            let r_b_e_new = s.attitude.to_rotation_matrix();
+            let l_e_new = r_b_e_new * lever_arm;
+            let pos_apc = s.position.vector + l_e_new;
+            
+            let omega_b_true = omega_b - Vector3::new(x[12], x[13], x[14]);
+            let v_apc = s.velocity + r_b_e_new * omega_b_true.cross(&lever_arm);
+            
+            let mut res = DVector::zeros(6);
+            res.rows_mut(0, 3).copy_from(&pos_apc);
+            res.rows_mut(3, 3).copy_from(&v_apc);
+            res
+        };
+        
+        let mut h_num = DMatrix::zeros(6, 15);
+        let eps = [
+            1.0, 1.0, 1.0,       // pos
+            1e-3, 1e-3, 1e-3,    // vel
+            1e-5, 1e-5, 1e-5,    // att
+            1e-5, 1e-5, 1e-5,    // abias
+            1e-5, 1e-5, 1e-5     // gbias
+        ];
+        
+        for j in 0..15 {
+            let mut x_plus = DVector::zeros(15);
+            let mut x_minus = DVector::zeros(15);
+            x_plus[j] = eps[j];
+            x_minus[j] = -eps[j];
+            
+            let f_plus = f(&x_plus);
+            let f_minus = f(&x_minus);
+            
+            for i in 0..6 {
+                h_num[(i, j)] = (f_plus[i] - f_minus[i]) / (2.0 * eps[j]);
+            }
+        }
+        
+        let mut max_diff = 0.0;
+        for r in 0..6 {
+            for c in 0..15 {
+                let diff = (h_analytic[(r, c)] - h_num[(r, c)]).abs();
+                if diff > 1e-4 {
+                    println!("Mismatch at [{},{}]: analytic={}, num={}, diff={}", r, c, h_analytic[(r, c)], h_num[(r, c)], diff);
+                }
+                if diff > max_diff { max_diff = diff; }
+            }
+        }
+        assert!(max_diff < 1e-4, "Max diff: {}", max_diff);
+    }
+
     use super::*;
     use nalgebra::Vector3;
 

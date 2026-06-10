@@ -85,10 +85,9 @@ pub fn update_loosely_coupled(
     state.velocity += dx.rows(3, 3);
     
     if state.covariance.nrows() >= crate::filter::CORE_STATE_SIZE {
-        state.accel_bias += dx.rows(6, 3);
-        state.gyro_bias += dx.rows(9, 3);
-        
-        let d_theta = dx.rows(12, 3);
+        let d_theta = dx.rows(6, 3);
+        state.accel_bias += dx.rows(9, 3);
+        state.gyro_bias += dx.rows(12, 3);
         let angle = d_theta.norm();
         if angle > 1e-8 {
             let axis_vec3 = nalgebra::Vector3::new(d_theta[0], d_theta[1], d_theta[2]);
@@ -224,26 +223,48 @@ pub fn update(state: &mut RtkState, z: &DVector<f64>, h: &DMatrix<f64>, r: &DMat
                 _ => max_innovation,
             };
             
-            if v[i].abs() > thresh && ratio > max_outlier_ratio {
-                max_outlier_ratio = ratio;
-                worst_idx = Some(i);
+            let abs_thresh = match meas_type {
+                0 => 40.0, // Pseudorange max 40m error
+                1 | 2 => 1.0, // Phase max 1m error
+                3 => 15.0, // Doppler max 15m/s error
+                _ => 40.0,
+            };
+            
+            let is_tightly_coupled = state.covariance.nrows() > 6;
+            
+            if (v[i].abs() > thresh && ratio > max_outlier_ratio) || (is_tightly_coupled && current_z[i].abs() > abs_thresh) {
+                if v[i].abs() > thresh && ratio > max_outlier_ratio {
+                    max_outlier_ratio = ratio;
+                    worst_idx = Some(i);
+                } else if is_tightly_coupled && current_z[i].abs() > abs_thresh {
+                    // Force rejection if absolute value is too high (only for INS to protect attitude)
+                    worst_idx = Some(i);
+                    max_outlier_ratio = f64::INFINITY;
+                }
             }
         }
         
         if let Some(idx) = worst_idx {
             if current_valid.len() > 4 {
-                if _iter >= 20 { // Increase from 4 to 20 to handle mass multipath in urban canyons
+                if _iter >= 20 { 
                     tracing::debug!("Max outlier rejection iterations reached. Not dropping meas type {} with post-fit residual {:.2}", meas_types.map_or(0, |m| m[current_valid[idx]].1), v[idx]);
                     break;
                 }
-                tracing::debug!("Iterative outlier rejection: dropping meas type {} with post-fit residual {:.2}", meas_types.map_or(0, |m| m[current_valid[idx]].1), v[idx]);
                 current_z = current_z.remove_row(idx);
                 current_h = current_h.remove_row(idx);
                 current_r = current_r.remove_row(idx).remove_column(idx);
                 current_valid.remove(idx);
                 continue;
+            } else if max_outlier_ratio == f64::INFINITY || max_outlier_ratio > 3.0 {
+                // If we hit the minimum measurement limit but the remaining ones are still garbage
+                // (e.g. max_outlier_ratio == INFINITY from our absolute cap, or ratio > 3.0)
+                tracing::warn!("EKF update rejected: Remaining measurements are extreme outliers (ratio={:.1}, z={:.1}).", max_outlier_ratio, current_z[idx]);
+                return Err(UpdateError::InvalidMeasurement);
+            } else {
+                break;
             }
         }
+        
         break;
     }
 
@@ -343,7 +364,17 @@ pub fn apply_fix_and_hold(state: &mut RtkState, z_dd: &DVector<f64>, d_full: &DM
         None => return Err(UpdateError::SingularMatrix),
     };
     
-    let k = p * d_full.transpose() * s_inv;
+    let mut k = p * d_full.transpose() * s_inv;
+    
+    // DECOUPLE IMU STATES FROM AR SNAPS:
+    if state.covariance.nrows() > 15 {
+        for i in 6..15 {
+            for j in 0..k.ncols() {
+                k[(i, j)] = 0.0;
+            }
+        }
+    }
+    
     let dx = &k * &v;
     
     state.position.vector.x += dx[0];

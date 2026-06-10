@@ -25,6 +25,7 @@ pub enum EngineMode {
     RtkInsLooselyCoupled,
     Ppp,
     PppIns,
+    PppInsLooselyCoupled,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -171,7 +172,7 @@ impl ProcessingEngine {
 
     pub fn predict_state(&mut self, dt: f64) {
         if let Some(state) = self.current_state.as_mut() {
-            let enable_imu = matches!(self.config.mode, EngineMode::SppIns | EngineMode::RtkIns | EngineMode::PppIns | EngineMode::RtkInsLooselyCoupled | EngineMode::SppInsLooselyCoupled);
+            let enable_imu = matches!(self.config.mode, EngineMode::SppIns | EngineMode::RtkIns | EngineMode::PppIns | EngineMode::RtkInsLooselyCoupled | EngineMode::SppInsLooselyCoupled | EngineMode::PppInsLooselyCoupled);
             let imu_data = if enable_imu { &self.imu_buffer[..] } else { &[] };
             crate::engine::predictor::predict(state, dt, self.config.dynamics_model, imu_data);
             
@@ -206,7 +207,7 @@ impl ProcessingEngine {
             EngineMode::SppInsLooselyCoupled => self.process_spp_loosely_coupled(&filtered_rover).err(),
             EngineMode::Rtk | EngineMode::RtkIns => self.process_rtk(&filtered_rover, filtered_base).err(),
             EngineMode::RtkInsLooselyCoupled => self.process_rtk_loosely_coupled(&filtered_rover, filtered_base).err(),
-            EngineMode::Ppp | EngineMode::PppIns => crate::engine::ppp::process_ppp(self, &filtered_rover).err(),
+            EngineMode::Ppp | EngineMode::PppIns | EngineMode::PppInsLooselyCoupled => crate::engine::ppp::process_ppp(self, &filtered_rover).err(),
         };
         if let Some(e) = err {
             if let EngineError::StateDisappeared = e {
@@ -602,7 +603,7 @@ impl ProcessingEngine {
         // the actual uncertainty, and carrier phase measurements refine it.
         // Only fall back to SPP when the prediction has clearly diverged.
         let use_gnss_only_seed = matches!(self.config.mode, EngineMode::Rtk | EngineMode::Ppp)
-            || (matches!(self.config.mode, EngineMode::RtkIns | EngineMode::PppIns | EngineMode::SppIns) && !had_imu_data);
+            || (matches!(self.config.mode, EngineMode::RtkIns | EngineMode::PppIns | EngineMode::SppIns | EngineMode::RtkInsLooselyCoupled | EngineMode::SppInsLooselyCoupled | EngineMode::PppInsLooselyCoupled) && !had_imu_data);
         
         if use_gnss_only_seed {
             let need_spp_reset = if let Some(pos) = spp_pos {
@@ -792,7 +793,7 @@ impl ProcessingEngine {
             }
         }
         
-        let is_ins = matches!(self.config.mode, EngineMode::SppIns | EngineMode::RtkIns | EngineMode::PppIns);
+        let is_ins = matches!(self.config.mode, EngineMode::SppIns | EngineMode::RtkIns | EngineMode::PppIns | EngineMode::RtkInsLooselyCoupled | EngineMode::SppInsLooselyCoupled | EngineMode::PppInsLooselyCoupled);
         if self.config.enable_nhc && is_ins {
             if let Some(state) = self.current_state.as_mut() {
                 // Determine if stationary for ZUPT
