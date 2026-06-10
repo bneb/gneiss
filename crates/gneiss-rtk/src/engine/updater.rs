@@ -104,7 +104,7 @@ pub fn update_loosely_coupled(
     Ok(())
 }
 
-pub fn update(state: &mut RtkState, z: &DVector<f64>, h: &DMatrix<f64>, r: &DMatrix<f64>, max_innovation: f64, meas_types: Option<&[(gneiss_core::sat::SatelliteId, u8)]>) -> Result<Vec<usize>, UpdateError> {
+pub fn update(state: &mut RtkState, z: &DVector<f64>, h: &DMatrix<f64>, r: &DMatrix<f64>, max_innovation: f64, meas_types: Option<&[(gneiss_core::sat::SatelliteId, u8)]>, is_tightly_coupled: bool) -> Result<Vec<usize>, UpdateError> {
     if z.len() != h.nrows() || h.ncols() != state.covariance.nrows() {
         return Err(UpdateError::DimensionMismatch);
     }
@@ -229,8 +229,6 @@ pub fn update(state: &mut RtkState, z: &DVector<f64>, h: &DMatrix<f64>, r: &DMat
                 3 => 15.0, // Doppler max 15m/s error
                 _ => 40.0,
             };
-            
-            let is_tightly_coupled = state.covariance.nrows() > 6;
             
             if (v[i].abs() > thresh && ratio > max_outlier_ratio) || (is_tightly_coupled && current_z[i].abs() > abs_thresh) {
                 if v[i].abs() > thresh && ratio > max_outlier_ratio {

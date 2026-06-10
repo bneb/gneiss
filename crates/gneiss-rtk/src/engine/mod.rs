@@ -28,6 +28,12 @@ pub enum EngineMode {
     PppInsLooselyCoupled,
 }
 
+impl EngineMode {
+    pub fn is_tightly_coupled(&self) -> bool {
+        matches!(self, Self::SppIns | Self::RtkIns | Self::PppIns)
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum DynamicsModel {
@@ -450,7 +456,7 @@ impl ProcessingEngine {
             // Using a tighter variance of 9.0 (3m std dev) forces the INS to track the clean SPP positions
             r_mat.fill_diagonal(9.0);
 
-            if crate::engine::updater::update(state, &z_vec, &h_mat, &r_mat, self.config.chi_square_pr_threshold, None).is_err() {
+            if crate::engine::updater::update(state, &z_vec, &h_mat, &r_mat, self.config.chi_square_pr_threshold, None, self.config.mode.is_tightly_coupled()).is_err() {
                 state.consecutive_rejections += 1;
                 if state.consecutive_rejections > 5 {
                     tracing::warn!("SPP EKF rejected for {} epochs. Hard resetting INS to SPP.", state.consecutive_rejections);
@@ -718,7 +724,7 @@ impl ProcessingEngine {
                         self.config.chi_square_cp_threshold,
                     ) {
                     
-                    if crate::engine::updater::update(state, &z_safe, &h_safe, &r_safe, self.config.chi_square_pr_threshold, Some(&type_safe)).is_err() { 
+                    if crate::engine::updater::update(state, &z_safe, &h_safe, &r_safe, self.config.chi_square_pr_threshold, Some(&type_safe), self.config.mode.is_tightly_coupled()).is_err() { 
                         state.consecutive_rejections += 1;
                         if state.consecutive_rejections > 5 {
                             if let Some(pos) = spp_pos {
@@ -754,7 +760,7 @@ impl ProcessingEngine {
                         }
                     } else {
                         state.consecutive_rejections = 0;
-                        if let Ok((fixed_state, da, _q_fixed, _ratio, _subset_size)) = state.resolve_ambiguities(&self.ephemerides, self.config.lambda_min_subset, self.config.ar_min_epoch_count, self.config.ar_min_lock, self.config.lambda_min_ratio) {
+                        if let Ok((fixed_state, _da, _q_fixed, _ratio, _subset_size)) = state.resolve_ambiguities(&self.ephemerides, self.config.lambda_min_subset, self.config.ar_min_epoch_count, self.config.ar_min_lock, self.config.lambda_min_ratio) {
                             tracing::debug!("Integer ambiguities resolved!");
                             *state = fixed_state;
                         } else if let Err(e) = state.resolve_ambiguities(&self.ephemerides, self.config.lambda_min_subset, self.config.ar_min_epoch_count, self.config.ar_min_lock, self.config.lambda_min_ratio) {
@@ -788,7 +794,7 @@ impl ProcessingEngine {
             let mut r_mat = nalgebra::DMatrix::zeros(3, 3);
             r_mat.fill_diagonal(25.0);
 
-            if let Err(e) = crate::engine::updater::update(state, &z_vec, &h_mat, &r_mat, 15.0, None) {
+            if let Err(e) = crate::engine::updater::update(state, &z_vec, &h_mat, &r_mat, 15.0, None, self.config.mode.is_tightly_coupled()) {
                 tracing::debug!("SPP Fallback update failed: {:?}", e);
             }
         }
@@ -862,6 +868,12 @@ impl ProcessingEngine {
         if n_epochs == 0 { return Err(EngineError::NoObservations); }
         
         let mut smoothed_states = self.state_history.clone();
+
+        if matches!(self.config.mode, EngineMode::Spp) {
+            // Pure SPP is an epoch-by-epoch solution. No kinematics or IMU bias states exist to smooth.
+            // Return forward solutions without smoothing.
+            return Ok(smoothed_states);
+        }
         
         // Backward pass
         for k in (0..n_epochs - 1).rev() {
