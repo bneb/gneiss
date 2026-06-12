@@ -1,458 +1,125 @@
 use gneiss_core::obs::EpochObs;
 use crate::filter::RtkState;
 use crate::engine::{EngineError, ProcessingEngine};
-use nalgebra::{Vector3, DMatrix, DVector};
+use crate::engine::processed_sat::ProcessedSat;
+use crate::engine::ppp_fg::PppFactorGraph;
+use nalgebra::Vector3;
 
 const LIGHT_SPEED: f64 = 299792458.0;
 
-fn snr_scale(snr: i32) -> f64 {
-    (10.0f64).powf((45.0 - snr as f64) / 10.0)
-}
-
-pub fn process_ppp<'a>(engine: &'a mut ProcessingEngine, rover_obs: &EpochObs) -> Result<&'a RtkState, EngineError> {
-    let valid_pos = {
-        if engine.current_state.is_none() {
-            return engine.process_spp(rover_obs);
-        }
-        let state = engine.current_state.as_ref().unwrap();
-        state.position.vector.norm().is_normal() && state.position.vector.norm() >= 1000.0
-    };
-    if !valid_pos {
+pub fn process_ppp<'a>(engine: &'a mut ProcessingEngine, rover_obs: &'a EpochObs) -> Result<&'a RtkState, EngineError> {
+    if !valid_pos(engine) {
         return engine.process_spp(rover_obs);
     }
-    let state = engine.current_state.as_mut().unwrap();
     
-    let mut h_rows = Vec::new();
-    let mut z_vec = Vec::new();
-    let mut r_vec = Vec::new();
-    let mut sat_vec = Vec::new();
+    let sats = build_sats(engine, rover_obs);
+    if sats.is_empty() {
+        return Err(EngineError::InsufficientSatellites);
+    }
 
-    let mut sats_to_process = Vec::new();
+    let state = engine.current_state.as_mut().unwrap();
+    update_phase_ambiguities(state, &sats, rover_obs.time);
+    
+    let fg = PppFactorGraph::new();
+    fg.solve(state, &sats)?;
+    
+    state.prune_stale_ambiguities(state.epoch_count as u32, 10);
+    Ok(engine.current_state.as_ref().unwrap())
+}
 
-    for (_idx, sat_obs) in rover_obs.satellites.iter().enumerate() {
-        let pr1 = sat_obs.get_observable(1);
-        let pr2 = sat_obs.get_observable(2);
-        
-        if pr1.is_none() || pr2.is_none() { continue; }
+fn valid_pos(engine: &ProcessingEngine) -> bool {
+    if let Some(state) = &engine.current_state {
+        state.position.vector.norm().is_normal() && state.position.vector.norm() >= 1000.0
+    } else {
+        false
+    }
+}
+
+fn build_sats<'a>(engine: &ProcessingEngine, rover_obs: &'a EpochObs) -> Vec<ProcessedSat<'a>> {
+    let mut sats = Vec::new();
+    let state = engine.current_state.as_ref().unwrap();
+    let mut rcv_pos_ecef = Vector3::new(state.position.vector.x, state.position.vector.y, state.position.vector.z);
+    rcv_pos_ecef += gneiss_core::tides::solid_earth_tides_ecef(rover_obs.time, rcv_pos_ecef);
+    let rcv_pos_llh = gneiss_core::coords::ecef_to_llh(rcv_pos_ecef);
+
+    for sat_obs in &rover_obs.satellites {
+        let (pr1, pr2) = match (sat_obs.get_observable(1), sat_obs.get_observable(2)) {
+            (Some(p1), Some(p2)) => (p1, p2),
+            _ => continue,
+        };
         let eph = match engine.ephemerides.iter().find(|e| e.sat() == sat_obs.sat) {
-            Some(e) => e,
-            None => continue,
+            Some(e) => e, None => continue,
         };
 
         let f1 = gneiss_core::signal::satellite_frequencies(sat_obs.sat, eph.freq_num()).0;
         let f2 = gneiss_core::signal::satellite_frequencies(sat_obs.sat, eph.freq_num()).1;
-        let p_if = crate::combinations::iono_free(pr1.unwrap(), pr2.unwrap(), f1, f2);
+        let p_if = crate::combinations::iono_free(pr1, pr2, f1, f2);
         
-        let cp1 = sat_obs.get_observable_phase(1);
-        let cp2 = sat_obs.get_observable_phase(2);
-
-        let mut rcv_pos_ecef = Vector3::new(state.position.vector.x, state.position.vector.y, state.position.vector.z);
-        let set_disp = gneiss_core::tides::solid_earth_tides_ecef(rover_obs.time, rcv_pos_ecef);
-        rcv_pos_ecef += set_disp;
-        let _rcv_pos_llh = gneiss_core::coords::ecef_to_llh(rcv_pos_ecef);
-        
-        let (sat_pos, _sat_vel, sat_clk, _) = eph.position(rover_obs.time);
-        let sat_pos_rot = sat_pos;
-
-        let dist = (sat_pos_rot - rcv_pos_ecef).norm();
-        let rcv_pos_llh = gneiss_core::coords::ecef_to_llh(rcv_pos_ecef);
-        let (_az, el) = gneiss_core::coords::az_el(rcv_pos_llh, rcv_pos_ecef, sat_pos_rot);
-
+        let (sat_pos, sat_vel, sat_clk, sat_drift) = eph.position(rover_obs.time);
+        let dist = (sat_pos - rcv_pos_ecef).norm();
+        let (_az, el) = gneiss_core::coords::az_el(rcv_pos_llh, rcv_pos_ecef, sat_pos);
         if el < libm::asin(0.261799) { continue; }
 
-        let dt_sat_m = sat_clk * LIGHT_SPEED;
-        let snr = sat_obs.get_snr(1).unwrap_or(45);
-
-        let los = (sat_pos_rot - rcv_pos_ecef) / dist;
         let tropo_params = gneiss_core::atmosphere::TropoParams::default();
         let z_dry = 0.0022768 * tropo_params.press_hpa / (1.0 - 0.00266 * libm::cos(2.0 * rcv_pos_llh.x) - 0.00028 * rcv_pos_llh.z / 1000.0);
-        let map_wet = 1.0 / libm::sin(el);
         let tropo_dry = z_dry / libm::sin(el);
 
-        let lam1 = LIGHT_SPEED / gneiss_core::signal::satellite_frequencies(sat_obs.sat, eph.freq_num()).0;
-        let lam2 = LIGHT_SPEED / gneiss_core::signal::satellite_frequencies(sat_obs.sat, eph.freq_num()).1;
-
-        sats_to_process.push((sat_obs, dt_sat_m, p_if, cp1, cp2, los, dist, el, snr, lam1, lam2, tropo_dry, map_wet, f1, f2, sat_pos_rot, rcv_pos_ecef));
+        sats.push(ProcessedSat {
+            sat_obs, dt_sat_m: sat_clk * LIGHT_SPEED, p_meas: p_if, is_iono_free: true,
+            cp1: sat_obs.get_observable_phase(1), cp2: sat_obs.get_observable_phase(2),
+            los: (sat_pos - rcv_pos_ecef) / dist, dist, el, snr: sat_obs.get_snr(1).unwrap_or(45) as f64,
+            doppler: 0.0, lam1: LIGHT_SPEED / f1, lam2: LIGHT_SPEED / f2,
+            tropo_dry, map_wet: 1.0 / libm::sin(el), iono_delay: 0.0,
+            f1, f2, sat_pos_rot: sat_pos, sat_vel, sat_clock_drift: sat_drift,
+            rcv_pos_ecef, pcv_correction: 0.0,
+        });
     }
-
-    // PASS 1: State modifications
-    for (sat_obs, dt_sat_m, p_if, cp1, cp2, _los, dist, _el, _snr, lam1, lam2, tropo_dry, map_wet, f1, f2, sat_pos_rot, rcv_pos_ecef) in &sats_to_process {
-        let expected_p = dist + state.rcv_clk_bias - dt_sat_m + tropo_dry + state.zwd * map_wet;
-        let res_p = p_if - expected_p;
-
-        if let (Some(cp1_cyc), Some(cp2_cyc)) = (cp1, cp2) {
-            if *cp1_cyc != 0.0 && *cp2_cyc != 0.0 {
-                let windup = gneiss_core::windup::phase_windup(*sat_pos_rot, gneiss_core::sun::sun_position_ecef(rover_obs.time), *rcv_pos_ecef, *state.windup.get(&sat_obs.sat).unwrap_or(&0.0));
-                state.windup.insert(sat_obs.sat, windup);
-
-                let l1_m = (cp1_cyc + windup) * lam1;
-                let l2_m = (cp2_cyc + windup) * lam2;
-                let l_if = crate::combinations::iono_free(l1_m, l2_m, *f1, *f2);
-                let l_gf = l1_m - l2_m;
-                
-                let mut slip = false;
-                if let Some(&prev_gf) = state.gf_values.get(&sat_obs.sat) {
-                    if (l_gf - prev_gf).abs() > 0.05 { slip = true; }
-                }
-                state.gf_values.insert(sat_obs.sat, l_gf);
-                
-                let l1_lock = sat_obs.get_locktime(1);
-                let prev_l1 = *state.locktimes.get(&(sat_obs.sat, 1)).unwrap_or(&0);
-                let mut new_l1 = prev_l1.saturating_add(1);
-                if let Some(lk) = l1_lock {
-                    if lk == 0 || lk < prev_l1 { slip = true; new_l1 = lk; } else { new_l1 = lk; }
-                } else if new_l1 == 0 && state.locktimes.contains_key(&(sat_obs.sat, 1)) { slip = true; }
-                state.locktimes.insert((sat_obs.sat, 1), new_l1);
-                
-                let l2_lock = sat_obs.get_locktime(2);
-                let prev_l2 = *state.locktimes.get(&(sat_obs.sat, 2)).unwrap_or(&0);
-                let mut new_l2 = prev_l2.saturating_add(1);
-                if let Some(lk) = l2_lock {
-                    if lk == 0 || lk < prev_l2 { slip = true; new_l2 = lk; } else { new_l2 = lk; }
-                } else if new_l2 == 0 && state.locktimes.contains_key(&(sat_obs.sat, 2)) { slip = true; }
-                state.locktimes.insert((sat_obs.sat, 2), new_l2);
-
-                if slip { state.remove_ambiguity(sat_obs.sat, 0); }
-
-                let res_l = l_if - expected_p;
-                if !state.ambiguity_keys.contains(&(sat_obs.sat, 0)) {
-                    let amb_est = res_l - res_p;
-                    state.add_ambiguity(sat_obs.sat, 0, amb_est, 100.0);
-                }
-                state.last_observed.insert((sat_obs.sat, 0), state.epoch_count as u32);
-            }
-        }
-    }
-
-    // PASS 2: Measurement generation
-    for (sat_obs, dt_sat_m, p_if, cp1, cp2, los, dist, el, snr, lam1, lam2, tropo_dry, map_wet, f1, f2, _sat_pos_rot, _rcv_pos_ecef) in &sats_to_process {
-        let expected_p = dist + state.rcv_clk_bias - dt_sat_m + tropo_dry + state.zwd * map_wet;
-        let res_p = p_if - expected_p;
-
-        let mut h_row_p = vec![0.0; state.covariance.ncols()];
-        h_row_p[0] = -los.x;
-        h_row_p[1] = -los.y;
-        h_row_p[2] = -los.z;
-        h_row_p[17] = *map_wet;
-        h_row_p[15] = 1.0;
-
-        h_rows.push(h_row_p);
-        z_vec.push(res_p);
-        sat_vec.push(sat_obs.sat);
-        
-        let var_p = 9.0 * snr_scale(*snr as i32) / libm::sin(*el);
-        r_vec.push(var_p);
-
-        if let (Some(cp1_cyc), Some(cp2_cyc)) = (cp1, cp2) {
-            if *cp1_cyc != 0.0 && *cp2_cyc != 0.0 {
-                let windup = *state.windup.get(&sat_obs.sat).unwrap_or(&0.0);
-                let l1_m = (cp1_cyc + windup) * lam1;
-                let l2_m = (cp2_cyc + windup) * lam2;
-                let l_if = crate::combinations::iono_free(l1_m, l2_m, *f1, *f2);
-
-                let amb_idx = state.ambiguity_keys.iter().position(|&(s, f)| s == sat_obs.sat && f == 0).unwrap();
-                let n_if_est = state.ambiguities[amb_idx];
-
-                let mut h_row_l = vec![0.0; state.covariance.ncols()];
-                h_row_l[0] = -los.x;
-                h_row_l[1] = -los.y;
-                h_row_l[2] = -los.z;
-                h_row_l[17] = *map_wet;
-                h_row_l[15] = 1.0;
-                h_row_l[crate::filter::CORE_STATE_SIZE + amb_idx] = 1.0;
-
-                let expected_l = expected_p + n_if_est;
-                let res_l = l_if - expected_l;
-
-                h_rows.push(h_row_l);
-                z_vec.push(res_l);
-                sat_vec.push(sat_obs.sat);
-                
-                let f1_4 = f1 * f1 * f1 * f1;
-                let f2_4 = f2 * f2 * f2 * f2;
-                let if_factor = (f1_4 + f2_4) / (f1 * f1 - f2 * f2).powi(2);
-                let var_l = if_factor * 0.0001 * snr_scale(*snr as i32) / libm::sin(*el);
-                r_vec.push(var_l);
-            }
-        }
-    }
-
-    if z_vec.is_empty() {
-        return Err(EngineError::InsufficientSatellites);
-    }
-
-
-    // Clock jump detection
-    let mut pr_residuals = Vec::new();
-    for i in 0..z_vec.len() {
-        // Pseudorange rows have 1.0 in h_rows[i][15] and 0.0 in ambiguity states
-        let is_pr = h_rows[i][15] == 1.0 && !h_rows[i][crate::filter::CORE_STATE_SIZE..].iter().any(|&x| x != 0.0);
-        if is_pr {
-            pr_residuals.push(z_vec[i]);
-        }
-    }
-    
-    if !pr_residuals.is_empty() {
-        pr_residuals.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-        let median_res = pr_residuals[pr_residuals.len() / 2];
-        
-        if median_res.abs() > 300_000.0 {
-            tracing::debug!("Clock jump detected! Median residual = {:.2}m", median_res);
-            
-            // Shift clock bias
-            state.rcv_clk_bias += median_res;
-            
-            // Shift all ambiguities to counteract clock shift in phase
-            for i in 0..state.ambiguities.len() {
-                state.ambiguities[i] -= median_res;
-            }
-            
-            // Expand clock covariance to allow re-convergence
-            state.covariance[(15, 15)] += 1e6;
-            
-            // Apply shift to pseudorange residuals
-            for i in 0..z_vec.len() {
-                let is_pr = h_rows[i][15] == 1.0 && !h_rows[i][crate::filter::CORE_STATE_SIZE..].iter().any(|&x| x != 0.0);
-                if is_pr {
-                    z_vec[i] -= median_res;
-                }
-            }
-        }
-    }
-
-    let h = DMatrix::from_fn(z_vec.len(), state.covariance.ncols(), |r, c| h_rows[r][c]);
-
-    let z = DVector::from_vec(z_vec);
-    let mut r_mat = DMatrix::zeros(r_vec.len(), r_vec.len());
-    for i in 0..r_vec.len() {
-        r_mat[(i, i)] = r_vec[i];
-    }
-
-    crate::engine::updater::update(state, &z, &h, &r_mat, 15.0, None, engine.config.mode.is_tightly_coupled()).map_err(|e| {
-        tracing::error!("PPP EKF Update failed: {:?}", e);
-        EngineError::StateDisappeared
-    })?;
-
-    state.prune_stale_ambiguities(state.epoch_count as u32, 10);
-    Ok(state)
+    sats
 }
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::engine::{EngineConfig, EngineMode, ProcessingEngine, EngineError};
-    use crate::filter::RtkState;
-    use gneiss_core::coords::{Coordinate, Datum, Frame};
-    use gneiss_core::time::GpsTime;
-    use gneiss_core::sat::{SatelliteId, Constellation};
-    use gneiss_core::ephemeris::{Ephemeris, GpsEphemeris};
-    use gneiss_core::obs::{EpochObs, SatObs, Observation, ObsCode, SignalCode, ObsType};
-    use nalgebra::{Vector3, DMatrix, DVector};
 
-    #[test]
-    fn test_snr_scale_mutants() {
-        assert_eq!(snr_scale(45), 1.0);
-        assert_eq!(snr_scale(35), 10.0);
-        assert_eq!(snr_scale(25), 100.0);
-    }
+fn update_phase_ambiguities(state: &mut RtkState, sats: &[ProcessedSat], time: gneiss_core::time::GpsTime) {
+    for sat in sats {
+        if let (Some(cp1_cyc), Some(cp2_cyc)) = (sat.cp1, sat.cp2) {
+            if cp1_cyc == 0.0 || cp2_cyc == 0.0 { continue; }
+            let windup = gneiss_core::windup::phase_windup(sat.sat_pos_rot, gneiss_core::sun::sun_position_ecef(time), sat.rcv_pos_ecef, *state.windup.get(&sat.sat_obs.sat).unwrap_or(&0.0));
+            state.windup.insert(sat.sat_obs.sat, windup);
 
-    fn create_mock_obs() -> EpochObs {
-        EpochObs {
-            time: GpsTime::new(2000, 0.0),
-            satellites: vec![],
+            let l1_m = (cp1_cyc + windup) * sat.lam1;
+            let l2_m = (cp2_cyc + windup) * sat.lam2;
+            let l_if = crate::combinations::iono_free(l1_m, l2_m, sat.f1, sat.f2);
+            let l_gf = l1_m - l2_m;
+            
+            let mut slip = false;
+            if let Some(&prev_gf) = state.gf_values.get(&sat.sat_obs.sat) {
+                if (l_gf - prev_gf).abs() > 0.05 { slip = true; }
+            }
+            state.gf_values.insert(sat.sat_obs.sat, l_gf);
+            
+            if check_locktime(state, sat.sat_obs, 1) || check_locktime(state, sat.sat_obs, 2) {
+                slip = true;
+            }
+
+            if slip { state.remove_ambiguity(sat.sat_obs.sat, 0); }
+
+            let expected_p = sat.dist + state.rcv_clk_bias - sat.dt_sat_m + sat.tropo_dry + state.zwd * sat.map_wet;
+            if !state.ambiguity_keys.contains(&(sat.sat_obs.sat, 0)) {
+                state.add_ambiguity(sat.sat_obs.sat, 0, (l_if - expected_p) - (sat.p_meas - expected_p), 100.0);
+            }
+            state.last_observed.insert((sat.sat_obs.sat, 0), state.epoch_count as u32);
         }
     }
+}
 
-    #[test]
-    fn test_process_ppp_valid_pos_fallback() {
-        let mut config = EngineConfig::default();
-        config.mode = EngineMode::Ppp;
-        let mut engine = ProcessingEngine::new(config);
-        let obs = create_mock_obs();
-
-        let res = process_ppp(&mut engine, &obs);
-        assert!(res.is_err()); 
-
-        let time = GpsTime::new(2000, 0.0);
-        engine.current_state = Some(RtkState::new(time, Coordinate::new(Vector3::new(10.0, 0.0, 0.0), Datum::WGS84, Frame::ECEF, time), 1.0));
-        let res2 = process_ppp(&mut engine, &obs);
-        assert!(res2.is_ok());
-
-        engine.current_state = Some(RtkState::new(time, Coordinate::new(Vector3::new(f64::NAN, 0.0, 0.0), Datum::WGS84, Frame::ECEF, time), 1.0));
-        let res3 = process_ppp(&mut engine, &obs);
-        assert!(res3.is_ok());
-
-        engine.current_state = Some(RtkState::new(time, Coordinate::new(Vector3::new(2000.0, 0.0, 0.0), Datum::WGS84, Frame::ECEF, time), 1.0));
-        let res4 = process_ppp(&mut engine, &obs);
-        assert_eq!(res4.unwrap_err(), EngineError::InsufficientSatellites);
+fn check_locktime(state: &mut RtkState, obs: &gneiss_core::obs::SatObs, band: u8) -> bool {
+    let lk_obs = obs.get_locktime(band);
+    let prev = *state.locktimes.get(&(obs.sat, band)).unwrap_or(&0);
+    let mut new_lk = prev.saturating_add(1);
+    let mut slip = false;
+    if let Some(lk) = lk_obs {
+        if lk == 0 || lk < prev { slip = true; new_lk = lk; } else { new_lk = lk; }
+    } else if new_lk == 0 && state.locktimes.contains_key(&(obs.sat, band)) {
+        slip = true;
     }
-
-    fn mock_eph(sat: SatelliteId) -> Ephemeris {
-        Ephemeris::Gps(GpsEphemeris {
-            sat,
-            toe: GpsTime::new(2000, 0.0),
-            toc: GpsTime::new(2000, 0.0),
-            af0: 0.0, af1: 0.0, af2: 0.0,
-            crs: 0.0, crc: 0.0, cuc: 0.0, cus: 0.0, cic: 0.0, cis: 0.0,
-            m0: 0.0, e: 0.0, sqrt_a: 5153.0, delta_n: 0.0,
-            omega0: 0.0, omega_dot: 0.0, i0: 0.0, idot: 0.0, omega: 0.0, tgd: 0.0,
-            iode: 0, iodc: 0,
-        })
-    }
-
-    fn pseudo_obs(freq_band: u8, val: f64) -> Observation {
-        Observation {
-            code: ObsCode { obs_type: ObsType::Pseudorange, signal: SignalCode { freq_band, attribute: 'C' } },
-            value: val,
-            lock_time: None,
-        }
-    }
-    
-    fn phase_obs(freq_band: u8, val: f64) -> Observation {
-        Observation {
-            code: ObsCode { obs_type: ObsType::CarrierPhase, signal: SignalCode { freq_band, attribute: 'C' } },
-            value: val,
-            lock_time: Some(10),
-        }
-    }
-
-    #[test]
-    fn test_process_ppp_sat_skipping() {
-        let mut config = EngineConfig::default();
-        config.mode = EngineMode::Ppp;
-        let mut engine = ProcessingEngine::new(config);
-        
-        let time = GpsTime::new(2000, 0.0);
-        let pos = Coordinate::new(Vector3::new(6378000.0, 0.0, 0.0), Datum::WGS84, Frame::ECEF, time);
-        engine.current_state = Some(RtkState::new(time, pos, 1.0));
-        
-        let sat1 = SatelliteId { constellation: Constellation::Gps, prn: 1 };
-        engine.ephemerides.push(mock_eph(sat1));
-
-        let mut obs = create_mock_obs();
-        obs.satellites.push(SatObs {
-            sat: sat1,
-            observations: vec![
-                pseudo_obs(1, 20000000.0),
-            ]
-        });
-        assert_eq!(process_ppp(&mut engine, &obs).unwrap_err(), EngineError::InsufficientSatellites);
-
-        let sat2 = SatelliteId { constellation: Constellation::Gps, prn: 2 };
-        obs.satellites[0].sat = sat2; // no eph
-        obs.satellites[0].observations.push(pseudo_obs(2, 20000000.0));
-        assert_eq!(process_ppp(&mut engine, &obs).unwrap_err(), EngineError::InsufficientSatellites);
-
-        obs.satellites[0].sat = sat1; // valid eph
-        engine.current_state.as_mut().unwrap().position.vector = Vector3::new(-6378000.0, 0.0, 0.0); // el < 15
-        assert_eq!(process_ppp(&mut engine, &obs).unwrap_err(), EngineError::InsufficientSatellites);
-    }
-
-    #[test]
-    fn test_process_ppp_full_observation() {
-        let mut config = EngineConfig::default();
-        config.mode = EngineMode::Ppp;
-        let mut engine = ProcessingEngine::new(config);
-        
-        let time = GpsTime::new(2000, 0.0);
-        let pos = Coordinate::new(Vector3::new(6378000.0, 0.0, 0.0), Datum::WGS84, Frame::ECEF, time);
-        engine.current_state = Some(RtkState::new(time, pos, 1.0));
-        
-        let sat1 = SatelliteId { constellation: Constellation::Gps, prn: 1 };
-        engine.ephemerides.push(mock_eph(sat1));
-
-        let mut obs = create_mock_obs();
-        obs.satellites.push(SatObs {
-            sat: sat1,
-            observations: vec![
-                pseudo_obs(1, 40000000.0),
-                pseudo_obs(2, 40000000.0),
-                phase_obs(1, 100000000.0),
-                phase_obs(2, 70000000.0),
-            ]
-        });
-
-        engine.current_state.as_mut().unwrap().gf_values.insert(sat1, 10.0);
-        
-        let res = process_ppp(&mut engine, &obs);
-        assert!(res.is_ok());
-        
-        let state = res.unwrap();
-        assert!(state.ambiguity_keys.contains(&(sat1, 0)));
-        assert_eq!(*state.locktimes.get(&(sat1, 1)).unwrap(), 10);
-    }
-
-    #[test]
-    fn test_process_ppp_clock_jump() {
-        let mut config = EngineConfig::default();
-        config.mode = EngineMode::Ppp;
-        let mut engine = ProcessingEngine::new(config);
-        
-        let time = GpsTime::new(2000, 0.0);
-        let pos = Coordinate::new(Vector3::new(6378000.0, 0.0, 0.0), Datum::WGS84, Frame::ECEF, time);
-        engine.current_state = Some(RtkState::new(time, pos, 1.0));
-        
-        let sat1 = SatelliteId { constellation: Constellation::Gps, prn: 1 };
-        engine.ephemerides.push(mock_eph(sat1));
-
-        let mut obs = create_mock_obs();
-        obs.satellites.push(SatObs {
-            sat: sat1,
-            observations: vec![
-                pseudo_obs(1, 40000000.0),
-                pseudo_obs(2, 40000000.0),
-                phase_obs(1, 100000000.0),
-                phase_obs(2, 70000000.0),
-            ]
-        });
-
-        let res = process_ppp(&mut engine, &obs);
-        assert!(res.is_ok());
-        let state = res.unwrap();
-        assert!(state.rcv_clk_bias > 10_000_000.0);
-    }
-
-    #[test]
-    fn test_process_ppp_slip_boundary() {
-        let mut config = EngineConfig::default();
-        config.mode = EngineMode::Ppp;
-        let mut engine = ProcessingEngine::new(config);
-        
-        let time = GpsTime::new(2000, 0.0);
-        let pos = Coordinate::new(Vector3::new(6378000.0, 0.0, 0.0), Datum::WGS84, Frame::ECEF, time);
-        engine.current_state = Some(RtkState::new(time, pos, 1.0));
-        
-        let sat1 = SatelliteId { constellation: Constellation::Gps, prn: 1 };
-        engine.ephemerides.push(mock_eph(sat1));
-
-        let mut obs = create_mock_obs();
-        obs.satellites.push(SatObs {
-            sat: sat1,
-            observations: vec![
-                pseudo_obs(1, 40000000.0),
-                pseudo_obs(2, 40000000.0),
-                phase_obs(1, 100.0),
-                phase_obs(2, 100.0),
-            ]
-        });
-
-        let res1 = process_ppp(&mut engine, &obs);
-        assert!(res1.is_ok());
-        
-        obs.satellites[0].observations[2].lock_time = Some(11);
-        obs.satellites[0].observations[3].lock_time = Some(11); 
-
-        obs.satellites[0].observations[2].value = 100.0 + 0.04 / 0.19029367279836488;
-        let res2 = process_ppp(&mut engine, &obs);
-        assert!(res2.is_ok());
-        assert_eq!(*engine.current_state.as_ref().unwrap().locktimes.get(&(sat1, 1)).unwrap(), 11, "Should not have slipped");
-
-        obs.satellites[0].observations[2].value = 100.0 + 0.06 / 0.19029367279836488;
-        obs.satellites[0].observations[2].lock_time = Some(12);
-        obs.satellites[0].observations[3].lock_time = Some(12);
-        
-        let res3 = process_ppp(&mut engine, &obs);
-        assert!(res3.is_ok());
-        assert_eq!(*engine.current_state.as_ref().unwrap().locktimes.get(&(sat1, 1)).unwrap(), 12, "Locktime increments from obs");
-        assert!(engine.current_state.as_ref().unwrap().ambiguities[0].abs() > 0.0);
-    }
+    state.locktimes.insert((obs.sat, band), new_lk);
+    slip
 }

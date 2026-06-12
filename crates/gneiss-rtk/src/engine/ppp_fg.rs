@@ -1,10 +1,16 @@
 use nalgebra::{DMatrix, DVector, Vector3};
 use crate::engine::processed_sat::ProcessedSat;
-use crate::filter::RtkState;
+use crate::filter::{RtkState, CORE_STATE_SIZE};
+use crate::engine::EngineError;
 
-const C: f64 = 299792458.0;
+const SPEED_OF_LIGHT: f64 = 299792458.0;
+const NOMINAL_SNR_DBHZ: f64 = 45.0;
+const SNR_SCALE_DIVISOR: f64 = 10.0;
+const PSEUDORANGE_VARIANCE_BASE: f64 = 9.0;
+const CARRIER_PHASE_VARIANCE_BASE: f64 = 0.0001;
+const MATRIX_REGULARIZATION: f64 = 1e-6;
 
-/// A robust Levenberg-Marquardt Factor Graph solver for Precise Point Positioning (PPP).
+/// Configuration for the Iterated EKF (Factor Graph) solver.
 pub struct PppFactorGraph {
     pub max_iterations: usize,
     pub convergence_threshold: f64,
@@ -13,164 +19,144 @@ pub struct PppFactorGraph {
 
 impl Default for PppFactorGraph {
     fn default() -> Self {
-        Self {
-            max_iterations: 15,
-            convergence_threshold: 1e-4,
-            huber_k: 3.0,
-        }
+        Self { max_iterations: 15, convergence_threshold: 1e-3, huber_k: 3.0 }
     }
 }
 
-pub struct PppFgResult {
-    pub position: Vector3<f64>,
-    pub cdt: f64,
-    pub ztd: f64,
-    pub covariance: DMatrix<f64>,
+pub struct FgMeasurement {
+    pub res: f64,
+    pub h_row: DVector<f64>,
+    pub weight: f64,
+    pub is_phase: bool,
 }
 
 impl PppFactorGraph {
-    pub fn new() -> Self {
-        Self::default()
-    }
+    pub fn new() -> Self { Self::default() }
 
-    pub fn solve(&self, initial_state: &RtkState, sats: &[ProcessedSat]) -> Option<PppFgResult> {
-        let num_sats = sats.len();
-        if num_sats < 4 {
-            return None;
-        }
+    pub fn solve(&self, state: &mut RtkState, sats: &[ProcessedSat]) -> Result<(), EngineError> {
+        let x_pred = extract_state_vector(state);
+        let p_pred = state.covariance.clone();
+        let mut x_i = x_pred.clone();
 
-        // State vector: [X, Y, Z, cdt, ztd]
-        // If we want to solve ambiguities, they would go here. For standard PPP, we often float them.
-        // For simplicity in the recovered engine, we solve the core state first.
-        let num_states = 5;
-        let mut x = DVector::zeros(num_states);
-        x[0] = initial_state.position.vector.x;
-        x[1] = initial_state.position.vector.y;
-        x[2] = initial_state.position.vector.z;
-        x[3] = initial_state.rcv_clk_bias;
-        x[4] = 0.0; // Initial ZTD
+        for _ in 0..self.max_iterations {
+            let meas = self.build_measurements(state, &x_i, sats);
+            if meas.is_empty() { return Err(EngineError::InsufficientSatellites); }
 
-        let mut lambda = 0.01; // LM damping
-        let mut best_cost = f64::INFINITY;
-        let mut final_cov = DMatrix::zeros(num_states, num_states);
+            let (h_mat, res_vec, r_mat) = assemble_matrices(&meas, x_i.len());
+            let s = &h_mat * &p_pred * h_mat.transpose() + &r_mat;
+            let s_inv = invert_matrix(&s).ok_or(EngineError::StateDisappeared)?;
 
-        for _iter in 0..self.max_iterations {
-            let mut residuals = Vec::new();
-            let mut jacobians = Vec::new();
-            let mut weights = Vec::new();
+            let k = &p_pred * h_mat.transpose() * s_inv;
+            let innov = &res_vec - &h_mat * (&x_pred - &x_i);
+            
+            let dx = &k * innov;
+            x_i = &x_pred + &dx;
 
-            let current_pos = Vector3::new(x[0], x[1], x[2]);
-            let current_cdt = x[3];
-            let current_ztd = x[4];
-
-            // Build factors
-            for sat in sats {
-                let geom_range = (sat.sat_pos_rot - current_pos).norm();
-                let los = (current_pos - sat.sat_pos_rot) / geom_range; // derivative of range wrt pos
-                let tropo_delay = sat.tropo_dry + current_ztd * sat.map_wet;
-                
-                let expected_pr = geom_range + current_cdt - (sat.sat_clock_drift * C) + tropo_delay;
-
-                // Pseudorange factor (L1)
-                if let Some(pr1) = sat.sat_obs.get_observable(1) {
-                    let r = pr1 - expected_pr;
-                    let mut j = DVector::zeros(num_states);
-                    j[0] = los.x;
-                    j[1] = los.y;
-                    j[2] = los.z;
-                    j[3] = 1.0;
-                    j[4] = sat.map_wet;
-
-                    residuals.push(r);
-                    jacobians.push(j);
-                    // Weight based on elevation and SNR
-                    let mut w: f64 = 1.0 / (0.3 + 2.0 * (-sat.el).exp()); 
-                    
-                    // Huber loss weighting
-                    let norm_r = r.abs() * w.sqrt();
-                    if norm_r > self.huber_k {
-                        w *= self.huber_k / norm_r;
-                    }
-                    weights.push(w);
-                }
-
-                // If iono-free or dual freq phase is available, add phase factor
-                // (Omitted for brevity in the core recovery, but easily extensible by adding state variables for ambiguities)
-            }
-
-            let num_meas = residuals.len();
-            if num_meas < num_states {
-                return None; // Not enough measurements
-            }
-
-            let mut j_mat = DMatrix::zeros(num_meas, num_states);
-            let mut r_vec = DVector::zeros(num_meas);
-            let mut w_mat = DMatrix::zeros(num_meas, num_meas);
-
-            let mut current_cost = 0.0;
-            for i in 0..num_meas {
-                r_vec[i] = residuals[i];
-                w_mat[(i, i)] = weights[i];
-                for k in 0..num_states {
-                    j_mat[(i, k)] = jacobians[i][k];
-                }
-                current_cost += residuals[i] * residuals[i] * weights[i];
-            }
-
-            let jtw = j_mat.transpose() * &w_mat;
-            let jt_w_j = &jtw * &j_mat;
-            let jt_w_r = &jtw * &r_vec;
-
-            // Levenberg-Marquardt diagonal augmentation
-            let mut a_mat = jt_w_j.clone();
-            for i in 0..num_states {
-                a_mat[(i, i)] *= 1.0 + lambda;
-            }
-
-            if let Some(dx) = a_mat.cholesky().map(|c| c.solve(&jt_w_r)) {
-                if dx.norm() < self.convergence_threshold {
-                    if let Some(inv) = jt_w_j.try_inverse() {
-                        final_cov = inv;
-                    }
-                    break;
-                }
-
-                // Try update
-                let new_x = &x + &dx;
-                // Evaluate new cost
-                let mut new_cost = 0.0;
-                for i in 0..num_meas {
-                    let sat = &sats[i]; // Approximate
-                    let pr_new_pos = Vector3::new(new_x[0], new_x[1], new_x[2]);
-                    let new_geom_range = (sat.sat_pos_rot - pr_new_pos).norm();
-                    let expected_pr = new_geom_range + new_x[3] - (sat.sat_clock_drift * C) + sat.tropo_dry + new_x[4] * sat.map_wet;
-                    
-                    if let Some(pr1) = sat.sat_obs.get_observable(1) {
-                        let r = pr1 - expected_pr;
-                        let mut w = weights[i];
-                        let norm_r = r.abs() * w.sqrt();
-                        if norm_r > self.huber_k { w *= self.huber_k / norm_r; }
-                        new_cost += r * r * w;
-                    }
-                }
-
-                if new_cost < current_cost {
-                    x = new_x;
-                    best_cost = new_cost;
-                    lambda = (lambda * 0.1).max(1e-7); // decrease lambda (closer to Gauss-Newton)
-                } else {
-                    lambda = (lambda * 10.0).min(1e5); // increase lambda (closer to gradient descent)
-                }
-            } else {
-                return None; // Singular matrix
+            if dx.norm() < self.convergence_threshold {
+                let id = DMatrix::identity(x_i.len(), x_i.len());
+                let i_kh = id - &k * h_mat;
+                state.covariance = &i_kh * &p_pred * i_kh.transpose() + &k * r_mat * k.transpose();
+                break;
             }
         }
-
-        Some(PppFgResult {
-            position: Vector3::new(x[0], x[1], x[2]),
-            cdt: x[3],
-            ztd: x[4],
-            covariance: final_cov,
-        })
+        
+        apply_state_vector(state, &x_i);
+        Ok(())
     }
+
+    fn build_measurements(&self, state: &RtkState, x_i: &DVector<f64>, sats: &[ProcessedSat]) -> Vec<FgMeasurement> {
+        let mut meas = Vec::new();
+        let rcv_pos = Vector3::new(x_i[0], x_i[1], x_i[2]);
+        let rcv_clk = x_i[15];
+        let ztd = if x_i.len() > 17 { x_i[17] } else { 0.0 };
+
+        for sat in sats {
+            let dist = (sat.sat_pos_rot - rcv_pos).norm();
+            let los = (rcv_pos - sat.sat_pos_rot) / dist;
+            let expected_p = dist + rcv_clk - (sat.sat_clock_drift * SPEED_OF_LIGHT) + sat.tropo_dry + ztd * sat.map_wet;
+
+            if let Some(pr1) = sat.sat_obs.get_observable(1) {
+                let res = pr1 - expected_p;
+                let var = PSEUDORANGE_VARIANCE_BASE * snr_scale(sat.snr as i32) / libm::sin(sat.el);
+                let w = apply_huber(res, var, self.huber_k);
+                meas.push(FgMeasurement { res, h_row: build_h_row(&los, sat.map_wet, None, x_i.len()), weight: w, is_phase: false });
+            }
+
+            if let (Some(cp1), Some(cp2)) = (sat.cp1, sat.cp2) {
+                if let Some(amb_idx) = find_ambiguity_index(state, sat.sat_obs.sat) {
+                    let l_if = crate::combinations::iono_free(cp1 * sat.lam1, cp2 * sat.lam2, sat.f1, sat.f2);
+                    let expected_l = expected_p + x_i[CORE_STATE_SIZE + amb_idx];
+                    let res = l_if - expected_l;
+                    
+                    let var = CARRIER_PHASE_VARIANCE_BASE * snr_scale(sat.snr as i32) / libm::sin(sat.el);
+                    let w = apply_huber(res, var, self.huber_k);
+                    meas.push(FgMeasurement { res, h_row: build_h_row(&los, sat.map_wet, Some(CORE_STATE_SIZE + amb_idx), x_i.len()), weight: w, is_phase: true });
+                }
+            }
+        }
+        meas
+    }
+}
+
+fn apply_huber(res: f64, var: f64, k: f64) -> f64 {
+    let norm_r = res.abs() / var.sqrt();
+    if norm_r > k { var * (norm_r / k) } else { var }
+}
+
+fn snr_scale(snr: i32) -> f64 {
+    (10.0f64).powf((NOMINAL_SNR_DBHZ - snr as f64) / SNR_SCALE_DIVISOR)
+}
+
+fn invert_matrix(mat: &DMatrix<f64>) -> Option<DMatrix<f64>> {
+    mat.clone().cholesky().map(|c| c.inverse())
+        .or_else(|| (mat.clone() + DMatrix::identity(mat.nrows(), mat.ncols()) * MATRIX_REGULARIZATION).try_inverse())
+}
+
+fn find_ambiguity_index(state: &RtkState, sat: gneiss_core::sat::SatelliteId) -> Option<usize> {
+    state.ambiguity_keys.iter().position(|&(s, f)| s == sat && f == 0)
+}
+
+fn build_h_row(los: &Vector3<f64>, map_wet: f64, amb_idx: Option<usize>, size: usize) -> DVector<f64> {
+    let mut h = DVector::zeros(size);
+    h[0] = -los.x; h[1] = -los.y; h[2] = -los.z;
+    h[15] = 1.0;
+    if size > 17 { h[17] = map_wet; }
+    if let Some(idx) = amb_idx { h[idx] = 1.0; }
+    h
+}
+
+fn extract_state_vector(state: &RtkState) -> DVector<f64> {
+    let mut x = DVector::zeros(CORE_STATE_SIZE + state.ambiguities.len());
+    x[0] = state.position.vector.x; x[1] = state.position.vector.y; x[2] = state.position.vector.z;
+    x[3] = state.velocity.x; x[4] = state.velocity.y; x[5] = state.velocity.z;
+    let r = state.attitude.scaled_axis(); x[6] = r.x; x[7] = r.y; x[8] = r.z;
+    x[9] = state.accel_bias.x; x[10] = state.accel_bias.y; x[11] = state.accel_bias.z;
+    x[12] = state.gyro_bias.x; x[13] = state.gyro_bias.y; x[14] = state.gyro_bias.z;
+    x[15] = state.rcv_clk_bias;
+    if CORE_STATE_SIZE > 16 { x[16] = state.rcv_clk_drift; x[17] = state.zwd; }
+    for (i, &amb) in state.ambiguities.iter().enumerate() { x[CORE_STATE_SIZE + i] = amb; }
+    x
+}
+
+fn apply_state_vector(state: &mut RtkState, x: &DVector<f64>) {
+    state.position.vector = Vector3::new(x[0], x[1], x[2]);
+    state.velocity = Vector3::new(x[3], x[4], x[5]);
+    state.attitude = nalgebra::UnitQuaternion::from_scaled_axis(Vector3::new(x[6], x[7], x[8]));
+    state.accel_bias = Vector3::new(x[9], x[10], x[11]);
+    state.gyro_bias = Vector3::new(x[12], x[13], x[14]);
+    state.rcv_clk_bias = x[15];
+    if CORE_STATE_SIZE > 16 { state.rcv_clk_drift = x[16]; state.zwd = x[17]; }
+    for i in 0..state.ambiguities.len() { state.ambiguities[i] = x[CORE_STATE_SIZE + i]; }
+}
+
+fn assemble_matrices(meas: &[FgMeasurement], cols: usize) -> (DMatrix<f64>, DVector<f64>, DMatrix<f64>) {
+    let mut h = DMatrix::zeros(meas.len(), cols);
+    let mut z = DVector::zeros(meas.len());
+    let mut r = DMatrix::zeros(meas.len(), meas.len());
+    for (i, m) in meas.iter().enumerate() {
+        for j in 0..cols { h[(i, j)] = m.h_row[j]; }
+        z[i] = m.res;
+        r[(i, i)] = m.weight;
+    }
+    (h, z, r)
 }
