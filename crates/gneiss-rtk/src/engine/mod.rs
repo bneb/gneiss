@@ -1,4 +1,7 @@
-//pub mod ppp_fg;
+pub mod ppp_fg;
+pub mod tight_fg;
+pub mod tcar;
+pub mod processed_sat;
 pub mod matcher;
 pub mod predictor;
 pub mod updater;
@@ -1103,4 +1106,3 @@ mod tests {
 }
 mod tests_predictor;
 pub mod jacobian_verify;
-pub mod tight_fg;
