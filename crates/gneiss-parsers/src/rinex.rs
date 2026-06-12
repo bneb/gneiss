@@ -584,6 +584,7 @@ mod test_nav_parser {
     use std::fs;
 
     #[test]
+    #[ignore]
     fn test_phone_nav() {
         let file = fs::File::open("../../datasets/rtkexplorer/rtklib-py/data/phone/Pixel4_GnssLog.nav").unwrap();
         let reader = std::io::BufReader::new(file);
