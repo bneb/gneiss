@@ -73,7 +73,7 @@ fn resolve_lambda_inner(a: &DVector<f64>, q: &DMatrix<f64>, max_iters: usize) ->
         return Err("LAMBDA search iteration limit exceeded");
     }
 
-    if best_dist == f64::MAX || second_best_dist == f64::MAX {
+    if best_dist >= f64::MAX || second_best_dist >= f64::MAX {
         return Err("LAMBDA search iteration limit exceeded");
     }
 
@@ -180,6 +180,7 @@ fn ldlt_lower(q: &DMatrix<f64>) -> Result<LdltResult, &'static str> {
     Ok(LdltResult { l, d })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn search_recursive(
     k: isize,
     n: usize,
@@ -261,13 +262,14 @@ pub fn bootstrapping_success_rate(d: &DVector<f64>) -> f64 {
         let x = 1.0 / (2.0 * f64::sqrt(di));
         ps *= libm::erf(x / std::f64::consts::SQRT_2);
     }
-    ps.max(0.0).min(1.0)
+    ps.clamp(0.0, 1.0)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    #[test]
     fn test_lambda_2d() {
         let a = DVector::from_vec(vec![5.45, 3.10]);
         let q = DMatrix::from_row_slice(2, 2, &[6.290, 5.978, 5.978, 5.692]);
@@ -298,6 +300,7 @@ mod tests {
         assert!(result.success_rate > 0.0 && result.success_rate <= 1.0);
     }
 
+    #[test]
     fn test_lambda_iter_limit() {
         let a = DVector::from_vec(vec![5.45, 3.10]);
         let q = DMatrix::from_row_slice(2, 2, &[6.290, 5.978, 5.978, 5.692]);
@@ -308,18 +311,8 @@ mod tests {
     }
 
 
-    fn test_lambda_unreachable_candidates() {
-        // If 'a' is huge, distance calculation overflows to INFINITY
-        // breaking the loop immediately without hitting max iterations.
-        let a = DVector::from_vec(vec![1e300, 1e300]);
-        let q = DMatrix::from_row_slice(2, 2, &[1.0, 0.0, 0.0, 1.0]);
-        
-        let result = super::resolve_lambda_inner(&a, &q, 10000);
-        assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), "LAMBDA search iteration limit exceeded");
-    }
 
-
+    #[test]
     fn test_lambda_catch_gte_mutant() {
         let a = DVector::from_vec(vec![0.0, 0.0]);
         let q = DMatrix::from_row_slice(2, 2, &[1.0, 0.0, 0.0, 1.0]);

@@ -1,10 +1,10 @@
 #[cfg(test)]
 mod tests {
-    use crate::engine::updater::update;
+
     use crate::filter::RtkState;
     use gneiss_core::coords::{Coordinate, Datum, Frame};
     use gneiss_core::time::GpsTime;
-    use nalgebra::{DMatrix, DVector, Vector3};
+    use nalgebra::Vector3;
 
     #[test]
     fn test_loosely_coupled_jacobian() {

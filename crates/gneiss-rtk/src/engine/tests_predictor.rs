@@ -11,14 +11,14 @@ mod tests {
     #[test]
     fn test_imu_prediction_rotation() {
         let time = GpsTime::new(2000, 0.0);
-        let pos = Coordinate::new(Vector3::new(6378137.0, 0.0, 0.0), Datum::WGS84, Frame::ECEF, time);
+        let pos = Coordinate::new(Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0), Datum::WGS84, Frame::ECEF, time);
         let mut state = RtkState::new(time, pos, 1.0);
         
         let gyro = Vector3::new(0.0, 0.0, 90.0f64.to_radians());
         let accel = Vector3::new(0.0, 0.0, 0.0); 
         
         let imu_meas = ImuMeasurement::new(0, accel, gyro);
-        predictor::predict(&mut state, 1.0, crate::engine::DynamicsModel::Automotive, &vec![imu_meas; 100]);
+        predictor::predict(&mut state, 1.0, &crate::engine::EngineConfig::default(), &vec![imu_meas; 100]);
         
         let (_, _, yaw): (f64, f64, f64) = state.attitude.euler_angles();
         assert!((yaw.abs() - core::f64::consts::FRAC_PI_2).abs() < 0.1);
@@ -35,7 +35,7 @@ mod tests {
         let accel = -g; 
         
         let imu_meas = ImuMeasurement::new(0, accel, Vector3::zeros());
-        predictor::predict(&mut state, 1.0, crate::engine::DynamicsModel::Automotive, &vec![imu_meas; 100]);
+        predictor::predict(&mut state, 1.0, &crate::engine::EngineConfig::default(), &vec![imu_meas; 100]);
         
         assert!(state.velocity.norm() < 1e-3, "Stationary IMU should not gain velocity, got {}", state.velocity.norm());
         assert!((state.position.vector - pos.vector).norm() < 1e-3);
@@ -44,10 +44,10 @@ mod tests {
     #[test]
     fn test_physics_centrifugal_cancellation() {
         let time = GpsTime::new(2000, 0.0);
-        let pos = Coordinate::new(Vector3::new(6378137.0, 0.0, 0.0), Datum::WGS84, Frame::ECEF, time);
+        let pos = Coordinate::new(Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0), Datum::WGS84, Frame::ECEF, time);
         let mut state = RtkState::new(time, pos, 1.0);
         
-        let omega_ie = Vector3::new(0.0, 0.0, 7.2921151467e-5);
+        let omega_ie = Vector3::new(0.0, 0.0, gneiss_core::constants::EARTH_ROTATION_RATE_RAD_S);
         let gravity = predictor::gravity_wgs84(state.position.vector);
         let centrifugal = omega_ie.cross(&(omega_ie.cross(&state.position.vector)));
         
@@ -55,7 +55,7 @@ mod tests {
         let accel_body = state.attitude.inverse() * f_e;
         
         let imu_meas = ImuMeasurement::new(0, accel_body, Vector3::zeros());
-        predictor::predict(&mut state, 1.0, crate::engine::DynamicsModel::Automotive, &vec![imu_meas; 100]);
+        predictor::predict(&mut state, 1.0, &crate::engine::EngineConfig::default(), &vec![imu_meas; 100]);
         
         assert!(state.velocity.norm() < 1e-3, "Equatorial stationary IMU should be stable, got {}", state.velocity.norm());
     }
@@ -63,7 +63,7 @@ mod tests {
     #[test]
     fn test_coupling_lever_arm_to_attitude() {
         let time = GpsTime::new(2000, 0.0);
-        let pos = Coordinate::new(Vector3::new(6378137.0, 0.0, 0.0), Datum::WGS84, Frame::ECEF, time);
+        let pos = Coordinate::new(Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0), Datum::WGS84, Frame::ECEF, time);
         let mut state = RtkState::new(time, pos, 0.01);
         
         state.attitude = UnitQuaternion::identity();

@@ -13,7 +13,7 @@ const GM_MOON: f64 = 4.902800066E12;
 /// Gravitational parameter of the Earth (m^3 / s^2)
 const GM_EARTH: f64 = 3.986004415E14;
 /// Equatorial radius of the Earth (m)
-const R_EARTH: f64 = 6378137.0;
+const R_EARTH: f64 = crate::constants::WGS84_SEMI_MAJOR_AXIS_M;
 
 /// Calculates the Solid Earth Tides (SET) displacement vector in ECEF frame.
 /// Returns the displacement (dx, dy, dz) in meters.

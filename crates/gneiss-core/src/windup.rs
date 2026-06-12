@@ -81,7 +81,7 @@ mod tests {
         // We just ensure it doesn't panic and returns a reasonable fraction.
         let sat_pos = Vector3::new(26560000.0, 0.0, 0.0);
         let sun_pos = Vector3::new(0.0, 149597870700.0, 0.0);
-        let rcv_pos = Vector3::new(6378137.0, 0.0, 0.0);
+        let rcv_pos = Vector3::new(crate::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0);
         let w = phase_windup(sat_pos, sun_pos, rcv_pos, 0.0);
         assert!((-0.5..=0.5).contains(&w));
     }

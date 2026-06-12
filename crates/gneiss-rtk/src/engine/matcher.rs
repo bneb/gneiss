@@ -4,7 +4,7 @@ use gneiss_core::obs::{EpochObs, ObsType};
 pub fn match_observations(rover_obs: &EpochObs, base_obs: &EpochObs, ephemerides: &[gneiss_core::ephemeris::Ephemeris]) -> Vec<(DdObservation, DdObservation)> {
     let mut matched_obs = Vec::new();
     for r_sat in &rover_obs.satellites {
-        if ephemerides.iter().find(|e| e.sat() == r_sat.sat).is_none() {
+        if !ephemerides.iter().any(|e| e.sat() == r_sat.sat) {
             continue;
         }
         if let Some(b_sat) = base_obs.satellites.iter().find(|s| s.sat == r_sat.sat) {

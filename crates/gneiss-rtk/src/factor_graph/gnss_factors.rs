@@ -23,7 +23,7 @@ impl Factor for PseudorangeFactor {
         let rz = state[self.index_z];
         let dt = state[self.index_dt];
         
-        let zwd = self.index_zwd.map(|idx| state[idx]).unwrap_or(0.0);
+        let _zwd = self.index_zwd.map(|idx| state[idx]).unwrap_or(0.0);
         
         let dx = self.sat_pos.x - rx;
         let dy = self.sat_pos.y - ry;
@@ -99,9 +99,9 @@ impl Factor for CarrierPhaseFactor {
         let dt = state[self.index_dt];
         let amb = state[self.index_amb];
         let is_iono_free = false;
-        let zwd = self.index_zwd.map(|idx| state[idx]).unwrap_or(0.0);
-        let var_cp = if is_iono_free { 0.001 } else { 0.01 }; // 10cm stddev for phase
-        let huber_cp = 3.0; // 3-sigma (30cm) to reject cycle slips.
+        let _zwd = self.index_zwd.map(|idx| state[idx]).unwrap_or(0.0);
+        let _var_cp = if is_iono_free { 0.001 } else { 0.01 }; // 10cm stddev for phase
+        let _huber_cp = 3.0; // 3-sigma (30cm) to reject cycle slips.
 
         let dx = self.sat_pos.x - rx;
         let dy = self.sat_pos.y - ry;
@@ -536,7 +536,7 @@ mod doppler_tests {
         // Assume satellite at [1000, 0, 0], moving away from receiver at [0, 0, 0]
         let los = Vector3::new(1.0, 0.0, 0.0);
         let sat_vel = Vector3::new(10.0, 0.0, 0.0); // moving away at 10 m/s
-        let rx_vel = Vector3::new(2.0, 0.0, 0.0);   // moving towards sat at 2 m/s
+        let _rx_vel = Vector3::new(2.0, 0.0, 0.0);   // moving towards sat at 2 m/s
         
         // True relative velocity = sat_vel - rx_vel = [8.0, 0, 0]
         // Range rate = los.dot(sat_vel - rx_vel) = 8.0 m/s

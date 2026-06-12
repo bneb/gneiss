@@ -13,6 +13,7 @@ pub fn update_loosely_coupled(
     gnss_state: &RtkState,
     lever_arm: Vector3<f64>,
     omega_b: Vector3<f64>,
+    tuning: &crate::engine::config::EkfTuningConfig,
 ) -> Result<(), UpdateError> {
     let p_6x6 = state.covariance.view((0, 0), (6, 6));
     let r_6x6 = gnss_state.covariance.view((0, 0), (6, 6));
@@ -42,7 +43,7 @@ pub fn update_loosely_coupled(
     
     // 6 DOF chi-square 99.9% is 22.46. 
     // We use a generous threshold because SPP covariance can be overly optimistic
-    if mahalanobis_sq > 250.0 {
+    if mahalanobis_sq > tuning.loosely_coupled_mahalanobis_sq {
         return Err(UpdateError::InvalidMeasurement); // Trigger reset
     }
     
@@ -104,7 +105,8 @@ pub fn update_loosely_coupled(
     Ok(())
 }
 
-pub fn update(state: &mut RtkState, z: &DVector<f64>, h: &DMatrix<f64>, r: &DMatrix<f64>, max_innovation: f64, meas_types: Option<&[(gneiss_core::sat::SatelliteId, u8)]>, is_tightly_coupled: bool) -> Result<Vec<usize>, UpdateError> {
+#[allow(clippy::too_many_arguments)]
+pub fn update(state: &mut RtkState, z: &DVector<f64>, h: &DMatrix<f64>, r: &DMatrix<f64>, max_innovation: f64, meas_types: Option<&[(gneiss_core::sat::SatelliteId, u8)]>, is_tightly_coupled: bool, tuning: &crate::engine::config::EkfTuningConfig) -> Result<Vec<usize>, UpdateError> {
     if z.len() != h.nrows() || h.ncols() != state.covariance.nrows() {
         return Err(UpdateError::DimensionMismatch);
     }
@@ -218,15 +220,15 @@ pub fn update(state: &mut RtkState, z: &DVector<f64>, h: &DMatrix<f64>, r: &DMat
             
             let thresh = match meas_type {
                 0 => max_innovation, 
-                1 | 2 => 5.0, // 5.0m for Phase to allow tracking vehicle dynamics over outages
-                3 => max_innovation * 2.0, // Doppler max innovation (typically 15-30m/s)
+                1 | 2 => tuning.phase_outlier_ratio_thresh, // 5.0m for Phase to allow tracking vehicle dynamics over outages
+                3 => max_innovation * tuning.doppler_outlier_ratio_mult, // Doppler max innovation (typically 15-30m/s)
                 _ => max_innovation,
             };
             
             let abs_thresh = match meas_type {
-                0 => 40.0, // Pseudorange max 40m error
-                1 | 2 => 1.0, // Phase max 1m error
-                3 => 15.0, // Doppler max 15m/s error
+                0 => tuning.pr_abs_thresh, // Pseudorange max 40m error
+                1 | 2 => tuning.cp_abs_thresh, // Phase max 1m error
+                3 => tuning.dop_abs_thresh, // Doppler max 15m/s error
                 _ => 40.0,
             };
             

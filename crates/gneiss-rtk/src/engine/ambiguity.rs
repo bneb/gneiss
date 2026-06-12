@@ -86,8 +86,8 @@ pub fn manage_ambiguities_and_slips(
         // Geometry-Free cycle slip detection (feature-gated)
         #[cfg(feature = "gf-slip")]
         if let (Some(r_cp1), Some(r_cp2)) = (r.cp_l1, r.cp_l2) {
-            let lam1 = 299792458.0 / r_f1;
-            let lam2 = 299792458.0 / r_f2;
+            let lam1 = gneiss_core::constants::SPEED_OF_LIGHT_M_S / r_f1;
+            let lam2 = gneiss_core::constants::SPEED_OF_LIGHT_M_S / r_f2;
             let l_gf = r_cp1 * lam1 - r_cp2 * lam2;
             if let Some(&prev_gf) = state.gf_values.get(&r.sat) {
                 if (l_gf - prev_gf).abs() > 0.05 {
@@ -109,8 +109,8 @@ pub fn manage_ambiguities_and_slips(
             }
             
             if let (Some(r_cp1), Some(b_cp1)) = (r.cp_l1, b.cp_l1) {
-                let lam_r1 = 299792458.0 / r_f1;
-                let lam_b1 = 299792458.0 / b_f1;
+                let lam_r1 = gneiss_core::constants::SPEED_OF_LIGHT_M_S / r_f1;
+                let lam_b1 = gneiss_core::constants::SPEED_OF_LIGHT_M_S / b_f1;
                 let cp_l1_rov = r_cp1 * lam_r1;
                 let cp_l1_base = b_cp1 * lam_b1;
 
@@ -127,8 +127,8 @@ pub fn manage_ambiguities_and_slips(
                                     let ar_dist_rov = (state.position.vector - ar_sat_vec).norm();
                                     let ar_dist_base = (base_coord.vector - ab_sat_vec).norm();
                                     
-                                    let a_lam_r = 299792458.0 / r_f1;
-                                    let a_lam_b = 299792458.0 / b_f1;
+                                    let a_lam_r = gneiss_core::constants::SPEED_OF_LIGHT_M_S / r_f1;
+                                    let a_lam_b = gneiss_core::constants::SPEED_OF_LIGHT_M_S / b_f1;
                                     let a_cp_rov = ar_cp * a_lam_r;
                                     let a_cp_base = ab_cp * a_lam_b;
                                     
@@ -158,8 +158,8 @@ pub fn manage_ambiguities_and_slips(
             }
             
             if let (Some(r_pr2), Some(r_cp2), Some(b_pr2), Some(b_cp2)) = (r.pr_l2, r.cp_l2, b.pr_l2, b.cp_l2) {
-                let lam_r2 = 299792458.0 / r_f2;
-                let lam_b2 = 299792458.0 / b_f2;
+                let lam_r2 = gneiss_core::constants::SPEED_OF_LIGHT_M_S / r_f2;
+                let lam_b2 = gneiss_core::constants::SPEED_OF_LIGHT_M_S / b_f2;
                 let cp_l2_rov = r_cp2 * lam_r2;
                 let cp_l2_base = b_cp2 * lam_b2;
                 
@@ -175,8 +175,8 @@ pub fn manage_ambiguities_and_slips(
                                     let ar_dist_rov = (state.position.vector - ar_sat_vec).norm();
                                     let ar_dist_base = (base_coord.vector - ab_sat_vec).norm();
                                     
-                                    let a_lam_r = 299792458.0 / r_f2;
-                                    let a_lam_b = 299792458.0 / b_f2;
+                                    let a_lam_r = gneiss_core::constants::SPEED_OF_LIGHT_M_S / r_f2;
+                                    let a_lam_b = gneiss_core::constants::SPEED_OF_LIGHT_M_S / b_f2;
                                     let a_cp_rov = ar_cp * a_lam_r;
                                     let a_cp_base = ab_cp * a_lam_b;
                                     
@@ -206,10 +206,10 @@ pub fn manage_ambiguities_and_slips(
             }
         }
         if let (Some(r_pr2), Some(r_cp2), Some(b_pr2), Some(b_cp2), Some(r_cp1), Some(b_cp1)) = (r.pr_l2, r.cp_l2, b.pr_l2, b.cp_l2, r.cp_l1, b.cp_l1) {
-            let r_cp1_m = r_cp1 * (299792458.0 / r_f1);
-            let r_cp2_m = r_cp2 * (299792458.0 / r_f2);
-            let b_cp1_m = b_cp1 * (299792458.0 / b_f1);
-            let b_cp2_m = b_cp2 * (299792458.0 / b_f2);
+            let r_cp1_m = r_cp1 * (gneiss_core::constants::SPEED_OF_LIGHT_M_S / r_f1);
+            let r_cp2_m = r_cp2 * (gneiss_core::constants::SPEED_OF_LIGHT_M_S / r_f2);
+            let b_cp1_m = b_cp1 * (gneiss_core::constants::SPEED_OF_LIGHT_M_S / b_f1);
+            let b_cp2_m = b_cp2 * (gneiss_core::constants::SPEED_OF_LIGHT_M_S / b_f2);
             let mw_sd = crate::combinations::melbourne_wubbena(r_cp1_m, r_cp2_m, r.pr_l1, r_pr2, r_f1, r_f2) - 
                         crate::combinations::melbourne_wubbena(b_cp1_m, b_cp2_m, b.pr_l1, b_pr2, b_f1, b_f2);
             state.update_mw(r.sat, mw_sd / crate::combinations::lambda_wl(r_f1, r_f2));

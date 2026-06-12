@@ -10,7 +10,8 @@ pub fn apply_nhc(
     sigma_vertical: f64,
     imu_mounting_angles: &Option<[f64; 3]>,
     imu_to_nhc_lever_arm: &[f64; 3],
-    omega_b: &nalgebra::Vector3<f64>
+    omega_b: &nalgebra::Vector3<f64>,
+    tuning: &crate::engine::config::EkfTuningConfig
 ) -> Result<(), &'static str> {
     let r_e_b = state.attitude.inverse().to_rotation_matrix();
     let v_b_imu = r_e_b * state.velocity;
@@ -72,18 +73,18 @@ pub fn apply_nhc(
         sigma_vertical * sigma_vertical
     ]));
 
-    updater::update(state, &z, &h, &r, 1e9, None, true).map_err(|_| "NHC update failed")?;
+    updater::update(state, &z, &h, &r, 1e9, None, true, tuning).map_err(|_| "NHC update failed")?;
     Ok(())
 }
 
-pub fn apply_zupt(state: &mut RtkState, sigma: f64) -> Result<(), &'static str> {
+pub fn apply_zupt(state: &mut RtkState, sigma: f64, tuning: &crate::engine::config::EkfTuningConfig) -> Result<(), &'static str> {
     let z = DVector::from_column_slice(&[-state.velocity.x, -state.velocity.y, -state.velocity.z]);
     let n = state.covariance.nrows();
     let mut h = DMatrix::<f64>::zeros(3, n);
     for i in 0..3 { h[(i, 3 + i)] = 1.0; }
     
     let r = DMatrix::from_diagonal(&DVector::from_element(3, sigma * sigma));
-    updater::update(state, &z, &h, &r, 1e9, None, true).map_err(|_| "ZUPT update failed")?;
+    updater::update(state, &z, &h, &r, 1e9, None, true, tuning).map_err(|_| "ZUPT update failed")?;
     Ok(())}
 
 #[cfg(test)]
@@ -110,7 +111,7 @@ mod tests {
             let mut omega_b_pos = *omega_b;
             let mut omega_b_neg = *omega_b;
 
-            if j >= 6 && j <= 8 {
+            if (6..=8).contains(&j) {
                 let mut dpsi_pos = Vector3::zeros();
                 dpsi_pos[j - 6] = epsilon;
                 let dq_pos = UnitQuaternion::from_scaled_axis(dpsi_pos);
@@ -120,10 +121,10 @@ mod tests {
                 dpsi_neg[j - 6] = -epsilon;
                 let dq_neg = UnitQuaternion::from_scaled_axis(dpsi_neg);
                 state_neg.attitude = dq_neg * state_neg.attitude;
-            } else if j >= 3 && j < 6 {
+            } else if (3..6).contains(&j) {
                 state_pos.velocity[j - 3] += epsilon;
                 state_neg.velocity[j - 3] -= epsilon;
-            } else if j >= 12 && j < 15 {
+            } else if (12..15).contains(&j) {
                 state_pos.gyro_bias[j - 12] += epsilon;
                 state_neg.gyro_bias[j - 12] -= epsilon;
                 // omega_b = gyro - bg
@@ -159,7 +160,7 @@ mod tests {
         state.velocity = Vector3::new(10.0, 20.0, 30.0);
         state.attitude = UnitQuaternion::from_euler_angles(0.1, 0.2, 0.3);
         
-        let imu_mounting_angles = Some([0.05, -0.05, 0.1]);
+        let imu_mounting_angles = [0.05, -0.05, 0.1];
         let imu_to_nhc_lever_arm = [1.5, 0.2, -0.5];
         let omega_b = Vector3::new(0.01, -0.02, 0.05);
 
@@ -168,7 +169,7 @@ mod tests {
         // Actually apply_nhc calls updater::update. It's easier to just copy the analytical Jacobian code here.
         let r_e_b = state.attitude.inverse().to_rotation_matrix();
         let v_b_imu = r_e_b * state.velocity;
-        let r_b_v = nalgebra::Rotation3::from_euler_angles(imu_mounting_angles.unwrap()[0], imu_mounting_angles.unwrap()[1], imu_mounting_angles.unwrap()[2]);
+        let r_b_v = nalgebra::Rotation3::from_euler_angles(imu_mounting_angles[0], imu_mounting_angles[1], imu_mounting_angles[2]);
         
         let n = state.covariance.nrows();
         let mut h_ana = DMatrix::<f64>::zeros(2, n);
@@ -196,7 +197,7 @@ mod tests {
         h_ana[(0, 12)] = dr_dbg[(1, 0)]; h_ana[(0, 13)] = dr_dbg[(1, 1)]; h_ana[(0, 14)] = dr_dbg[(1, 2)];
         h_ana[(1, 12)] = dr_dbg[(2, 0)]; h_ana[(1, 13)] = dr_dbg[(2, 1)]; h_ana[(1, 14)] = dr_dbg[(2, 2)];
 
-        let h_num = compute_numerical_jacobian_nhc(&state, &imu_mounting_angles, &imu_to_nhc_lever_arm, &omega_b, 1e-6);
+        let h_num = compute_numerical_jacobian_nhc(&state, &Some(imu_mounting_angles), &imu_to_nhc_lever_arm, &omega_b, 1e-6);
 
         let diff = (h_ana.clone() - h_num.clone()).abs().max();
         println!("Max diff: {}", diff);

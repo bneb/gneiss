@@ -1,12 +1,12 @@
 use crate::filter::RtkState;
 use nalgebra::{DMatrix, DVector, Vector3, UnitQuaternion, Matrix3};
 
-use crate::engine::DynamicsModel;
+use crate::engine::{DynamicsModel, EngineConfig};
 
-pub fn predict(state: &mut RtkState, dt: f64, dynamics: DynamicsModel, imu_buffer: &[gneiss_core::imu::ImuMeasurement]) {
+pub fn predict(state: &mut RtkState, dt: f64, config: &EngineConfig, imu_buffer: &[gneiss_core::imu::ImuMeasurement]) {
     let n = state.covariance.nrows();
     let mut phi = DMatrix::<f64>::identity(n, n);
-    let omega_ie = Vector3::new(0.0, 0.0, 7.2921151467e-5); // Earth rotation rate
+    let omega_ie = Vector3::new(0.0, 0.0, gneiss_core::constants::EARTH_ROTATION_RATE_RAD_S); // Earth rotation rate
     
     if imu_buffer.is_empty() {
         // Standard GNSS-only kinematic model
@@ -102,11 +102,11 @@ pub fn predict(state: &mut RtkState, dt: f64, dynamics: DynamicsModel, imu_buffe
     let dt_abs = dt.abs();
     if imu_buffer.is_empty() {
         // Standard GNSS-only dynamic model (predicts position using velocity)
-        let q_acc = match dynamics {
+        let q_acc = match config.dynamics_model {
             DynamicsModel::Static => 0.001,
             DynamicsModel::Pedestrian => 1.0,
             DynamicsModel::Marine => 2.0,
-            DynamicsModel::Automotive => 1.0,
+            DynamicsModel::Automotive => 10.0,
             DynamicsModel::Airborne => 50.0,
         };
         let q_pos = q_acc * dt_abs.powi(3) / 3.0; 
@@ -121,10 +121,10 @@ pub fn predict(state: &mut RtkState, dt: f64, dynamics: DynamicsModel, imu_buffe
         for i in 6..9 { q[(i, i)] = 1e-7 * dt_abs; } 
     } else {
         // IMU-specific process noise (based on VRW, ARW)
-        let sigma_v = 0.01; // Velocity Random Walk (m/s/sqrt(s))
-        let sigma_phi = 0.001; // Angular Random Walk (rad/sqrt(s))
-        let sigma_ab = 1e-4; // Accel bias instability
-        let sigma_gb = 1e-5; // Gyro bias instability
+        let sigma_v = config.tuning.sigma_v; // Velocity Random Walk (m/s/sqrt(s))
+        let sigma_phi = config.tuning.sigma_phi; // Angular Random Walk (rad/sqrt(s))
+        let sigma_ab = config.tuning.sigma_ab; // Accel bias instability
+        let sigma_gb = config.tuning.sigma_gb; // Gyro bias instability
         
         let q_vel = sigma_v * sigma_v * dt_abs;
         let q_att = sigma_phi * sigma_phi * dt_abs;
@@ -145,9 +145,9 @@ pub fn predict(state: &mut RtkState, dt: f64, dynamics: DynamicsModel, imu_buffe
         
         // Clock models: random walk + integrated random walk
         // Unsteered TCXO can drift significantly between epochs
-        let q_cb = 1e6 * dt_abs;
-        let q_cd = 1e4 * dt_abs;
-        let q_zwd = 1e-8 * dt_abs;
+        let q_cb = config.process_noise_cb * dt_abs;
+        let q_cd = config.process_noise_cd * dt_abs;
+        let q_zwd = config.process_noise_zwd * dt_abs;
         
         q[(15, 15)] = q_cb;
         q[(16, 16)] = q_cd;
@@ -156,28 +156,21 @@ pub fn predict(state: &mut RtkState, dt: f64, dynamics: DynamicsModel, imu_buffe
 
     // Ambiguity noise
     for i in crate::filter::CORE_STATE_SIZE..n {
-        if state.is_fixed { q[(i, i)] = 1e-12; } else { q[(i, i)] = 1e-8 * dt_abs; }
+        if state.is_fixed { 
+            q[(i, i)] = config.process_noise_amb_fixed; 
+        } else { 
+            q[(i, i)] = config.process_noise_amb_float * dt_abs; 
+        }
     }
     
     state.core_phi = Some(phi.view((0, 0), (crate::filter::CORE_STATE_SIZE, crate::filter::CORE_STATE_SIZE)).into_owned());
     
+    let mut phi_full = DMatrix::identity(n, n);
     let core_size = crate::filter::CORE_STATE_SIZE;
-    let phi_core = phi.view((0, 0), (core_size, core_size));
+    phi_full.view_mut((0, 0), (core_size, core_size)).copy_from(&phi.view((0, 0), (core_size, core_size)));
     
-    let p_core = state.covariance.view((0, 0), (core_size, core_size));
-    let p_core_new = phi_core * p_core * phi_core.transpose();
-    
-    if n > core_size {
-        let p_cross = state.covariance.view((0, core_size), (core_size, n - core_size));
-        let p_cross_new = phi_core * p_cross;
-        
-        state.covariance.view_mut((0, 0), (core_size, core_size)).copy_from(&p_core_new);
-        state.covariance.view_mut((0, core_size), (core_size, n - core_size)).copy_from(&p_cross_new);
-        state.covariance.view_mut((core_size, 0), (n - core_size, core_size)).copy_from(&p_cross_new.transpose());
-    } else {
-        state.covariance.view_mut((0, 0), (core_size, core_size)).copy_from(&p_core_new);
-    }
-    state.covariance += q;
+    let p_new = &phi_full * &state.covariance * phi_full.transpose();
+    state.covariance = p_new + q;
     
     state.full_p_predict = Some(state.covariance.clone());
     
@@ -210,7 +203,7 @@ pub fn gravity_wgs84(pos_ecef: Vector3<f64>) -> Vector3<f64> {
     
     let r2 = r * r;
     let r3 = r2 * r;
-    let a = 6378137.0;
+    let a = gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M;
     let mu = 3.986005e14;
     let j2 = 1.082627e-3;
     

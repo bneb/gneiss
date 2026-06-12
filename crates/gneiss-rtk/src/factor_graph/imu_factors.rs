@@ -48,15 +48,13 @@ impl ImuPreintegration {
         
         let mut prev_time = imu_data[0].time_tag;
         
-        for i in 1..imu_data.len() {
-            let m = &imu_data[i];
-            
+        for m in imu_data.iter().skip(1) {
             // Assume time_tag is in milliseconds and handles simple wrap-arounds or is absolute.
             let dt = if m.time_tag >= prev_time {
                 (m.time_tag - prev_time) as f64 / 1000.0
             } else {
                 // Handle potential u32 wrap-around
-                ((std::u32::MAX - prev_time) + m.time_tag) as f64 / 1000.0
+                ((u32::MAX as u64 - prev_time as u64) + m.time_tag as u64) as f64 / 1000.0
             };
             
             prev_time = m.time_tag;

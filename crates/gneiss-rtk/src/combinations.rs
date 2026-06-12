@@ -1,4 +1,4 @@
-const LIGHT_SPEED: f64 = 299792458.0;
+const LIGHT_SPEED: f64 = gneiss_core::constants::SPEED_OF_LIGHT_M_S;
 
 /// Calculates the Wide-Lane (WL) carrier phase combination in meters.
 /// L_wl = (f1 * L1 - f2 * L2) / (f1 - f2)

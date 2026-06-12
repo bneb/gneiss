@@ -50,8 +50,8 @@ pub enum SppError {
     PoorGeometry,
 }
 
-const LIGHT_SPEED: f64 = 299792458.0;
-const OMEGA_E: f64 = 7.2921151467e-5; // WGS 84 value of earth's rotation rate
+const LIGHT_SPEED: f64 = gneiss_core::constants::SPEED_OF_LIGHT_M_S;
+const OMEGA_E: f64 = gneiss_core::constants::EARTH_ROTATION_RATE_RAD_S; // WGS 84 value of earth's rotation rate
 
 use serde::{Serialize, Deserialize};
 
@@ -186,6 +186,7 @@ fn seed_initial_state(measurements: &[SppMeasurement], prev_state: Option<&SppSt
             gneiss_core::sat::Constellation::Glonass => if cdt_glo.is_none() { cdt_glo = Some(cdt); },
             _ => {},
         }
+        tracing::info!("SPP seed: SAT={}, raw_pr={:.3}, dt_sat_m={:.3}, geom_r={:.3}, cdt={:.3}", m.eph.sat(), m.raw_pr, (corrected_pr - m.raw_pr), geom_r, cdt);
     }
 
     let default_cdt = cdt_gps.or(cdt_gal).or(cdt_bds).or(cdt_glo).unwrap_or(0.0);
@@ -425,6 +426,13 @@ pub fn spp_wnlls_step(
         let expected_pr = r + cdt + tropo_delay + iono_delay;
         let residual = corrected_pr - expected_pr;
         
+        static mut SPP_PRINTED: bool = false;
+        if unsafe { !SPP_PRINTED } {
+            unsafe { SPP_PRINTED = true; }
+            println!("SPP PRN{} PR res={:.3}m (raw_pr={:.3}, expected_pr={:.3}, cdt={:.3}, tropo={:.3}, iono={:.3}, dist={:.3}, corrected={:.3})", 
+                m.eph.sat().prn, residual, m.raw_pr, expected_pr, cdt, tropo_delay, iono_delay, r, corrected_pr);
+        }
+        
         // 4. Weight Matrix (Lower elevation or SNR = higher variance)
         let variance = gneiss_core::variance::observation_variance(m.snr, el, config.nominal_snr_dbhz);
         
@@ -444,25 +452,7 @@ pub fn spp_wnlls_step(
     }
 
     if use_height_constraint {
-        let lat = rec_llh.x;
-        let lon = rec_llh.y;
-        
-        let sin_lat = lat.sin();
-        let cos_lat = lat.cos();
-        let sin_lon = lon.sin();
-        let cos_lon = lon.cos();
-        
-        // UP vector in ECEF
-        h_matrix[(n, 0)] = cos_lat * cos_lon;
-        h_matrix[(n, 1)] = cos_lat * sin_lon;
-        h_matrix[(n, 2)] = sin_lat;
-        
-        // Penalize change in height from initial guess
-        dz_vector[n] = 0.0;
-        
-        // Give it a relatively high variance so true measurements take precedence,
-        // but low enough to constrain the geometry (100 m^2 = 10m std dev)
-        w_matrix[(n, n)] = 1.0 / 100.0; 
+        apply_height_constraint(rec_llh, n, &mut h_matrix, &mut w_matrix, &mut dz_vector);
     }
 
     let h_t = h_matrix.transpose();
@@ -506,6 +496,34 @@ pub fn spp_wnlls_step(
     ))
 }
 
+fn apply_height_constraint(
+    rec_llh: Vector3<f64>,
+    row_idx: usize,
+    h_matrix: &mut DMatrix<f64>,
+    w_matrix: &mut DMatrix<f64>,
+    dz_vector: &mut DVector<f64>
+) {
+    let lat = rec_llh.x;
+    let lon = rec_llh.y;
+    
+    let sin_lat = lat.sin();
+    let cos_lat = lat.cos();
+    let sin_lon = lon.sin();
+    let cos_lon = lon.cos();
+    
+    // UP vector in ECEF
+    h_matrix[(row_idx, 0)] = cos_lat * cos_lon;
+    h_matrix[(row_idx, 1)] = cos_lat * sin_lon;
+    h_matrix[(row_idx, 2)] = sin_lat;
+    
+    // Penalize change in height from initial guess
+    dz_vector[row_idx] = 0.0;
+    
+    // Give it a relatively high variance so true measurements take precedence,
+    // but low enough to constrain the geometry (100 m^2 = 10m std dev)
+    w_matrix[(row_idx, row_idx)] = 1.0 / 100.0; 
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -517,7 +535,7 @@ mod tests {
         use gneiss_core::obs::{EpochObs, SatObs, Observation, ObsCode, SignalCode};
 
         let t = GpsTime::new(2000, 100000.0);
-        let true_pos = nalgebra::Vector3::new(6378137.0, 0.0, 0.0);
+        let true_pos = nalgebra::Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0);
         let true_cdt = 1000.0;
 
         let mut ephemerides = Vec::new();
@@ -548,7 +566,7 @@ mod tests {
             ephemerides.push(eph.clone());
 
             let mut raw_pr = 20000000.0 + true_cdt; // rough initial guess
-            let light_speed = 299792458.0;
+            let light_speed = gneiss_core::constants::SPEED_OF_LIGHT_M_S;
             
             for _ in 0..5 {
                 let pr_time = raw_pr / light_speed;
