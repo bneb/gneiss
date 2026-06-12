@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/engine/ppp.rs
++++ replace >= with < in process_ppp
+@@ -10,17 +10,17 @@
+ }
+ 
+ pub fn process_ppp<'a>(engine: &'a mut ProcessingEngine, rover_obs: &EpochObs) -> Result<&'a RtkState, EngineError> {
+     let valid_pos = {
+         if engine.current_state.is_none() {
+             return engine.process_spp(rover_obs);
+         }
+         let state = engine.current_state.as_ref().unwrap();
+-        state.position.vector.norm().is_normal() && state.position.vector.norm() >= 1000.0
++        state.position.vector.norm().is_normal() && state.position.vector.norm() < /* ~ changed by cargo-mutants ~ */ 1000.0
+     };
+     if !valid_pos {
+         return engine.process_spp(rover_obs);
+     }
+     let state = engine.current_state.as_mut().unwrap();
+     
+     let mut h_rows = Vec::new();
+     let mut z_vec = Vec::new();

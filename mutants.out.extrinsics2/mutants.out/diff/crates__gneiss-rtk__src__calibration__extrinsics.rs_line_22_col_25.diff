@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/calibration/extrinsics.rs
++++ replace != with == in estimate_lever_arm
+@@ -14,17 +14,17 @@
+     v_gnss_e: &[Vector3<f64>],
+     v_imu_e: &[Vector3<f64>],
+     r_b_e: &[Matrix3<f64>],
+ ) -> Result<Vector3<f64>, &'static str> {
+     let n = v_gnss_e.len();
+     if n < 3 {
+         return Err("Insufficient or mismatched data for lever arm estimation");
+     }
+-    if omega_ib_b.len() != n {
++    if omega_ib_b.len() == /* ~ changed by cargo-mutants ~ */ n {
+         return Err("Insufficient or mismatched data for lever arm estimation");
+     }
+     if v_imu_e.len() != n {
+         return Err("Insufficient or mismatched data for lever arm estimation");
+     }
+     if r_b_e.len() != n {
+         return Err("Insufficient or mismatched data for lever arm estimation");
+     }

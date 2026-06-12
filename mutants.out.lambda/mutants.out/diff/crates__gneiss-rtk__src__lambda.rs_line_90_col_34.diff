@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/lambda.rs
++++ replace / with % in resolve_lambda_inner
+@@ -82,17 +82,17 @@
+     let t_inv = z_mat.transpose().try_inverse().ok_or("Transformation matrix inversion failed")?;
+     let best_a = &t_inv * &best_z;
+     let second_best_a = &t_inv * &second_best_z;
+ 
+     // 4. Success Rate calculation
+     let success_rate = bootstrapping_success_rate(&d);
+ 
+     let safe_best_dist = if best_dist < 1e-12 { 1e-12 } else { best_dist };
+-    let ratio = second_best_dist / safe_best_dist;
++    let ratio = second_best_dist % /* ~ changed by cargo-mutants ~ */ safe_best_dist;
+ 
+     Ok(LambdaResult {
+         best_integers: best_a,
+         second_best_integers: second_best_a,
+         ratio,
+         success_rate,
+     })
+ }

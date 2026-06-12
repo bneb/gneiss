@@ -1,0 +1,4 @@
+crates/gneiss-rtk/src/calibration/time_sync.rs:38:23: replace > with >= in cross_correlate_time_offset
+crates/gneiss-rtk/src/calibration/time_sync.rs:53:18: replace > with >= in cross_correlate_time_offset
+crates/gneiss-rtk/src/calibration/time_sync.rs:53:33: replace > with >= in cross_correlate_time_offset
+crates/gneiss-rtk/src/calibration/time_sync.rs:53:50: replace > with >= in cross_correlate_time_offset

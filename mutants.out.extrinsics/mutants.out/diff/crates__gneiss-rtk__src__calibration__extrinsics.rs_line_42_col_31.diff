@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/calibration/extrinsics.rs
++++ replace - with + in estimate_lever_arm
+@@ -34,17 +34,17 @@
+         let w = omega_ib_b[i];
+         let w_skew = Matrix3::new(
+             0.0, -w.z,  w.y,
+              w.z,  0.0, -w.x,
+             -w.y,  w.x,  0.0
+         );
+         
+         let h_i = r_b_e[i] * w_skew;
+-        let z_i = v_gnss_e[i] - v_imu_e[i];
++        let z_i = v_gnss_e[i] + /* ~ changed by cargo-mutants ~ */ v_imu_e[i];
+ 
+         h_matrix.fixed_view_mut::<3, 3>(i * 3, 0).copy_from(&h_i);
+         z_vector.fixed_rows_mut::<3>(i * 3).copy_from(&z_i);
+     }
+ 
+     // Solve using normal equations: x = (H^T * H)^-1 * H^T * Z
+     let h_t = h_matrix.transpose();
+     let h_t_h = &h_t * &h_matrix;

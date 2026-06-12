@@ -1,0 +1,1922 @@
+[
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ replace cross_correlate_time_offset -> f64 with 0.0\n@@ -3,68 +3,17 @@\n /// Computes the time offset between GNSS and IMU sensors using cross-correlation of velocity profiles.\n /// Returns the offset in seconds. A positive offset means GNSS time is lagging behind IMU time.\n pub fn cross_correlate_time_offset(\n     gnss_time: &[f64],\n     gnss_vel: &[Vector3<f64>],\n     imu_time: &[f64],\n     imu_vel: &[Vector3<f64>],\n ) -> f64 {\n-    let mut best_tau = 0.0;\n-    let mut max_corr = f64::NEG_INFINITY;\n-\n-    // Sweep from -0.5 to +0.5 seconds with 1 ms resolution\n-    let steps = 500;\n-    for step in -steps..=steps {\n-        let tau = (step as f64) * 0.001;\n-        let mut sum_xy = 0.0;\n-        let mut sum_xx = 0.0;\n-        let mut sum_yy = 0.0;\n-        let mut count = 0;\n-\n-        for i in 0..gnss_time.len() {\n-            let t_eval = gnss_time[i] - tau;\n-            \n-            let idx = match imu_time.binary_search_by(|t| t.partial_cmp(&t_eval).unwrap_or(core::cmp::Ordering::Equal)) {\n-                Ok(j) => j,\n-                Err(j) => j,\n-            };\n-\n-            if idx > 0 && idx < imu_time.len() {\n-                let t0 = imu_time[idx - 1];\n-                let t1 = imu_time[idx];\n-                let v0 = imu_vel[idx - 1];\n-                let v1 = imu_vel[idx];\n-\n-                let dt = t1 - t0;\n-                if dt > 0.0 {\n-                    let alpha = (t_eval - t0) / dt;\n-                    let v_interp = v0 + (v1 - v0) * alpha;\n-                    \n-                    let x = gnss_vel[i];\n-                    let y = v_interp;\n-                    \n-                    sum_xy += x.dot(&y);\n-                    sum_xx += x.norm_squared();\n-                    sum_yy += y.norm_squared();\n-                    count += 1;\n-                }\n-            }\n-        }\n-\n-        if count > 10 && sum_xx > 1e-6 && sum_yy > 1e-6 { \n-            let corr = sum_xy / (sum_xx.sqrt() * sum_yy.sqrt());\n-            if corr > max_corr {\n-                max_corr = corr;\n-                best_tau = tau;\n-            }\n-        }\n-    }\n-\n-    best_tau\n+    0.0 /* ~ changed by cargo-mutants ~ */\n }\n \n #[cfg(test)]\n mod tests {\n     use super::*;\n     use nalgebra::Vector3;\n \n     #[test]\n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:11:5: replace cross_correlate_time_offset -> f64 with 0.0",
+    "package": "gneiss-rtk",
+    "replacement": "0.0",
+    "span": {
+      "end": {
+        "column": 13,
+        "line": 62
+      },
+      "start": {
+        "column": 5,
+        "line": 11
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ replace cross_correlate_time_offset -> f64 with 1.0\n@@ -3,68 +3,17 @@\n /// Computes the time offset between GNSS and IMU sensors using cross-correlation of velocity profiles.\n /// Returns the offset in seconds. A positive offset means GNSS time is lagging behind IMU time.\n pub fn cross_correlate_time_offset(\n     gnss_time: &[f64],\n     gnss_vel: &[Vector3<f64>],\n     imu_time: &[f64],\n     imu_vel: &[Vector3<f64>],\n ) -> f64 {\n-    let mut best_tau = 0.0;\n-    let mut max_corr = f64::NEG_INFINITY;\n-\n-    // Sweep from -0.5 to +0.5 seconds with 1 ms resolution\n-    let steps = 500;\n-    for step in -steps..=steps {\n-        let tau = (step as f64) * 0.001;\n-        let mut sum_xy = 0.0;\n-        let mut sum_xx = 0.0;\n-        let mut sum_yy = 0.0;\n-        let mut count = 0;\n-\n-        for i in 0..gnss_time.len() {\n-            let t_eval = gnss_time[i] - tau;\n-            \n-            let idx = match imu_time.binary_search_by(|t| t.partial_cmp(&t_eval).unwrap_or(core::cmp::Ordering::Equal)) {\n-                Ok(j) => j,\n-                Err(j) => j,\n-            };\n-\n-            if idx > 0 && idx < imu_time.len() {\n-                let t0 = imu_time[idx - 1];\n-                let t1 = imu_time[idx];\n-                let v0 = imu_vel[idx - 1];\n-                let v1 = imu_vel[idx];\n-\n-                let dt = t1 - t0;\n-                if dt > 0.0 {\n-                    let alpha = (t_eval - t0) / dt;\n-                    let v_interp = v0 + (v1 - v0) * alpha;\n-                    \n-                    let x = gnss_vel[i];\n-                    let y = v_interp;\n-                    \n-                    sum_xy += x.dot(&y);\n-                    sum_xx += x.norm_squared();\n-                    sum_yy += y.norm_squared();\n-                    count += 1;\n-                }\n-            }\n-        }\n-\n-        if count > 10 && sum_xx > 1e-6 && sum_yy > 1e-6 { \n-            let corr = sum_xy / (sum_xx.sqrt() * sum_yy.sqrt());\n-            if corr > max_corr {\n-                max_corr = corr;\n-                best_tau = tau;\n-            }\n-        }\n-    }\n-\n-    best_tau\n+    1.0 /* ~ changed by cargo-mutants ~ */\n }\n \n #[cfg(test)]\n mod tests {\n     use super::*;\n     use nalgebra::Vector3;\n \n     #[test]\n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:11:5: replace cross_correlate_time_offset -> f64 with 1.0",
+    "package": "gneiss-rtk",
+    "replacement": "1.0",
+    "span": {
+      "end": {
+        "column": 13,
+        "line": 62
+      },
+      "start": {
+        "column": 5,
+        "line": 11
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ replace cross_correlate_time_offset -> f64 with -1.0\n@@ -3,68 +3,17 @@\n /// Computes the time offset between GNSS and IMU sensors using cross-correlation of velocity profiles.\n /// Returns the offset in seconds. A positive offset means GNSS time is lagging behind IMU time.\n pub fn cross_correlate_time_offset(\n     gnss_time: &[f64],\n     gnss_vel: &[Vector3<f64>],\n     imu_time: &[f64],\n     imu_vel: &[Vector3<f64>],\n ) -> f64 {\n-    let mut best_tau = 0.0;\n-    let mut max_corr = f64::NEG_INFINITY;\n-\n-    // Sweep from -0.5 to +0.5 seconds with 1 ms resolution\n-    let steps = 500;\n-    for step in -steps..=steps {\n-        let tau = (step as f64) * 0.001;\n-        let mut sum_xy = 0.0;\n-        let mut sum_xx = 0.0;\n-        let mut sum_yy = 0.0;\n-        let mut count = 0;\n-\n-        for i in 0..gnss_time.len() {\n-            let t_eval = gnss_time[i] - tau;\n-            \n-            let idx = match imu_time.binary_search_by(|t| t.partial_cmp(&t_eval).unwrap_or(core::cmp::Ordering::Equal)) {\n-                Ok(j) => j,\n-                Err(j) => j,\n-            };\n-\n-            if idx > 0 && idx < imu_time.len() {\n-                let t0 = imu_time[idx - 1];\n-                let t1 = imu_time[idx];\n-                let v0 = imu_vel[idx - 1];\n-                let v1 = imu_vel[idx];\n-\n-                let dt = t1 - t0;\n-                if dt > 0.0 {\n-                    let alpha = (t_eval - t0) / dt;\n-                    let v_interp = v0 + (v1 - v0) * alpha;\n-                    \n-                    let x = gnss_vel[i];\n-                    let y = v_interp;\n-                    \n-                    sum_xy += x.dot(&y);\n-                    sum_xx += x.norm_squared();\n-                    sum_yy += y.norm_squared();\n-                    count += 1;\n-                }\n-            }\n-        }\n-\n-        if count > 10 && sum_xx > 1e-6 && sum_yy > 1e-6 { \n-            let corr = sum_xy / (sum_xx.sqrt() * sum_yy.sqrt());\n-            if corr > max_corr {\n-                max_corr = corr;\n-                best_tau = tau;\n-            }\n-        }\n-    }\n-\n-    best_tau\n+    -1.0 /* ~ changed by cargo-mutants ~ */\n }\n \n #[cfg(test)]\n mod tests {\n     use super::*;\n     use nalgebra::Vector3;\n \n     #[test]\n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:11:5: replace cross_correlate_time_offset -> f64 with -1.0",
+    "package": "gneiss-rtk",
+    "replacement": "-1.0",
+    "span": {
+      "end": {
+        "column": 13,
+        "line": 62
+      },
+      "start": {
+        "column": 5,
+        "line": 11
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ delete - in cross_correlate_time_offset\n@@ -8,17 +8,17 @@\n     imu_time: &[f64],\n     imu_vel: &[Vector3<f64>],\n ) -> f64 {\n     let mut best_tau = 0.0;\n     let mut max_corr = f64::NEG_INFINITY;\n \n     // Sweep from -0.5 to +0.5 seconds with 1 ms resolution\n     let steps = 500;\n-    for step in -steps..=steps {\n+    for step in  /* ~ changed by cargo-mutants ~ */steps..=steps {\n         let tau = (step as f64) * 0.001;\n         let mut sum_xy = 0.0;\n         let mut sum_xx = 0.0;\n         let mut sum_yy = 0.0;\n         let mut count = 0;\n \n         for i in 0..gnss_time.len() {\n             let t_eval = gnss_time[i] - tau;\n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "UnaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:16:17: delete - in cross_correlate_time_offset",
+    "package": "gneiss-rtk",
+    "replacement": "",
+    "span": {
+      "end": {
+        "column": 18,
+        "line": 16
+      },
+      "start": {
+        "column": 17,
+        "line": 16
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ replace * with + in cross_correlate_time_offset\n@@ -9,17 +9,17 @@\n     imu_vel: &[Vector3<f64>],\n ) -> f64 {\n     let mut best_tau = 0.0;\n     let mut max_corr = f64::NEG_INFINITY;\n \n     // Sweep from -0.5 to +0.5 seconds with 1 ms resolution\n     let steps = 500;\n     for step in -steps..=steps {\n-        let tau = (step as f64) * 0.001;\n+        let tau = (step as f64) + /* ~ changed by cargo-mutants ~ */ 0.001;\n         let mut sum_xy = 0.0;\n         let mut sum_xx = 0.0;\n         let mut sum_yy = 0.0;\n         let mut count = 0;\n \n         for i in 0..gnss_time.len() {\n             let t_eval = gnss_time[i] - tau;\n             \n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:17:33: replace * with + in cross_correlate_time_offset",
+    "package": "gneiss-rtk",
+    "replacement": "+",
+    "span": {
+      "end": {
+        "column": 34,
+        "line": 17
+      },
+      "start": {
+        "column": 33,
+        "line": 17
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ replace * with / in cross_correlate_time_offset\n@@ -9,17 +9,17 @@\n     imu_vel: &[Vector3<f64>],\n ) -> f64 {\n     let mut best_tau = 0.0;\n     let mut max_corr = f64::NEG_INFINITY;\n \n     // Sweep from -0.5 to +0.5 seconds with 1 ms resolution\n     let steps = 500;\n     for step in -steps..=steps {\n-        let tau = (step as f64) * 0.001;\n+        let tau = (step as f64) / /* ~ changed by cargo-mutants ~ */ 0.001;\n         let mut sum_xy = 0.0;\n         let mut sum_xx = 0.0;\n         let mut sum_yy = 0.0;\n         let mut count = 0;\n \n         for i in 0..gnss_time.len() {\n             let t_eval = gnss_time[i] - tau;\n             \n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:17:33: replace * with / in cross_correlate_time_offset",
+    "package": "gneiss-rtk",
+    "replacement": "/",
+    "span": {
+      "end": {
+        "column": 34,
+        "line": 17
+      },
+      "start": {
+        "column": 33,
+        "line": 17
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ replace - with + in cross_correlate_time_offset\n@@ -16,17 +16,17 @@\n     for step in -steps..=steps {\n         let tau = (step as f64) * 0.001;\n         let mut sum_xy = 0.0;\n         let mut sum_xx = 0.0;\n         let mut sum_yy = 0.0;\n         let mut count = 0;\n \n         for i in 0..gnss_time.len() {\n-            let t_eval = gnss_time[i] - tau;\n+            let t_eval = gnss_time[i] + /* ~ changed by cargo-mutants ~ */ tau;\n             \n             let idx = match imu_time.binary_search_by(|t| t.partial_cmp(&t_eval).unwrap_or(core::cmp::Ordering::Equal)) {\n                 Ok(j) => j,\n                 Err(j) => j,\n             };\n \n             if idx > 0 && idx < imu_time.len() {\n                 let t0 = imu_time[idx - 1];\n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:24:39: replace - with + in cross_correlate_time_offset",
+    "package": "gneiss-rtk",
+    "replacement": "+",
+    "span": {
+      "end": {
+        "column": 40,
+        "line": 24
+      },
+      "start": {
+        "column": 39,
+        "line": 24
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ replace - with / in cross_correlate_time_offset\n@@ -16,17 +16,17 @@\n     for step in -steps..=steps {\n         let tau = (step as f64) * 0.001;\n         let mut sum_xy = 0.0;\n         let mut sum_xx = 0.0;\n         let mut sum_yy = 0.0;\n         let mut count = 0;\n \n         for i in 0..gnss_time.len() {\n-            let t_eval = gnss_time[i] - tau;\n+            let t_eval = gnss_time[i] / /* ~ changed by cargo-mutants ~ */ tau;\n             \n             let idx = match imu_time.binary_search_by(|t| t.partial_cmp(&t_eval).unwrap_or(core::cmp::Ordering::Equal)) {\n                 Ok(j) => j,\n                 Err(j) => j,\n             };\n \n             if idx > 0 && idx < imu_time.len() {\n                 let t0 = imu_time[idx - 1];\n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:24:39: replace - with / in cross_correlate_time_offset",
+    "package": "gneiss-rtk",
+    "replacement": "/",
+    "span": {
+      "end": {
+        "column": 40,
+        "line": 24
+      },
+      "start": {
+        "column": 39,
+        "line": 24
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ replace && with || in cross_correlate_time_offset\n@@ -23,17 +23,17 @@\n         for i in 0..gnss_time.len() {\n             let t_eval = gnss_time[i] - tau;\n             \n             let idx = match imu_time.binary_search_by(|t| t.partial_cmp(&t_eval).unwrap_or(core::cmp::Ordering::Equal)) {\n                 Ok(j) => j,\n                 Err(j) => j,\n             };\n \n-            if idx > 0 && idx < imu_time.len() {\n+            if idx > 0 || /* ~ changed by cargo-mutants ~ */ idx < imu_time.len() {\n                 let t0 = imu_time[idx - 1];\n                 let t1 = imu_time[idx];\n                 let v0 = imu_vel[idx - 1];\n                 let v1 = imu_vel[idx];\n \n                 let dt = t1 - t0;\n                 if dt > 0.0 {\n                     let alpha = (t_eval - t0) / dt;\n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:31:24: replace && with || in cross_correlate_time_offset",
+    "package": "gneiss-rtk",
+    "replacement": "||",
+    "span": {
+      "end": {
+        "column": 26,
+        "line": 31
+      },
+      "start": {
+        "column": 24,
+        "line": 31
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ replace > with == in cross_correlate_time_offset\n@@ -23,17 +23,17 @@\n         for i in 0..gnss_time.len() {\n             let t_eval = gnss_time[i] - tau;\n             \n             let idx = match imu_time.binary_search_by(|t| t.partial_cmp(&t_eval).unwrap_or(core::cmp::Ordering::Equal)) {\n                 Ok(j) => j,\n                 Err(j) => j,\n             };\n \n-            if idx > 0 && idx < imu_time.len() {\n+            if idx == /* ~ changed by cargo-mutants ~ */ 0 && idx < imu_time.len() {\n                 let t0 = imu_time[idx - 1];\n                 let t1 = imu_time[idx];\n                 let v0 = imu_vel[idx - 1];\n                 let v1 = imu_vel[idx];\n \n                 let dt = t1 - t0;\n                 if dt > 0.0 {\n                     let alpha = (t_eval - t0) / dt;\n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:31:20: replace > with == in cross_correlate_time_offset",
+    "package": "gneiss-rtk",
+    "replacement": "==",
+    "span": {
+      "end": {
+        "column": 21,
+        "line": 31
+      },
+      "start": {
+        "column": 20,
+        "line": 31
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ replace > with < in cross_correlate_time_offset\n@@ -23,17 +23,17 @@\n         for i in 0..gnss_time.len() {\n             let t_eval = gnss_time[i] - tau;\n             \n             let idx = match imu_time.binary_search_by(|t| t.partial_cmp(&t_eval).unwrap_or(core::cmp::Ordering::Equal)) {\n                 Ok(j) => j,\n                 Err(j) => j,\n             };\n \n-            if idx > 0 && idx < imu_time.len() {\n+            if idx < /* ~ changed by cargo-mutants ~ */ 0 && idx < imu_time.len() {\n                 let t0 = imu_time[idx - 1];\n                 let t1 = imu_time[idx];\n                 let v0 = imu_vel[idx - 1];\n                 let v1 = imu_vel[idx];\n \n                 let dt = t1 - t0;\n                 if dt > 0.0 {\n                     let alpha = (t_eval - t0) / dt;\n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:31:20: replace > with < in cross_correlate_time_offset",
+    "package": "gneiss-rtk",
+    "replacement": "<",
+    "span": {
+      "end": {
+        "column": 21,
+        "line": 31
+      },
+      "start": {
+        "column": 20,
+        "line": 31
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ replace > with >= in cross_correlate_time_offset\n@@ -23,17 +23,17 @@\n         for i in 0..gnss_time.len() {\n             let t_eval = gnss_time[i] - tau;\n             \n             let idx = match imu_time.binary_search_by(|t| t.partial_cmp(&t_eval).unwrap_or(core::cmp::Ordering::Equal)) {\n                 Ok(j) => j,\n                 Err(j) => j,\n             };\n \n-            if idx > 0 && idx < imu_time.len() {\n+            if idx >= /* ~ changed by cargo-mutants ~ */ 0 && idx < imu_time.len() {\n                 let t0 = imu_time[idx - 1];\n                 let t1 = imu_time[idx];\n                 let v0 = imu_vel[idx - 1];\n                 let v1 = imu_vel[idx];\n \n                 let dt = t1 - t0;\n                 if dt > 0.0 {\n                     let alpha = (t_eval - t0) / dt;\n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:31:20: replace > with >= in cross_correlate_time_offset",
+    "package": "gneiss-rtk",
+    "replacement": ">=",
+    "span": {
+      "end": {
+        "column": 21,
+        "line": 31
+      },
+      "start": {
+        "column": 20,
+        "line": 31
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ replace < with == in cross_correlate_time_offset\n@@ -23,17 +23,17 @@\n         for i in 0..gnss_time.len() {\n             let t_eval = gnss_time[i] - tau;\n             \n             let idx = match imu_time.binary_search_by(|t| t.partial_cmp(&t_eval).unwrap_or(core::cmp::Ordering::Equal)) {\n                 Ok(j) => j,\n                 Err(j) => j,\n             };\n \n-            if idx > 0 && idx < imu_time.len() {\n+            if idx > 0 && idx == /* ~ changed by cargo-mutants ~ */ imu_time.len() {\n                 let t0 = imu_time[idx - 1];\n                 let t1 = imu_time[idx];\n                 let v0 = imu_vel[idx - 1];\n                 let v1 = imu_vel[idx];\n \n                 let dt = t1 - t0;\n                 if dt > 0.0 {\n                     let alpha = (t_eval - t0) / dt;\n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:31:31: replace < with == in cross_correlate_time_offset",
+    "package": "gneiss-rtk",
+    "replacement": "==",
+    "span": {
+      "end": {
+        "column": 32,
+        "line": 31
+      },
+      "start": {
+        "column": 31,
+        "line": 31
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ replace < with > in cross_correlate_time_offset\n@@ -23,17 +23,17 @@\n         for i in 0..gnss_time.len() {\n             let t_eval = gnss_time[i] - tau;\n             \n             let idx = match imu_time.binary_search_by(|t| t.partial_cmp(&t_eval).unwrap_or(core::cmp::Ordering::Equal)) {\n                 Ok(j) => j,\n                 Err(j) => j,\n             };\n \n-            if idx > 0 && idx < imu_time.len() {\n+            if idx > 0 && idx > /* ~ changed by cargo-mutants ~ */ imu_time.len() {\n                 let t0 = imu_time[idx - 1];\n                 let t1 = imu_time[idx];\n                 let v0 = imu_vel[idx - 1];\n                 let v1 = imu_vel[idx];\n \n                 let dt = t1 - t0;\n                 if dt > 0.0 {\n                     let alpha = (t_eval - t0) / dt;\n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:31:31: replace < with > in cross_correlate_time_offset",
+    "package": "gneiss-rtk",
+    "replacement": ">",
+    "span": {
+      "end": {
+        "column": 32,
+        "line": 31
+      },
+      "start": {
+        "column": 31,
+        "line": 31
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ replace < with <= in cross_correlate_time_offset\n@@ -23,17 +23,17 @@\n         for i in 0..gnss_time.len() {\n             let t_eval = gnss_time[i] - tau;\n             \n             let idx = match imu_time.binary_search_by(|t| t.partial_cmp(&t_eval).unwrap_or(core::cmp::Ordering::Equal)) {\n                 Ok(j) => j,\n                 Err(j) => j,\n             };\n \n-            if idx > 0 && idx < imu_time.len() {\n+            if idx > 0 && idx <= /* ~ changed by cargo-mutants ~ */ imu_time.len() {\n                 let t0 = imu_time[idx - 1];\n                 let t1 = imu_time[idx];\n                 let v0 = imu_vel[idx - 1];\n                 let v1 = imu_vel[idx];\n \n                 let dt = t1 - t0;\n                 if dt > 0.0 {\n                     let alpha = (t_eval - t0) / dt;\n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:31:31: replace < with <= in cross_correlate_time_offset",
+    "package": "gneiss-rtk",
+    "replacement": "<=",
+    "span": {
+      "end": {
+        "column": 32,
+        "line": 31
+      },
+      "start": {
+        "column": 31,
+        "line": 31
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ replace - with + in cross_correlate_time_offset\n@@ -24,17 +24,17 @@\n             let t_eval = gnss_time[i] - tau;\n             \n             let idx = match imu_time.binary_search_by(|t| t.partial_cmp(&t_eval).unwrap_or(core::cmp::Ordering::Equal)) {\n                 Ok(j) => j,\n                 Err(j) => j,\n             };\n \n             if idx > 0 && idx < imu_time.len() {\n-                let t0 = imu_time[idx - 1];\n+                let t0 = imu_time[idx + /* ~ changed by cargo-mutants ~ */ 1];\n                 let t1 = imu_time[idx];\n                 let v0 = imu_vel[idx - 1];\n                 let v1 = imu_vel[idx];\n \n                 let dt = t1 - t0;\n                 if dt > 0.0 {\n                     let alpha = (t_eval - t0) / dt;\n                     let v_interp = v0 + (v1 - v0) * alpha;\n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:32:39: replace - with + in cross_correlate_time_offset",
+    "package": "gneiss-rtk",
+    "replacement": "+",
+    "span": {
+      "end": {
+        "column": 40,
+        "line": 32
+      },
+      "start": {
+        "column": 39,
+        "line": 32
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ replace - with / in cross_correlate_time_offset\n@@ -24,17 +24,17 @@\n             let t_eval = gnss_time[i] - tau;\n             \n             let idx = match imu_time.binary_search_by(|t| t.partial_cmp(&t_eval).unwrap_or(core::cmp::Ordering::Equal)) {\n                 Ok(j) => j,\n                 Err(j) => j,\n             };\n \n             if idx > 0 && idx < imu_time.len() {\n-                let t0 = imu_time[idx - 1];\n+                let t0 = imu_time[idx / /* ~ changed by cargo-mutants ~ */ 1];\n                 let t1 = imu_time[idx];\n                 let v0 = imu_vel[idx - 1];\n                 let v1 = imu_vel[idx];\n \n                 let dt = t1 - t0;\n                 if dt > 0.0 {\n                     let alpha = (t_eval - t0) / dt;\n                     let v_interp = v0 + (v1 - v0) * alpha;\n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:32:39: replace - with / in cross_correlate_time_offset",
+    "package": "gneiss-rtk",
+    "replacement": "/",
+    "span": {
+      "end": {
+        "column": 40,
+        "line": 32
+      },
+      "start": {
+        "column": 39,
+        "line": 32
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ replace - with + in cross_correlate_time_offset\n@@ -26,17 +26,17 @@\n             let idx = match imu_time.binary_search_by(|t| t.partial_cmp(&t_eval).unwrap_or(core::cmp::Ordering::Equal)) {\n                 Ok(j) => j,\n                 Err(j) => j,\n             };\n \n             if idx > 0 && idx < imu_time.len() {\n                 let t0 = imu_time[idx - 1];\n                 let t1 = imu_time[idx];\n-                let v0 = imu_vel[idx - 1];\n+                let v0 = imu_vel[idx + /* ~ changed by cargo-mutants ~ */ 1];\n                 let v1 = imu_vel[idx];\n \n                 let dt = t1 - t0;\n                 if dt > 0.0 {\n                     let alpha = (t_eval - t0) / dt;\n                     let v_interp = v0 + (v1 - v0) * alpha;\n                     \n                     let x = gnss_vel[i];\n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:34:38: replace - with + in cross_correlate_time_offset",
+    "package": "gneiss-rtk",
+    "replacement": "+",
+    "span": {
+      "end": {
+        "column": 39,
+        "line": 34
+      },
+      "start": {
+        "column": 38,
+        "line": 34
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ replace - with / in cross_correlate_time_offset\n@@ -26,17 +26,17 @@\n             let idx = match imu_time.binary_search_by(|t| t.partial_cmp(&t_eval).unwrap_or(core::cmp::Ordering::Equal)) {\n                 Ok(j) => j,\n                 Err(j) => j,\n             };\n \n             if idx > 0 && idx < imu_time.len() {\n                 let t0 = imu_time[idx - 1];\n                 let t1 = imu_time[idx];\n-                let v0 = imu_vel[idx - 1];\n+                let v0 = imu_vel[idx / /* ~ changed by cargo-mutants ~ */ 1];\n                 let v1 = imu_vel[idx];\n \n                 let dt = t1 - t0;\n                 if dt > 0.0 {\n                     let alpha = (t_eval - t0) / dt;\n                     let v_interp = v0 + (v1 - v0) * alpha;\n                     \n                     let x = gnss_vel[i];\n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:34:38: replace - with / in cross_correlate_time_offset",
+    "package": "gneiss-rtk",
+    "replacement": "/",
+    "span": {
+      "end": {
+        "column": 39,
+        "line": 34
+      },
+      "start": {
+        "column": 38,
+        "line": 34
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ replace - with + in cross_correlate_time_offset\n@@ -29,17 +29,17 @@\n             };\n \n             if idx > 0 && idx < imu_time.len() {\n                 let t0 = imu_time[idx - 1];\n                 let t1 = imu_time[idx];\n                 let v0 = imu_vel[idx - 1];\n                 let v1 = imu_vel[idx];\n \n-                let dt = t1 - t0;\n+                let dt = t1 + /* ~ changed by cargo-mutants ~ */ t0;\n                 if dt > 0.0 {\n                     let alpha = (t_eval - t0) / dt;\n                     let v_interp = v0 + (v1 - v0) * alpha;\n                     \n                     let x = gnss_vel[i];\n                     let y = v_interp;\n                     \n                     sum_xy += x.dot(&y);\n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:37:29: replace - with + in cross_correlate_time_offset",
+    "package": "gneiss-rtk",
+    "replacement": "+",
+    "span": {
+      "end": {
+        "column": 30,
+        "line": 37
+      },
+      "start": {
+        "column": 29,
+        "line": 37
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ replace - with / in cross_correlate_time_offset\n@@ -29,17 +29,17 @@\n             };\n \n             if idx > 0 && idx < imu_time.len() {\n                 let t0 = imu_time[idx - 1];\n                 let t1 = imu_time[idx];\n                 let v0 = imu_vel[idx - 1];\n                 let v1 = imu_vel[idx];\n \n-                let dt = t1 - t0;\n+                let dt = t1 / /* ~ changed by cargo-mutants ~ */ t0;\n                 if dt > 0.0 {\n                     let alpha = (t_eval - t0) / dt;\n                     let v_interp = v0 + (v1 - v0) * alpha;\n                     \n                     let x = gnss_vel[i];\n                     let y = v_interp;\n                     \n                     sum_xy += x.dot(&y);\n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:37:29: replace - with / in cross_correlate_time_offset",
+    "package": "gneiss-rtk",
+    "replacement": "/",
+    "span": {
+      "end": {
+        "column": 30,
+        "line": 37
+      },
+      "start": {
+        "column": 29,
+        "line": 37
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ replace > with == in cross_correlate_time_offset\n@@ -30,17 +30,17 @@\n \n             if idx > 0 && idx < imu_time.len() {\n                 let t0 = imu_time[idx - 1];\n                 let t1 = imu_time[idx];\n                 let v0 = imu_vel[idx - 1];\n                 let v1 = imu_vel[idx];\n \n                 let dt = t1 - t0;\n-                if dt > 0.0 {\n+                if dt == /* ~ changed by cargo-mutants ~ */ 0.0 {\n                     let alpha = (t_eval - t0) / dt;\n                     let v_interp = v0 + (v1 - v0) * alpha;\n                     \n                     let x = gnss_vel[i];\n                     let y = v_interp;\n                     \n                     sum_xy += x.dot(&y);\n                     sum_xx += x.norm_squared();\n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:38:23: replace > with == in cross_correlate_time_offset",
+    "package": "gneiss-rtk",
+    "replacement": "==",
+    "span": {
+      "end": {
+        "column": 24,
+        "line": 38
+      },
+      "start": {
+        "column": 23,
+        "line": 38
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ replace > with < in cross_correlate_time_offset\n@@ -30,17 +30,17 @@\n \n             if idx > 0 && idx < imu_time.len() {\n                 let t0 = imu_time[idx - 1];\n                 let t1 = imu_time[idx];\n                 let v0 = imu_vel[idx - 1];\n                 let v1 = imu_vel[idx];\n \n                 let dt = t1 - t0;\n-                if dt > 0.0 {\n+                if dt < /* ~ changed by cargo-mutants ~ */ 0.0 {\n                     let alpha = (t_eval - t0) / dt;\n                     let v_interp = v0 + (v1 - v0) * alpha;\n                     \n                     let x = gnss_vel[i];\n                     let y = v_interp;\n                     \n                     sum_xy += x.dot(&y);\n                     sum_xx += x.norm_squared();\n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:38:23: replace > with < in cross_correlate_time_offset",
+    "package": "gneiss-rtk",
+    "replacement": "<",
+    "span": {
+      "end": {
+        "column": 24,
+        "line": 38
+      },
+      "start": {
+        "column": 23,
+        "line": 38
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ replace > with >= in cross_correlate_time_offset\n@@ -30,17 +30,17 @@\n \n             if idx > 0 && idx < imu_time.len() {\n                 let t0 = imu_time[idx - 1];\n                 let t1 = imu_time[idx];\n                 let v0 = imu_vel[idx - 1];\n                 let v1 = imu_vel[idx];\n \n                 let dt = t1 - t0;\n-                if dt > 0.0 {\n+                if dt >= /* ~ changed by cargo-mutants ~ */ 0.0 {\n                     let alpha = (t_eval - t0) / dt;\n                     let v_interp = v0 + (v1 - v0) * alpha;\n                     \n                     let x = gnss_vel[i];\n                     let y = v_interp;\n                     \n                     sum_xy += x.dot(&y);\n                     sum_xx += x.norm_squared();\n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:38:23: replace > with >= in cross_correlate_time_offset",
+    "package": "gneiss-rtk",
+    "replacement": ">=",
+    "span": {
+      "end": {
+        "column": 24,
+        "line": 38
+      },
+      "start": {
+        "column": 23,
+        "line": 38
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ replace / with % in cross_correlate_time_offset\n@@ -31,17 +31,17 @@\n             if idx > 0 && idx < imu_time.len() {\n                 let t0 = imu_time[idx - 1];\n                 let t1 = imu_time[idx];\n                 let v0 = imu_vel[idx - 1];\n                 let v1 = imu_vel[idx];\n \n                 let dt = t1 - t0;\n                 if dt > 0.0 {\n-                    let alpha = (t_eval - t0) / dt;\n+                    let alpha = (t_eval - t0) % /* ~ changed by cargo-mutants ~ */ dt;\n                     let v_interp = v0 + (v1 - v0) * alpha;\n                     \n                     let x = gnss_vel[i];\n                     let y = v_interp;\n                     \n                     sum_xy += x.dot(&y);\n                     sum_xx += x.norm_squared();\n                     sum_yy += y.norm_squared();\n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:39:47: replace / with % in cross_correlate_time_offset",
+    "package": "gneiss-rtk",
+    "replacement": "%",
+    "span": {
+      "end": {
+        "column": 48,
+        "line": 39
+      },
+      "start": {
+        "column": 47,
+        "line": 39
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ replace / with * in cross_correlate_time_offset\n@@ -31,17 +31,17 @@\n             if idx > 0 && idx < imu_time.len() {\n                 let t0 = imu_time[idx - 1];\n                 let t1 = imu_time[idx];\n                 let v0 = imu_vel[idx - 1];\n                 let v1 = imu_vel[idx];\n \n                 let dt = t1 - t0;\n                 if dt > 0.0 {\n-                    let alpha = (t_eval - t0) / dt;\n+                    let alpha = (t_eval - t0) * /* ~ changed by cargo-mutants ~ */ dt;\n                     let v_interp = v0 + (v1 - v0) * alpha;\n                     \n                     let x = gnss_vel[i];\n                     let y = v_interp;\n                     \n                     sum_xy += x.dot(&y);\n                     sum_xx += x.norm_squared();\n                     sum_yy += y.norm_squared();\n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:39:47: replace / with * in cross_correlate_time_offset",
+    "package": "gneiss-rtk",
+    "replacement": "*",
+    "span": {
+      "end": {
+        "column": 48,
+        "line": 39
+      },
+      "start": {
+        "column": 47,
+        "line": 39
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ replace - with + in cross_correlate_time_offset\n@@ -31,17 +31,17 @@\n             if idx > 0 && idx < imu_time.len() {\n                 let t0 = imu_time[idx - 1];\n                 let t1 = imu_time[idx];\n                 let v0 = imu_vel[idx - 1];\n                 let v1 = imu_vel[idx];\n \n                 let dt = t1 - t0;\n                 if dt > 0.0 {\n-                    let alpha = (t_eval - t0) / dt;\n+                    let alpha = (t_eval + /* ~ changed by cargo-mutants ~ */ t0) / dt;\n                     let v_interp = v0 + (v1 - v0) * alpha;\n                     \n                     let x = gnss_vel[i];\n                     let y = v_interp;\n                     \n                     sum_xy += x.dot(&y);\n                     sum_xx += x.norm_squared();\n                     sum_yy += y.norm_squared();\n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:39:41: replace - with + in cross_correlate_time_offset",
+    "package": "gneiss-rtk",
+    "replacement": "+",
+    "span": {
+      "end": {
+        "column": 42,
+        "line": 39
+      },
+      "start": {
+        "column": 41,
+        "line": 39
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ replace - with / in cross_correlate_time_offset\n@@ -31,17 +31,17 @@\n             if idx > 0 && idx < imu_time.len() {\n                 let t0 = imu_time[idx - 1];\n                 let t1 = imu_time[idx];\n                 let v0 = imu_vel[idx - 1];\n                 let v1 = imu_vel[idx];\n \n                 let dt = t1 - t0;\n                 if dt > 0.0 {\n-                    let alpha = (t_eval - t0) / dt;\n+                    let alpha = (t_eval / /* ~ changed by cargo-mutants ~ */ t0) / dt;\n                     let v_interp = v0 + (v1 - v0) * alpha;\n                     \n                     let x = gnss_vel[i];\n                     let y = v_interp;\n                     \n                     sum_xy += x.dot(&y);\n                     sum_xx += x.norm_squared();\n                     sum_yy += y.norm_squared();\n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:39:41: replace - with / in cross_correlate_time_offset",
+    "package": "gneiss-rtk",
+    "replacement": "/",
+    "span": {
+      "end": {
+        "column": 42,
+        "line": 39
+      },
+      "start": {
+        "column": 41,
+        "line": 39
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ replace + with - in cross_correlate_time_offset\n@@ -32,17 +32,17 @@\n                 let t0 = imu_time[idx - 1];\n                 let t1 = imu_time[idx];\n                 let v0 = imu_vel[idx - 1];\n                 let v1 = imu_vel[idx];\n \n                 let dt = t1 - t0;\n                 if dt > 0.0 {\n                     let alpha = (t_eval - t0) / dt;\n-                    let v_interp = v0 + (v1 - v0) * alpha;\n+                    let v_interp = v0 - /* ~ changed by cargo-mutants ~ */ (v1 - v0) * alpha;\n                     \n                     let x = gnss_vel[i];\n                     let y = v_interp;\n                     \n                     sum_xy += x.dot(&y);\n                     sum_xx += x.norm_squared();\n                     sum_yy += y.norm_squared();\n                     count += 1;\n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:40:39: replace + with - in cross_correlate_time_offset",
+    "package": "gneiss-rtk",
+    "replacement": "-",
+    "span": {
+      "end": {
+        "column": 40,
+        "line": 40
+      },
+      "start": {
+        "column": 39,
+        "line": 40
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ replace + with * in cross_correlate_time_offset\n@@ -32,17 +32,17 @@\n                 let t0 = imu_time[idx - 1];\n                 let t1 = imu_time[idx];\n                 let v0 = imu_vel[idx - 1];\n                 let v1 = imu_vel[idx];\n \n                 let dt = t1 - t0;\n                 if dt > 0.0 {\n                     let alpha = (t_eval - t0) / dt;\n-                    let v_interp = v0 + (v1 - v0) * alpha;\n+                    let v_interp = v0 * /* ~ changed by cargo-mutants ~ */ (v1 - v0) * alpha;\n                     \n                     let x = gnss_vel[i];\n                     let y = v_interp;\n                     \n                     sum_xy += x.dot(&y);\n                     sum_xx += x.norm_squared();\n                     sum_yy += y.norm_squared();\n                     count += 1;\n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:40:39: replace + with * in cross_correlate_time_offset",
+    "package": "gneiss-rtk",
+    "replacement": "*",
+    "span": {
+      "end": {
+        "column": 40,
+        "line": 40
+      },
+      "start": {
+        "column": 39,
+        "line": 40
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ replace * with + in cross_correlate_time_offset\n@@ -32,17 +32,17 @@\n                 let t0 = imu_time[idx - 1];\n                 let t1 = imu_time[idx];\n                 let v0 = imu_vel[idx - 1];\n                 let v1 = imu_vel[idx];\n \n                 let dt = t1 - t0;\n                 if dt > 0.0 {\n                     let alpha = (t_eval - t0) / dt;\n-                    let v_interp = v0 + (v1 - v0) * alpha;\n+                    let v_interp = v0 + (v1 - v0) + /* ~ changed by cargo-mutants ~ */ alpha;\n                     \n                     let x = gnss_vel[i];\n                     let y = v_interp;\n                     \n                     sum_xy += x.dot(&y);\n                     sum_xx += x.norm_squared();\n                     sum_yy += y.norm_squared();\n                     count += 1;\n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:40:51: replace * with + in cross_correlate_time_offset",
+    "package": "gneiss-rtk",
+    "replacement": "+",
+    "span": {
+      "end": {
+        "column": 52,
+        "line": 40
+      },
+      "start": {
+        "column": 51,
+        "line": 40
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ replace * with / in cross_correlate_time_offset\n@@ -32,17 +32,17 @@\n                 let t0 = imu_time[idx - 1];\n                 let t1 = imu_time[idx];\n                 let v0 = imu_vel[idx - 1];\n                 let v1 = imu_vel[idx];\n \n                 let dt = t1 - t0;\n                 if dt > 0.0 {\n                     let alpha = (t_eval - t0) / dt;\n-                    let v_interp = v0 + (v1 - v0) * alpha;\n+                    let v_interp = v0 + (v1 - v0) / /* ~ changed by cargo-mutants ~ */ alpha;\n                     \n                     let x = gnss_vel[i];\n                     let y = v_interp;\n                     \n                     sum_xy += x.dot(&y);\n                     sum_xx += x.norm_squared();\n                     sum_yy += y.norm_squared();\n                     count += 1;\n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:40:51: replace * with / in cross_correlate_time_offset",
+    "package": "gneiss-rtk",
+    "replacement": "/",
+    "span": {
+      "end": {
+        "column": 52,
+        "line": 40
+      },
+      "start": {
+        "column": 51,
+        "line": 40
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ replace - with + in cross_correlate_time_offset\n@@ -32,17 +32,17 @@\n                 let t0 = imu_time[idx - 1];\n                 let t1 = imu_time[idx];\n                 let v0 = imu_vel[idx - 1];\n                 let v1 = imu_vel[idx];\n \n                 let dt = t1 - t0;\n                 if dt > 0.0 {\n                     let alpha = (t_eval - t0) / dt;\n-                    let v_interp = v0 + (v1 - v0) * alpha;\n+                    let v_interp = v0 + (v1 + /* ~ changed by cargo-mutants ~ */ v0) * alpha;\n                     \n                     let x = gnss_vel[i];\n                     let y = v_interp;\n                     \n                     sum_xy += x.dot(&y);\n                     sum_xx += x.norm_squared();\n                     sum_yy += y.norm_squared();\n                     count += 1;\n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:40:45: replace - with + in cross_correlate_time_offset",
+    "package": "gneiss-rtk",
+    "replacement": "+",
+    "span": {
+      "end": {
+        "column": 46,
+        "line": 40
+      },
+      "start": {
+        "column": 45,
+        "line": 40
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ replace - with / in cross_correlate_time_offset\n@@ -32,17 +32,17 @@\n                 let t0 = imu_time[idx - 1];\n                 let t1 = imu_time[idx];\n                 let v0 = imu_vel[idx - 1];\n                 let v1 = imu_vel[idx];\n \n                 let dt = t1 - t0;\n                 if dt > 0.0 {\n                     let alpha = (t_eval - t0) / dt;\n-                    let v_interp = v0 + (v1 - v0) * alpha;\n+                    let v_interp = v0 + (v1 / /* ~ changed by cargo-mutants ~ */ v0) * alpha;\n                     \n                     let x = gnss_vel[i];\n                     let y = v_interp;\n                     \n                     sum_xy += x.dot(&y);\n                     sum_xx += x.norm_squared();\n                     sum_yy += y.norm_squared();\n                     count += 1;\n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:40:45: replace - with / in cross_correlate_time_offset",
+    "package": "gneiss-rtk",
+    "replacement": "/",
+    "span": {
+      "end": {
+        "column": 46,
+        "line": 40
+      },
+      "start": {
+        "column": 45,
+        "line": 40
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ replace += with -= in cross_correlate_time_offset\n@@ -37,17 +37,17 @@\n                 let dt = t1 - t0;\n                 if dt > 0.0 {\n                     let alpha = (t_eval - t0) / dt;\n                     let v_interp = v0 + (v1 - v0) * alpha;\n                     \n                     let x = gnss_vel[i];\n                     let y = v_interp;\n                     \n-                    sum_xy += x.dot(&y);\n+                    sum_xy -= /* ~ changed by cargo-mutants ~ */ x.dot(&y);\n                     sum_xx += x.norm_squared();\n                     sum_yy += y.norm_squared();\n                     count += 1;\n                 }\n             }\n         }\n \n         if count > 10 && sum_xx > 1e-6 && sum_yy > 1e-6 { \n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:45:28: replace += with -= in cross_correlate_time_offset",
+    "package": "gneiss-rtk",
+    "replacement": "-=",
+    "span": {
+      "end": {
+        "column": 30,
+        "line": 45
+      },
+      "start": {
+        "column": 28,
+        "line": 45
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ replace += with *= in cross_correlate_time_offset\n@@ -37,17 +37,17 @@\n                 let dt = t1 - t0;\n                 if dt > 0.0 {\n                     let alpha = (t_eval - t0) / dt;\n                     let v_interp = v0 + (v1 - v0) * alpha;\n                     \n                     let x = gnss_vel[i];\n                     let y = v_interp;\n                     \n-                    sum_xy += x.dot(&y);\n+                    sum_xy *= /* ~ changed by cargo-mutants ~ */ x.dot(&y);\n                     sum_xx += x.norm_squared();\n                     sum_yy += y.norm_squared();\n                     count += 1;\n                 }\n             }\n         }\n \n         if count > 10 && sum_xx > 1e-6 && sum_yy > 1e-6 { \n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:45:28: replace += with *= in cross_correlate_time_offset",
+    "package": "gneiss-rtk",
+    "replacement": "*=",
+    "span": {
+      "end": {
+        "column": 30,
+        "line": 45
+      },
+      "start": {
+        "column": 28,
+        "line": 45
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ replace += with -= in cross_correlate_time_offset\n@@ -38,17 +38,17 @@\n                 if dt > 0.0 {\n                     let alpha = (t_eval - t0) / dt;\n                     let v_interp = v0 + (v1 - v0) * alpha;\n                     \n                     let x = gnss_vel[i];\n                     let y = v_interp;\n                     \n                     sum_xy += x.dot(&y);\n-                    sum_xx += x.norm_squared();\n+                    sum_xx -= /* ~ changed by cargo-mutants ~ */ x.norm_squared();\n                     sum_yy += y.norm_squared();\n                     count += 1;\n                 }\n             }\n         }\n \n         if count > 10 && sum_xx > 1e-6 && sum_yy > 1e-6 { \n             let corr = sum_xy / (sum_xx.sqrt() * sum_yy.sqrt());\n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:46:28: replace += with -= in cross_correlate_time_offset",
+    "package": "gneiss-rtk",
+    "replacement": "-=",
+    "span": {
+      "end": {
+        "column": 30,
+        "line": 46
+      },
+      "start": {
+        "column": 28,
+        "line": 46
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ replace += with *= in cross_correlate_time_offset\n@@ -38,17 +38,17 @@\n                 if dt > 0.0 {\n                     let alpha = (t_eval - t0) / dt;\n                     let v_interp = v0 + (v1 - v0) * alpha;\n                     \n                     let x = gnss_vel[i];\n                     let y = v_interp;\n                     \n                     sum_xy += x.dot(&y);\n-                    sum_xx += x.norm_squared();\n+                    sum_xx *= /* ~ changed by cargo-mutants ~ */ x.norm_squared();\n                     sum_yy += y.norm_squared();\n                     count += 1;\n                 }\n             }\n         }\n \n         if count > 10 && sum_xx > 1e-6 && sum_yy > 1e-6 { \n             let corr = sum_xy / (sum_xx.sqrt() * sum_yy.sqrt());\n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:46:28: replace += with *= in cross_correlate_time_offset",
+    "package": "gneiss-rtk",
+    "replacement": "*=",
+    "span": {
+      "end": {
+        "column": 30,
+        "line": 46
+      },
+      "start": {
+        "column": 28,
+        "line": 46
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ replace += with -= in cross_correlate_time_offset\n@@ -39,17 +39,17 @@\n                     let alpha = (t_eval - t0) / dt;\n                     let v_interp = v0 + (v1 - v0) * alpha;\n                     \n                     let x = gnss_vel[i];\n                     let y = v_interp;\n                     \n                     sum_xy += x.dot(&y);\n                     sum_xx += x.norm_squared();\n-                    sum_yy += y.norm_squared();\n+                    sum_yy -= /* ~ changed by cargo-mutants ~ */ y.norm_squared();\n                     count += 1;\n                 }\n             }\n         }\n \n         if count > 10 && sum_xx > 1e-6 && sum_yy > 1e-6 { \n             let corr = sum_xy / (sum_xx.sqrt() * sum_yy.sqrt());\n             if corr > max_corr {\n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:47:28: replace += with -= in cross_correlate_time_offset",
+    "package": "gneiss-rtk",
+    "replacement": "-=",
+    "span": {
+      "end": {
+        "column": 30,
+        "line": 47
+      },
+      "start": {
+        "column": 28,
+        "line": 47
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ replace += with *= in cross_correlate_time_offset\n@@ -39,17 +39,17 @@\n                     let alpha = (t_eval - t0) / dt;\n                     let v_interp = v0 + (v1 - v0) * alpha;\n                     \n                     let x = gnss_vel[i];\n                     let y = v_interp;\n                     \n                     sum_xy += x.dot(&y);\n                     sum_xx += x.norm_squared();\n-                    sum_yy += y.norm_squared();\n+                    sum_yy *= /* ~ changed by cargo-mutants ~ */ y.norm_squared();\n                     count += 1;\n                 }\n             }\n         }\n \n         if count > 10 && sum_xx > 1e-6 && sum_yy > 1e-6 { \n             let corr = sum_xy / (sum_xx.sqrt() * sum_yy.sqrt());\n             if corr > max_corr {\n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:47:28: replace += with *= in cross_correlate_time_offset",
+    "package": "gneiss-rtk",
+    "replacement": "*=",
+    "span": {
+      "end": {
+        "column": 30,
+        "line": 47
+      },
+      "start": {
+        "column": 28,
+        "line": 47
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ replace += with -= in cross_correlate_time_offset\n@@ -40,17 +40,17 @@\n                     let v_interp = v0 + (v1 - v0) * alpha;\n                     \n                     let x = gnss_vel[i];\n                     let y = v_interp;\n                     \n                     sum_xy += x.dot(&y);\n                     sum_xx += x.norm_squared();\n                     sum_yy += y.norm_squared();\n-                    count += 1;\n+                    count -= /* ~ changed by cargo-mutants ~ */ 1;\n                 }\n             }\n         }\n \n         if count > 10 && sum_xx > 1e-6 && sum_yy > 1e-6 { \n             let corr = sum_xy / (sum_xx.sqrt() * sum_yy.sqrt());\n             if corr > max_corr {\n                 max_corr = corr;\n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:48:27: replace += with -= in cross_correlate_time_offset",
+    "package": "gneiss-rtk",
+    "replacement": "-=",
+    "span": {
+      "end": {
+        "column": 29,
+        "line": 48
+      },
+      "start": {
+        "column": 27,
+        "line": 48
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ replace += with *= in cross_correlate_time_offset\n@@ -40,17 +40,17 @@\n                     let v_interp = v0 + (v1 - v0) * alpha;\n                     \n                     let x = gnss_vel[i];\n                     let y = v_interp;\n                     \n                     sum_xy += x.dot(&y);\n                     sum_xx += x.norm_squared();\n                     sum_yy += y.norm_squared();\n-                    count += 1;\n+                    count *= /* ~ changed by cargo-mutants ~ */ 1;\n                 }\n             }\n         }\n \n         if count > 10 && sum_xx > 1e-6 && sum_yy > 1e-6 { \n             let corr = sum_xy / (sum_xx.sqrt() * sum_yy.sqrt());\n             if corr > max_corr {\n                 max_corr = corr;\n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:48:27: replace += with *= in cross_correlate_time_offset",
+    "package": "gneiss-rtk",
+    "replacement": "*=",
+    "span": {
+      "end": {
+        "column": 29,
+        "line": 48
+      },
+      "start": {
+        "column": 27,
+        "line": 48
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ replace && with || in cross_correlate_time_offset\n@@ -45,17 +45,17 @@\n                     sum_xy += x.dot(&y);\n                     sum_xx += x.norm_squared();\n                     sum_yy += y.norm_squared();\n                     count += 1;\n                 }\n             }\n         }\n \n-        if count > 10 && sum_xx > 1e-6 && sum_yy > 1e-6 { \n+        if count > 10 && sum_xx > 1e-6 || /* ~ changed by cargo-mutants ~ */ sum_yy > 1e-6 { \n             let corr = sum_xy / (sum_xx.sqrt() * sum_yy.sqrt());\n             if corr > max_corr {\n                 max_corr = corr;\n                 best_tau = tau;\n             }\n         }\n     }\n \n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:53:40: replace && with || in cross_correlate_time_offset",
+    "package": "gneiss-rtk",
+    "replacement": "||",
+    "span": {
+      "end": {
+        "column": 42,
+        "line": 53
+      },
+      "start": {
+        "column": 40,
+        "line": 53
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ replace && with || in cross_correlate_time_offset\n@@ -45,17 +45,17 @@\n                     sum_xy += x.dot(&y);\n                     sum_xx += x.norm_squared();\n                     sum_yy += y.norm_squared();\n                     count += 1;\n                 }\n             }\n         }\n \n-        if count > 10 && sum_xx > 1e-6 && sum_yy > 1e-6 { \n+        if count > 10 || /* ~ changed by cargo-mutants ~ */ sum_xx > 1e-6 && sum_yy > 1e-6 { \n             let corr = sum_xy / (sum_xx.sqrt() * sum_yy.sqrt());\n             if corr > max_corr {\n                 max_corr = corr;\n                 best_tau = tau;\n             }\n         }\n     }\n \n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:53:23: replace && with || in cross_correlate_time_offset",
+    "package": "gneiss-rtk",
+    "replacement": "||",
+    "span": {
+      "end": {
+        "column": 25,
+        "line": 53
+      },
+      "start": {
+        "column": 23,
+        "line": 53
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ replace > with == in cross_correlate_time_offset\n@@ -45,17 +45,17 @@\n                     sum_xy += x.dot(&y);\n                     sum_xx += x.norm_squared();\n                     sum_yy += y.norm_squared();\n                     count += 1;\n                 }\n             }\n         }\n \n-        if count > 10 && sum_xx > 1e-6 && sum_yy > 1e-6 { \n+        if count == /* ~ changed by cargo-mutants ~ */ 10 && sum_xx > 1e-6 && sum_yy > 1e-6 { \n             let corr = sum_xy / (sum_xx.sqrt() * sum_yy.sqrt());\n             if corr > max_corr {\n                 max_corr = corr;\n                 best_tau = tau;\n             }\n         }\n     }\n \n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:53:18: replace > with == in cross_correlate_time_offset",
+    "package": "gneiss-rtk",
+    "replacement": "==",
+    "span": {
+      "end": {
+        "column": 19,
+        "line": 53
+      },
+      "start": {
+        "column": 18,
+        "line": 53
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ replace > with < in cross_correlate_time_offset\n@@ -45,17 +45,17 @@\n                     sum_xy += x.dot(&y);\n                     sum_xx += x.norm_squared();\n                     sum_yy += y.norm_squared();\n                     count += 1;\n                 }\n             }\n         }\n \n-        if count > 10 && sum_xx > 1e-6 && sum_yy > 1e-6 { \n+        if count < /* ~ changed by cargo-mutants ~ */ 10 && sum_xx > 1e-6 && sum_yy > 1e-6 { \n             let corr = sum_xy / (sum_xx.sqrt() * sum_yy.sqrt());\n             if corr > max_corr {\n                 max_corr = corr;\n                 best_tau = tau;\n             }\n         }\n     }\n \n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:53:18: replace > with < in cross_correlate_time_offset",
+    "package": "gneiss-rtk",
+    "replacement": "<",
+    "span": {
+      "end": {
+        "column": 19,
+        "line": 53
+      },
+      "start": {
+        "column": 18,
+        "line": 53
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ replace > with >= in cross_correlate_time_offset\n@@ -45,17 +45,17 @@\n                     sum_xy += x.dot(&y);\n                     sum_xx += x.norm_squared();\n                     sum_yy += y.norm_squared();\n                     count += 1;\n                 }\n             }\n         }\n \n-        if count > 10 && sum_xx > 1e-6 && sum_yy > 1e-6 { \n+        if count >= /* ~ changed by cargo-mutants ~ */ 10 && sum_xx > 1e-6 && sum_yy > 1e-6 { \n             let corr = sum_xy / (sum_xx.sqrt() * sum_yy.sqrt());\n             if corr > max_corr {\n                 max_corr = corr;\n                 best_tau = tau;\n             }\n         }\n     }\n \n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:53:18: replace > with >= in cross_correlate_time_offset",
+    "package": "gneiss-rtk",
+    "replacement": ">=",
+    "span": {
+      "end": {
+        "column": 19,
+        "line": 53
+      },
+      "start": {
+        "column": 18,
+        "line": 53
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ replace > with == in cross_correlate_time_offset\n@@ -45,17 +45,17 @@\n                     sum_xy += x.dot(&y);\n                     sum_xx += x.norm_squared();\n                     sum_yy += y.norm_squared();\n                     count += 1;\n                 }\n             }\n         }\n \n-        if count > 10 && sum_xx > 1e-6 && sum_yy > 1e-6 { \n+        if count > 10 && sum_xx == /* ~ changed by cargo-mutants ~ */ 1e-6 && sum_yy > 1e-6 { \n             let corr = sum_xy / (sum_xx.sqrt() * sum_yy.sqrt());\n             if corr > max_corr {\n                 max_corr = corr;\n                 best_tau = tau;\n             }\n         }\n     }\n \n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:53:33: replace > with == in cross_correlate_time_offset",
+    "package": "gneiss-rtk",
+    "replacement": "==",
+    "span": {
+      "end": {
+        "column": 34,
+        "line": 53
+      },
+      "start": {
+        "column": 33,
+        "line": 53
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ replace > with < in cross_correlate_time_offset\n@@ -45,17 +45,17 @@\n                     sum_xy += x.dot(&y);\n                     sum_xx += x.norm_squared();\n                     sum_yy += y.norm_squared();\n                     count += 1;\n                 }\n             }\n         }\n \n-        if count > 10 && sum_xx > 1e-6 && sum_yy > 1e-6 { \n+        if count > 10 && sum_xx < /* ~ changed by cargo-mutants ~ */ 1e-6 && sum_yy > 1e-6 { \n             let corr = sum_xy / (sum_xx.sqrt() * sum_yy.sqrt());\n             if corr > max_corr {\n                 max_corr = corr;\n                 best_tau = tau;\n             }\n         }\n     }\n \n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:53:33: replace > with < in cross_correlate_time_offset",
+    "package": "gneiss-rtk",
+    "replacement": "<",
+    "span": {
+      "end": {
+        "column": 34,
+        "line": 53
+      },
+      "start": {
+        "column": 33,
+        "line": 53
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ replace > with >= in cross_correlate_time_offset\n@@ -45,17 +45,17 @@\n                     sum_xy += x.dot(&y);\n                     sum_xx += x.norm_squared();\n                     sum_yy += y.norm_squared();\n                     count += 1;\n                 }\n             }\n         }\n \n-        if count > 10 && sum_xx > 1e-6 && sum_yy > 1e-6 { \n+        if count > 10 && sum_xx >= /* ~ changed by cargo-mutants ~ */ 1e-6 && sum_yy > 1e-6 { \n             let corr = sum_xy / (sum_xx.sqrt() * sum_yy.sqrt());\n             if corr > max_corr {\n                 max_corr = corr;\n                 best_tau = tau;\n             }\n         }\n     }\n \n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:53:33: replace > with >= in cross_correlate_time_offset",
+    "package": "gneiss-rtk",
+    "replacement": ">=",
+    "span": {
+      "end": {
+        "column": 34,
+        "line": 53
+      },
+      "start": {
+        "column": 33,
+        "line": 53
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ replace > with == in cross_correlate_time_offset\n@@ -45,17 +45,17 @@\n                     sum_xy += x.dot(&y);\n                     sum_xx += x.norm_squared();\n                     sum_yy += y.norm_squared();\n                     count += 1;\n                 }\n             }\n         }\n \n-        if count > 10 && sum_xx > 1e-6 && sum_yy > 1e-6 { \n+        if count > 10 && sum_xx > 1e-6 && sum_yy == /* ~ changed by cargo-mutants ~ */ 1e-6 { \n             let corr = sum_xy / (sum_xx.sqrt() * sum_yy.sqrt());\n             if corr > max_corr {\n                 max_corr = corr;\n                 best_tau = tau;\n             }\n         }\n     }\n \n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:53:50: replace > with == in cross_correlate_time_offset",
+    "package": "gneiss-rtk",
+    "replacement": "==",
+    "span": {
+      "end": {
+        "column": 51,
+        "line": 53
+      },
+      "start": {
+        "column": 50,
+        "line": 53
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ replace > with < in cross_correlate_time_offset\n@@ -45,17 +45,17 @@\n                     sum_xy += x.dot(&y);\n                     sum_xx += x.norm_squared();\n                     sum_yy += y.norm_squared();\n                     count += 1;\n                 }\n             }\n         }\n \n-        if count > 10 && sum_xx > 1e-6 && sum_yy > 1e-6 { \n+        if count > 10 && sum_xx > 1e-6 && sum_yy < /* ~ changed by cargo-mutants ~ */ 1e-6 { \n             let corr = sum_xy / (sum_xx.sqrt() * sum_yy.sqrt());\n             if corr > max_corr {\n                 max_corr = corr;\n                 best_tau = tau;\n             }\n         }\n     }\n \n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:53:50: replace > with < in cross_correlate_time_offset",
+    "package": "gneiss-rtk",
+    "replacement": "<",
+    "span": {
+      "end": {
+        "column": 51,
+        "line": 53
+      },
+      "start": {
+        "column": 50,
+        "line": 53
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ replace > with >= in cross_correlate_time_offset\n@@ -45,17 +45,17 @@\n                     sum_xy += x.dot(&y);\n                     sum_xx += x.norm_squared();\n                     sum_yy += y.norm_squared();\n                     count += 1;\n                 }\n             }\n         }\n \n-        if count > 10 && sum_xx > 1e-6 && sum_yy > 1e-6 { \n+        if count > 10 && sum_xx > 1e-6 && sum_yy >= /* ~ changed by cargo-mutants ~ */ 1e-6 { \n             let corr = sum_xy / (sum_xx.sqrt() * sum_yy.sqrt());\n             if corr > max_corr {\n                 max_corr = corr;\n                 best_tau = tau;\n             }\n         }\n     }\n \n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:53:50: replace > with >= in cross_correlate_time_offset",
+    "package": "gneiss-rtk",
+    "replacement": ">=",
+    "span": {
+      "end": {
+        "column": 51,
+        "line": 53
+      },
+      "start": {
+        "column": 50,
+        "line": 53
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ replace / with % in cross_correlate_time_offset\n@@ -46,17 +46,17 @@\n                     sum_xx += x.norm_squared();\n                     sum_yy += y.norm_squared();\n                     count += 1;\n                 }\n             }\n         }\n \n         if count > 10 && sum_xx > 1e-6 && sum_yy > 1e-6 { \n-            let corr = sum_xy / (sum_xx.sqrt() * sum_yy.sqrt());\n+            let corr = sum_xy % /* ~ changed by cargo-mutants ~ */ (sum_xx.sqrt() * sum_yy.sqrt());\n             if corr > max_corr {\n                 max_corr = corr;\n                 best_tau = tau;\n             }\n         }\n     }\n \n     best_tau\n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:54:31: replace / with % in cross_correlate_time_offset",
+    "package": "gneiss-rtk",
+    "replacement": "%",
+    "span": {
+      "end": {
+        "column": 32,
+        "line": 54
+      },
+      "start": {
+        "column": 31,
+        "line": 54
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ replace / with * in cross_correlate_time_offset\n@@ -46,17 +46,17 @@\n                     sum_xx += x.norm_squared();\n                     sum_yy += y.norm_squared();\n                     count += 1;\n                 }\n             }\n         }\n \n         if count > 10 && sum_xx > 1e-6 && sum_yy > 1e-6 { \n-            let corr = sum_xy / (sum_xx.sqrt() * sum_yy.sqrt());\n+            let corr = sum_xy * /* ~ changed by cargo-mutants ~ */ (sum_xx.sqrt() * sum_yy.sqrt());\n             if corr > max_corr {\n                 max_corr = corr;\n                 best_tau = tau;\n             }\n         }\n     }\n \n     best_tau\n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:54:31: replace / with * in cross_correlate_time_offset",
+    "package": "gneiss-rtk",
+    "replacement": "*",
+    "span": {
+      "end": {
+        "column": 32,
+        "line": 54
+      },
+      "start": {
+        "column": 31,
+        "line": 54
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ replace * with + in cross_correlate_time_offset\n@@ -46,17 +46,17 @@\n                     sum_xx += x.norm_squared();\n                     sum_yy += y.norm_squared();\n                     count += 1;\n                 }\n             }\n         }\n \n         if count > 10 && sum_xx > 1e-6 && sum_yy > 1e-6 { \n-            let corr = sum_xy / (sum_xx.sqrt() * sum_yy.sqrt());\n+            let corr = sum_xy / (sum_xx.sqrt() + /* ~ changed by cargo-mutants ~ */ sum_yy.sqrt());\n             if corr > max_corr {\n                 max_corr = corr;\n                 best_tau = tau;\n             }\n         }\n     }\n \n     best_tau\n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:54:48: replace * with + in cross_correlate_time_offset",
+    "package": "gneiss-rtk",
+    "replacement": "+",
+    "span": {
+      "end": {
+        "column": 49,
+        "line": 54
+      },
+      "start": {
+        "column": 48,
+        "line": 54
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ replace * with / in cross_correlate_time_offset\n@@ -46,17 +46,17 @@\n                     sum_xx += x.norm_squared();\n                     sum_yy += y.norm_squared();\n                     count += 1;\n                 }\n             }\n         }\n \n         if count > 10 && sum_xx > 1e-6 && sum_yy > 1e-6 { \n-            let corr = sum_xy / (sum_xx.sqrt() * sum_yy.sqrt());\n+            let corr = sum_xy / (sum_xx.sqrt() / /* ~ changed by cargo-mutants ~ */ sum_yy.sqrt());\n             if corr > max_corr {\n                 max_corr = corr;\n                 best_tau = tau;\n             }\n         }\n     }\n \n     best_tau\n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:54:48: replace * with / in cross_correlate_time_offset",
+    "package": "gneiss-rtk",
+    "replacement": "/",
+    "span": {
+      "end": {
+        "column": 49,
+        "line": 54
+      },
+      "start": {
+        "column": 48,
+        "line": 54
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ replace > with == in cross_correlate_time_offset\n@@ -47,17 +47,17 @@\n                     sum_yy += y.norm_squared();\n                     count += 1;\n                 }\n             }\n         }\n \n         if count > 10 && sum_xx > 1e-6 && sum_yy > 1e-6 { \n             let corr = sum_xy / (sum_xx.sqrt() * sum_yy.sqrt());\n-            if corr > max_corr {\n+            if corr == /* ~ changed by cargo-mutants ~ */ max_corr {\n                 max_corr = corr;\n                 best_tau = tau;\n             }\n         }\n     }\n \n     best_tau\n }\n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:55:21: replace > with == in cross_correlate_time_offset",
+    "package": "gneiss-rtk",
+    "replacement": "==",
+    "span": {
+      "end": {
+        "column": 22,
+        "line": 55
+      },
+      "start": {
+        "column": 21,
+        "line": 55
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ replace > with < in cross_correlate_time_offset\n@@ -47,17 +47,17 @@\n                     sum_yy += y.norm_squared();\n                     count += 1;\n                 }\n             }\n         }\n \n         if count > 10 && sum_xx > 1e-6 && sum_yy > 1e-6 { \n             let corr = sum_xy / (sum_xx.sqrt() * sum_yy.sqrt());\n-            if corr > max_corr {\n+            if corr < /* ~ changed by cargo-mutants ~ */ max_corr {\n                 max_corr = corr;\n                 best_tau = tau;\n             }\n         }\n     }\n \n     best_tau\n }\n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:55:21: replace > with < in cross_correlate_time_offset",
+    "package": "gneiss-rtk",
+    "replacement": "<",
+    "span": {
+      "end": {
+        "column": 22,
+        "line": 55
+      },
+      "start": {
+        "column": 21,
+        "line": 55
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/time_sync.rs\n+++ replace > with >= in cross_correlate_time_offset\n@@ -47,17 +47,17 @@\n                     sum_yy += y.norm_squared();\n                     count += 1;\n                 }\n             }\n         }\n \n         if count > 10 && sum_xx > 1e-6 && sum_yy > 1e-6 { \n             let corr = sum_xy / (sum_xx.sqrt() * sum_yy.sqrt());\n-            if corr > max_corr {\n+            if corr >= /* ~ changed by cargo-mutants ~ */ max_corr {\n                 max_corr = corr;\n                 best_tau = tau;\n             }\n         }\n     }\n \n     best_tau\n }\n",
+    "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+    "function": {
+      "function_name": "cross_correlate_time_offset",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 63
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:55:21: replace > with >= in cross_correlate_time_offset",
+    "package": "gneiss-rtk",
+    "replacement": ">=",
+    "span": {
+      "end": {
+        "column": 22,
+        "line": 55
+      },
+      "start": {
+        "column": 21,
+        "line": 55
+      }
+    }
+  }
+]

@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/engine/ppp.rs
++++ replace += with -= in process_ppp
+@@ -43,17 +43,17 @@
+         let f2 = gneiss_core::signal::satellite_frequencies(sat_obs.sat, eph.freq_num()).1;
+         let p_if = crate::combinations::iono_free(pr1.unwrap(), pr2.unwrap(), f1, f2);
+         
+         let cp1 = sat_obs.get_observable_phase(1);
+         let cp2 = sat_obs.get_observable_phase(2);
+ 
+         let mut rcv_pos_ecef = Vector3::new(state.position.vector.x, state.position.vector.y, state.position.vector.z);
+         let set_disp = gneiss_core::tides::solid_earth_tides_ecef(rover_obs.time, rcv_pos_ecef);
+-        rcv_pos_ecef += set_disp;
++        rcv_pos_ecef -= /* ~ changed by cargo-mutants ~ */ set_disp;
+         let _rcv_pos_llh = gneiss_core::coords::ecef_to_llh(rcv_pos_ecef);
+         
+         let (sat_pos, _sat_vel, sat_clk, _) = eph.position(rover_obs.time);
+         let sat_pos_rot = sat_pos;
+ 
+         let dist = (sat_pos_rot - rcv_pos_ecef).norm();
+         let rcv_pos_llh = gneiss_core::coords::ecef_to_llh(rcv_pos_ecef);
+         let (_az, el) = gneiss_core::coords::az_el(rcv_pos_llh, rcv_pos_ecef, sat_pos_rot);

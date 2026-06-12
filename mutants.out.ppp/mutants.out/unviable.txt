@@ -1,0 +1,5 @@
+crates/gneiss-rtk/src/engine/ppp.rs:13:5: replace process_ppp -> Result<&'a RtkState, EngineError> with Ok(Box::leak(Box::new(Default::default())))
+crates/gneiss-rtk/src/engine/ppp.rs:51:22: replace += with *= in process_ppp
+crates/gneiss-rtk/src/engine/ppp.rs:57:33: replace - with / in process_ppp
+crates/gneiss-rtk/src/engine/ppp.rs:66:48: replace / with % in process_ppp
+crates/gneiss-rtk/src/engine/ppp.rs:66:32: replace - with / in process_ppp

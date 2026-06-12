@@ -1,0 +1,44 @@
+--- crates/gneiss-rtk/src/engine/ppp.rs
++++ crates/gneiss-rtk/src/engine/ppp.rs
+@@ -47,21 +47,15 @@
+         }
+     }
+ 
+-    if let Some(cdt) = spp_cdt {
+-        let mut clock_diff = cdt - engine.current_state.as_ref().unwrap().rcv_clk_bias;
+-        if clock_diff.abs() > 100_000.0 {
+-            let st = engine.current_state.as_ref().unwrap();
+-            let mut pr_diffs = Vec::new();
+-            for s in sats_to_process.iter() {
+-                let expected_p = s.dist + st.rcv_clk_bias - s.dt_sat_m + s.tropo_dry + st.zwd * s.map_wet + s.pcv_correction + s.iono_delay;
+-                pr_diffs.push(s.p_meas - expected_p);
+-            }
+-            if !pr_diffs.is_empty() {
+-                pr_diffs.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+-                clock_diff = pr_diffs[pr_diffs.len() / 2];
+-            }
++    {
++        let st = engine.current_state.as_ref().unwrap();
++        let mut pr_diffs: Vec<f64> = sats_to_process.iter().map(|s| s.p_meas - (s.dist + st.rcv_clk_bias - s.dt_sat_m + s.tropo_dry + st.zwd * s.map_wet + s.pcv_correction + s.iono_delay)).collect();
++        if !pr_diffs.is_empty() {
++            pr_diffs.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
++            let clock_diff = pr_diffs[pr_diffs.len() / 2];
++            
++            if clock_diff.abs() > 100_000.0 {
+-            tracing::info!("Detected clock jump! Snapping clock state from {:.2} to {:.2}", engine.current_state.as_ref().unwrap().rcv_clk_bias, engine.current_state.as_ref().unwrap().rcv_clk_bias + clock_diff);
++                tracing::info!("Detected clock jump! Snapping clock state from {:.2} to {:.2}", st.rcv_clk_bias, st.rcv_clk_bias + clock_diff);
+-            let state = engine.current_state.as_mut().unwrap();
+-            state.rcv_clk_bias += clock_diff;
++                let state = engine.current_state.as_mut().unwrap();
++                state.rcv_clk_bias += clock_diff;
+             
+             // Android clock jumps only affect pseudorange. To prevent phase residuals from jumping,
+             // we must absorb the clock jump into the phase ambiguities.
+@@ -75,6 +69,7 @@
+                     let idx_j = 18 + j;
+                     state.covariance[(idx_i, idx_j)] += v;
+                 }
+             }
+         }
++        }
+     }

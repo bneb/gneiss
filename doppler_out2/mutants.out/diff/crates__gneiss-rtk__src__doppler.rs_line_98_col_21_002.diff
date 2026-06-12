@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/doppler.rs
++++ replace < with <= in compute_doppler_update
+@@ -90,17 +90,17 @@
+         // Variance: scaled by elevation and SNR
+         let var = 0.04 * gneiss_core::variance::observation_variance(meas.snr, meas.elevation, 45.0);
+ 
+         z_vals.push(z_i);
+         h_rows.push(h_row);
+         r_vals.push(var);
+     }
+ 
+-    if z_vals.len() < 4 {
++    if z_vals.len() <= /* ~ changed by cargo-mutants ~ */ 4 {
+         return None;
+     }
+ 
+     let n_meas = z_vals.len();
+     let z = DVector::from_vec(z_vals);
+     let mut h = DMatrix::zeros(n_meas, state_size);
+     for (i, row) in h_rows.iter().enumerate() {
+         for (j, &val) in row.iter().enumerate() {

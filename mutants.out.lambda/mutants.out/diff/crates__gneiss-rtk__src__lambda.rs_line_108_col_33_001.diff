@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/lambda.rs
++++ replace += with *= in decorrelate
+@@ -100,17 +100,17 @@
+ /// Decorrelates the ambiguities using the LAMBDA reduction (Z-transformation).
+ /// Returns (z_hat, Q_z, Z_mat, L, D) where Q_z = L^T D L
+ fn decorrelate(a: &DVector<f64>, q: &DMatrix<f64>) -> Result<DecorrelateResult, &'static str> {
+     let n = a.len();
+     let mut z_mat = DMatrix::<f64>::identity(n, n);
+     let mut z_hat = a.clone();
+     
+     let mut q_z = q.clone();
+-    for i in 0..n { q_z[(i, i)] += 1e-10; }
++    for i in 0..n { q_z[(i, i)] *= /* ~ changed by cargo-mutants ~ */ 1e-10; }
+ 
+     let mut l;
+     let mut d;
+ 
+     let mut k = (n - 2) as isize;
+     let mut iter = 0;
+     while k >= 0 && iter < 100 {
+         iter += 1;

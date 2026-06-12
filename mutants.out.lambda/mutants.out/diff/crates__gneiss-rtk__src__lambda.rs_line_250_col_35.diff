@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/lambda.rs
++++ replace += with -= in search_recursive
+@@ -242,17 +242,17 @@
+ 
+         let aborted = search_recursive(
+             k - 1, n, l, d, z_hat, y, current_z, new_dist,
+             best_z, best_dist, second_best_z, second_best_dist, iter_count, max_iters,
+         );
+         if aborted { return true; }
+ 
+         offset = step * direction;
+-        if direction > 0.0 { step += 1.0; }
++        if direction > 0.0 { step -= /* ~ changed by cargo-mutants ~ */ 1.0; }
+         direction = -direction;
+     }
+     
+     false
+ }
+ 
+ pub fn bootstrapping_success_rate(d: &DVector<f64>) -> f64 {
+     let mut ps = 1.0;

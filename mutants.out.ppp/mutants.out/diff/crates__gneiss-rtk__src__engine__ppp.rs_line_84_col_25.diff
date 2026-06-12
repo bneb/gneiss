@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/engine/ppp.rs
++++ replace != with == in process_ppp
+@@ -76,17 +76,17 @@
+     }
+ 
+     // PASS 1: State modifications
+     for (sat_obs, dt_sat_m, p_if, cp1, cp2, _los, dist, _el, _snr, lam1, lam2, tropo_dry, map_wet, f1, f2, sat_pos_rot, rcv_pos_ecef) in &sats_to_process {
+         let expected_p = dist + state.rcv_clk_bias - dt_sat_m + tropo_dry + state.zwd * map_wet;
+         let res_p = p_if - expected_p;
+ 
+         if let (Some(cp1_cyc), Some(cp2_cyc)) = (cp1, cp2) {
+-            if *cp1_cyc != 0.0 && *cp2_cyc != 0.0 {
++            if *cp1_cyc == /* ~ changed by cargo-mutants ~ */ 0.0 && *cp2_cyc != 0.0 {
+                 let windup = gneiss_core::windup::phase_windup(*sat_pos_rot, gneiss_core::sun::sun_position_ecef(rover_obs.time), *rcv_pos_ecef, *state.windup.get(&sat_obs.sat).unwrap_or(&0.0));
+                 state.windup.insert(sat_obs.sat, windup);
+ 
+                 let l1_m = (cp1_cyc + windup) * lam1;
+                 let l2_m = (cp2_cyc + windup) * lam2;
+                 let l_if = crate::combinations::iono_free(l1_m, l2_m, *f1, *f2);
+                 let l_gf = l1_m - l2_m;
+                 

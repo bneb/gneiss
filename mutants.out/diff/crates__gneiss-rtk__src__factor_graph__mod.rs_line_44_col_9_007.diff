@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/factor_graph/mod.rs
++++ replace <impl Factor for PriorFactor>::information -> DMatrix<f64> with DMatrix::from_iter([-1.0])
+@@ -36,17 +36,17 @@
+         -state.clone()
+     }
+     
+     fn jacobian(&self, state: &DVector<f64>) -> DMatrix<f64> {
+         -DMatrix::identity(state.len(), state.len())
+     }
+     
+     fn information(&self) -> DMatrix<f64> {
+-        self.information.clone()
++        DMatrix::from_iter([-1.0]) /* ~ changed by cargo-mutants ~ */
+     }
+ }
+ 
+ /// A simple Levenberg-Marquardt Optimizer for Factor Graphs.
+ pub struct FactorGraphOptimizer {
+     pub factors: Vec<Box<dyn Factor>>,
+ }
+ 

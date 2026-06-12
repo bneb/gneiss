@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/engine/ppp.rs
++++ replace == with != in process_ppp
+@@ -29,17 +29,17 @@
+ 
+     let mut sats_to_process = Vec::new();
+ 
+     for (_idx, sat_obs) in rover_obs.satellites.iter().enumerate() {
+         let pr1 = sat_obs.get_observable(1);
+         let pr2 = sat_obs.get_observable(2);
+         
+         if pr1.is_none() || pr2.is_none() { continue; }
+-        let eph = match engine.ephemerides.iter().find(|e| e.sat() == sat_obs.sat) {
++        let eph = match engine.ephemerides.iter().find(|e| e.sat() != /* ~ changed by cargo-mutants ~ */ sat_obs.sat) {
+             Some(e) => e,
+             None => continue,
+         };
+ 
+         let f1 = gneiss_core::signal::satellite_frequencies(sat_obs.sat, eph.freq_num()).0;
+         let f2 = gneiss_core::signal::satellite_frequencies(sat_obs.sat, eph.freq_num()).1;
+         let p_if = crate::combinations::iono_free(pr1.unwrap(), pr2.unwrap(), f1, f2);
+         

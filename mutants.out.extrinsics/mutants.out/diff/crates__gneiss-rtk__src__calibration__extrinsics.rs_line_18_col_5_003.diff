@@ -1,0 +1,60 @@
+--- crates/gneiss-rtk/src/calibration/extrinsics.rs
++++ replace estimate_lever_arm -> Result<Vector3<f64>, &'static str> with Ok(Vector3::from(0.0))
+@@ -10,56 +10,17 @@
+ /// `r_b_e`: Rotation matrix from Body to ECEF frame
+ pub fn estimate_lever_arm(
+     omega_ib_b: &[Vector3<f64>],
+     _omega_dot_b: &[Vector3<f64>],
+     v_gnss_e: &[Vector3<f64>],
+     v_imu_e: &[Vector3<f64>],
+     r_b_e: &[Matrix3<f64>],
+ ) -> Result<Vector3<f64>, &'static str> {
+-    let n = v_gnss_e.len();
+-    if n < 3 || omega_ib_b.len() != n || v_imu_e.len() != n || r_b_e.len() != n {
+-        return Err("Insufficient or mismatched data for lever arm estimation");
+-    }
+-
+-    // We are solving: Z = H * x
+-    // where x is the 3x1 lever arm vector.
+-    // Z = V_gnss - V_imu
+-    // V_gnss = V_imu + R_b_e * (omega_ib_b x lever_arm)
+-    // omega x lever_arm = [omega x] * lever_arm
+-    // So H = R_b_e * [omega x]
+-    
+-    let mut h_matrix = DMatrix::<f64>::zeros(n * 3, 3);
+-    let mut z_vector = DVector::<f64>::zeros(n * 3);
+-
+-    for i in 0..n {
+-        let w = omega_ib_b[i];
+-        let w_skew = Matrix3::new(
+-            0.0, -w.z,  w.y,
+-             w.z,  0.0, -w.x,
+-            -w.y,  w.x,  0.0
+-        );
+-        
+-        let h_i = r_b_e[i] * w_skew;
+-        let z_i = v_gnss_e[i] - v_imu_e[i];
+-
+-        h_matrix.fixed_view_mut::<3, 3>(i * 3, 0).copy_from(&h_i);
+-        z_vector.fixed_rows_mut::<3>(i * 3).copy_from(&z_i);
+-    }
+-
+-    // Solve using normal equations: x = (H^T * H)^-1 * H^T * Z
+-    let h_t = h_matrix.transpose();
+-    let h_t_h = &h_t * &h_matrix;
+-    
+-    // Check if the matrix is invertible (requires dynamic excitation/turning)
+-    let h_t_h_inv = h_t_h.try_inverse().ok_or("Matrix is singular; insufficient dynamic excitation to observe lever arm")?;
+-    
+-    let lever_arm = h_t_h_inv * &h_t * z_vector;
+-
+-    Ok(Vector3::new(lever_arm[0], lever_arm[1], lever_arm[2]))
++    Ok(Vector3::from(0.0)) /* ~ changed by cargo-mutants ~ */
+ }
+ 
+ #[cfg(test)]
+ mod tests {
+     use super::*;
+     use nalgebra::{Vector3, Rotation3};
+ 
+     #[test]

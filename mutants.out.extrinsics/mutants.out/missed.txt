@@ -1,0 +1,5 @@
+crates/gneiss-rtk/src/calibration/extrinsics.rs:19:61: replace || with && in estimate_lever_arm
+crates/gneiss-rtk/src/calibration/extrinsics.rs:19:39: replace || with && in estimate_lever_arm
+crates/gneiss-rtk/src/calibration/extrinsics.rs:19:14: replace || with && in estimate_lever_arm
+crates/gneiss-rtk/src/calibration/extrinsics.rs:19:10: replace < with == in estimate_lever_arm
+crates/gneiss-rtk/src/calibration/extrinsics.rs:19:10: replace < with <= in estimate_lever_arm

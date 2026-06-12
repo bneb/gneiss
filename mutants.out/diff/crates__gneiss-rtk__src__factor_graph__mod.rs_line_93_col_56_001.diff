@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/factor_graph/mod.rs
++++ replace * with / in FactorGraphOptimizer::optimize
+@@ -85,17 +85,17 @@
+             let mut current_error = 0.0;
+             
+             // Build the normal equations
+             for factor in &self.factors {
+                 let res = factor.residual(&state);
+                 let jac = factor.jacobian(&state);
+                 let mut info = factor.information();
+                 
+-                let maha_sq = (res.transpose() * &info * &res)[0];
++                let maha_sq = (res.transpose() * &info / /* ~ changed by cargo-mutants ~ */ &res)[0];
+                 let mut cost = 0.5 * maha_sq;
+                 
+                 if let Some(k) = factor.robust_threshold() {
+                     let e = maha_sq.sqrt();
+                     if _iter == 0 {
+                         tracing::debug!("Iter 0 factor: res={:.2}, e={:.2}, k={:.2}, info={:.4}", res[0], e, k, info[(0,0)]);
+                     }
+                     if e > k * 3.0 && factor.is_cauchy_rejectable() {

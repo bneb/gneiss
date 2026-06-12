@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/engine/ppp.rs
++++ replace / with * in process_ppp
+@@ -65,17 +65,17 @@
+ 
+         let los = (sat_pos_rot - rcv_pos_ecef) / dist;
+         let tropo_params = gneiss_core::atmosphere::TropoParams::default();
+         let z_dry = 0.0022768 * tropo_params.press_hpa / (1.0 - 0.00266 * libm::cos(2.0 * rcv_pos_llh.x) - 0.00028 * rcv_pos_llh.z / 1000.0);
+         let map_wet = 1.0 / libm::sin(el);
+         let tropo_dry = z_dry / libm::sin(el);
+ 
+         let lam1 = LIGHT_SPEED / gneiss_core::signal::satellite_frequencies(sat_obs.sat, eph.freq_num()).0;
+-        let lam2 = LIGHT_SPEED / gneiss_core::signal::satellite_frequencies(sat_obs.sat, eph.freq_num()).1;
++        let lam2 = LIGHT_SPEED * /* ~ changed by cargo-mutants ~ */ gneiss_core::signal::satellite_frequencies(sat_obs.sat, eph.freq_num()).1;
+ 
+         sats_to_process.push((sat_obs, dt_sat_m, p_if, cp1, cp2, los, dist, el, snr, lam1, lam2, tropo_dry, map_wet, f1, f2, sat_pos_rot, rcv_pos_ecef));
+     }
+ 
+     // PASS 1: State modifications
+     for (sat_obs, dt_sat_m, p_if, cp1, cp2, _los, dist, _el, _snr, lam1, lam2, tropo_dry, map_wet, f1, f2, sat_pos_rot, rcv_pos_ecef) in &sats_to_process {
+         let expected_p = dist + state.rcv_clk_bias - dt_sat_m + tropo_dry + state.zwd * map_wet;
+         let res_p = p_if - expected_p;

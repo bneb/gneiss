@@ -1,0 +1,1282 @@
+[
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/extrinsics.rs\n+++ replace estimate_lever_arm -> Result<Vector3<f64>, &'static str> with Ok(Vector3::new())\n@@ -10,56 +10,17 @@\n /// `r_b_e`: Rotation matrix from Body to ECEF frame\n pub fn estimate_lever_arm(\n     omega_ib_b: &[Vector3<f64>],\n     _omega_dot_b: &[Vector3<f64>],\n     v_gnss_e: &[Vector3<f64>],\n     v_imu_e: &[Vector3<f64>],\n     r_b_e: &[Matrix3<f64>],\n ) -> Result<Vector3<f64>, &'static str> {\n-    let n = v_gnss_e.len();\n-    if n < 3 || omega_ib_b.len() != n || v_imu_e.len() != n || r_b_e.len() != n {\n-        return Err(\"Insufficient or mismatched data for lever arm estimation\");\n-    }\n-\n-    // We are solving: Z = H * x\n-    // where x is the 3x1 lever arm vector.\n-    // Z = V_gnss - V_imu\n-    // V_gnss = V_imu + R_b_e * (omega_ib_b x lever_arm)\n-    // omega x lever_arm = [omega x] * lever_arm\n-    // So H = R_b_e * [omega x]\n-    \n-    let mut h_matrix = DMatrix::<f64>::zeros(n * 3, 3);\n-    let mut z_vector = DVector::<f64>::zeros(n * 3);\n-\n-    for i in 0..n {\n-        let w = omega_ib_b[i];\n-        let w_skew = Matrix3::new(\n-            0.0, -w.z,  w.y,\n-             w.z,  0.0, -w.x,\n-            -w.y,  w.x,  0.0\n-        );\n-        \n-        let h_i = r_b_e[i] * w_skew;\n-        let z_i = v_gnss_e[i] - v_imu_e[i];\n-\n-        h_matrix.fixed_view_mut::<3, 3>(i * 3, 0).copy_from(&h_i);\n-        z_vector.fixed_rows_mut::<3>(i * 3).copy_from(&z_i);\n-    }\n-\n-    // Solve using normal equations: x = (H^T * H)^-1 * H^T * Z\n-    let h_t = h_matrix.transpose();\n-    let h_t_h = &h_t * &h_matrix;\n-    \n-    // Check if the matrix is invertible (requires dynamic excitation/turning)\n-    let h_t_h_inv = h_t_h.try_inverse().ok_or(\"Matrix is singular; insufficient dynamic excitation to observe lever arm\")?;\n-    \n-    let lever_arm = h_t_h_inv * &h_t * z_vector;\n-\n-    Ok(Vector3::new(lever_arm[0], lever_arm[1], lever_arm[2]))\n+    Ok(Vector3::new()) /* ~ changed by cargo-mutants ~ */\n }\n \n #[cfg(test)]\n mod tests {\n     use super::*;\n     use nalgebra::{Vector3, Rotation3};\n \n     #[test]\n",
+    "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+    "function": {
+      "function_name": "estimate_lever_arm",
+      "return_type": "-> Result<Vector3<f64>, &'static str>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 58
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:18:5: replace estimate_lever_arm -> Result<Vector3<f64>, &'static str> with Ok(Vector3::new())",
+    "package": "gneiss-rtk",
+    "replacement": "Ok(Vector3::new())",
+    "span": {
+      "end": {
+        "column": 63,
+        "line": 57
+      },
+      "start": {
+        "column": 5,
+        "line": 18
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/extrinsics.rs\n+++ replace estimate_lever_arm -> Result<Vector3<f64>, &'static str> with Ok(Vector3::from_iter([0.0]))\n@@ -10,56 +10,17 @@\n /// `r_b_e`: Rotation matrix from Body to ECEF frame\n pub fn estimate_lever_arm(\n     omega_ib_b: &[Vector3<f64>],\n     _omega_dot_b: &[Vector3<f64>],\n     v_gnss_e: &[Vector3<f64>],\n     v_imu_e: &[Vector3<f64>],\n     r_b_e: &[Matrix3<f64>],\n ) -> Result<Vector3<f64>, &'static str> {\n-    let n = v_gnss_e.len();\n-    if n < 3 || omega_ib_b.len() != n || v_imu_e.len() != n || r_b_e.len() != n {\n-        return Err(\"Insufficient or mismatched data for lever arm estimation\");\n-    }\n-\n-    // We are solving: Z = H * x\n-    // where x is the 3x1 lever arm vector.\n-    // Z = V_gnss - V_imu\n-    // V_gnss = V_imu + R_b_e * (omega_ib_b x lever_arm)\n-    // omega x lever_arm = [omega x] * lever_arm\n-    // So H = R_b_e * [omega x]\n-    \n-    let mut h_matrix = DMatrix::<f64>::zeros(n * 3, 3);\n-    let mut z_vector = DVector::<f64>::zeros(n * 3);\n-\n-    for i in 0..n {\n-        let w = omega_ib_b[i];\n-        let w_skew = Matrix3::new(\n-            0.0, -w.z,  w.y,\n-             w.z,  0.0, -w.x,\n-            -w.y,  w.x,  0.0\n-        );\n-        \n-        let h_i = r_b_e[i] * w_skew;\n-        let z_i = v_gnss_e[i] - v_imu_e[i];\n-\n-        h_matrix.fixed_view_mut::<3, 3>(i * 3, 0).copy_from(&h_i);\n-        z_vector.fixed_rows_mut::<3>(i * 3).copy_from(&z_i);\n-    }\n-\n-    // Solve using normal equations: x = (H^T * H)^-1 * H^T * Z\n-    let h_t = h_matrix.transpose();\n-    let h_t_h = &h_t * &h_matrix;\n-    \n-    // Check if the matrix is invertible (requires dynamic excitation/turning)\n-    let h_t_h_inv = h_t_h.try_inverse().ok_or(\"Matrix is singular; insufficient dynamic excitation to observe lever arm\")?;\n-    \n-    let lever_arm = h_t_h_inv * &h_t * z_vector;\n-\n-    Ok(Vector3::new(lever_arm[0], lever_arm[1], lever_arm[2]))\n+    Ok(Vector3::from_iter([0.0])) /* ~ changed by cargo-mutants ~ */\n }\n \n #[cfg(test)]\n mod tests {\n     use super::*;\n     use nalgebra::{Vector3, Rotation3};\n \n     #[test]\n",
+    "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+    "function": {
+      "function_name": "estimate_lever_arm",
+      "return_type": "-> Result<Vector3<f64>, &'static str>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 58
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:18:5: replace estimate_lever_arm -> Result<Vector3<f64>, &'static str> with Ok(Vector3::from_iter([0.0]))",
+    "package": "gneiss-rtk",
+    "replacement": "Ok(Vector3::from_iter([0.0]))",
+    "span": {
+      "end": {
+        "column": 63,
+        "line": 57
+      },
+      "start": {
+        "column": 5,
+        "line": 18
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/extrinsics.rs\n+++ replace estimate_lever_arm -> Result<Vector3<f64>, &'static str> with Ok(Vector3::new(0.0))\n@@ -10,56 +10,17 @@\n /// `r_b_e`: Rotation matrix from Body to ECEF frame\n pub fn estimate_lever_arm(\n     omega_ib_b: &[Vector3<f64>],\n     _omega_dot_b: &[Vector3<f64>],\n     v_gnss_e: &[Vector3<f64>],\n     v_imu_e: &[Vector3<f64>],\n     r_b_e: &[Matrix3<f64>],\n ) -> Result<Vector3<f64>, &'static str> {\n-    let n = v_gnss_e.len();\n-    if n < 3 || omega_ib_b.len() != n || v_imu_e.len() != n || r_b_e.len() != n {\n-        return Err(\"Insufficient or mismatched data for lever arm estimation\");\n-    }\n-\n-    // We are solving: Z = H * x\n-    // where x is the 3x1 lever arm vector.\n-    // Z = V_gnss - V_imu\n-    // V_gnss = V_imu + R_b_e * (omega_ib_b x lever_arm)\n-    // omega x lever_arm = [omega x] * lever_arm\n-    // So H = R_b_e * [omega x]\n-    \n-    let mut h_matrix = DMatrix::<f64>::zeros(n * 3, 3);\n-    let mut z_vector = DVector::<f64>::zeros(n * 3);\n-\n-    for i in 0..n {\n-        let w = omega_ib_b[i];\n-        let w_skew = Matrix3::new(\n-            0.0, -w.z,  w.y,\n-             w.z,  0.0, -w.x,\n-            -w.y,  w.x,  0.0\n-        );\n-        \n-        let h_i = r_b_e[i] * w_skew;\n-        let z_i = v_gnss_e[i] - v_imu_e[i];\n-\n-        h_matrix.fixed_view_mut::<3, 3>(i * 3, 0).copy_from(&h_i);\n-        z_vector.fixed_rows_mut::<3>(i * 3).copy_from(&z_i);\n-    }\n-\n-    // Solve using normal equations: x = (H^T * H)^-1 * H^T * Z\n-    let h_t = h_matrix.transpose();\n-    let h_t_h = &h_t * &h_matrix;\n-    \n-    // Check if the matrix is invertible (requires dynamic excitation/turning)\n-    let h_t_h_inv = h_t_h.try_inverse().ok_or(\"Matrix is singular; insufficient dynamic excitation to observe lever arm\")?;\n-    \n-    let lever_arm = h_t_h_inv * &h_t * z_vector;\n-\n-    Ok(Vector3::new(lever_arm[0], lever_arm[1], lever_arm[2]))\n+    Ok(Vector3::new(0.0)) /* ~ changed by cargo-mutants ~ */\n }\n \n #[cfg(test)]\n mod tests {\n     use super::*;\n     use nalgebra::{Vector3, Rotation3};\n \n     #[test]\n",
+    "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+    "function": {
+      "function_name": "estimate_lever_arm",
+      "return_type": "-> Result<Vector3<f64>, &'static str>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 58
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:18:5: replace estimate_lever_arm -> Result<Vector3<f64>, &'static str> with Ok(Vector3::new(0.0))",
+    "package": "gneiss-rtk",
+    "replacement": "Ok(Vector3::new(0.0))",
+    "span": {
+      "end": {
+        "column": 63,
+        "line": 57
+      },
+      "start": {
+        "column": 5,
+        "line": 18
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/extrinsics.rs\n+++ replace estimate_lever_arm -> Result<Vector3<f64>, &'static str> with Ok(Vector3::from(0.0))\n@@ -10,56 +10,17 @@\n /// `r_b_e`: Rotation matrix from Body to ECEF frame\n pub fn estimate_lever_arm(\n     omega_ib_b: &[Vector3<f64>],\n     _omega_dot_b: &[Vector3<f64>],\n     v_gnss_e: &[Vector3<f64>],\n     v_imu_e: &[Vector3<f64>],\n     r_b_e: &[Matrix3<f64>],\n ) -> Result<Vector3<f64>, &'static str> {\n-    let n = v_gnss_e.len();\n-    if n < 3 || omega_ib_b.len() != n || v_imu_e.len() != n || r_b_e.len() != n {\n-        return Err(\"Insufficient or mismatched data for lever arm estimation\");\n-    }\n-\n-    // We are solving: Z = H * x\n-    // where x is the 3x1 lever arm vector.\n-    // Z = V_gnss - V_imu\n-    // V_gnss = V_imu + R_b_e * (omega_ib_b x lever_arm)\n-    // omega x lever_arm = [omega x] * lever_arm\n-    // So H = R_b_e * [omega x]\n-    \n-    let mut h_matrix = DMatrix::<f64>::zeros(n * 3, 3);\n-    let mut z_vector = DVector::<f64>::zeros(n * 3);\n-\n-    for i in 0..n {\n-        let w = omega_ib_b[i];\n-        let w_skew = Matrix3::new(\n-            0.0, -w.z,  w.y,\n-             w.z,  0.0, -w.x,\n-            -w.y,  w.x,  0.0\n-        );\n-        \n-        let h_i = r_b_e[i] * w_skew;\n-        let z_i = v_gnss_e[i] - v_imu_e[i];\n-\n-        h_matrix.fixed_view_mut::<3, 3>(i * 3, 0).copy_from(&h_i);\n-        z_vector.fixed_rows_mut::<3>(i * 3).copy_from(&z_i);\n-    }\n-\n-    // Solve using normal equations: x = (H^T * H)^-1 * H^T * Z\n-    let h_t = h_matrix.transpose();\n-    let h_t_h = &h_t * &h_matrix;\n-    \n-    // Check if the matrix is invertible (requires dynamic excitation/turning)\n-    let h_t_h_inv = h_t_h.try_inverse().ok_or(\"Matrix is singular; insufficient dynamic excitation to observe lever arm\")?;\n-    \n-    let lever_arm = h_t_h_inv * &h_t * z_vector;\n-\n-    Ok(Vector3::new(lever_arm[0], lever_arm[1], lever_arm[2]))\n+    Ok(Vector3::from(0.0)) /* ~ changed by cargo-mutants ~ */\n }\n \n #[cfg(test)]\n mod tests {\n     use super::*;\n     use nalgebra::{Vector3, Rotation3};\n \n     #[test]\n",
+    "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+    "function": {
+      "function_name": "estimate_lever_arm",
+      "return_type": "-> Result<Vector3<f64>, &'static str>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 58
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:18:5: replace estimate_lever_arm -> Result<Vector3<f64>, &'static str> with Ok(Vector3::from(0.0))",
+    "package": "gneiss-rtk",
+    "replacement": "Ok(Vector3::from(0.0))",
+    "span": {
+      "end": {
+        "column": 63,
+        "line": 57
+      },
+      "start": {
+        "column": 5,
+        "line": 18
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/extrinsics.rs\n+++ replace estimate_lever_arm -> Result<Vector3<f64>, &'static str> with Ok(Vector3::from_iter([1.0]))\n@@ -10,56 +10,17 @@\n /// `r_b_e`: Rotation matrix from Body to ECEF frame\n pub fn estimate_lever_arm(\n     omega_ib_b: &[Vector3<f64>],\n     _omega_dot_b: &[Vector3<f64>],\n     v_gnss_e: &[Vector3<f64>],\n     v_imu_e: &[Vector3<f64>],\n     r_b_e: &[Matrix3<f64>],\n ) -> Result<Vector3<f64>, &'static str> {\n-    let n = v_gnss_e.len();\n-    if n < 3 || omega_ib_b.len() != n || v_imu_e.len() != n || r_b_e.len() != n {\n-        return Err(\"Insufficient or mismatched data for lever arm estimation\");\n-    }\n-\n-    // We are solving: Z = H * x\n-    // where x is the 3x1 lever arm vector.\n-    // Z = V_gnss - V_imu\n-    // V_gnss = V_imu + R_b_e * (omega_ib_b x lever_arm)\n-    // omega x lever_arm = [omega x] * lever_arm\n-    // So H = R_b_e * [omega x]\n-    \n-    let mut h_matrix = DMatrix::<f64>::zeros(n * 3, 3);\n-    let mut z_vector = DVector::<f64>::zeros(n * 3);\n-\n-    for i in 0..n {\n-        let w = omega_ib_b[i];\n-        let w_skew = Matrix3::new(\n-            0.0, -w.z,  w.y,\n-             w.z,  0.0, -w.x,\n-            -w.y,  w.x,  0.0\n-        );\n-        \n-        let h_i = r_b_e[i] * w_skew;\n-        let z_i = v_gnss_e[i] - v_imu_e[i];\n-\n-        h_matrix.fixed_view_mut::<3, 3>(i * 3, 0).copy_from(&h_i);\n-        z_vector.fixed_rows_mut::<3>(i * 3).copy_from(&z_i);\n-    }\n-\n-    // Solve using normal equations: x = (H^T * H)^-1 * H^T * Z\n-    let h_t = h_matrix.transpose();\n-    let h_t_h = &h_t * &h_matrix;\n-    \n-    // Check if the matrix is invertible (requires dynamic excitation/turning)\n-    let h_t_h_inv = h_t_h.try_inverse().ok_or(\"Matrix is singular; insufficient dynamic excitation to observe lever arm\")?;\n-    \n-    let lever_arm = h_t_h_inv * &h_t * z_vector;\n-\n-    Ok(Vector3::new(lever_arm[0], lever_arm[1], lever_arm[2]))\n+    Ok(Vector3::from_iter([1.0])) /* ~ changed by cargo-mutants ~ */\n }\n \n #[cfg(test)]\n mod tests {\n     use super::*;\n     use nalgebra::{Vector3, Rotation3};\n \n     #[test]\n",
+    "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+    "function": {
+      "function_name": "estimate_lever_arm",
+      "return_type": "-> Result<Vector3<f64>, &'static str>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 58
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:18:5: replace estimate_lever_arm -> Result<Vector3<f64>, &'static str> with Ok(Vector3::from_iter([1.0]))",
+    "package": "gneiss-rtk",
+    "replacement": "Ok(Vector3::from_iter([1.0]))",
+    "span": {
+      "end": {
+        "column": 63,
+        "line": 57
+      },
+      "start": {
+        "column": 5,
+        "line": 18
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/extrinsics.rs\n+++ replace estimate_lever_arm -> Result<Vector3<f64>, &'static str> with Ok(Vector3::new(1.0))\n@@ -10,56 +10,17 @@\n /// `r_b_e`: Rotation matrix from Body to ECEF frame\n pub fn estimate_lever_arm(\n     omega_ib_b: &[Vector3<f64>],\n     _omega_dot_b: &[Vector3<f64>],\n     v_gnss_e: &[Vector3<f64>],\n     v_imu_e: &[Vector3<f64>],\n     r_b_e: &[Matrix3<f64>],\n ) -> Result<Vector3<f64>, &'static str> {\n-    let n = v_gnss_e.len();\n-    if n < 3 || omega_ib_b.len() != n || v_imu_e.len() != n || r_b_e.len() != n {\n-        return Err(\"Insufficient or mismatched data for lever arm estimation\");\n-    }\n-\n-    // We are solving: Z = H * x\n-    // where x is the 3x1 lever arm vector.\n-    // Z = V_gnss - V_imu\n-    // V_gnss = V_imu + R_b_e * (omega_ib_b x lever_arm)\n-    // omega x lever_arm = [omega x] * lever_arm\n-    // So H = R_b_e * [omega x]\n-    \n-    let mut h_matrix = DMatrix::<f64>::zeros(n * 3, 3);\n-    let mut z_vector = DVector::<f64>::zeros(n * 3);\n-\n-    for i in 0..n {\n-        let w = omega_ib_b[i];\n-        let w_skew = Matrix3::new(\n-            0.0, -w.z,  w.y,\n-             w.z,  0.0, -w.x,\n-            -w.y,  w.x,  0.0\n-        );\n-        \n-        let h_i = r_b_e[i] * w_skew;\n-        let z_i = v_gnss_e[i] - v_imu_e[i];\n-\n-        h_matrix.fixed_view_mut::<3, 3>(i * 3, 0).copy_from(&h_i);\n-        z_vector.fixed_rows_mut::<3>(i * 3).copy_from(&z_i);\n-    }\n-\n-    // Solve using normal equations: x = (H^T * H)^-1 * H^T * Z\n-    let h_t = h_matrix.transpose();\n-    let h_t_h = &h_t * &h_matrix;\n-    \n-    // Check if the matrix is invertible (requires dynamic excitation/turning)\n-    let h_t_h_inv = h_t_h.try_inverse().ok_or(\"Matrix is singular; insufficient dynamic excitation to observe lever arm\")?;\n-    \n-    let lever_arm = h_t_h_inv * &h_t * z_vector;\n-\n-    Ok(Vector3::new(lever_arm[0], lever_arm[1], lever_arm[2]))\n+    Ok(Vector3::new(1.0)) /* ~ changed by cargo-mutants ~ */\n }\n \n #[cfg(test)]\n mod tests {\n     use super::*;\n     use nalgebra::{Vector3, Rotation3};\n \n     #[test]\n",
+    "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+    "function": {
+      "function_name": "estimate_lever_arm",
+      "return_type": "-> Result<Vector3<f64>, &'static str>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 58
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:18:5: replace estimate_lever_arm -> Result<Vector3<f64>, &'static str> with Ok(Vector3::new(1.0))",
+    "package": "gneiss-rtk",
+    "replacement": "Ok(Vector3::new(1.0))",
+    "span": {
+      "end": {
+        "column": 63,
+        "line": 57
+      },
+      "start": {
+        "column": 5,
+        "line": 18
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/extrinsics.rs\n+++ replace estimate_lever_arm -> Result<Vector3<f64>, &'static str> with Ok(Vector3::from(1.0))\n@@ -10,56 +10,17 @@\n /// `r_b_e`: Rotation matrix from Body to ECEF frame\n pub fn estimate_lever_arm(\n     omega_ib_b: &[Vector3<f64>],\n     _omega_dot_b: &[Vector3<f64>],\n     v_gnss_e: &[Vector3<f64>],\n     v_imu_e: &[Vector3<f64>],\n     r_b_e: &[Matrix3<f64>],\n ) -> Result<Vector3<f64>, &'static str> {\n-    let n = v_gnss_e.len();\n-    if n < 3 || omega_ib_b.len() != n || v_imu_e.len() != n || r_b_e.len() != n {\n-        return Err(\"Insufficient or mismatched data for lever arm estimation\");\n-    }\n-\n-    // We are solving: Z = H * x\n-    // where x is the 3x1 lever arm vector.\n-    // Z = V_gnss - V_imu\n-    // V_gnss = V_imu + R_b_e * (omega_ib_b x lever_arm)\n-    // omega x lever_arm = [omega x] * lever_arm\n-    // So H = R_b_e * [omega x]\n-    \n-    let mut h_matrix = DMatrix::<f64>::zeros(n * 3, 3);\n-    let mut z_vector = DVector::<f64>::zeros(n * 3);\n-\n-    for i in 0..n {\n-        let w = omega_ib_b[i];\n-        let w_skew = Matrix3::new(\n-            0.0, -w.z,  w.y,\n-             w.z,  0.0, -w.x,\n-            -w.y,  w.x,  0.0\n-        );\n-        \n-        let h_i = r_b_e[i] * w_skew;\n-        let z_i = v_gnss_e[i] - v_imu_e[i];\n-\n-        h_matrix.fixed_view_mut::<3, 3>(i * 3, 0).copy_from(&h_i);\n-        z_vector.fixed_rows_mut::<3>(i * 3).copy_from(&z_i);\n-    }\n-\n-    // Solve using normal equations: x = (H^T * H)^-1 * H^T * Z\n-    let h_t = h_matrix.transpose();\n-    let h_t_h = &h_t * &h_matrix;\n-    \n-    // Check if the matrix is invertible (requires dynamic excitation/turning)\n-    let h_t_h_inv = h_t_h.try_inverse().ok_or(\"Matrix is singular; insufficient dynamic excitation to observe lever arm\")?;\n-    \n-    let lever_arm = h_t_h_inv * &h_t * z_vector;\n-\n-    Ok(Vector3::new(lever_arm[0], lever_arm[1], lever_arm[2]))\n+    Ok(Vector3::from(1.0)) /* ~ changed by cargo-mutants ~ */\n }\n \n #[cfg(test)]\n mod tests {\n     use super::*;\n     use nalgebra::{Vector3, Rotation3};\n \n     #[test]\n",
+    "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+    "function": {
+      "function_name": "estimate_lever_arm",
+      "return_type": "-> Result<Vector3<f64>, &'static str>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 58
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:18:5: replace estimate_lever_arm -> Result<Vector3<f64>, &'static str> with Ok(Vector3::from(1.0))",
+    "package": "gneiss-rtk",
+    "replacement": "Ok(Vector3::from(1.0))",
+    "span": {
+      "end": {
+        "column": 63,
+        "line": 57
+      },
+      "start": {
+        "column": 5,
+        "line": 18
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/extrinsics.rs\n+++ replace estimate_lever_arm -> Result<Vector3<f64>, &'static str> with Ok(Vector3::from_iter([-1.0]))\n@@ -10,56 +10,17 @@\n /// `r_b_e`: Rotation matrix from Body to ECEF frame\n pub fn estimate_lever_arm(\n     omega_ib_b: &[Vector3<f64>],\n     _omega_dot_b: &[Vector3<f64>],\n     v_gnss_e: &[Vector3<f64>],\n     v_imu_e: &[Vector3<f64>],\n     r_b_e: &[Matrix3<f64>],\n ) -> Result<Vector3<f64>, &'static str> {\n-    let n = v_gnss_e.len();\n-    if n < 3 || omega_ib_b.len() != n || v_imu_e.len() != n || r_b_e.len() != n {\n-        return Err(\"Insufficient or mismatched data for lever arm estimation\");\n-    }\n-\n-    // We are solving: Z = H * x\n-    // where x is the 3x1 lever arm vector.\n-    // Z = V_gnss - V_imu\n-    // V_gnss = V_imu + R_b_e * (omega_ib_b x lever_arm)\n-    // omega x lever_arm = [omega x] * lever_arm\n-    // So H = R_b_e * [omega x]\n-    \n-    let mut h_matrix = DMatrix::<f64>::zeros(n * 3, 3);\n-    let mut z_vector = DVector::<f64>::zeros(n * 3);\n-\n-    for i in 0..n {\n-        let w = omega_ib_b[i];\n-        let w_skew = Matrix3::new(\n-            0.0, -w.z,  w.y,\n-             w.z,  0.0, -w.x,\n-            -w.y,  w.x,  0.0\n-        );\n-        \n-        let h_i = r_b_e[i] * w_skew;\n-        let z_i = v_gnss_e[i] - v_imu_e[i];\n-\n-        h_matrix.fixed_view_mut::<3, 3>(i * 3, 0).copy_from(&h_i);\n-        z_vector.fixed_rows_mut::<3>(i * 3).copy_from(&z_i);\n-    }\n-\n-    // Solve using normal equations: x = (H^T * H)^-1 * H^T * Z\n-    let h_t = h_matrix.transpose();\n-    let h_t_h = &h_t * &h_matrix;\n-    \n-    // Check if the matrix is invertible (requires dynamic excitation/turning)\n-    let h_t_h_inv = h_t_h.try_inverse().ok_or(\"Matrix is singular; insufficient dynamic excitation to observe lever arm\")?;\n-    \n-    let lever_arm = h_t_h_inv * &h_t * z_vector;\n-\n-    Ok(Vector3::new(lever_arm[0], lever_arm[1], lever_arm[2]))\n+    Ok(Vector3::from_iter([-1.0])) /* ~ changed by cargo-mutants ~ */\n }\n \n #[cfg(test)]\n mod tests {\n     use super::*;\n     use nalgebra::{Vector3, Rotation3};\n \n     #[test]\n",
+    "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+    "function": {
+      "function_name": "estimate_lever_arm",
+      "return_type": "-> Result<Vector3<f64>, &'static str>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 58
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:18:5: replace estimate_lever_arm -> Result<Vector3<f64>, &'static str> with Ok(Vector3::from_iter([-1.0]))",
+    "package": "gneiss-rtk",
+    "replacement": "Ok(Vector3::from_iter([-1.0]))",
+    "span": {
+      "end": {
+        "column": 63,
+        "line": 57
+      },
+      "start": {
+        "column": 5,
+        "line": 18
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/extrinsics.rs\n+++ replace estimate_lever_arm -> Result<Vector3<f64>, &'static str> with Ok(Vector3::new(-1.0))\n@@ -10,56 +10,17 @@\n /// `r_b_e`: Rotation matrix from Body to ECEF frame\n pub fn estimate_lever_arm(\n     omega_ib_b: &[Vector3<f64>],\n     _omega_dot_b: &[Vector3<f64>],\n     v_gnss_e: &[Vector3<f64>],\n     v_imu_e: &[Vector3<f64>],\n     r_b_e: &[Matrix3<f64>],\n ) -> Result<Vector3<f64>, &'static str> {\n-    let n = v_gnss_e.len();\n-    if n < 3 || omega_ib_b.len() != n || v_imu_e.len() != n || r_b_e.len() != n {\n-        return Err(\"Insufficient or mismatched data for lever arm estimation\");\n-    }\n-\n-    // We are solving: Z = H * x\n-    // where x is the 3x1 lever arm vector.\n-    // Z = V_gnss - V_imu\n-    // V_gnss = V_imu + R_b_e * (omega_ib_b x lever_arm)\n-    // omega x lever_arm = [omega x] * lever_arm\n-    // So H = R_b_e * [omega x]\n-    \n-    let mut h_matrix = DMatrix::<f64>::zeros(n * 3, 3);\n-    let mut z_vector = DVector::<f64>::zeros(n * 3);\n-\n-    for i in 0..n {\n-        let w = omega_ib_b[i];\n-        let w_skew = Matrix3::new(\n-            0.0, -w.z,  w.y,\n-             w.z,  0.0, -w.x,\n-            -w.y,  w.x,  0.0\n-        );\n-        \n-        let h_i = r_b_e[i] * w_skew;\n-        let z_i = v_gnss_e[i] - v_imu_e[i];\n-\n-        h_matrix.fixed_view_mut::<3, 3>(i * 3, 0).copy_from(&h_i);\n-        z_vector.fixed_rows_mut::<3>(i * 3).copy_from(&z_i);\n-    }\n-\n-    // Solve using normal equations: x = (H^T * H)^-1 * H^T * Z\n-    let h_t = h_matrix.transpose();\n-    let h_t_h = &h_t * &h_matrix;\n-    \n-    // Check if the matrix is invertible (requires dynamic excitation/turning)\n-    let h_t_h_inv = h_t_h.try_inverse().ok_or(\"Matrix is singular; insufficient dynamic excitation to observe lever arm\")?;\n-    \n-    let lever_arm = h_t_h_inv * &h_t * z_vector;\n-\n-    Ok(Vector3::new(lever_arm[0], lever_arm[1], lever_arm[2]))\n+    Ok(Vector3::new(-1.0)) /* ~ changed by cargo-mutants ~ */\n }\n \n #[cfg(test)]\n mod tests {\n     use super::*;\n     use nalgebra::{Vector3, Rotation3};\n \n     #[test]\n",
+    "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+    "function": {
+      "function_name": "estimate_lever_arm",
+      "return_type": "-> Result<Vector3<f64>, &'static str>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 58
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:18:5: replace estimate_lever_arm -> Result<Vector3<f64>, &'static str> with Ok(Vector3::new(-1.0))",
+    "package": "gneiss-rtk",
+    "replacement": "Ok(Vector3::new(-1.0))",
+    "span": {
+      "end": {
+        "column": 63,
+        "line": 57
+      },
+      "start": {
+        "column": 5,
+        "line": 18
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/extrinsics.rs\n+++ replace estimate_lever_arm -> Result<Vector3<f64>, &'static str> with Ok(Vector3::from(-1.0))\n@@ -10,56 +10,17 @@\n /// `r_b_e`: Rotation matrix from Body to ECEF frame\n pub fn estimate_lever_arm(\n     omega_ib_b: &[Vector3<f64>],\n     _omega_dot_b: &[Vector3<f64>],\n     v_gnss_e: &[Vector3<f64>],\n     v_imu_e: &[Vector3<f64>],\n     r_b_e: &[Matrix3<f64>],\n ) -> Result<Vector3<f64>, &'static str> {\n-    let n = v_gnss_e.len();\n-    if n < 3 || omega_ib_b.len() != n || v_imu_e.len() != n || r_b_e.len() != n {\n-        return Err(\"Insufficient or mismatched data for lever arm estimation\");\n-    }\n-\n-    // We are solving: Z = H * x\n-    // where x is the 3x1 lever arm vector.\n-    // Z = V_gnss - V_imu\n-    // V_gnss = V_imu + R_b_e * (omega_ib_b x lever_arm)\n-    // omega x lever_arm = [omega x] * lever_arm\n-    // So H = R_b_e * [omega x]\n-    \n-    let mut h_matrix = DMatrix::<f64>::zeros(n * 3, 3);\n-    let mut z_vector = DVector::<f64>::zeros(n * 3);\n-\n-    for i in 0..n {\n-        let w = omega_ib_b[i];\n-        let w_skew = Matrix3::new(\n-            0.0, -w.z,  w.y,\n-             w.z,  0.0, -w.x,\n-            -w.y,  w.x,  0.0\n-        );\n-        \n-        let h_i = r_b_e[i] * w_skew;\n-        let z_i = v_gnss_e[i] - v_imu_e[i];\n-\n-        h_matrix.fixed_view_mut::<3, 3>(i * 3, 0).copy_from(&h_i);\n-        z_vector.fixed_rows_mut::<3>(i * 3).copy_from(&z_i);\n-    }\n-\n-    // Solve using normal equations: x = (H^T * H)^-1 * H^T * Z\n-    let h_t = h_matrix.transpose();\n-    let h_t_h = &h_t * &h_matrix;\n-    \n-    // Check if the matrix is invertible (requires dynamic excitation/turning)\n-    let h_t_h_inv = h_t_h.try_inverse().ok_or(\"Matrix is singular; insufficient dynamic excitation to observe lever arm\")?;\n-    \n-    let lever_arm = h_t_h_inv * &h_t * z_vector;\n-\n-    Ok(Vector3::new(lever_arm[0], lever_arm[1], lever_arm[2]))\n+    Ok(Vector3::from(-1.0)) /* ~ changed by cargo-mutants ~ */\n }\n \n #[cfg(test)]\n mod tests {\n     use super::*;\n     use nalgebra::{Vector3, Rotation3};\n \n     #[test]\n",
+    "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+    "function": {
+      "function_name": "estimate_lever_arm",
+      "return_type": "-> Result<Vector3<f64>, &'static str>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 58
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:18:5: replace estimate_lever_arm -> Result<Vector3<f64>, &'static str> with Ok(Vector3::from(-1.0))",
+    "package": "gneiss-rtk",
+    "replacement": "Ok(Vector3::from(-1.0))",
+    "span": {
+      "end": {
+        "column": 63,
+        "line": 57
+      },
+      "start": {
+        "column": 5,
+        "line": 18
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/extrinsics.rs\n+++ replace || with && in estimate_lever_arm\n@@ -11,17 +11,17 @@\n pub fn estimate_lever_arm(\n     omega_ib_b: &[Vector3<f64>],\n     _omega_dot_b: &[Vector3<f64>],\n     v_gnss_e: &[Vector3<f64>],\n     v_imu_e: &[Vector3<f64>],\n     r_b_e: &[Matrix3<f64>],\n ) -> Result<Vector3<f64>, &'static str> {\n     let n = v_gnss_e.len();\n-    if n < 3 || omega_ib_b.len() != n || v_imu_e.len() != n || r_b_e.len() != n {\n+    if n < 3 || omega_ib_b.len() != n || v_imu_e.len() != n && /* ~ changed by cargo-mutants ~ */ r_b_e.len() != n {\n         return Err(\"Insufficient or mismatched data for lever arm estimation\");\n     }\n \n     // We are solving: Z = H * x\n     // where x is the 3x1 lever arm vector.\n     // Z = V_gnss - V_imu\n     // V_gnss = V_imu + R_b_e * (omega_ib_b x lever_arm)\n     // omega x lever_arm = [omega x] * lever_arm\n",
+    "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+    "function": {
+      "function_name": "estimate_lever_arm",
+      "return_type": "-> Result<Vector3<f64>, &'static str>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 58
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:19:61: replace || with && in estimate_lever_arm",
+    "package": "gneiss-rtk",
+    "replacement": "&&",
+    "span": {
+      "end": {
+        "column": 63,
+        "line": 19
+      },
+      "start": {
+        "column": 61,
+        "line": 19
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/extrinsics.rs\n+++ replace || with && in estimate_lever_arm\n@@ -11,17 +11,17 @@\n pub fn estimate_lever_arm(\n     omega_ib_b: &[Vector3<f64>],\n     _omega_dot_b: &[Vector3<f64>],\n     v_gnss_e: &[Vector3<f64>],\n     v_imu_e: &[Vector3<f64>],\n     r_b_e: &[Matrix3<f64>],\n ) -> Result<Vector3<f64>, &'static str> {\n     let n = v_gnss_e.len();\n-    if n < 3 || omega_ib_b.len() != n || v_imu_e.len() != n || r_b_e.len() != n {\n+    if n < 3 || omega_ib_b.len() != n && /* ~ changed by cargo-mutants ~ */ v_imu_e.len() != n || r_b_e.len() != n {\n         return Err(\"Insufficient or mismatched data for lever arm estimation\");\n     }\n \n     // We are solving: Z = H * x\n     // where x is the 3x1 lever arm vector.\n     // Z = V_gnss - V_imu\n     // V_gnss = V_imu + R_b_e * (omega_ib_b x lever_arm)\n     // omega x lever_arm = [omega x] * lever_arm\n",
+    "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+    "function": {
+      "function_name": "estimate_lever_arm",
+      "return_type": "-> Result<Vector3<f64>, &'static str>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 58
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:19:39: replace || with && in estimate_lever_arm",
+    "package": "gneiss-rtk",
+    "replacement": "&&",
+    "span": {
+      "end": {
+        "column": 41,
+        "line": 19
+      },
+      "start": {
+        "column": 39,
+        "line": 19
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/extrinsics.rs\n+++ replace || with && in estimate_lever_arm\n@@ -11,17 +11,17 @@\n pub fn estimate_lever_arm(\n     omega_ib_b: &[Vector3<f64>],\n     _omega_dot_b: &[Vector3<f64>],\n     v_gnss_e: &[Vector3<f64>],\n     v_imu_e: &[Vector3<f64>],\n     r_b_e: &[Matrix3<f64>],\n ) -> Result<Vector3<f64>, &'static str> {\n     let n = v_gnss_e.len();\n-    if n < 3 || omega_ib_b.len() != n || v_imu_e.len() != n || r_b_e.len() != n {\n+    if n < 3 && /* ~ changed by cargo-mutants ~ */ omega_ib_b.len() != n || v_imu_e.len() != n || r_b_e.len() != n {\n         return Err(\"Insufficient or mismatched data for lever arm estimation\");\n     }\n \n     // We are solving: Z = H * x\n     // where x is the 3x1 lever arm vector.\n     // Z = V_gnss - V_imu\n     // V_gnss = V_imu + R_b_e * (omega_ib_b x lever_arm)\n     // omega x lever_arm = [omega x] * lever_arm\n",
+    "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+    "function": {
+      "function_name": "estimate_lever_arm",
+      "return_type": "-> Result<Vector3<f64>, &'static str>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 58
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:19:14: replace || with && in estimate_lever_arm",
+    "package": "gneiss-rtk",
+    "replacement": "&&",
+    "span": {
+      "end": {
+        "column": 16,
+        "line": 19
+      },
+      "start": {
+        "column": 14,
+        "line": 19
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/extrinsics.rs\n+++ replace < with == in estimate_lever_arm\n@@ -11,17 +11,17 @@\n pub fn estimate_lever_arm(\n     omega_ib_b: &[Vector3<f64>],\n     _omega_dot_b: &[Vector3<f64>],\n     v_gnss_e: &[Vector3<f64>],\n     v_imu_e: &[Vector3<f64>],\n     r_b_e: &[Matrix3<f64>],\n ) -> Result<Vector3<f64>, &'static str> {\n     let n = v_gnss_e.len();\n-    if n < 3 || omega_ib_b.len() != n || v_imu_e.len() != n || r_b_e.len() != n {\n+    if n == /* ~ changed by cargo-mutants ~ */ 3 || omega_ib_b.len() != n || v_imu_e.len() != n || r_b_e.len() != n {\n         return Err(\"Insufficient or mismatched data for lever arm estimation\");\n     }\n \n     // We are solving: Z = H * x\n     // where x is the 3x1 lever arm vector.\n     // Z = V_gnss - V_imu\n     // V_gnss = V_imu + R_b_e * (omega_ib_b x lever_arm)\n     // omega x lever_arm = [omega x] * lever_arm\n",
+    "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+    "function": {
+      "function_name": "estimate_lever_arm",
+      "return_type": "-> Result<Vector3<f64>, &'static str>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 58
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:19:10: replace < with == in estimate_lever_arm",
+    "package": "gneiss-rtk",
+    "replacement": "==",
+    "span": {
+      "end": {
+        "column": 11,
+        "line": 19
+      },
+      "start": {
+        "column": 10,
+        "line": 19
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/extrinsics.rs\n+++ replace < with > in estimate_lever_arm\n@@ -11,17 +11,17 @@\n pub fn estimate_lever_arm(\n     omega_ib_b: &[Vector3<f64>],\n     _omega_dot_b: &[Vector3<f64>],\n     v_gnss_e: &[Vector3<f64>],\n     v_imu_e: &[Vector3<f64>],\n     r_b_e: &[Matrix3<f64>],\n ) -> Result<Vector3<f64>, &'static str> {\n     let n = v_gnss_e.len();\n-    if n < 3 || omega_ib_b.len() != n || v_imu_e.len() != n || r_b_e.len() != n {\n+    if n > /* ~ changed by cargo-mutants ~ */ 3 || omega_ib_b.len() != n || v_imu_e.len() != n || r_b_e.len() != n {\n         return Err(\"Insufficient or mismatched data for lever arm estimation\");\n     }\n \n     // We are solving: Z = H * x\n     // where x is the 3x1 lever arm vector.\n     // Z = V_gnss - V_imu\n     // V_gnss = V_imu + R_b_e * (omega_ib_b x lever_arm)\n     // omega x lever_arm = [omega x] * lever_arm\n",
+    "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+    "function": {
+      "function_name": "estimate_lever_arm",
+      "return_type": "-> Result<Vector3<f64>, &'static str>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 58
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:19:10: replace < with > in estimate_lever_arm",
+    "package": "gneiss-rtk",
+    "replacement": ">",
+    "span": {
+      "end": {
+        "column": 11,
+        "line": 19
+      },
+      "start": {
+        "column": 10,
+        "line": 19
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/extrinsics.rs\n+++ replace < with <= in estimate_lever_arm\n@@ -11,17 +11,17 @@\n pub fn estimate_lever_arm(\n     omega_ib_b: &[Vector3<f64>],\n     _omega_dot_b: &[Vector3<f64>],\n     v_gnss_e: &[Vector3<f64>],\n     v_imu_e: &[Vector3<f64>],\n     r_b_e: &[Matrix3<f64>],\n ) -> Result<Vector3<f64>, &'static str> {\n     let n = v_gnss_e.len();\n-    if n < 3 || omega_ib_b.len() != n || v_imu_e.len() != n || r_b_e.len() != n {\n+    if n <= /* ~ changed by cargo-mutants ~ */ 3 || omega_ib_b.len() != n || v_imu_e.len() != n || r_b_e.len() != n {\n         return Err(\"Insufficient or mismatched data for lever arm estimation\");\n     }\n \n     // We are solving: Z = H * x\n     // where x is the 3x1 lever arm vector.\n     // Z = V_gnss - V_imu\n     // V_gnss = V_imu + R_b_e * (omega_ib_b x lever_arm)\n     // omega x lever_arm = [omega x] * lever_arm\n",
+    "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+    "function": {
+      "function_name": "estimate_lever_arm",
+      "return_type": "-> Result<Vector3<f64>, &'static str>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 58
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:19:10: replace < with <= in estimate_lever_arm",
+    "package": "gneiss-rtk",
+    "replacement": "<=",
+    "span": {
+      "end": {
+        "column": 11,
+        "line": 19
+      },
+      "start": {
+        "column": 10,
+        "line": 19
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/extrinsics.rs\n+++ replace != with == in estimate_lever_arm\n@@ -11,17 +11,17 @@\n pub fn estimate_lever_arm(\n     omega_ib_b: &[Vector3<f64>],\n     _omega_dot_b: &[Vector3<f64>],\n     v_gnss_e: &[Vector3<f64>],\n     v_imu_e: &[Vector3<f64>],\n     r_b_e: &[Matrix3<f64>],\n ) -> Result<Vector3<f64>, &'static str> {\n     let n = v_gnss_e.len();\n-    if n < 3 || omega_ib_b.len() != n || v_imu_e.len() != n || r_b_e.len() != n {\n+    if n < 3 || omega_ib_b.len() == /* ~ changed by cargo-mutants ~ */ n || v_imu_e.len() != n || r_b_e.len() != n {\n         return Err(\"Insufficient or mismatched data for lever arm estimation\");\n     }\n \n     // We are solving: Z = H * x\n     // where x is the 3x1 lever arm vector.\n     // Z = V_gnss - V_imu\n     // V_gnss = V_imu + R_b_e * (omega_ib_b x lever_arm)\n     // omega x lever_arm = [omega x] * lever_arm\n",
+    "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+    "function": {
+      "function_name": "estimate_lever_arm",
+      "return_type": "-> Result<Vector3<f64>, &'static str>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 58
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:19:34: replace != with == in estimate_lever_arm",
+    "package": "gneiss-rtk",
+    "replacement": "==",
+    "span": {
+      "end": {
+        "column": 36,
+        "line": 19
+      },
+      "start": {
+        "column": 34,
+        "line": 19
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/extrinsics.rs\n+++ replace != with == in estimate_lever_arm\n@@ -11,17 +11,17 @@\n pub fn estimate_lever_arm(\n     omega_ib_b: &[Vector3<f64>],\n     _omega_dot_b: &[Vector3<f64>],\n     v_gnss_e: &[Vector3<f64>],\n     v_imu_e: &[Vector3<f64>],\n     r_b_e: &[Matrix3<f64>],\n ) -> Result<Vector3<f64>, &'static str> {\n     let n = v_gnss_e.len();\n-    if n < 3 || omega_ib_b.len() != n || v_imu_e.len() != n || r_b_e.len() != n {\n+    if n < 3 || omega_ib_b.len() != n || v_imu_e.len() == /* ~ changed by cargo-mutants ~ */ n || r_b_e.len() != n {\n         return Err(\"Insufficient or mismatched data for lever arm estimation\");\n     }\n \n     // We are solving: Z = H * x\n     // where x is the 3x1 lever arm vector.\n     // Z = V_gnss - V_imu\n     // V_gnss = V_imu + R_b_e * (omega_ib_b x lever_arm)\n     // omega x lever_arm = [omega x] * lever_arm\n",
+    "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+    "function": {
+      "function_name": "estimate_lever_arm",
+      "return_type": "-> Result<Vector3<f64>, &'static str>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 58
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:19:56: replace != with == in estimate_lever_arm",
+    "package": "gneiss-rtk",
+    "replacement": "==",
+    "span": {
+      "end": {
+        "column": 58,
+        "line": 19
+      },
+      "start": {
+        "column": 56,
+        "line": 19
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/extrinsics.rs\n+++ replace != with == in estimate_lever_arm\n@@ -11,17 +11,17 @@\n pub fn estimate_lever_arm(\n     omega_ib_b: &[Vector3<f64>],\n     _omega_dot_b: &[Vector3<f64>],\n     v_gnss_e: &[Vector3<f64>],\n     v_imu_e: &[Vector3<f64>],\n     r_b_e: &[Matrix3<f64>],\n ) -> Result<Vector3<f64>, &'static str> {\n     let n = v_gnss_e.len();\n-    if n < 3 || omega_ib_b.len() != n || v_imu_e.len() != n || r_b_e.len() != n {\n+    if n < 3 || omega_ib_b.len() != n || v_imu_e.len() != n || r_b_e.len() == /* ~ changed by cargo-mutants ~ */ n {\n         return Err(\"Insufficient or mismatched data for lever arm estimation\");\n     }\n \n     // We are solving: Z = H * x\n     // where x is the 3x1 lever arm vector.\n     // Z = V_gnss - V_imu\n     // V_gnss = V_imu + R_b_e * (omega_ib_b x lever_arm)\n     // omega x lever_arm = [omega x] * lever_arm\n",
+    "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+    "function": {
+      "function_name": "estimate_lever_arm",
+      "return_type": "-> Result<Vector3<f64>, &'static str>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 58
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:19:76: replace != with == in estimate_lever_arm",
+    "package": "gneiss-rtk",
+    "replacement": "==",
+    "span": {
+      "end": {
+        "column": 78,
+        "line": 19
+      },
+      "start": {
+        "column": 76,
+        "line": 19
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/extrinsics.rs\n+++ replace * with + in estimate_lever_arm\n@@ -22,17 +22,17 @@\n \n     // We are solving: Z = H * x\n     // where x is the 3x1 lever arm vector.\n     // Z = V_gnss - V_imu\n     // V_gnss = V_imu + R_b_e * (omega_ib_b x lever_arm)\n     // omega x lever_arm = [omega x] * lever_arm\n     // So H = R_b_e * [omega x]\n     \n-    let mut h_matrix = DMatrix::<f64>::zeros(n * 3, 3);\n+    let mut h_matrix = DMatrix::<f64>::zeros(n + /* ~ changed by cargo-mutants ~ */ 3, 3);\n     let mut z_vector = DVector::<f64>::zeros(n * 3);\n \n     for i in 0..n {\n         let w = omega_ib_b[i];\n         let w_skew = Matrix3::new(\n             0.0, -w.z,  w.y,\n              w.z,  0.0, -w.x,\n             -w.y,  w.x,  0.0\n",
+    "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+    "function": {
+      "function_name": "estimate_lever_arm",
+      "return_type": "-> Result<Vector3<f64>, &'static str>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 58
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:30:48: replace * with + in estimate_lever_arm",
+    "package": "gneiss-rtk",
+    "replacement": "+",
+    "span": {
+      "end": {
+        "column": 49,
+        "line": 30
+      },
+      "start": {
+        "column": 48,
+        "line": 30
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/extrinsics.rs\n+++ replace * with / in estimate_lever_arm\n@@ -22,17 +22,17 @@\n \n     // We are solving: Z = H * x\n     // where x is the 3x1 lever arm vector.\n     // Z = V_gnss - V_imu\n     // V_gnss = V_imu + R_b_e * (omega_ib_b x lever_arm)\n     // omega x lever_arm = [omega x] * lever_arm\n     // So H = R_b_e * [omega x]\n     \n-    let mut h_matrix = DMatrix::<f64>::zeros(n * 3, 3);\n+    let mut h_matrix = DMatrix::<f64>::zeros(n / /* ~ changed by cargo-mutants ~ */ 3, 3);\n     let mut z_vector = DVector::<f64>::zeros(n * 3);\n \n     for i in 0..n {\n         let w = omega_ib_b[i];\n         let w_skew = Matrix3::new(\n             0.0, -w.z,  w.y,\n              w.z,  0.0, -w.x,\n             -w.y,  w.x,  0.0\n",
+    "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+    "function": {
+      "function_name": "estimate_lever_arm",
+      "return_type": "-> Result<Vector3<f64>, &'static str>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 58
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:30:48: replace * with / in estimate_lever_arm",
+    "package": "gneiss-rtk",
+    "replacement": "/",
+    "span": {
+      "end": {
+        "column": 49,
+        "line": 30
+      },
+      "start": {
+        "column": 48,
+        "line": 30
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/extrinsics.rs\n+++ replace * with + in estimate_lever_arm\n@@ -23,17 +23,17 @@\n     // We are solving: Z = H * x\n     // where x is the 3x1 lever arm vector.\n     // Z = V_gnss - V_imu\n     // V_gnss = V_imu + R_b_e * (omega_ib_b x lever_arm)\n     // omega x lever_arm = [omega x] * lever_arm\n     // So H = R_b_e * [omega x]\n     \n     let mut h_matrix = DMatrix::<f64>::zeros(n * 3, 3);\n-    let mut z_vector = DVector::<f64>::zeros(n * 3);\n+    let mut z_vector = DVector::<f64>::zeros(n + /* ~ changed by cargo-mutants ~ */ 3);\n \n     for i in 0..n {\n         let w = omega_ib_b[i];\n         let w_skew = Matrix3::new(\n             0.0, -w.z,  w.y,\n              w.z,  0.0, -w.x,\n             -w.y,  w.x,  0.0\n         );\n",
+    "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+    "function": {
+      "function_name": "estimate_lever_arm",
+      "return_type": "-> Result<Vector3<f64>, &'static str>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 58
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:31:48: replace * with + in estimate_lever_arm",
+    "package": "gneiss-rtk",
+    "replacement": "+",
+    "span": {
+      "end": {
+        "column": 49,
+        "line": 31
+      },
+      "start": {
+        "column": 48,
+        "line": 31
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/extrinsics.rs\n+++ replace * with / in estimate_lever_arm\n@@ -23,17 +23,17 @@\n     // We are solving: Z = H * x\n     // where x is the 3x1 lever arm vector.\n     // Z = V_gnss - V_imu\n     // V_gnss = V_imu + R_b_e * (omega_ib_b x lever_arm)\n     // omega x lever_arm = [omega x] * lever_arm\n     // So H = R_b_e * [omega x]\n     \n     let mut h_matrix = DMatrix::<f64>::zeros(n * 3, 3);\n-    let mut z_vector = DVector::<f64>::zeros(n * 3);\n+    let mut z_vector = DVector::<f64>::zeros(n / /* ~ changed by cargo-mutants ~ */ 3);\n \n     for i in 0..n {\n         let w = omega_ib_b[i];\n         let w_skew = Matrix3::new(\n             0.0, -w.z,  w.y,\n              w.z,  0.0, -w.x,\n             -w.y,  w.x,  0.0\n         );\n",
+    "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+    "function": {
+      "function_name": "estimate_lever_arm",
+      "return_type": "-> Result<Vector3<f64>, &'static str>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 58
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:31:48: replace * with / in estimate_lever_arm",
+    "package": "gneiss-rtk",
+    "replacement": "/",
+    "span": {
+      "end": {
+        "column": 49,
+        "line": 31
+      },
+      "start": {
+        "column": 48,
+        "line": 31
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/extrinsics.rs\n+++ delete - in estimate_lever_arm\n@@ -28,17 +28,17 @@\n     // So H = R_b_e * [omega x]\n     \n     let mut h_matrix = DMatrix::<f64>::zeros(n * 3, 3);\n     let mut z_vector = DVector::<f64>::zeros(n * 3);\n \n     for i in 0..n {\n         let w = omega_ib_b[i];\n         let w_skew = Matrix3::new(\n-            0.0, -w.z,  w.y,\n+            0.0,  /* ~ changed by cargo-mutants ~ */w.z,  w.y,\n              w.z,  0.0, -w.x,\n             -w.y,  w.x,  0.0\n         );\n         \n         let h_i = r_b_e[i] * w_skew;\n         let z_i = v_gnss_e[i] - v_imu_e[i];\n \n         h_matrix.fixed_view_mut::<3, 3>(i * 3, 0).copy_from(&h_i);\n",
+    "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+    "function": {
+      "function_name": "estimate_lever_arm",
+      "return_type": "-> Result<Vector3<f64>, &'static str>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 58
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "UnaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:36:18: delete - in estimate_lever_arm",
+    "package": "gneiss-rtk",
+    "replacement": "",
+    "span": {
+      "end": {
+        "column": 19,
+        "line": 36
+      },
+      "start": {
+        "column": 18,
+        "line": 36
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/extrinsics.rs\n+++ delete - in estimate_lever_arm\n@@ -29,17 +29,17 @@\n     \n     let mut h_matrix = DMatrix::<f64>::zeros(n * 3, 3);\n     let mut z_vector = DVector::<f64>::zeros(n * 3);\n \n     for i in 0..n {\n         let w = omega_ib_b[i];\n         let w_skew = Matrix3::new(\n             0.0, -w.z,  w.y,\n-             w.z,  0.0, -w.x,\n+             w.z,  0.0,  /* ~ changed by cargo-mutants ~ */w.x,\n             -w.y,  w.x,  0.0\n         );\n         \n         let h_i = r_b_e[i] * w_skew;\n         let z_i = v_gnss_e[i] - v_imu_e[i];\n \n         h_matrix.fixed_view_mut::<3, 3>(i * 3, 0).copy_from(&h_i);\n         z_vector.fixed_rows_mut::<3>(i * 3).copy_from(&z_i);\n",
+    "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+    "function": {
+      "function_name": "estimate_lever_arm",
+      "return_type": "-> Result<Vector3<f64>, &'static str>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 58
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "UnaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:37:25: delete - in estimate_lever_arm",
+    "package": "gneiss-rtk",
+    "replacement": "",
+    "span": {
+      "end": {
+        "column": 26,
+        "line": 37
+      },
+      "start": {
+        "column": 25,
+        "line": 37
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/extrinsics.rs\n+++ delete - in estimate_lever_arm\n@@ -30,17 +30,17 @@\n     let mut h_matrix = DMatrix::<f64>::zeros(n * 3, 3);\n     let mut z_vector = DVector::<f64>::zeros(n * 3);\n \n     for i in 0..n {\n         let w = omega_ib_b[i];\n         let w_skew = Matrix3::new(\n             0.0, -w.z,  w.y,\n              w.z,  0.0, -w.x,\n-            -w.y,  w.x,  0.0\n+             /* ~ changed by cargo-mutants ~ */w.y,  w.x,  0.0\n         );\n         \n         let h_i = r_b_e[i] * w_skew;\n         let z_i = v_gnss_e[i] - v_imu_e[i];\n \n         h_matrix.fixed_view_mut::<3, 3>(i * 3, 0).copy_from(&h_i);\n         z_vector.fixed_rows_mut::<3>(i * 3).copy_from(&z_i);\n     }\n",
+    "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+    "function": {
+      "function_name": "estimate_lever_arm",
+      "return_type": "-> Result<Vector3<f64>, &'static str>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 58
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "UnaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:38:13: delete - in estimate_lever_arm",
+    "package": "gneiss-rtk",
+    "replacement": "",
+    "span": {
+      "end": {
+        "column": 14,
+        "line": 38
+      },
+      "start": {
+        "column": 13,
+        "line": 38
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/extrinsics.rs\n+++ replace * with + in estimate_lever_arm\n@@ -33,17 +33,17 @@\n     for i in 0..n {\n         let w = omega_ib_b[i];\n         let w_skew = Matrix3::new(\n             0.0, -w.z,  w.y,\n              w.z,  0.0, -w.x,\n             -w.y,  w.x,  0.0\n         );\n         \n-        let h_i = r_b_e[i] * w_skew;\n+        let h_i = r_b_e[i] + /* ~ changed by cargo-mutants ~ */ w_skew;\n         let z_i = v_gnss_e[i] - v_imu_e[i];\n \n         h_matrix.fixed_view_mut::<3, 3>(i * 3, 0).copy_from(&h_i);\n         z_vector.fixed_rows_mut::<3>(i * 3).copy_from(&z_i);\n     }\n \n     // Solve using normal equations: x = (H^T * H)^-1 * H^T * Z\n     let h_t = h_matrix.transpose();\n",
+    "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+    "function": {
+      "function_name": "estimate_lever_arm",
+      "return_type": "-> Result<Vector3<f64>, &'static str>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 58
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:41:28: replace * with + in estimate_lever_arm",
+    "package": "gneiss-rtk",
+    "replacement": "+",
+    "span": {
+      "end": {
+        "column": 29,
+        "line": 41
+      },
+      "start": {
+        "column": 28,
+        "line": 41
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/extrinsics.rs\n+++ replace * with / in estimate_lever_arm\n@@ -33,17 +33,17 @@\n     for i in 0..n {\n         let w = omega_ib_b[i];\n         let w_skew = Matrix3::new(\n             0.0, -w.z,  w.y,\n              w.z,  0.0, -w.x,\n             -w.y,  w.x,  0.0\n         );\n         \n-        let h_i = r_b_e[i] * w_skew;\n+        let h_i = r_b_e[i] / /* ~ changed by cargo-mutants ~ */ w_skew;\n         let z_i = v_gnss_e[i] - v_imu_e[i];\n \n         h_matrix.fixed_view_mut::<3, 3>(i * 3, 0).copy_from(&h_i);\n         z_vector.fixed_rows_mut::<3>(i * 3).copy_from(&z_i);\n     }\n \n     // Solve using normal equations: x = (H^T * H)^-1 * H^T * Z\n     let h_t = h_matrix.transpose();\n",
+    "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+    "function": {
+      "function_name": "estimate_lever_arm",
+      "return_type": "-> Result<Vector3<f64>, &'static str>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 58
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:41:28: replace * with / in estimate_lever_arm",
+    "package": "gneiss-rtk",
+    "replacement": "/",
+    "span": {
+      "end": {
+        "column": 29,
+        "line": 41
+      },
+      "start": {
+        "column": 28,
+        "line": 41
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/extrinsics.rs\n+++ replace - with + in estimate_lever_arm\n@@ -34,17 +34,17 @@\n         let w = omega_ib_b[i];\n         let w_skew = Matrix3::new(\n             0.0, -w.z,  w.y,\n              w.z,  0.0, -w.x,\n             -w.y,  w.x,  0.0\n         );\n         \n         let h_i = r_b_e[i] * w_skew;\n-        let z_i = v_gnss_e[i] - v_imu_e[i];\n+        let z_i = v_gnss_e[i] + /* ~ changed by cargo-mutants ~ */ v_imu_e[i];\n \n         h_matrix.fixed_view_mut::<3, 3>(i * 3, 0).copy_from(&h_i);\n         z_vector.fixed_rows_mut::<3>(i * 3).copy_from(&z_i);\n     }\n \n     // Solve using normal equations: x = (H^T * H)^-1 * H^T * Z\n     let h_t = h_matrix.transpose();\n     let h_t_h = &h_t * &h_matrix;\n",
+    "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+    "function": {
+      "function_name": "estimate_lever_arm",
+      "return_type": "-> Result<Vector3<f64>, &'static str>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 58
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:42:31: replace - with + in estimate_lever_arm",
+    "package": "gneiss-rtk",
+    "replacement": "+",
+    "span": {
+      "end": {
+        "column": 32,
+        "line": 42
+      },
+      "start": {
+        "column": 31,
+        "line": 42
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/extrinsics.rs\n+++ replace - with / in estimate_lever_arm\n@@ -34,17 +34,17 @@\n         let w = omega_ib_b[i];\n         let w_skew = Matrix3::new(\n             0.0, -w.z,  w.y,\n              w.z,  0.0, -w.x,\n             -w.y,  w.x,  0.0\n         );\n         \n         let h_i = r_b_e[i] * w_skew;\n-        let z_i = v_gnss_e[i] - v_imu_e[i];\n+        let z_i = v_gnss_e[i] / /* ~ changed by cargo-mutants ~ */ v_imu_e[i];\n \n         h_matrix.fixed_view_mut::<3, 3>(i * 3, 0).copy_from(&h_i);\n         z_vector.fixed_rows_mut::<3>(i * 3).copy_from(&z_i);\n     }\n \n     // Solve using normal equations: x = (H^T * H)^-1 * H^T * Z\n     let h_t = h_matrix.transpose();\n     let h_t_h = &h_t * &h_matrix;\n",
+    "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+    "function": {
+      "function_name": "estimate_lever_arm",
+      "return_type": "-> Result<Vector3<f64>, &'static str>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 58
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:42:31: replace - with / in estimate_lever_arm",
+    "package": "gneiss-rtk",
+    "replacement": "/",
+    "span": {
+      "end": {
+        "column": 32,
+        "line": 42
+      },
+      "start": {
+        "column": 31,
+        "line": 42
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/extrinsics.rs\n+++ replace * with + in estimate_lever_arm\n@@ -36,17 +36,17 @@\n             0.0, -w.z,  w.y,\n              w.z,  0.0, -w.x,\n             -w.y,  w.x,  0.0\n         );\n         \n         let h_i = r_b_e[i] * w_skew;\n         let z_i = v_gnss_e[i] - v_imu_e[i];\n \n-        h_matrix.fixed_view_mut::<3, 3>(i * 3, 0).copy_from(&h_i);\n+        h_matrix.fixed_view_mut::<3, 3>(i + /* ~ changed by cargo-mutants ~ */ 3, 0).copy_from(&h_i);\n         z_vector.fixed_rows_mut::<3>(i * 3).copy_from(&z_i);\n     }\n \n     // Solve using normal equations: x = (H^T * H)^-1 * H^T * Z\n     let h_t = h_matrix.transpose();\n     let h_t_h = &h_t * &h_matrix;\n     \n     // Check if the matrix is invertible (requires dynamic excitation/turning)\n",
+    "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+    "function": {
+      "function_name": "estimate_lever_arm",
+      "return_type": "-> Result<Vector3<f64>, &'static str>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 58
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:44:43: replace * with + in estimate_lever_arm",
+    "package": "gneiss-rtk",
+    "replacement": "+",
+    "span": {
+      "end": {
+        "column": 44,
+        "line": 44
+      },
+      "start": {
+        "column": 43,
+        "line": 44
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/extrinsics.rs\n+++ replace * with / in estimate_lever_arm\n@@ -36,17 +36,17 @@\n             0.0, -w.z,  w.y,\n              w.z,  0.0, -w.x,\n             -w.y,  w.x,  0.0\n         );\n         \n         let h_i = r_b_e[i] * w_skew;\n         let z_i = v_gnss_e[i] - v_imu_e[i];\n \n-        h_matrix.fixed_view_mut::<3, 3>(i * 3, 0).copy_from(&h_i);\n+        h_matrix.fixed_view_mut::<3, 3>(i / /* ~ changed by cargo-mutants ~ */ 3, 0).copy_from(&h_i);\n         z_vector.fixed_rows_mut::<3>(i * 3).copy_from(&z_i);\n     }\n \n     // Solve using normal equations: x = (H^T * H)^-1 * H^T * Z\n     let h_t = h_matrix.transpose();\n     let h_t_h = &h_t * &h_matrix;\n     \n     // Check if the matrix is invertible (requires dynamic excitation/turning)\n",
+    "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+    "function": {
+      "function_name": "estimate_lever_arm",
+      "return_type": "-> Result<Vector3<f64>, &'static str>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 58
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:44:43: replace * with / in estimate_lever_arm",
+    "package": "gneiss-rtk",
+    "replacement": "/",
+    "span": {
+      "end": {
+        "column": 44,
+        "line": 44
+      },
+      "start": {
+        "column": 43,
+        "line": 44
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/extrinsics.rs\n+++ replace * with + in estimate_lever_arm\n@@ -37,17 +37,17 @@\n              w.z,  0.0, -w.x,\n             -w.y,  w.x,  0.0\n         );\n         \n         let h_i = r_b_e[i] * w_skew;\n         let z_i = v_gnss_e[i] - v_imu_e[i];\n \n         h_matrix.fixed_view_mut::<3, 3>(i * 3, 0).copy_from(&h_i);\n-        z_vector.fixed_rows_mut::<3>(i * 3).copy_from(&z_i);\n+        z_vector.fixed_rows_mut::<3>(i + /* ~ changed by cargo-mutants ~ */ 3).copy_from(&z_i);\n     }\n \n     // Solve using normal equations: x = (H^T * H)^-1 * H^T * Z\n     let h_t = h_matrix.transpose();\n     let h_t_h = &h_t * &h_matrix;\n     \n     // Check if the matrix is invertible (requires dynamic excitation/turning)\n     let h_t_h_inv = h_t_h.try_inverse().ok_or(\"Matrix is singular; insufficient dynamic excitation to observe lever arm\")?;\n",
+    "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+    "function": {
+      "function_name": "estimate_lever_arm",
+      "return_type": "-> Result<Vector3<f64>, &'static str>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 58
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:45:40: replace * with + in estimate_lever_arm",
+    "package": "gneiss-rtk",
+    "replacement": "+",
+    "span": {
+      "end": {
+        "column": 41,
+        "line": 45
+      },
+      "start": {
+        "column": 40,
+        "line": 45
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/extrinsics.rs\n+++ replace * with / in estimate_lever_arm\n@@ -37,17 +37,17 @@\n              w.z,  0.0, -w.x,\n             -w.y,  w.x,  0.0\n         );\n         \n         let h_i = r_b_e[i] * w_skew;\n         let z_i = v_gnss_e[i] - v_imu_e[i];\n \n         h_matrix.fixed_view_mut::<3, 3>(i * 3, 0).copy_from(&h_i);\n-        z_vector.fixed_rows_mut::<3>(i * 3).copy_from(&z_i);\n+        z_vector.fixed_rows_mut::<3>(i / /* ~ changed by cargo-mutants ~ */ 3).copy_from(&z_i);\n     }\n \n     // Solve using normal equations: x = (H^T * H)^-1 * H^T * Z\n     let h_t = h_matrix.transpose();\n     let h_t_h = &h_t * &h_matrix;\n     \n     // Check if the matrix is invertible (requires dynamic excitation/turning)\n     let h_t_h_inv = h_t_h.try_inverse().ok_or(\"Matrix is singular; insufficient dynamic excitation to observe lever arm\")?;\n",
+    "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+    "function": {
+      "function_name": "estimate_lever_arm",
+      "return_type": "-> Result<Vector3<f64>, &'static str>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 58
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:45:40: replace * with / in estimate_lever_arm",
+    "package": "gneiss-rtk",
+    "replacement": "/",
+    "span": {
+      "end": {
+        "column": 41,
+        "line": 45
+      },
+      "start": {
+        "column": 40,
+        "line": 45
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/extrinsics.rs\n+++ replace * with + in estimate_lever_arm\n@@ -42,17 +42,17 @@\n         let z_i = v_gnss_e[i] - v_imu_e[i];\n \n         h_matrix.fixed_view_mut::<3, 3>(i * 3, 0).copy_from(&h_i);\n         z_vector.fixed_rows_mut::<3>(i * 3).copy_from(&z_i);\n     }\n \n     // Solve using normal equations: x = (H^T * H)^-1 * H^T * Z\n     let h_t = h_matrix.transpose();\n-    let h_t_h = &h_t * &h_matrix;\n+    let h_t_h = &h_t + /* ~ changed by cargo-mutants ~ */ &h_matrix;\n     \n     // Check if the matrix is invertible (requires dynamic excitation/turning)\n     let h_t_h_inv = h_t_h.try_inverse().ok_or(\"Matrix is singular; insufficient dynamic excitation to observe lever arm\")?;\n     \n     let lever_arm = h_t_h_inv * &h_t * z_vector;\n \n     Ok(Vector3::new(lever_arm[0], lever_arm[1], lever_arm[2]))\n }\n",
+    "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+    "function": {
+      "function_name": "estimate_lever_arm",
+      "return_type": "-> Result<Vector3<f64>, &'static str>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 58
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:50:22: replace * with + in estimate_lever_arm",
+    "package": "gneiss-rtk",
+    "replacement": "+",
+    "span": {
+      "end": {
+        "column": 23,
+        "line": 50
+      },
+      "start": {
+        "column": 22,
+        "line": 50
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/extrinsics.rs\n+++ replace * with / in estimate_lever_arm\n@@ -42,17 +42,17 @@\n         let z_i = v_gnss_e[i] - v_imu_e[i];\n \n         h_matrix.fixed_view_mut::<3, 3>(i * 3, 0).copy_from(&h_i);\n         z_vector.fixed_rows_mut::<3>(i * 3).copy_from(&z_i);\n     }\n \n     // Solve using normal equations: x = (H^T * H)^-1 * H^T * Z\n     let h_t = h_matrix.transpose();\n-    let h_t_h = &h_t * &h_matrix;\n+    let h_t_h = &h_t / /* ~ changed by cargo-mutants ~ */ &h_matrix;\n     \n     // Check if the matrix is invertible (requires dynamic excitation/turning)\n     let h_t_h_inv = h_t_h.try_inverse().ok_or(\"Matrix is singular; insufficient dynamic excitation to observe lever arm\")?;\n     \n     let lever_arm = h_t_h_inv * &h_t * z_vector;\n \n     Ok(Vector3::new(lever_arm[0], lever_arm[1], lever_arm[2]))\n }\n",
+    "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+    "function": {
+      "function_name": "estimate_lever_arm",
+      "return_type": "-> Result<Vector3<f64>, &'static str>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 58
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:50:22: replace * with / in estimate_lever_arm",
+    "package": "gneiss-rtk",
+    "replacement": "/",
+    "span": {
+      "end": {
+        "column": 23,
+        "line": 50
+      },
+      "start": {
+        "column": 22,
+        "line": 50
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/extrinsics.rs\n+++ replace * with + in estimate_lever_arm\n@@ -47,17 +47,17 @@\n \n     // Solve using normal equations: x = (H^T * H)^-1 * H^T * Z\n     let h_t = h_matrix.transpose();\n     let h_t_h = &h_t * &h_matrix;\n     \n     // Check if the matrix is invertible (requires dynamic excitation/turning)\n     let h_t_h_inv = h_t_h.try_inverse().ok_or(\"Matrix is singular; insufficient dynamic excitation to observe lever arm\")?;\n     \n-    let lever_arm = h_t_h_inv * &h_t * z_vector;\n+    let lever_arm = h_t_h_inv * &h_t + /* ~ changed by cargo-mutants ~ */ z_vector;\n \n     Ok(Vector3::new(lever_arm[0], lever_arm[1], lever_arm[2]))\n }\n \n #[cfg(test)]\n mod tests {\n     use super::*;\n     use nalgebra::{Vector3, Rotation3};\n",
+    "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+    "function": {
+      "function_name": "estimate_lever_arm",
+      "return_type": "-> Result<Vector3<f64>, &'static str>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 58
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:55:38: replace * with + in estimate_lever_arm",
+    "package": "gneiss-rtk",
+    "replacement": "+",
+    "span": {
+      "end": {
+        "column": 39,
+        "line": 55
+      },
+      "start": {
+        "column": 38,
+        "line": 55
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/extrinsics.rs\n+++ replace * with / in estimate_lever_arm\n@@ -47,17 +47,17 @@\n \n     // Solve using normal equations: x = (H^T * H)^-1 * H^T * Z\n     let h_t = h_matrix.transpose();\n     let h_t_h = &h_t * &h_matrix;\n     \n     // Check if the matrix is invertible (requires dynamic excitation/turning)\n     let h_t_h_inv = h_t_h.try_inverse().ok_or(\"Matrix is singular; insufficient dynamic excitation to observe lever arm\")?;\n     \n-    let lever_arm = h_t_h_inv * &h_t * z_vector;\n+    let lever_arm = h_t_h_inv * &h_t / /* ~ changed by cargo-mutants ~ */ z_vector;\n \n     Ok(Vector3::new(lever_arm[0], lever_arm[1], lever_arm[2]))\n }\n \n #[cfg(test)]\n mod tests {\n     use super::*;\n     use nalgebra::{Vector3, Rotation3};\n",
+    "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+    "function": {
+      "function_name": "estimate_lever_arm",
+      "return_type": "-> Result<Vector3<f64>, &'static str>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 58
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:55:38: replace * with / in estimate_lever_arm",
+    "package": "gneiss-rtk",
+    "replacement": "/",
+    "span": {
+      "end": {
+        "column": 39,
+        "line": 55
+      },
+      "start": {
+        "column": 38,
+        "line": 55
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/extrinsics.rs\n+++ replace * with + in estimate_lever_arm\n@@ -47,17 +47,17 @@\n \n     // Solve using normal equations: x = (H^T * H)^-1 * H^T * Z\n     let h_t = h_matrix.transpose();\n     let h_t_h = &h_t * &h_matrix;\n     \n     // Check if the matrix is invertible (requires dynamic excitation/turning)\n     let h_t_h_inv = h_t_h.try_inverse().ok_or(\"Matrix is singular; insufficient dynamic excitation to observe lever arm\")?;\n     \n-    let lever_arm = h_t_h_inv * &h_t * z_vector;\n+    let lever_arm = h_t_h_inv + /* ~ changed by cargo-mutants ~ */ &h_t * z_vector;\n \n     Ok(Vector3::new(lever_arm[0], lever_arm[1], lever_arm[2]))\n }\n \n #[cfg(test)]\n mod tests {\n     use super::*;\n     use nalgebra::{Vector3, Rotation3};\n",
+    "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+    "function": {
+      "function_name": "estimate_lever_arm",
+      "return_type": "-> Result<Vector3<f64>, &'static str>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 58
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:55:31: replace * with + in estimate_lever_arm",
+    "package": "gneiss-rtk",
+    "replacement": "+",
+    "span": {
+      "end": {
+        "column": 32,
+        "line": 55
+      },
+      "start": {
+        "column": 31,
+        "line": 55
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/extrinsics.rs\n+++ replace * with / in estimate_lever_arm\n@@ -47,17 +47,17 @@\n \n     // Solve using normal equations: x = (H^T * H)^-1 * H^T * Z\n     let h_t = h_matrix.transpose();\n     let h_t_h = &h_t * &h_matrix;\n     \n     // Check if the matrix is invertible (requires dynamic excitation/turning)\n     let h_t_h_inv = h_t_h.try_inverse().ok_or(\"Matrix is singular; insufficient dynamic excitation to observe lever arm\")?;\n     \n-    let lever_arm = h_t_h_inv * &h_t * z_vector;\n+    let lever_arm = h_t_h_inv / /* ~ changed by cargo-mutants ~ */ &h_t * z_vector;\n \n     Ok(Vector3::new(lever_arm[0], lever_arm[1], lever_arm[2]))\n }\n \n #[cfg(test)]\n mod tests {\n     use super::*;\n     use nalgebra::{Vector3, Rotation3};\n",
+    "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+    "function": {
+      "function_name": "estimate_lever_arm",
+      "return_type": "-> Result<Vector3<f64>, &'static str>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 58
+        },
+        "start": {
+          "column": 1,
+          "line": 3
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:55:31: replace * with / in estimate_lever_arm",
+    "package": "gneiss-rtk",
+    "replacement": "/",
+    "span": {
+      "end": {
+        "column": 32,
+        "line": 55
+      },
+      "start": {
+        "column": 31,
+        "line": 55
+      }
+    }
+  }
+]

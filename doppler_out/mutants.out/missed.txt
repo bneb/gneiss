@@ -1,0 +1,7 @@
+crates/gneiss-rtk/src/doppler.rs:62:18: replace < with == in compute_doppler_update
+crates/gneiss-rtk/src/doppler.rs:62:18: replace < with <= in compute_doppler_update
+crates/gneiss-rtk/src/doppler.rs:73:31: replace - with + in compute_doppler_update
+crates/gneiss-rtk/src/doppler.rs:84:20: delete - in compute_doppler_update
+crates/gneiss-rtk/src/doppler.rs:85:20: delete - in compute_doppler_update
+crates/gneiss-rtk/src/doppler.rs:88:24: replace * with + in compute_doppler_update
+crates/gneiss-rtk/src/doppler.rs:88:24: replace * with / in compute_doppler_update

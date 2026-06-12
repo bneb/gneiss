@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/engine/ppp.rs
++++ delete - in process_ppp
+@@ -125,17 +125,17 @@
+     }
+ 
+     // PASS 2: Measurement generation
+     for (sat_obs, dt_sat_m, p_if, cp1, cp2, los, dist, el, snr, lam1, lam2, tropo_dry, map_wet, f1, f2, _sat_pos_rot, _rcv_pos_ecef) in &sats_to_process {
+         let expected_p = dist + state.rcv_clk_bias - dt_sat_m + tropo_dry + state.zwd * map_wet;
+         let res_p = p_if - expected_p;
+ 
+         let mut h_row_p = vec![0.0; state.covariance.ncols()];
+-        h_row_p[0] = -los.x;
++        h_row_p[0] =  /* ~ changed by cargo-mutants ~ */los.x;
+         h_row_p[1] = -los.y;
+         h_row_p[2] = -los.z;
+         h_row_p[17] = *map_wet;
+         h_row_p[15] = 1.0;
+ 
+         h_rows.push(h_row_p);
+         z_vec.push(res_p);
+         sat_vec.push(sat_obs.sat);

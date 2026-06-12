@@ -1,0 +1,2186 @@
+{
+  "outcomes": [
+    {
+      "scenario": "Baseline",
+      "summary": "Success",
+      "log_path": "log/baseline.log",
+      "diff_path": null,
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 22.34037625,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.340577417,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:44:5: replace compute_doppler_update -> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)> with None",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 113,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 44,
+              "column": 5
+            },
+            "end": {
+              "line": 112,
+              "column": 20
+            }
+          },
+          "replacement": "None",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_44_col_5.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_44_col_5.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.217865708,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.5978435,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:44:5: replace compute_doppler_update -> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)> with Some((DVector::new(), DMatrix::new(), DMatrix::new()))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 113,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 44,
+              "column": 5
+            },
+            "end": {
+              "line": 112,
+              "column": 20
+            }
+          },
+          "replacement": "Some((DVector::new(), DMatrix::new(), DMatrix::new()))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.16865625,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.436622209,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:44:5: replace compute_doppler_update -> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)> with Some((DVector::new(), DMatrix::new(), DMatrix::from_iter([0.0])))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 113,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 44,
+              "column": 5
+            },
+            "end": {
+              "line": 112,
+              "column": 20
+            }
+          },
+          "replacement": "Some((DVector::new(), DMatrix::new(), DMatrix::from_iter([0.0])))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_002.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_002.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.113277958,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.59240825,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:44:5: replace compute_doppler_update -> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)> with Some((DVector::new(), DMatrix::new(), DMatrix::new(0.0)))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 113,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 44,
+              "column": 5
+            },
+            "end": {
+              "line": 112,
+              "column": 20
+            }
+          },
+          "replacement": "Some((DVector::new(), DMatrix::new(), DMatrix::new(0.0)))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_003.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_003.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.115442959,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.444647,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:44:5: replace compute_doppler_update -> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)> with Some((DVector::new(), DMatrix::new(), DMatrix::from(0.0)))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 113,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 44,
+              "column": 5
+            },
+            "end": {
+              "line": 112,
+              "column": 20
+            }
+          },
+          "replacement": "Some((DVector::new(), DMatrix::new(), DMatrix::from(0.0)))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_004.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_004.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.157201625,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.3675595,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:44:5: replace compute_doppler_update -> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)> with Some((DVector::new(), DMatrix::new(), DMatrix::from_iter([1.0])))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 113,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 44,
+              "column": 5
+            },
+            "end": {
+              "line": 112,
+              "column": 20
+            }
+          },
+          "replacement": "Some((DVector::new(), DMatrix::new(), DMatrix::from_iter([1.0])))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_005.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_005.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.108199916,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.5875535,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:44:5: replace compute_doppler_update -> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)> with Some((DVector::new(), DMatrix::new(), DMatrix::new(1.0)))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 113,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 44,
+              "column": 5
+            },
+            "end": {
+              "line": 112,
+              "column": 20
+            }
+          },
+          "replacement": "Some((DVector::new(), DMatrix::new(), DMatrix::new(1.0)))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_006.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_006.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.107355375,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.550695583,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:44:5: replace compute_doppler_update -> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)> with Some((DVector::new(), DMatrix::new(), DMatrix::from(1.0)))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 113,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 44,
+              "column": 5
+            },
+            "end": {
+              "line": 112,
+              "column": 20
+            }
+          },
+          "replacement": "Some((DVector::new(), DMatrix::new(), DMatrix::from(1.0)))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_007.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_007.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.162147042,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.397239583,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:44:5: replace compute_doppler_update -> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)> with Some((DVector::new(), DMatrix::new(), DMatrix::from_iter([-1.0])))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 113,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 44,
+              "column": 5
+            },
+            "end": {
+              "line": 112,
+              "column": 20
+            }
+          },
+          "replacement": "Some((DVector::new(), DMatrix::new(), DMatrix::from_iter([-1.0])))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_008.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_008.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.112763458,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.370817959,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:44:5: replace compute_doppler_update -> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)> with Some((DVector::new(), DMatrix::new(), DMatrix::new(-1.0)))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 113,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 44,
+              "column": 5
+            },
+            "end": {
+              "line": 112,
+              "column": 20
+            }
+          },
+          "replacement": "Some((DVector::new(), DMatrix::new(), DMatrix::new(-1.0)))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_009.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_009.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.16348025,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.4292445,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:44:5: replace compute_doppler_update -> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)> with Some((DVector::new(), DMatrix::new(), DMatrix::from(-1.0)))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 113,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 44,
+              "column": 5
+            },
+            "end": {
+              "line": 112,
+              "column": 20
+            }
+          },
+          "replacement": "Some((DVector::new(), DMatrix::new(), DMatrix::from(-1.0)))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_010.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_010.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.107916834,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.539673917,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:44:5: replace compute_doppler_update -> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)> with Some((DVector::new(), DMatrix::from_iter([0.0]), DMatrix::new()))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 113,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 44,
+              "column": 5
+            },
+            "end": {
+              "line": 112,
+              "column": 20
+            }
+          },
+          "replacement": "Some((DVector::new(), DMatrix::from_iter([0.0]), DMatrix::new()))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_011.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_011.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.106892416,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.379558583,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:44:5: replace compute_doppler_update -> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)> with Some((DVector::new(), DMatrix::from_iter([0.0]), DMatrix::from_iter([0.0])))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 113,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 44,
+              "column": 5
+            },
+            "end": {
+              "line": 112,
+              "column": 20
+            }
+          },
+          "replacement": "Some((DVector::new(), DMatrix::from_iter([0.0]), DMatrix::from_iter([0.0])))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_012.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_012.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.164775083,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.480660208,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:44:5: replace compute_doppler_update -> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)> with Some((DVector::new(), DMatrix::from_iter([0.0]), DMatrix::new(0.0)))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 113,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 44,
+              "column": 5
+            },
+            "end": {
+              "line": 112,
+              "column": 20
+            }
+          },
+          "replacement": "Some((DVector::new(), DMatrix::from_iter([0.0]), DMatrix::new(0.0)))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_013.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_013.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.1134005,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.592872083,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:44:5: replace compute_doppler_update -> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)> with Some((DVector::new(), DMatrix::from_iter([0.0]), DMatrix::from(0.0)))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 113,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 44,
+              "column": 5
+            },
+            "end": {
+              "line": 112,
+              "column": 20
+            }
+          },
+          "replacement": "Some((DVector::new(), DMatrix::from_iter([0.0]), DMatrix::from(0.0)))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_014.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_014.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.1596485,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.691044042,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:44:5: replace compute_doppler_update -> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)> with Some((DVector::new(), DMatrix::from_iter([0.0]), DMatrix::from_iter([1.0])))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 113,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 44,
+              "column": 5
+            },
+            "end": {
+              "line": 112,
+              "column": 20
+            }
+          },
+          "replacement": "Some((DVector::new(), DMatrix::from_iter([0.0]), DMatrix::from_iter([1.0])))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_015.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_015.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.105771666,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.492521459,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:44:5: replace compute_doppler_update -> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)> with Some((DVector::new(), DMatrix::from_iter([0.0]), DMatrix::new(1.0)))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 113,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 44,
+              "column": 5
+            },
+            "end": {
+              "line": 112,
+              "column": 20
+            }
+          },
+          "replacement": "Some((DVector::new(), DMatrix::from_iter([0.0]), DMatrix::new(1.0)))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_016.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_016.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.108291417,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.428749709,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:44:5: replace compute_doppler_update -> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)> with Some((DVector::new(), DMatrix::from_iter([0.0]), DMatrix::from(1.0)))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 113,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 44,
+              "column": 5
+            },
+            "end": {
+              "line": 112,
+              "column": 20
+            }
+          },
+          "replacement": "Some((DVector::new(), DMatrix::from_iter([0.0]), DMatrix::from(1.0)))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_017.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_017.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.15910175,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.511915875,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:44:5: replace compute_doppler_update -> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)> with Some((DVector::new(), DMatrix::from_iter([0.0]), DMatrix::from_iter([-1.0])))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 113,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 44,
+              "column": 5
+            },
+            "end": {
+              "line": 112,
+              "column": 20
+            }
+          },
+          "replacement": "Some((DVector::new(), DMatrix::from_iter([0.0]), DMatrix::from_iter([-1.0])))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_018.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_018.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.170457709,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.864859125,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:44:5: replace compute_doppler_update -> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)> with Some((DVector::new(), DMatrix::from_iter([0.0]), DMatrix::new(-1.0)))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 113,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 44,
+              "column": 5
+            },
+            "end": {
+              "line": 112,
+              "column": 20
+            }
+          },
+          "replacement": "Some((DVector::new(), DMatrix::from_iter([0.0]), DMatrix::new(-1.0)))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_019.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_019.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.107862542,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.540503625,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:44:5: replace compute_doppler_update -> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)> with Some((DVector::new(), DMatrix::from_iter([0.0]), DMatrix::from(-1.0)))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 113,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 44,
+              "column": 5
+            },
+            "end": {
+              "line": 112,
+              "column": 20
+            }
+          },
+          "replacement": "Some((DVector::new(), DMatrix::from_iter([0.0]), DMatrix::from(-1.0)))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_020.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_020.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.106607,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.741708208,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:44:5: replace compute_doppler_update -> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)> with Some((DVector::new(), DMatrix::new(0.0), DMatrix::new()))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 113,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 44,
+              "column": 5
+            },
+            "end": {
+              "line": 112,
+              "column": 20
+            }
+          },
+          "replacement": "Some((DVector::new(), DMatrix::new(0.0), DMatrix::new()))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_021.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_021.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.119146542,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.605648459,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:44:5: replace compute_doppler_update -> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)> with Some((DVector::new(), DMatrix::new(0.0), DMatrix::from_iter([0.0])))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 113,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 44,
+              "column": 5
+            },
+            "end": {
+              "line": 112,
+              "column": 20
+            }
+          },
+          "replacement": "Some((DVector::new(), DMatrix::new(0.0), DMatrix::from_iter([0.0])))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_022.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_022.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.340732583,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.387901666,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:44:5: replace compute_doppler_update -> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)> with Some((DVector::new(), DMatrix::new(0.0), DMatrix::new(0.0)))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 113,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 44,
+              "column": 5
+            },
+            "end": {
+              "line": 112,
+              "column": 20
+            }
+          },
+          "replacement": "Some((DVector::new(), DMatrix::new(0.0), DMatrix::new(0.0)))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_023.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_023.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.105671292,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.379483792,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:44:5: replace compute_doppler_update -> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)> with Some((DVector::new(), DMatrix::new(0.0), DMatrix::from(0.0)))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 113,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 44,
+              "column": 5
+            },
+            "end": {
+              "line": 112,
+              "column": 20
+            }
+          },
+          "replacement": "Some((DVector::new(), DMatrix::new(0.0), DMatrix::from(0.0)))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_024.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_024.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.165412125,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.484110291,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:44:5: replace compute_doppler_update -> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)> with Some((DVector::new(), DMatrix::new(0.0), DMatrix::from_iter([1.0])))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 113,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 44,
+              "column": 5
+            },
+            "end": {
+              "line": 112,
+              "column": 20
+            }
+          },
+          "replacement": "Some((DVector::new(), DMatrix::new(0.0), DMatrix::from_iter([1.0])))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_025.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_025.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.22217,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.437189875,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:44:5: replace compute_doppler_update -> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)> with Some((DVector::new(), DMatrix::new(0.0), DMatrix::new(1.0)))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 113,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 44,
+              "column": 5
+            },
+            "end": {
+              "line": 112,
+              "column": 20
+            }
+          },
+          "replacement": "Some((DVector::new(), DMatrix::new(0.0), DMatrix::new(1.0)))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_026.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_026.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.107219833,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.540484792,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:44:5: replace compute_doppler_update -> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)> with Some((DVector::new(), DMatrix::new(0.0), DMatrix::from(1.0)))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 113,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 44,
+              "column": 5
+            },
+            "end": {
+              "line": 112,
+              "column": 20
+            }
+          },
+          "replacement": "Some((DVector::new(), DMatrix::new(0.0), DMatrix::from(1.0)))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_027.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_027.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.113412916,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.475705959,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:44:5: replace compute_doppler_update -> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)> with Some((DVector::new(), DMatrix::new(0.0), DMatrix::from_iter([-1.0])))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 113,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 44,
+              "column": 5
+            },
+            "end": {
+              "line": 112,
+              "column": 20
+            }
+          },
+          "replacement": "Some((DVector::new(), DMatrix::new(0.0), DMatrix::from_iter([-1.0])))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_028.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_028.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.159927542,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.42745425,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:44:5: replace compute_doppler_update -> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)> with Some((DVector::new(), DMatrix::new(0.0), DMatrix::new(-1.0)))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 113,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 44,
+              "column": 5
+            },
+            "end": {
+              "line": 112,
+              "column": 20
+            }
+          },
+          "replacement": "Some((DVector::new(), DMatrix::new(0.0), DMatrix::new(-1.0)))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_029.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_029.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.173874625,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.490194459,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:44:5: replace compute_doppler_update -> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)> with Some((DVector::new(), DMatrix::new(0.0), DMatrix::from(-1.0)))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 113,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 44,
+              "column": 5
+            },
+            "end": {
+              "line": 112,
+              "column": 20
+            }
+          },
+          "replacement": "Some((DVector::new(), DMatrix::new(0.0), DMatrix::from(-1.0)))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_030.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_030.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.165152583,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.645894,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:44:5: replace compute_doppler_update -> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)> with Some((DVector::new(), DMatrix::from(0.0), DMatrix::new()))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 113,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 44,
+              "column": 5
+            },
+            "end": {
+              "line": 112,
+              "column": 20
+            }
+          },
+          "replacement": "Some((DVector::new(), DMatrix::from(0.0), DMatrix::new()))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_031.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_031.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.106719542,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.37802175,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:44:5: replace compute_doppler_update -> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)> with Some((DVector::new(), DMatrix::from(0.0), DMatrix::from_iter([0.0])))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 113,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 44,
+              "column": 5
+            },
+            "end": {
+              "line": 112,
+              "column": 20
+            }
+          },
+          "replacement": "Some((DVector::new(), DMatrix::from(0.0), DMatrix::from_iter([0.0])))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_032.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_032.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.109920875,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.643623584,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:44:5: replace compute_doppler_update -> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)> with Some((DVector::new(), DMatrix::from(0.0), DMatrix::new(0.0)))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 113,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 44,
+              "column": 5
+            },
+            "end": {
+              "line": 112,
+              "column": 20
+            }
+          },
+          "replacement": "Some((DVector::new(), DMatrix::from(0.0), DMatrix::new(0.0)))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_033.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_44_col_5_033.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.164372667,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.742538,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    }
+  ],
+  "total_mutants": 34,
+  "missed": 34,
+  "caught": 0,
+  "timeout": 0,
+  "unviable": 0,
+  "success": 0,
+  "start_time": "2026-06-12T14:14:08.146241Z",
+  "end_time": null,
+  "cargo_mutants_version": "27.1.0"
+}

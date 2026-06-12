@@ -1,0 +1,18 @@
+--- crates/gneiss-rtk/src/engine/ppp.rs
++++ crates/gneiss-rtk/src/engine/ppp.rs
+@@ -304,6 +304,7 @@
+                         let diff = cp - (prev_cp - dop * dt);
+                         if (diff - median_diff).abs() > 2.0 {
+                             doppler_slip = true;
++                            println!("DOPPLER SLIP L1 on {:?} diff={:.2} median={:.2}", s.sat_obs.sat, diff, median_diff);
+                         }
+                     } else {
+                         doppler_slip = true;
+@@ -321,6 +322,7 @@
+                             let diff = cp - (prev_cp - dop * dt);
+                             if (diff - median_diff_l2).abs() > 2.0 {
+                                 doppler_slip = true;
++                                println!("DOPPLER SLIP L2 on {:?} diff={:.2} median_l2={:.2}", s.sat_obs.sat, diff, median_diff_l2);
+                             }
+                         } else {
+                             doppler_slip = true;

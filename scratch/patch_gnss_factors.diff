@@ -1,0 +1,34 @@
+--- crates/gneiss-rtk/src/factor_graph/gnss_factors.rs
++++ crates/gneiss-rtk/src/factor_graph/gnss_factors.rs
+@@ -178,6 +178,10 @@
+         let expected_pr = dist + dt - self.sat_clock_bias + self.tropo_dry_delay + zwd * self.map_wet;
+         DVector::from_vec(vec![self.measured_pr - expected_pr])
+     }
++    
++    fn robust_threshold(&self) -> Option<f64> {
++        Some(3.0) // 3-sigma Huber loss for pseudorange multipath
++    }
+     
+     fn jacobian(&self, delta: &DVector<f64>) -> DMatrix<f64> {
+         let rx = self.nominal_rx + delta[self.index_x];
+@@ -234,6 +238,10 @@
+         let expected_cp = dist + dt - self.sat_clock_bias + self.tropo_dry_delay + zwd * self.map_wet - amb * self.wavelength;
+         DVector::from_vec(vec![self.measured_cp - expected_cp])
+     }
++    
++    fn robust_threshold(&self) -> Option<f64> {
++        None
++    }
+     
+     fn jacobian(&self, delta: &DVector<f64>) -> DMatrix<f64> {
+         let rx = self.nominal_rx + delta[self.index_x];
+@@ -277,6 +285,10 @@
+         
+         DVector::from_vec(vec![self.measured_doppler_hz - expected_doppler_hz])
+     }
++    
++    fn robust_threshold(&self) -> Option<f64> {
++        Some(4.0)
++    }
+     
+     fn jacobian(&self, delta: &DVector<f64>) -> DMatrix<f64> {

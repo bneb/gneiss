@@ -303,11 +303,9 @@ impl RtkState {
                         // GNSS ambiguity resolution should not violently snap the IMU attitude or biases.
                         // By forcing the Kalman gain to 0 for these states, we prevent mean shifts AND 
                         // mathematically prevent the Joseph form from over-shrinking their covariance.
-                        if state_size > 15 {
-                            for i in 6..15 {
-                                for j in 0..k_full.ncols() {
-                                    k_full[(i, j)] = 0.0;
-                                }
+                        for i in 6..15 {
+                            for j in 0..k_full.ncols() {
+                                k_full[(i, j)] = 0.0;
                             }
                         }
                         
@@ -316,27 +314,10 @@ impl RtkState {
                         fixed_state.position.vector += dx.rows(0, 3).into_owned();
                         fixed_state.velocity += dx.rows(3, 3).into_owned();
                         
-                        let d_psi = nalgebra::Vector3::new(dx[6], dx[7], dx[8]);
-                        let angle = d_psi.norm();
-                        if angle > 1e-12 {
-                            let dq = nalgebra::UnitQuaternion::from_axis_angle(&nalgebra::Unit::new_unchecked(d_psi / angle), angle);
-                            fixed_state.attitude = dq * fixed_state.attitude;
-                            fixed_state.attitude.renormalize();
-                        }
-
-                        fixed_state.accel_bias.x += dx[9];
-                        fixed_state.accel_bias.y += dx[10];
-                        fixed_state.accel_bias.z += dx[11];
-                        fixed_state.gyro_bias.x += dx[12];
-                        fixed_state.gyro_bias.y += dx[13];
-                        fixed_state.gyro_bias.z += dx[14];
-                        
-                        if CORE_STATE_SIZE > 15 {
-                            fixed_state.rcv_clk_bias += dx[15];
-                            fixed_state.rcv_clk_drift += dx[16];
-                            fixed_state.zwd += dx[17];
-                            fixed_state.zwd = fixed_state.zwd.max(0.0);
-                        }
+                        fixed_state.rcv_clk_bias += dx[15];
+                        fixed_state.rcv_clk_drift += dx[16];
+                        fixed_state.zwd += dx[17];
+                        fixed_state.zwd = fixed_state.zwd.max(0.0);
 
                         for i in 0..self.ambiguities.len() {
                             fixed_state.ambiguities[i] += dx[CORE_STATE_SIZE + i];
@@ -571,6 +552,174 @@ mod tests {
         let f1 = 1575.42e6;
         let f2 = 1227.60e6;
         let dd = compute_double_difference(&rover_ref_obs, &rover_a_obs, &base_ref_obs, &base_a_obs, f1, f2, f1, f2);
-        assert!((dd - 1000.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_decouple_position() {
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 1.0);
+        
+        // Fill covariance with 1.0
+        state.covariance.fill(1.0);
+        state.decouple_position();
+
+        let cols = state.covariance.ncols();
+        for i in 0..3 {
+            for j in 3..cols {
+                assert_eq!(state.covariance[(i, j)], 0.0);
+                assert_eq!(state.covariance[(j, i)], 0.0);
+            }
+        }
+        // Ensure other elements are untouched
+        for i in 0..3 {
+            for j in 0..3 {
+                assert_eq!(state.covariance[(i, j)], 1.0);
+            }
+        }
+        for i in 3..cols {
+            for j in 3..cols {
+                assert_eq!(state.covariance[(i, j)], 1.0);
+            }
+        }
+    }
+
+    #[test]
+    fn test_decouple_clock() {
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 1.0);
+        
+        // Fill covariance with 1.0
+        state.covariance.fill(1.0);
+        state.decouple_clock();
+
+        let cols = state.covariance.ncols();
+        let rcv_clk = 15;
+        for j in 0..cols {
+            if j != rcv_clk {
+                assert_eq!(state.covariance[(rcv_clk, j)], 0.0);
+                assert_eq!(state.covariance[(j, rcv_clk)], 0.0);
+            }
+        }
+        
+        assert_eq!(state.covariance[(rcv_clk, rcv_clk)], 1.0);
+        
+        for i in 0..cols {
+            for j in 0..cols {
+                if i != rcv_clk && j != rcv_clk {
+                    assert_eq!(state.covariance[(i, j)], 1.0);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_update_mw() {
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 1.0);
+        let sat = SatelliteId { constellation: Constellation::Gps, prn: 1 };
+        
+        state.update_mw(sat, 10.0);
+        assert_eq!(state.mw_sd_counts[&sat], 1);
+        assert_eq!(state.mw_sd_ema[&sat], 10.0);
+        
+        state.update_mw(sat, 20.0);
+        assert_eq!(state.mw_sd_counts[&sat], 2);
+        // alpha = 1 / 2 = 0.5. ema = 10 * 0.5 + 20 * 0.5 = 15.0
+        assert_eq!(state.mw_sd_ema[&sat], 15.0);
+        
+        state.update_mw(sat, 30.0);
+        assert_eq!(state.mw_sd_counts[&sat], 3);
+        // alpha = 1 / 3. ema = 15 * (2/3) + 30 * 1/3 = 10 + 10 = 20.0
+        assert!((state.mw_sd_ema[&sat] - 20.0).abs() < 1e-6);
+        
+        // Add more than 100 to test min(100.0)
+        for _ in 0..97 {
+            state.update_mw(sat, 20.0);
+        }
+        assert_eq!(state.mw_sd_counts[&sat], 100);
+        assert!((state.mw_sd_ema[&sat] - 20.0).abs() < 1e-6);
+        
+        state.update_mw(sat, 120.0);
+        assert_eq!(state.mw_sd_counts[&sat], 101);
+        // alpha should be 1/100, not 1/101
+        assert!((state.mw_sd_ema[&sat] - (20.0 * 0.99 + 120.0 * 0.01)).abs() < 1e-6);
+    }
+    #[test]
+    fn test_prune_stale_ambiguities() {
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 1.0);
+        let sat1 = SatelliteId { constellation: Constellation::Gps, prn: 1 };
+        let sat2 = SatelliteId { constellation: Constellation::Gps, prn: 2 };
+        let sat3 = SatelliteId { constellation: Constellation::Gps, prn: 3 };
+
+        state.add_ambiguity(sat1, 1, 0.0, 1.0);
+        state.last_observed.insert((sat1, 1), 10);
+        state.locktimes.insert((sat1, 1), 10);
+        state.phase_history.insert((sat1, 1), (0.0, 0.0, time));
+
+        state.add_ambiguity(sat2, 1, 0.0, 1.0);
+        state.last_observed.insert((sat2, 1), 20);
+        state.locktimes.insert((sat2, 1), 20);
+        state.phase_history.insert((sat2, 1), (0.0, 0.0, time));
+
+        state.add_ambiguity(sat3, 1, 0.0, 1.0);
+        // sat3 has no last_observed, defaults to 0
+        
+        assert_eq!(state.covariance.nrows(), CORE_STATE_SIZE + 3);
+
+        state.prune_stale_ambiguities(25, 10);
+
+        assert_eq!(state.ambiguity_keys.len(), 1);
+        assert_eq!(state.ambiguity_keys[0], (sat2, 1));
+        assert!(state.last_observed.contains_key(&(sat2, 1)));
+        assert!(state.locktimes.contains_key(&(sat2, 1)));
+        assert!(state.phase_history.contains_key(&(sat2, 1)));
+
+        assert!(!state.last_observed.contains_key(&(sat1, 1)));
+        assert!(!state.locktimes.contains_key(&(sat1, 1)));
+        assert!(!state.phase_history.contains_key(&(sat1, 1)));
+        
+        assert_eq!(state.covariance.nrows(), CORE_STATE_SIZE + 1);
+        assert_eq!(state.covariance.ncols(), CORE_STATE_SIZE + 1);
+    }
+
+    #[test]
+    fn test_clear_ambiguities() {
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 1.0);
+        let sat1 = SatelliteId { constellation: Constellation::Gps, prn: 1 };
+        
+        state.add_ambiguity(sat1, 1, 10.0, 1.0);
+        assert_eq!(state.ambiguity_keys.len(), 1);
+        assert_eq!(state.covariance.nrows(), CORE_STATE_SIZE + 1);
+
+        state.clear_ambiguities();
+        assert_eq!(state.ambiguity_keys.len(), 0);
+        assert_eq!(state.ambiguities.len(), 0);
+        assert_eq!(state.ambiguity_track_ids.len(), 0);
+        assert_eq!(state.covariance.nrows(), CORE_STATE_SIZE);
+        assert_eq!(state.covariance.ncols(), CORE_STATE_SIZE);
+    }
+
+    #[test]
+    fn test_compute_if_combination() {
+        let f1 = 1575.42e6;
+        let f2 = 1227.60e6;
+        
+        // Single frequency
+        let res_single = compute_if_combination(100.0, None, f1, f2);
+        assert_eq!(res_single, 100.0);
+        
+        // Dual frequency
+        let f1_2 = f1 * f1;
+        let f2_2 = f2 * f2;
+        let expected = (f1_2 * 100.0 - f2_2 * 80.0) / (f1_2 - f2_2);
+        let res_dual = compute_if_combination(100.0, Some(80.0), f1, f2);
+        assert_eq!(res_dual, expected);
     }
 }

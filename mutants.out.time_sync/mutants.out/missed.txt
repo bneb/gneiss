@@ -1,0 +1,14 @@
+crates/gneiss-rtk/src/calibration/time_sync.rs:11:29: replace || with && in cross_correlate_time_offset
+crates/gneiss-rtk/src/calibration/time_sync.rs:11:47: replace < with == in cross_correlate_time_offset
+crates/gneiss-rtk/src/calibration/time_sync.rs:11:47: replace < with <= in cross_correlate_time_offset
+crates/gneiss-rtk/src/calibration/time_sync.rs:38:38: replace - with / in cross_correlate_time_offset
+crates/gneiss-rtk/src/calibration/time_sync.rs:42:23: replace > with >= in cross_correlate_time_offset
+crates/gneiss-rtk/src/calibration/time_sync.rs:44:51: replace * with / in cross_correlate_time_offset
+crates/gneiss-rtk/src/calibration/time_sync.rs:44:45: replace - with + in cross_correlate_time_offset
+crates/gneiss-rtk/src/calibration/time_sync.rs:57:40: replace && with || in cross_correlate_time_offset
+crates/gneiss-rtk/src/calibration/time_sync.rs:57:23: replace && with || in cross_correlate_time_offset
+crates/gneiss-rtk/src/calibration/time_sync.rs:57:18: replace > with >= in cross_correlate_time_offset
+crates/gneiss-rtk/src/calibration/time_sync.rs:57:33: replace > with >= in cross_correlate_time_offset
+crates/gneiss-rtk/src/calibration/time_sync.rs:57:50: replace > with >= in cross_correlate_time_offset
+crates/gneiss-rtk/src/calibration/time_sync.rs:58:48: replace * with + in cross_correlate_time_offset
+crates/gneiss-rtk/src/calibration/time_sync.rs:59:21: replace > with >= in cross_correlate_time_offset

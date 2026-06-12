@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/lambda.rs
++++ replace + with * in decorrelate
+@@ -110,17 +110,17 @@
+     let mut l;
+     let mut d;
+ 
+     let mut k = (n - 2) as isize;
+     let mut iter = 0;
+     while k >= 0 && iter < 100 {
+         iter += 1;
+         let k_u = k as usize;
+-        let k1 = k_u + 1;
++        let k1 = k_u * /* ~ changed by cargo-mutants ~ */ 1;
+ 
+         let res = ldlt_lower(&q_z)?;
+         l = res.l;
+         d = res.d;
+ 
+         let mut modified = false;
+         for i in (k_u + 1)..n {
+             let mu = l[(i, k_u)].round();

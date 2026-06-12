@@ -1,0 +1,1019 @@
+{
+  "outcomes": [
+    {
+      "scenario": "Baseline",
+      "summary": "Success",
+      "log_path": "log/baseline.log",
+      "diff_path": null,
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 18.8285305,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.230477083,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/variance.rs:8:5: replace dynamic_variance -> f64 with 0.0",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/variance.rs",
+          "function": {
+            "function_name": "dynamic_variance",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 1,
+                "column": 1
+              },
+              "end": {
+                "line": 15,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 8,
+              "column": 5
+            },
+            "end": {
+              "line": 14,
+              "column": 41
+            }
+          },
+          "replacement": "0.0",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__variance.rs_line_8_col_5.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__variance.rs_line_8_col_5.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.790355833,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.475208,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/variance.rs:8:5: replace dynamic_variance -> f64 with 1.0",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/variance.rs",
+          "function": {
+            "function_name": "dynamic_variance",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 1,
+                "column": 1
+              },
+              "end": {
+                "line": 15,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 8,
+              "column": 5
+            },
+            "end": {
+              "line": 14,
+              "column": 41
+            }
+          },
+          "replacement": "1.0",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__variance.rs_line_8_col_5_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__variance.rs_line_8_col_5_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.130363125,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.596067625,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/variance.rs:8:5: replace dynamic_variance -> f64 with -1.0",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/variance.rs",
+          "function": {
+            "function_name": "dynamic_variance",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 1,
+                "column": 1
+              },
+              "end": {
+                "line": 15,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 8,
+              "column": 5
+            },
+            "end": {
+              "line": 14,
+              "column": 41
+            }
+          },
+          "replacement": "-1.0",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__variance.rs_line_8_col_5_002.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__variance.rs_line_8_col_5_002.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.243240833,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.484319834,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/variance.rs:9:58: replace / with % in dynamic_variance",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/variance.rs",
+          "function": {
+            "function_name": "dynamic_variance",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 1,
+                "column": 1
+              },
+              "end": {
+                "line": 15,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 9,
+              "column": 58
+            },
+            "end": {
+              "line": 9,
+              "column": 59
+            }
+          },
+          "replacement": "%",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__variance.rs_line_9_col_58.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__variance.rs_line_9_col_58.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.5417857910000001,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.63553775,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/variance.rs:9:58: replace / with * in dynamic_variance",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/variance.rs",
+          "function": {
+            "function_name": "dynamic_variance",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 1,
+                "column": 1
+              },
+              "end": {
+                "line": 15,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 9,
+              "column": 58
+            },
+            "end": {
+              "line": 9,
+              "column": 59
+            }
+          },
+          "replacement": "*",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__variance.rs_line_9_col_58_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__variance.rs_line_9_col_58_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.165706875,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.479196459,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/variance.rs:9:43: replace - with + in dynamic_variance",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/variance.rs",
+          "function": {
+            "function_name": "dynamic_variance",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 1,
+                "column": 1
+              },
+              "end": {
+                "line": 15,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 9,
+              "column": 43
+            },
+            "end": {
+              "line": 9,
+              "column": 44
+            }
+          },
+          "replacement": "+",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__variance.rs_line_9_col_43.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__variance.rs_line_9_col_43.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.38582725,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.732462375,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/variance.rs:9:43: replace - with / in dynamic_variance",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/variance.rs",
+          "function": {
+            "function_name": "dynamic_variance",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 1,
+                "column": 1
+              },
+              "end": {
+                "line": 15,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 9,
+              "column": 43
+            },
+            "end": {
+              "line": 9,
+              "column": 44
+            }
+          },
+          "replacement": "/",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__variance.rs_line_9_col_43_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__variance.rs_line_9_col_43_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.318946625,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.685225875,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/variance.rs:12:24: replace / with % in dynamic_variance",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/variance.rs",
+          "function": {
+            "function_name": "dynamic_variance",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 1,
+                "column": 1
+              },
+              "end": {
+                "line": 15,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 12,
+              "column": 24
+            },
+            "end": {
+              "line": 12,
+              "column": 25
+            }
+          },
+          "replacement": "%",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__variance.rs_line_12_col_24.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__variance.rs_line_12_col_24.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.907077916,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.527579541,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/variance.rs:12:24: replace / with * in dynamic_variance",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/variance.rs",
+          "function": {
+            "function_name": "dynamic_variance",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 1,
+                "column": 1
+              },
+              "end": {
+                "line": 15,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 12,
+              "column": 24
+            },
+            "end": {
+              "line": 12,
+              "column": 25
+            }
+          },
+          "replacement": "*",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__variance.rs_line_12_col_24_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__variance.rs_line_12_col_24_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.058456792,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.749317583,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/variance.rs:12:34: replace * with + in dynamic_variance",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/variance.rs",
+          "function": {
+            "function_name": "dynamic_variance",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 1,
+                "column": 1
+              },
+              "end": {
+                "line": 15,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 12,
+              "column": 34
+            },
+            "end": {
+              "line": 12,
+              "column": 35
+            }
+          },
+          "replacement": "+",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__variance.rs_line_12_col_34.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__variance.rs_line_12_col_34.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.944028208,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.420855417,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/variance.rs:12:34: replace * with / in dynamic_variance",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/variance.rs",
+          "function": {
+            "function_name": "dynamic_variance",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 1,
+                "column": 1
+              },
+              "end": {
+                "line": 15,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 12,
+              "column": 34
+            },
+            "end": {
+              "line": 12,
+              "column": 35
+            }
+          },
+          "replacement": "/",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__variance.rs_line_12_col_34_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__variance.rs_line_12_col_34_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.8979485,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.746862834,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/variance.rs:14:31: replace * with + in dynamic_variance",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/variance.rs",
+          "function": {
+            "function_name": "dynamic_variance",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 1,
+                "column": 1
+              },
+              "end": {
+                "line": 15,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 14,
+              "column": 31
+            },
+            "end": {
+              "line": 14,
+              "column": 32
+            }
+          },
+          "replacement": "+",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__variance.rs_line_14_col_31.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__variance.rs_line_14_col_31.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.113842417,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.643453334,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/variance.rs:14:31: replace * with / in dynamic_variance",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/variance.rs",
+          "function": {
+            "function_name": "dynamic_variance",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 1,
+                "column": 1
+              },
+              "end": {
+                "line": 15,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 14,
+              "column": 31
+            },
+            "end": {
+              "line": 14,
+              "column": 32
+            }
+          },
+          "replacement": "/",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__variance.rs_line_14_col_31_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__variance.rs_line_14_col_31_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.86264975,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.613387291,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/variance.rs:14:19: replace * with + in dynamic_variance",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/variance.rs",
+          "function": {
+            "function_name": "dynamic_variance",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 1,
+                "column": 1
+              },
+              "end": {
+                "line": 15,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 14,
+              "column": 19
+            },
+            "end": {
+              "line": 14,
+              "column": 20
+            }
+          },
+          "replacement": "+",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__variance.rs_line_14_col_19.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__variance.rs_line_14_col_19.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.9596605,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.424191833,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/variance.rs:14:19: replace * with / in dynamic_variance",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/variance.rs",
+          "function": {
+            "function_name": "dynamic_variance",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 1,
+                "column": 1
+              },
+              "end": {
+                "line": 15,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 14,
+              "column": 19
+            },
+            "end": {
+              "line": 14,
+              "column": 20
+            }
+          },
+          "replacement": "/",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__variance.rs_line_14_col_19_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__variance.rs_line_14_col_19_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.799201209,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.4283175,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    }
+  ],
+  "total_mutants": 15,
+  "missed": 0,
+  "caught": 15,
+  "timeout": 0,
+  "unviable": 0,
+  "success": 0,
+  "start_time": "2026-06-12T13:34:34.519244Z",
+  "end_time": "2026-06-12T13:35:24.724201Z",
+  "cargo_mutants_version": "27.1.0"
+}

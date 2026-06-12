@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/doppler.rs
++++ replace * with + in compute_doppler_update
+@@ -64,17 +64,17 @@
+         let range = los.norm();
+         if range < 1.0 {
+             continue;
+         }
+         let e_los = los / range;
+ 
+         // Observed range-rate from Doppler (negative sign: positive Doppler = approaching = negative range-rate)
+         let lambda = LIGHT_SPEED / meas.frequency;
+-        let observed_range_rate = -meas.doppler_hz * lambda;
++        let observed_range_rate = -meas.doppler_hz + /* ~ changed by cargo-mutants ~ */ lambda;
+ 
+         // Predicted range-rate: ė · (v_sat - v_rcv)
+         // Note: This ignores Earth rotation correction for simplicity
+         let rel_vel = sat_vel - state.velocity;
+         let predicted_range_rate = e_los.dot(&rel_vel);
+ 
+         // Innovation
+         let z_i = observed_range_rate - predicted_range_rate;

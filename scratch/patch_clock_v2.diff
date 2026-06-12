@@ -1,0 +1,31 @@
+--- crates/gneiss-rtk/src/engine/ppp.rs
++++ crates/gneiss-rtk/src/engine/ppp.rs
+@@ -48,22 +48,16 @@
+     }
+ 
+     if let Some(cdt) = spp_cdt {
+         let mut clock_diff = cdt - engine.current_state.as_ref().unwrap().rcv_clk_bias;
+         if clock_diff.abs() > 100_000.0 {
+             let st = engine.current_state.as_ref().unwrap();
+             let mut pr_diffs = Vec::new();
+-            for s in rover_obs.satellites.iter() {
+-                if s.p1 != 0.0 {
+-                    if let Ok((pos, dt_sat, _)) = engine.ephemerides.calculate_satellite_position_and_velocity(s.sat, rover_obs.time, s.p1) {
+-                        let dist = (st.position.vector - pos).norm();
+-                        pr_diffs.push(s.p1 - (dist + st.rcv_clk_bias - dt_sat * gneiss_core::constants::SPEED_OF_LIGHT_M_S));
+-                    }
+-                }
++            for s in sats_to_process.iter() {
++                let expected_p = s.dist + st.rcv_clk_bias - s.dt_sat_m + s.tropo_dry + st.zwd * s.map_wet + s.pcv_correction + s.iono_delay;
++                pr_diffs.push(s.p_meas - expected_p);
+             }
+             if !pr_diffs.is_empty() {
+                 pr_diffs.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+                 clock_diff = pr_diffs[pr_diffs.len() / 2];
+             }
+             tracing::info!("Detected clock jump! Snapping clock state from {:.2} to {:.2}", engine.current_state.as_ref().unwrap().rcv_clk_bias, engine.current_state.as_ref().unwrap().rcv_clk_bias + clock_diff);
+             let state = engine.current_state.as_mut().unwrap();
+             state.rcv_clk_bias += clock_diff;
+             
+             // Android clock jumps only affect pseudorange. To prevent phase residuals from jumping,
+             // we must absorb the clock jump into the phase ambiguities.

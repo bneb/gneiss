@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/doppler.rs
++++ replace == with != in compute_doppler_update
+@@ -46,17 +46,17 @@
+     }
+ 
+     let state_size = state.covariance.ncols();
+     let mut z_vals = Vec::new();
+     let mut h_rows = Vec::new();
+     let mut r_vals = Vec::new();
+ 
+     for meas in measurements {
+-        let eph = match ephemerides.iter().find(|e| e.sat() == meas.sat) {
++        let eph = match ephemerides.iter().find(|e| e.sat() != /* ~ changed by cargo-mutants ~ */ meas.sat) {
+             Some(e) => e,
+             None => continue,
+         };
+ 
+         // Get satellite position and velocity
+         let (sat_pos, sat_vel, _dt_s, _) = eph.position(state.time);
+ 
+         // Line-of-sight unit vector from receiver to satellite

@@ -1,0 +1,22 @@
+--- crates/gneiss-rtk/src/engine/ppp.rs
++++ crates/gneiss-rtk/src/engine/ppp.rs
+@@ -282,10 +282,14 @@
+ 
+             let expected_p = s.dist + state.rcv_clk_bias - s.dt_sat_m + s.tropo_dry + state.zwd * s.map_wet + s.pcv_correction + s.iono_delay;
+             let mut expected_l = expected_p - 2.0 * s.iono_delay;
++            let mut existing_amb = None;
+             if let Some(pos) = state.ambiguity_keys.iter().position(|k| *k == (s.sat_obs.sat, 0)) {
++                existing_amb = Some(state.ambiguities[pos]);
+                 expected_l += state.ambiguities[pos];
+             }
+             
++            let res_l = l_if - expected_l;
++            if existing_amb.is_some() {
++                if s.sat_obs.sat.prn == 2 || s.sat_obs.sat.prn == 6 {
++                    println!("res_l for {:?} is {:.4}", s.sat_obs.sat, res_l);
++                }
++            }
++            
+             if slip {
+                 let initial_amb_val = l_if - (expected_p - 2.0 * s.iono_delay);
+                 state.reset_ambiguity_variance(s.sat_obs.sat, 0, initial_amb_val, 100.0);

@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/engine/ppp.rs
++++ replace - with / in process_ppp
+@@ -109,17 +109,17 @@
+                 let mut new_l2 = prev_l2.saturating_add(1);
+                 if let Some(lk) = l2_lock {
+                     if lk == 0 || lk < prev_l2 { slip = true; new_l2 = lk; } else { new_l2 = lk; }
+                 } else if new_l2 == 0 && state.locktimes.contains_key(&(sat_obs.sat, 2)) { slip = true; }
+                 state.locktimes.insert((sat_obs.sat, 2), new_l2);
+ 
+                 if slip { state.remove_ambiguity(sat_obs.sat, 0); }
+ 
+-                let res_l = l_if - expected_p;
++                let res_l = l_if / /* ~ changed by cargo-mutants ~ */ expected_p;
+                 if !state.ambiguity_keys.contains(&(sat_obs.sat, 0)) {
+                     let amb_est = res_l - res_p;
+                     state.add_ambiguity(sat_obs.sat, 0, amb_est, 100.0);
+                 }
+                 state.last_observed.insert((sat_obs.sat, 0), state.epoch_count as u32);
+             }
+         }
+     }

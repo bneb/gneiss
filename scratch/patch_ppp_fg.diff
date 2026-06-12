@@ -1,0 +1,36 @@
+--- crates/gneiss-rtk/src/engine/ppp_fg.rs
++++ crates/gneiss-rtk/src/engine/ppp_fg.rs
+@@ -34,6 +34,16 @@
+         }
+     }
+ 
++    let (rcv_pos, rcv_clk) = {
++        let state = engine.current_state.as_ref().unwrap();
++        (Vector3::new(state.position.vector.x, state.position.vector.y, state.position.vector.z), state.rcv_clk_bias)
++    };
++
++    let mut sats_to_process: Vec<ProcessedSat> = rover_obs.satellites.iter()
++        .filter(|sat| sat.sat.constellation == gneiss_core::sat::Constellation::Gps)
++        .filter_map(|sat| preprocess_single_sat(engine, rover_obs, sat, rcv_pos, rcv_clk))
++        .collect();
++
+     if let Some(cdt) = spp_cdt {
+         let mut clock_diff = cdt - engine.current_state.as_ref().unwrap().rcv_clk_bias;
+         if clock_diff.abs() > 100_000.0 {
+@@ -71,16 +81,6 @@
+             }
+         }
+     }
+-
+-    let (rcv_pos, rcv_clk) = {
+-        let state = engine.current_state.as_ref().unwrap();
+-        (Vector3::new(state.position.vector.x, state.position.vector.y, state.position.vector.z), state.rcv_clk_bias)
+-    };
+-
+-    let mut sats_to_process: Vec<ProcessedSat> = rover_obs.satellites.iter()
+-        .filter(|sat| sat.sat.constellation == gneiss_core::sat::Constellation::Gps)
+-        .filter_map(|sat| preprocess_single_sat(engine, rover_obs, sat, rcv_pos, rcv_clk))
+-        .collect();
+ 
+     let enable_doppler = engine.config.enable_doppler;
+     let state = engine.current_state.as_mut().unwrap();

@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/calibration/variance.rs
++++ replace / with % in dynamic_variance
+@@ -1,17 +1,17 @@
+ /// Computes the dynamic measurement variance for a GNSS observation based on SNR and Elevation.
+ /// Uses the SIGMA-Epsilon formulation.
+ /// 
+ /// `snr_dbhz`: Signal-to-Noise Ratio in dB-Hz
+ /// `elevation_rad`: Elevation angle of the satellite in radians
+ /// `base_variance`: The theoretical minimum variance of the measurement (e.g., 0.0001 for Carrier Phase, 9.0 for Pseudorange)
+ pub fn dynamic_variance(snr_dbhz: f64, elevation_rad: f64, base_variance: f64) -> f64 {
+     let snr_clamped = snr_dbhz.clamp(25.0, 50.0);
+-    let snr_scale = libm::pow(10.0, (45.0 - snr_clamped) / 10.0).clamp(1.0, 100.0);
++    let snr_scale = libm::pow(10.0, (45.0 - snr_clamped) % /* ~ changed by cargo-mutants ~ */ 10.0).clamp(1.0, 100.0);
+     
+     let sin_el = elevation_rad.sin().max(0.1);
+     let el_scale = 1.0 / (sin_el * sin_el);
+     
+     base_variance * snr_scale * el_scale
+ }
+ 
+ #[cfg(test)]

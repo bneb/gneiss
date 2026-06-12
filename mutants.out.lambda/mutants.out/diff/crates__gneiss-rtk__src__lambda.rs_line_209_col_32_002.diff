@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/lambda.rs
++++ replace < with <= in search_recursive
+@@ -201,17 +201,17 @@
+     if current_dist >= *second_best_dist { return false; }
+ 
+     if k < 0 {
+         if current_dist < *best_dist {
+             *second_best_dist = *best_dist;
+             second_best_z.copy_from(best_z);
+             *best_dist = current_dist;
+             best_z.copy_from(current_z);
+-        } else if current_dist < *second_best_dist {
++        } else if current_dist <= /* ~ changed by cargo-mutants ~ */ *second_best_dist {
+             *second_best_dist = current_dist;
+             second_best_z.copy_from(current_z);
+         }
+         return false;
+     }
+ 
+     let k_u = k as usize;
+     

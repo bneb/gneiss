@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/calibration/time_sync.rs
++++ replace * with / in cross_correlate_time_offset
+@@ -13,17 +13,17 @@
+     }
+ 
+     let mut best_tau = 0.0;
+     let mut max_corr = f64::NEG_INFINITY;
+ 
+     // Sweep from -0.5 to +0.5 seconds with 1 ms resolution
+     let steps = 500;
+     for step in -steps..=steps {
+-        let tau = (step as f64) * 0.001;
++        let tau = (step as f64) / /* ~ changed by cargo-mutants ~ */ 0.001;
+         let mut sum_xy = 0.0;
+         let mut sum_xx = 0.0;
+         let mut sum_yy = 0.0;
+         let mut count = 0;
+ 
+         for i in 0..gnss_time.len() {
+             let t_eval = gnss_time[i] - tau;
+             

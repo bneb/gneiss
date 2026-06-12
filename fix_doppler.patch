@@ -1,0 +1,43 @@
+--- crates/gneiss-rtk/src/doppler.rs
++++ crates/gneiss-rtk/src/doppler.rs
+@@ -321,19 +321,27 @@
+         }
+ 
+         let (_, h, _) = compute_doppler_update(&state, &measurements, &ephemerides).unwrap();
+ 
+-            let e_los = los / range;
+-
+-            for j in 0..h.ncols() {
+-                if j == 3 {
+-                    assert!((h[(i, j)] - (-e_los.x)).abs() < 1e-6, "H[{},3] should be -e_los.x", i);
+-                } else if j == 4 {
+-                    assert!((h[(i, j)] - (-e_los.y)).abs() < 1e-6, "H[{},4] should be -e_los.y", i);
+-                } else if j == 5 {
+-                    assert!((h[(i, j)] - (-e_los.z)).abs() < 1e-6, "H[{},5] should be -e_los.z", i);
+-                } else {
+-                    assert!(h[(i, j)].abs() < 1e-12,
+-                        "H[{},{}] should be zero for Doppler velocity, got {}", i, j, h[(i, j)]);
+-                }
+-            }
++        for i in 0..h.nrows() {
++            let eph = &ephemerides[i];
++            let (sat_pos, _, _, _) = eph.position(time);
++            let los = sat_pos - state.position.vector;
++            let range = los.norm();
++            let e_los = los / range;
++
++            for j in 0..h.ncols() {
++                if j == 3 {
++                    assert!((h[(i, j)] - (-e_los.x)).abs() < 1e-6, "H[{},3] should be -e_los.x", i);
++                } else if j == 4 {
++                    assert!((h[(i, j)] - (-e_los.y)).abs() < 1e-6, "H[{},4] should be -e_los.y", i);
++                } else if j == 5 {
++                    assert!((h[(i, j)] - (-e_los.z)).abs() < 1e-6, "H[{},5] should be -e_los.z", i);
++                } else {
++                    assert!(h[(i, j)].abs() < 1e-12,
++                        "H[{},{}] should be zero for Doppler velocity, got {}", i, j, h[(i, j)]);
++                }
++            }
++        }
+     }
+ }

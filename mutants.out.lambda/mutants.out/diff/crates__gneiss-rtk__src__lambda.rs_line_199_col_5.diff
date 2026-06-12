@@ -1,0 +1,76 @@
+--- crates/gneiss-rtk/src/lambda.rs
++++ replace search_recursive -> bool with true
+@@ -191,72 +191,17 @@
+     current_dist: f64,
+     best_z: &mut DVector<f64>,
+     best_dist: &mut f64,
+     second_best_z: &mut DVector<f64>,
+     second_best_dist: &mut f64,
+     iter_count: &mut usize,
+     max_iters: usize,
+ ) -> bool {
+-    *iter_count += 1;
+-    if *iter_count > max_iters { return true; }
+-    if current_dist >= *second_best_dist { return false; }
+-
+-    if k < 0 {
+-        if current_dist < *best_dist {
+-            *second_best_dist = *best_dist;
+-            second_best_z.copy_from(best_z);
+-            *best_dist = current_dist;
+-            best_z.copy_from(current_z);
+-        } else if current_dist < *second_best_dist {
+-            *second_best_dist = current_dist;
+-            second_best_z.copy_from(current_z);
+-        }
+-        return false;
+-    }
+-
+-    let k_u = k as usize;
+-    
+-    // Calculate conditional mean offset
+-    let mut s = 0.0;
+-    for j in (k_u + 1)..n {
+-        s += l[(j, k_u)] * y[j];
+-    }
+-    
+-    let z_cond_k = z_hat[k_u] + s; // Fixed sign: L y = z - z_hat => y_k = z_k - z_hat_k - s
+-    let center_z = z_cond_k.round();
+-
+-    let mut offset = 0.0;
+-    let mut step = 1.0;
+-    let mut direction = if z_cond_k > center_z { 1.0 } else { -1.0 };
+-
+-    loop {
+-        let z_test = center_z + offset;
+-        let y_k = z_test - z_cond_k;
+-        let new_dist = current_dist + (y_k * y_k) / d[k_u];
+-
+-        if new_dist >= *second_best_dist { break; }
+-
+-        current_z[k_u] = z_test;
+-        y[k_u] = y_k;
+-        
+-        // Removed debug print
+-
+-        let aborted = search_recursive(
+-            k - 1, n, l, d, z_hat, y, current_z, new_dist,
+-            best_z, best_dist, second_best_z, second_best_dist, iter_count, max_iters,
+-        );
+-        if aborted { return true; }
+-
+-        offset = step * direction;
+-        if direction > 0.0 { step += 1.0; }
+-        direction = -direction;
+-    }
+-    
+-    false
++    true /* ~ changed by cargo-mutants ~ */
+ }
+ 
+ pub fn bootstrapping_success_rate(d: &DVector<f64>) -> f64 {
+     let mut ps = 1.0;
+     for &di in d.as_slice() {
+         if di <= 0.0 { continue; }
+         let x = 1.0 / (2.0 * f64::sqrt(di));
+         ps *= libm::erf(x / std::f64::consts::SQRT_2);

@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/factor_graph/mod.rs
++++ replace Factor::robust_threshold -> Option<f64> with Some(1.0)
+@@ -11,17 +11,17 @@
+     /// Compute the Jacobian of the residual with respect to the state.
+     fn jacobian(&self, state: &DVector<f64>) -> DMatrix<f64>;
+     
+     /// Information matrix (inverse covariance) of the measurement.
+     fn information(&self) -> DMatrix<f64>;
+     
+     /// Optional robust Huber loss threshold (k). If None, uses pure L2 loss.
+     fn robust_threshold(&self) -> Option<f64> {
+-        None
++        Some(1.0) /* ~ changed by cargo-mutants ~ */
+     }
+     
+     fn is_cauchy_rejectable(&self) -> bool {
+         false
+     }
+ }
+ 
+ /// A generic Prior Factor on the entire state vector.

@@ -1,0 +1,10 @@
+--- crates/gneiss-rtk/src/engine/ppp.rs
++++ crates/gneiss-rtk/src/engine/ppp.rs
+@@ -296,6 +296,8 @@
+             let mut slip_from_res = false;
+             if existing_amb.is_some() && res_l.abs() > 0.5 {
+                 slip_from_res = true;
++                // println!("slip! res_l={:.2} for {:?}", res_l, s.sat_obs.sat);
+             }
+             
+             if slip || slip_from_res {

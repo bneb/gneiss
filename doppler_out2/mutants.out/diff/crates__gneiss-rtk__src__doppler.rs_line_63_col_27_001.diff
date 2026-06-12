@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/doppler.rs
++++ replace - with / in compute_doppler_update
+@@ -55,17 +55,17 @@
+             Some(e) => e,
+             None => continue,
+         };
+ 
+         // Get satellite position and velocity
+         let (sat_pos, sat_vel, _dt_s, _) = eph.position(state.time);
+ 
+         // Line-of-sight unit vector from receiver to satellite
+-        let los = sat_pos - state.position.vector;
++        let los = sat_pos / /* ~ changed by cargo-mutants ~ */ state.position.vector;
+         let range = los.norm();
+         if range < 1.0 {
+             continue;
+         }
+         let e_los = los / range;
+ 
+         // Observed range-rate from Doppler (negative sign: positive Doppler = approaching = negative range-rate)
+         let lambda = LIGHT_SPEED / meas.frequency;
