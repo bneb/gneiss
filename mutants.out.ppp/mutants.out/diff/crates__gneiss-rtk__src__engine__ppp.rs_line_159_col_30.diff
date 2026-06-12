@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/engine/ppp.rs
++++ delete - in process_ppp
+@@ -151,17 +151,17 @@
+                 let l_if = crate::combinations::iono_free(l1_m, l2_m, *f1, *f2);
+ 
+                 let amb_idx = state.ambiguity_keys.iter().position(|&(s, f)| s == sat_obs.sat && f == 0).unwrap();
+                 let n_if_est = state.ambiguities[amb_idx];
+ 
+                 let mut h_row_l = vec![0.0; state.covariance.ncols()];
+                 h_row_l[0] = -los.x;
+                 h_row_l[1] = -los.y;
+-                h_row_l[2] = -los.z;
++                h_row_l[2] =  /* ~ changed by cargo-mutants ~ */los.z;
+                 h_row_l[17] = *map_wet;
+                 h_row_l[15] = 1.0;
+                 h_row_l[crate::filter::CORE_STATE_SIZE + amb_idx] = 1.0;
+ 
+                 let expected_l = expected_p + n_if_est;
+                 let res_l = l_if - expected_l;
+ 
+                 h_rows.push(h_row_l);

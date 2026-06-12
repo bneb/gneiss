@@ -1,0 +1,1553 @@
+{
+  "outcomes": [
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:44:27: replace < with == in compute_doppler_update",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 116,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 44,
+              "column": 27
+            },
+            "end": {
+              "line": 44,
+              "column": 28
+            }
+          },
+          "replacement": "==",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_44_col_27.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_44_col_27.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 48.89675925,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0",
+            "--features=doppler-velocity"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:44:27: replace < with > in compute_doppler_update",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 116,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 44,
+              "column": 27
+            },
+            "end": {
+              "line": 44,
+              "column": 28
+            }
+          },
+          "replacement": ">",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_44_col_27_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_44_col_27_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 4.29094875,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0",
+            "--features=doppler-velocity"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:44:27: replace < with <= in compute_doppler_update",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 116,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 44,
+              "column": 27
+            },
+            "end": {
+              "line": 44,
+              "column": 28
+            }
+          },
+          "replacement": "<=",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_44_col_27_002.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_44_col_27_002.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 5.484242875,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0",
+            "--features=doppler-velocity"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:54:61: replace == with != in compute_doppler_update",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 116,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 54,
+              "column": 61
+            },
+            "end": {
+              "line": 54,
+              "column": 63
+            }
+          },
+          "replacement": "!=",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_54_col_61.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_54_col_61.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 5.771520042,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0",
+            "--features=doppler-velocity"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:63:27: replace - with + in compute_doppler_update",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 116,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 63,
+              "column": 27
+            },
+            "end": {
+              "line": 63,
+              "column": 28
+            }
+          },
+          "replacement": "+",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_63_col_27.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_63_col_27.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 5.346312,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0",
+            "--features=doppler-velocity"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:63:27: replace - with / in compute_doppler_update",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 116,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 63,
+              "column": 27
+            },
+            "end": {
+              "line": 63,
+              "column": 28
+            }
+          },
+          "replacement": "/",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_63_col_27_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_63_col_27_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.831658541,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0",
+            "--features=doppler-velocity"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:65:18: replace < with == in compute_doppler_update",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 116,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 65,
+              "column": 18
+            },
+            "end": {
+              "line": 65,
+              "column": 19
+            }
+          },
+          "replacement": "==",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_65_col_18.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_65_col_18.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.965411125,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0",
+            "--features=doppler-velocity"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:65:18: replace < with > in compute_doppler_update",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 116,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 65,
+              "column": 18
+            },
+            "end": {
+              "line": 65,
+              "column": 19
+            }
+          },
+          "replacement": ">",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_65_col_18_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_65_col_18_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.620231333,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0",
+            "--features=doppler-velocity"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:65:18: replace < with <= in compute_doppler_update",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 116,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 65,
+              "column": 18
+            },
+            "end": {
+              "line": 65,
+              "column": 19
+            }
+          },
+          "replacement": "<=",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_65_col_18_002.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_65_col_18_002.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 4.129476125,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0",
+            "--features=doppler-velocity"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:68:25: replace / with % in compute_doppler_update",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 116,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 68,
+              "column": 25
+            },
+            "end": {
+              "line": 68,
+              "column": 26
+            }
+          },
+          "replacement": "%",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_68_col_25.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_68_col_25.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 5.394791333,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0",
+            "--features=doppler-velocity"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:68:25: replace / with * in compute_doppler_update",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 116,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 68,
+              "column": 25
+            },
+            "end": {
+              "line": 68,
+              "column": 26
+            }
+          },
+          "replacement": "*",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_68_col_25_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_68_col_25_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 5.074175,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0",
+            "--features=doppler-velocity"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:71:34: replace / with % in compute_doppler_update",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 116,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 71,
+              "column": 34
+            },
+            "end": {
+              "line": 71,
+              "column": 35
+            }
+          },
+          "replacement": "%",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_71_col_34.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_71_col_34.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.7539717919999998,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0",
+            "--features=doppler-velocity"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:71:34: replace / with * in compute_doppler_update",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 116,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 71,
+              "column": 34
+            },
+            "end": {
+              "line": 71,
+              "column": 35
+            }
+          },
+          "replacement": "*",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_71_col_34_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_71_col_34_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 4.558294167,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0",
+            "--features=doppler-velocity"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:72:52: replace * with + in compute_doppler_update",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 116,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 72,
+              "column": 52
+            },
+            "end": {
+              "line": 72,
+              "column": 53
+            }
+          },
+          "replacement": "+",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_72_col_52.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_72_col_52.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 6.678904625,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0",
+            "--features=doppler-velocity"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:72:52: replace * with / in compute_doppler_update",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 116,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 72,
+              "column": 52
+            },
+            "end": {
+              "line": 72,
+              "column": 53
+            }
+          },
+          "replacement": "/",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_72_col_52_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_72_col_52_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 6.887367334,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0",
+            "--features=doppler-velocity"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:72:35: delete - in compute_doppler_update",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 116,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 72,
+              "column": 35
+            },
+            "end": {
+              "line": 72,
+              "column": 36
+            }
+          },
+          "replacement": "",
+          "genre": "UnaryOperator"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_72_col_35.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_72_col_35.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 5.704343333,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0",
+            "--features=doppler-velocity"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:76:31: replace - with + in compute_doppler_update",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 116,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 76,
+              "column": 31
+            },
+            "end": {
+              "line": 76,
+              "column": 32
+            }
+          },
+          "replacement": "+",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_76_col_31.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_76_col_31.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 6.254291083,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0",
+            "--features=doppler-velocity"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:76:31: replace - with / in compute_doppler_update",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 116,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 76,
+              "column": 31
+            },
+            "end": {
+              "line": 76,
+              "column": 32
+            }
+          },
+          "replacement": "/",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_76_col_31_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_76_col_31_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 5.406414042,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0",
+            "--features=doppler-velocity"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:80:39: replace - with + in compute_doppler_update",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 116,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 80,
+              "column": 39
+            },
+            "end": {
+              "line": 80,
+              "column": 40
+            }
+          },
+          "replacement": "+",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_80_col_39.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_80_col_39.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 5.051610834,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0",
+            "--features=doppler-velocity"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:80:39: replace - with / in compute_doppler_update",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 116,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 80,
+              "column": 39
+            },
+            "end": {
+              "line": 80,
+              "column": 40
+            }
+          },
+          "replacement": "/",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_80_col_39_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_80_col_39_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 5.202542833,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0",
+            "--features=doppler-velocity"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:86:20: delete - in compute_doppler_update",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 116,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 86,
+              "column": 20
+            },
+            "end": {
+              "line": 86,
+              "column": 21
+            }
+          },
+          "replacement": "",
+          "genre": "UnaryOperator"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_86_col_20.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_86_col_20.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 5.202696875,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0",
+            "--features=doppler-velocity"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:87:20: delete - in compute_doppler_update",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 116,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 87,
+              "column": 20
+            },
+            "end": {
+              "line": 87,
+              "column": 21
+            }
+          },
+          "replacement": "",
+          "genre": "UnaryOperator"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_87_col_20.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_87_col_20.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 6.278595625,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0",
+            "--features=doppler-velocity"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:88:20: delete - in compute_doppler_update",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 116,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 88,
+              "column": 20
+            },
+            "end": {
+              "line": 88,
+              "column": 21
+            }
+          },
+          "replacement": "",
+          "genre": "UnaryOperator"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_88_col_20.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_88_col_20.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 5.125357125,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0",
+            "--features=doppler-velocity"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:91:24: replace * with + in compute_doppler_update",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 116,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 91,
+              "column": 24
+            },
+            "end": {
+              "line": 91,
+              "column": 25
+            }
+          },
+          "replacement": "+",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_91_col_24.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_91_col_24.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 4.327843666,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0",
+            "--features=doppler-velocity"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:91:24: replace * with / in compute_doppler_update",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 116,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 91,
+              "column": 24
+            },
+            "end": {
+              "line": 91,
+              "column": 25
+            }
+          },
+          "replacement": "/",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_91_col_24_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_91_col_24_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 4.326475375,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0",
+            "--features=doppler-velocity"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:98:21: replace < with == in compute_doppler_update",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 116,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 98,
+              "column": 21
+            },
+            "end": {
+              "line": 98,
+              "column": 22
+            }
+          },
+          "replacement": "==",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_98_col_21.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_98_col_21.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 6.603923083,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0",
+            "--features=doppler-velocity"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:98:21: replace < with > in compute_doppler_update",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 116,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 98,
+              "column": 21
+            },
+            "end": {
+              "line": 98,
+              "column": 22
+            }
+          },
+          "replacement": ">",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_98_col_21_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_98_col_21_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 6.160292709,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0",
+            "--features=doppler-velocity"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/doppler.rs:98:21: replace < with <= in compute_doppler_update",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/doppler.rs",
+          "function": {
+            "function_name": "compute_doppler_update",
+            "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+            "span": {
+              "start": {
+                "line": 31,
+                "column": 1
+              },
+              "end": {
+                "line": 116,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 98,
+              "column": 21
+            },
+            "end": {
+              "line": 98,
+              "column": 22
+            }
+          },
+          "replacement": "<=",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__doppler.rs_line_98_col_21_002.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__doppler.rs_line_98_col_21_002.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 6.401113958,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0",
+            "--features=doppler-velocity"
+          ]
+        }
+      ]
+    }
+  ],
+  "total_mutants": 28,
+  "missed": 0,
+  "caught": 0,
+  "timeout": 0,
+  "unviable": 28,
+  "success": 0,
+  "start_time": "2026-06-12T14:27:21.119457Z",
+  "end_time": "2026-06-12T14:30:39.783194Z",
+  "cargo_mutants_version": "27.1.0"
+}

@@ -12,3 +12,4 @@ pub mod doppler;
 mod tests_ekf;
 mod tests_predictor;
 mod tests_updater;
+pub mod factor_graph;

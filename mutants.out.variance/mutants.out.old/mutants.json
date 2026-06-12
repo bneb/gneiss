@@ -1,0 +1,482 @@
+[
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/variance.rs\n+++ replace dynamic_variance -> f64 with 0.0\n@@ -1,22 +1,16 @@\n /// Computes the dynamic measurement variance for a GNSS observation based on SNR and Elevation.\n /// Uses the SIGMA-Epsilon formulation.\n /// \n /// `snr_dbhz`: Signal-to-Noise Ratio in dB-Hz\n /// `elevation_rad`: Elevation angle of the satellite in radians\n /// `base_variance`: The theoretical minimum variance of the measurement (e.g., 0.0001 for Carrier Phase, 9.0 for Pseudorange)\n pub fn dynamic_variance(snr_dbhz: f64, elevation_rad: f64, base_variance: f64) -> f64 {\n-    let snr_clamped = snr_dbhz.clamp(25.0, 50.0);\n-    let snr_scale = libm::pow(10.0, (45.0 - snr_clamped) / 10.0).clamp(1.0, 100.0);\n-    \n-    let sin_el = elevation_rad.sin().max(0.1);\n-    let el_scale = 1.0 / (sin_el * sin_el);\n-    \n-    base_variance * snr_scale * el_scale\n+    0.0 /* ~ changed by cargo-mutants ~ */\n }\n \n #[cfg(test)]\n mod tests {\n     use super::*;\n \n     #[test]\n     fn test_dynamic_variance_high_quality() {\n",
+    "file": "crates/gneiss-rtk/src/calibration/variance.rs",
+    "function": {
+      "function_name": "dynamic_variance",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 15
+        },
+        "start": {
+          "column": 1,
+          "line": 1
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "crates/gneiss-rtk/src/calibration/variance.rs:8:5: replace dynamic_variance -> f64 with 0.0",
+    "package": "gneiss-rtk",
+    "replacement": "0.0",
+    "span": {
+      "end": {
+        "column": 41,
+        "line": 14
+      },
+      "start": {
+        "column": 5,
+        "line": 8
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/variance.rs\n+++ replace dynamic_variance -> f64 with 1.0\n@@ -1,22 +1,16 @@\n /// Computes the dynamic measurement variance for a GNSS observation based on SNR and Elevation.\n /// Uses the SIGMA-Epsilon formulation.\n /// \n /// `snr_dbhz`: Signal-to-Noise Ratio in dB-Hz\n /// `elevation_rad`: Elevation angle of the satellite in radians\n /// `base_variance`: The theoretical minimum variance of the measurement (e.g., 0.0001 for Carrier Phase, 9.0 for Pseudorange)\n pub fn dynamic_variance(snr_dbhz: f64, elevation_rad: f64, base_variance: f64) -> f64 {\n-    let snr_clamped = snr_dbhz.clamp(25.0, 50.0);\n-    let snr_scale = libm::pow(10.0, (45.0 - snr_clamped) / 10.0).clamp(1.0, 100.0);\n-    \n-    let sin_el = elevation_rad.sin().max(0.1);\n-    let el_scale = 1.0 / (sin_el * sin_el);\n-    \n-    base_variance * snr_scale * el_scale\n+    1.0 /* ~ changed by cargo-mutants ~ */\n }\n \n #[cfg(test)]\n mod tests {\n     use super::*;\n \n     #[test]\n     fn test_dynamic_variance_high_quality() {\n",
+    "file": "crates/gneiss-rtk/src/calibration/variance.rs",
+    "function": {
+      "function_name": "dynamic_variance",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 15
+        },
+        "start": {
+          "column": 1,
+          "line": 1
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "crates/gneiss-rtk/src/calibration/variance.rs:8:5: replace dynamic_variance -> f64 with 1.0",
+    "package": "gneiss-rtk",
+    "replacement": "1.0",
+    "span": {
+      "end": {
+        "column": 41,
+        "line": 14
+      },
+      "start": {
+        "column": 5,
+        "line": 8
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/variance.rs\n+++ replace dynamic_variance -> f64 with -1.0\n@@ -1,22 +1,16 @@\n /// Computes the dynamic measurement variance for a GNSS observation based on SNR and Elevation.\n /// Uses the SIGMA-Epsilon formulation.\n /// \n /// `snr_dbhz`: Signal-to-Noise Ratio in dB-Hz\n /// `elevation_rad`: Elevation angle of the satellite in radians\n /// `base_variance`: The theoretical minimum variance of the measurement (e.g., 0.0001 for Carrier Phase, 9.0 for Pseudorange)\n pub fn dynamic_variance(snr_dbhz: f64, elevation_rad: f64, base_variance: f64) -> f64 {\n-    let snr_clamped = snr_dbhz.clamp(25.0, 50.0);\n-    let snr_scale = libm::pow(10.0, (45.0 - snr_clamped) / 10.0).clamp(1.0, 100.0);\n-    \n-    let sin_el = elevation_rad.sin().max(0.1);\n-    let el_scale = 1.0 / (sin_el * sin_el);\n-    \n-    base_variance * snr_scale * el_scale\n+    -1.0 /* ~ changed by cargo-mutants ~ */\n }\n \n #[cfg(test)]\n mod tests {\n     use super::*;\n \n     #[test]\n     fn test_dynamic_variance_high_quality() {\n",
+    "file": "crates/gneiss-rtk/src/calibration/variance.rs",
+    "function": {
+      "function_name": "dynamic_variance",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 15
+        },
+        "start": {
+          "column": 1,
+          "line": 1
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "crates/gneiss-rtk/src/calibration/variance.rs:8:5: replace dynamic_variance -> f64 with -1.0",
+    "package": "gneiss-rtk",
+    "replacement": "-1.0",
+    "span": {
+      "end": {
+        "column": 41,
+        "line": 14
+      },
+      "start": {
+        "column": 5,
+        "line": 8
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/variance.rs\n+++ replace / with % in dynamic_variance\n@@ -1,17 +1,17 @@\n /// Computes the dynamic measurement variance for a GNSS observation based on SNR and Elevation.\n /// Uses the SIGMA-Epsilon formulation.\n /// \n /// `snr_dbhz`: Signal-to-Noise Ratio in dB-Hz\n /// `elevation_rad`: Elevation angle of the satellite in radians\n /// `base_variance`: The theoretical minimum variance of the measurement (e.g., 0.0001 for Carrier Phase, 9.0 for Pseudorange)\n pub fn dynamic_variance(snr_dbhz: f64, elevation_rad: f64, base_variance: f64) -> f64 {\n     let snr_clamped = snr_dbhz.clamp(25.0, 50.0);\n-    let snr_scale = libm::pow(10.0, (45.0 - snr_clamped) / 10.0).clamp(1.0, 100.0);\n+    let snr_scale = libm::pow(10.0, (45.0 - snr_clamped) % /* ~ changed by cargo-mutants ~ */ 10.0).clamp(1.0, 100.0);\n     \n     let sin_el = elevation_rad.sin().max(0.1);\n     let el_scale = 1.0 / (sin_el * sin_el);\n     \n     base_variance * snr_scale * el_scale\n }\n \n #[cfg(test)]\n",
+    "file": "crates/gneiss-rtk/src/calibration/variance.rs",
+    "function": {
+      "function_name": "dynamic_variance",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 15
+        },
+        "start": {
+          "column": 1,
+          "line": 1
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/variance.rs:9:58: replace / with % in dynamic_variance",
+    "package": "gneiss-rtk",
+    "replacement": "%",
+    "span": {
+      "end": {
+        "column": 59,
+        "line": 9
+      },
+      "start": {
+        "column": 58,
+        "line": 9
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/variance.rs\n+++ replace / with * in dynamic_variance\n@@ -1,17 +1,17 @@\n /// Computes the dynamic measurement variance for a GNSS observation based on SNR and Elevation.\n /// Uses the SIGMA-Epsilon formulation.\n /// \n /// `snr_dbhz`: Signal-to-Noise Ratio in dB-Hz\n /// `elevation_rad`: Elevation angle of the satellite in radians\n /// `base_variance`: The theoretical minimum variance of the measurement (e.g., 0.0001 for Carrier Phase, 9.0 for Pseudorange)\n pub fn dynamic_variance(snr_dbhz: f64, elevation_rad: f64, base_variance: f64) -> f64 {\n     let snr_clamped = snr_dbhz.clamp(25.0, 50.0);\n-    let snr_scale = libm::pow(10.0, (45.0 - snr_clamped) / 10.0).clamp(1.0, 100.0);\n+    let snr_scale = libm::pow(10.0, (45.0 - snr_clamped) * /* ~ changed by cargo-mutants ~ */ 10.0).clamp(1.0, 100.0);\n     \n     let sin_el = elevation_rad.sin().max(0.1);\n     let el_scale = 1.0 / (sin_el * sin_el);\n     \n     base_variance * snr_scale * el_scale\n }\n \n #[cfg(test)]\n",
+    "file": "crates/gneiss-rtk/src/calibration/variance.rs",
+    "function": {
+      "function_name": "dynamic_variance",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 15
+        },
+        "start": {
+          "column": 1,
+          "line": 1
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/variance.rs:9:58: replace / with * in dynamic_variance",
+    "package": "gneiss-rtk",
+    "replacement": "*",
+    "span": {
+      "end": {
+        "column": 59,
+        "line": 9
+      },
+      "start": {
+        "column": 58,
+        "line": 9
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/variance.rs\n+++ replace - with + in dynamic_variance\n@@ -1,17 +1,17 @@\n /// Computes the dynamic measurement variance for a GNSS observation based on SNR and Elevation.\n /// Uses the SIGMA-Epsilon formulation.\n /// \n /// `snr_dbhz`: Signal-to-Noise Ratio in dB-Hz\n /// `elevation_rad`: Elevation angle of the satellite in radians\n /// `base_variance`: The theoretical minimum variance of the measurement (e.g., 0.0001 for Carrier Phase, 9.0 for Pseudorange)\n pub fn dynamic_variance(snr_dbhz: f64, elevation_rad: f64, base_variance: f64) -> f64 {\n     let snr_clamped = snr_dbhz.clamp(25.0, 50.0);\n-    let snr_scale = libm::pow(10.0, (45.0 - snr_clamped) / 10.0).clamp(1.0, 100.0);\n+    let snr_scale = libm::pow(10.0, (45.0 + /* ~ changed by cargo-mutants ~ */ snr_clamped) / 10.0).clamp(1.0, 100.0);\n     \n     let sin_el = elevation_rad.sin().max(0.1);\n     let el_scale = 1.0 / (sin_el * sin_el);\n     \n     base_variance * snr_scale * el_scale\n }\n \n #[cfg(test)]\n",
+    "file": "crates/gneiss-rtk/src/calibration/variance.rs",
+    "function": {
+      "function_name": "dynamic_variance",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 15
+        },
+        "start": {
+          "column": 1,
+          "line": 1
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/variance.rs:9:43: replace - with + in dynamic_variance",
+    "package": "gneiss-rtk",
+    "replacement": "+",
+    "span": {
+      "end": {
+        "column": 44,
+        "line": 9
+      },
+      "start": {
+        "column": 43,
+        "line": 9
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/variance.rs\n+++ replace - with / in dynamic_variance\n@@ -1,17 +1,17 @@\n /// Computes the dynamic measurement variance for a GNSS observation based on SNR and Elevation.\n /// Uses the SIGMA-Epsilon formulation.\n /// \n /// `snr_dbhz`: Signal-to-Noise Ratio in dB-Hz\n /// `elevation_rad`: Elevation angle of the satellite in radians\n /// `base_variance`: The theoretical minimum variance of the measurement (e.g., 0.0001 for Carrier Phase, 9.0 for Pseudorange)\n pub fn dynamic_variance(snr_dbhz: f64, elevation_rad: f64, base_variance: f64) -> f64 {\n     let snr_clamped = snr_dbhz.clamp(25.0, 50.0);\n-    let snr_scale = libm::pow(10.0, (45.0 - snr_clamped) / 10.0).clamp(1.0, 100.0);\n+    let snr_scale = libm::pow(10.0, (45.0 / /* ~ changed by cargo-mutants ~ */ snr_clamped) / 10.0).clamp(1.0, 100.0);\n     \n     let sin_el = elevation_rad.sin().max(0.1);\n     let el_scale = 1.0 / (sin_el * sin_el);\n     \n     base_variance * snr_scale * el_scale\n }\n \n #[cfg(test)]\n",
+    "file": "crates/gneiss-rtk/src/calibration/variance.rs",
+    "function": {
+      "function_name": "dynamic_variance",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 15
+        },
+        "start": {
+          "column": 1,
+          "line": 1
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/variance.rs:9:43: replace - with / in dynamic_variance",
+    "package": "gneiss-rtk",
+    "replacement": "/",
+    "span": {
+      "end": {
+        "column": 44,
+        "line": 9
+      },
+      "start": {
+        "column": 43,
+        "line": 9
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/variance.rs\n+++ replace / with % in dynamic_variance\n@@ -4,17 +4,17 @@\n /// `snr_dbhz`: Signal-to-Noise Ratio in dB-Hz\n /// `elevation_rad`: Elevation angle of the satellite in radians\n /// `base_variance`: The theoretical minimum variance of the measurement (e.g., 0.0001 for Carrier Phase, 9.0 for Pseudorange)\n pub fn dynamic_variance(snr_dbhz: f64, elevation_rad: f64, base_variance: f64) -> f64 {\n     let snr_clamped = snr_dbhz.clamp(25.0, 50.0);\n     let snr_scale = libm::pow(10.0, (45.0 - snr_clamped) / 10.0).clamp(1.0, 100.0);\n     \n     let sin_el = elevation_rad.sin().max(0.1);\n-    let el_scale = 1.0 / (sin_el * sin_el);\n+    let el_scale = 1.0 % /* ~ changed by cargo-mutants ~ */ (sin_el * sin_el);\n     \n     base_variance * snr_scale * el_scale\n }\n \n #[cfg(test)]\n mod tests {\n     use super::*;\n \n",
+    "file": "crates/gneiss-rtk/src/calibration/variance.rs",
+    "function": {
+      "function_name": "dynamic_variance",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 15
+        },
+        "start": {
+          "column": 1,
+          "line": 1
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/variance.rs:12:24: replace / with % in dynamic_variance",
+    "package": "gneiss-rtk",
+    "replacement": "%",
+    "span": {
+      "end": {
+        "column": 25,
+        "line": 12
+      },
+      "start": {
+        "column": 24,
+        "line": 12
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/variance.rs\n+++ replace / with * in dynamic_variance\n@@ -4,17 +4,17 @@\n /// `snr_dbhz`: Signal-to-Noise Ratio in dB-Hz\n /// `elevation_rad`: Elevation angle of the satellite in radians\n /// `base_variance`: The theoretical minimum variance of the measurement (e.g., 0.0001 for Carrier Phase, 9.0 for Pseudorange)\n pub fn dynamic_variance(snr_dbhz: f64, elevation_rad: f64, base_variance: f64) -> f64 {\n     let snr_clamped = snr_dbhz.clamp(25.0, 50.0);\n     let snr_scale = libm::pow(10.0, (45.0 - snr_clamped) / 10.0).clamp(1.0, 100.0);\n     \n     let sin_el = elevation_rad.sin().max(0.1);\n-    let el_scale = 1.0 / (sin_el * sin_el);\n+    let el_scale = 1.0 * /* ~ changed by cargo-mutants ~ */ (sin_el * sin_el);\n     \n     base_variance * snr_scale * el_scale\n }\n \n #[cfg(test)]\n mod tests {\n     use super::*;\n \n",
+    "file": "crates/gneiss-rtk/src/calibration/variance.rs",
+    "function": {
+      "function_name": "dynamic_variance",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 15
+        },
+        "start": {
+          "column": 1,
+          "line": 1
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/variance.rs:12:24: replace / with * in dynamic_variance",
+    "package": "gneiss-rtk",
+    "replacement": "*",
+    "span": {
+      "end": {
+        "column": 25,
+        "line": 12
+      },
+      "start": {
+        "column": 24,
+        "line": 12
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/variance.rs\n+++ replace * with + in dynamic_variance\n@@ -4,17 +4,17 @@\n /// `snr_dbhz`: Signal-to-Noise Ratio in dB-Hz\n /// `elevation_rad`: Elevation angle of the satellite in radians\n /// `base_variance`: The theoretical minimum variance of the measurement (e.g., 0.0001 for Carrier Phase, 9.0 for Pseudorange)\n pub fn dynamic_variance(snr_dbhz: f64, elevation_rad: f64, base_variance: f64) -> f64 {\n     let snr_clamped = snr_dbhz.clamp(25.0, 50.0);\n     let snr_scale = libm::pow(10.0, (45.0 - snr_clamped) / 10.0).clamp(1.0, 100.0);\n     \n     let sin_el = elevation_rad.sin().max(0.1);\n-    let el_scale = 1.0 / (sin_el * sin_el);\n+    let el_scale = 1.0 / (sin_el + /* ~ changed by cargo-mutants ~ */ sin_el);\n     \n     base_variance * snr_scale * el_scale\n }\n \n #[cfg(test)]\n mod tests {\n     use super::*;\n \n",
+    "file": "crates/gneiss-rtk/src/calibration/variance.rs",
+    "function": {
+      "function_name": "dynamic_variance",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 15
+        },
+        "start": {
+          "column": 1,
+          "line": 1
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/variance.rs:12:34: replace * with + in dynamic_variance",
+    "package": "gneiss-rtk",
+    "replacement": "+",
+    "span": {
+      "end": {
+        "column": 35,
+        "line": 12
+      },
+      "start": {
+        "column": 34,
+        "line": 12
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/variance.rs\n+++ replace * with / in dynamic_variance\n@@ -4,17 +4,17 @@\n /// `snr_dbhz`: Signal-to-Noise Ratio in dB-Hz\n /// `elevation_rad`: Elevation angle of the satellite in radians\n /// `base_variance`: The theoretical minimum variance of the measurement (e.g., 0.0001 for Carrier Phase, 9.0 for Pseudorange)\n pub fn dynamic_variance(snr_dbhz: f64, elevation_rad: f64, base_variance: f64) -> f64 {\n     let snr_clamped = snr_dbhz.clamp(25.0, 50.0);\n     let snr_scale = libm::pow(10.0, (45.0 - snr_clamped) / 10.0).clamp(1.0, 100.0);\n     \n     let sin_el = elevation_rad.sin().max(0.1);\n-    let el_scale = 1.0 / (sin_el * sin_el);\n+    let el_scale = 1.0 / (sin_el / /* ~ changed by cargo-mutants ~ */ sin_el);\n     \n     base_variance * snr_scale * el_scale\n }\n \n #[cfg(test)]\n mod tests {\n     use super::*;\n \n",
+    "file": "crates/gneiss-rtk/src/calibration/variance.rs",
+    "function": {
+      "function_name": "dynamic_variance",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 15
+        },
+        "start": {
+          "column": 1,
+          "line": 1
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/variance.rs:12:34: replace * with / in dynamic_variance",
+    "package": "gneiss-rtk",
+    "replacement": "/",
+    "span": {
+      "end": {
+        "column": 35,
+        "line": 12
+      },
+      "start": {
+        "column": 34,
+        "line": 12
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/variance.rs\n+++ replace * with + in dynamic_variance\n@@ -6,17 +6,17 @@\n /// `base_variance`: The theoretical minimum variance of the measurement (e.g., 0.0001 for Carrier Phase, 9.0 for Pseudorange)\n pub fn dynamic_variance(snr_dbhz: f64, elevation_rad: f64, base_variance: f64) -> f64 {\n     let snr_clamped = snr_dbhz.clamp(25.0, 50.0);\n     let snr_scale = libm::pow(10.0, (45.0 - snr_clamped) / 10.0).clamp(1.0, 100.0);\n     \n     let sin_el = elevation_rad.sin().max(0.1);\n     let el_scale = 1.0 / (sin_el * sin_el);\n     \n-    base_variance * snr_scale * el_scale\n+    base_variance * snr_scale + /* ~ changed by cargo-mutants ~ */ el_scale\n }\n \n #[cfg(test)]\n mod tests {\n     use super::*;\n \n     #[test]\n     fn test_dynamic_variance_high_quality() {\n",
+    "file": "crates/gneiss-rtk/src/calibration/variance.rs",
+    "function": {
+      "function_name": "dynamic_variance",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 15
+        },
+        "start": {
+          "column": 1,
+          "line": 1
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/variance.rs:14:31: replace * with + in dynamic_variance",
+    "package": "gneiss-rtk",
+    "replacement": "+",
+    "span": {
+      "end": {
+        "column": 32,
+        "line": 14
+      },
+      "start": {
+        "column": 31,
+        "line": 14
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/variance.rs\n+++ replace * with / in dynamic_variance\n@@ -6,17 +6,17 @@\n /// `base_variance`: The theoretical minimum variance of the measurement (e.g., 0.0001 for Carrier Phase, 9.0 for Pseudorange)\n pub fn dynamic_variance(snr_dbhz: f64, elevation_rad: f64, base_variance: f64) -> f64 {\n     let snr_clamped = snr_dbhz.clamp(25.0, 50.0);\n     let snr_scale = libm::pow(10.0, (45.0 - snr_clamped) / 10.0).clamp(1.0, 100.0);\n     \n     let sin_el = elevation_rad.sin().max(0.1);\n     let el_scale = 1.0 / (sin_el * sin_el);\n     \n-    base_variance * snr_scale * el_scale\n+    base_variance * snr_scale / /* ~ changed by cargo-mutants ~ */ el_scale\n }\n \n #[cfg(test)]\n mod tests {\n     use super::*;\n \n     #[test]\n     fn test_dynamic_variance_high_quality() {\n",
+    "file": "crates/gneiss-rtk/src/calibration/variance.rs",
+    "function": {
+      "function_name": "dynamic_variance",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 15
+        },
+        "start": {
+          "column": 1,
+          "line": 1
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/variance.rs:14:31: replace * with / in dynamic_variance",
+    "package": "gneiss-rtk",
+    "replacement": "/",
+    "span": {
+      "end": {
+        "column": 32,
+        "line": 14
+      },
+      "start": {
+        "column": 31,
+        "line": 14
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/variance.rs\n+++ replace * with + in dynamic_variance\n@@ -6,17 +6,17 @@\n /// `base_variance`: The theoretical minimum variance of the measurement (e.g., 0.0001 for Carrier Phase, 9.0 for Pseudorange)\n pub fn dynamic_variance(snr_dbhz: f64, elevation_rad: f64, base_variance: f64) -> f64 {\n     let snr_clamped = snr_dbhz.clamp(25.0, 50.0);\n     let snr_scale = libm::pow(10.0, (45.0 - snr_clamped) / 10.0).clamp(1.0, 100.0);\n     \n     let sin_el = elevation_rad.sin().max(0.1);\n     let el_scale = 1.0 / (sin_el * sin_el);\n     \n-    base_variance * snr_scale * el_scale\n+    base_variance + /* ~ changed by cargo-mutants ~ */ snr_scale * el_scale\n }\n \n #[cfg(test)]\n mod tests {\n     use super::*;\n \n     #[test]\n     fn test_dynamic_variance_high_quality() {\n",
+    "file": "crates/gneiss-rtk/src/calibration/variance.rs",
+    "function": {
+      "function_name": "dynamic_variance",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 15
+        },
+        "start": {
+          "column": 1,
+          "line": 1
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/variance.rs:14:19: replace * with + in dynamic_variance",
+    "package": "gneiss-rtk",
+    "replacement": "+",
+    "span": {
+      "end": {
+        "column": 20,
+        "line": 14
+      },
+      "start": {
+        "column": 19,
+        "line": 14
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/calibration/variance.rs\n+++ replace * with / in dynamic_variance\n@@ -6,17 +6,17 @@\n /// `base_variance`: The theoretical minimum variance of the measurement (e.g., 0.0001 for Carrier Phase, 9.0 for Pseudorange)\n pub fn dynamic_variance(snr_dbhz: f64, elevation_rad: f64, base_variance: f64) -> f64 {\n     let snr_clamped = snr_dbhz.clamp(25.0, 50.0);\n     let snr_scale = libm::pow(10.0, (45.0 - snr_clamped) / 10.0).clamp(1.0, 100.0);\n     \n     let sin_el = elevation_rad.sin().max(0.1);\n     let el_scale = 1.0 / (sin_el * sin_el);\n     \n-    base_variance * snr_scale * el_scale\n+    base_variance / /* ~ changed by cargo-mutants ~ */ snr_scale * el_scale\n }\n \n #[cfg(test)]\n mod tests {\n     use super::*;\n \n     #[test]\n     fn test_dynamic_variance_high_quality() {\n",
+    "file": "crates/gneiss-rtk/src/calibration/variance.rs",
+    "function": {
+      "function_name": "dynamic_variance",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 15
+        },
+        "start": {
+          "column": 1,
+          "line": 1
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/calibration/variance.rs:14:19: replace * with / in dynamic_variance",
+    "package": "gneiss-rtk",
+    "replacement": "/",
+    "span": {
+      "end": {
+        "column": 20,
+        "line": 14
+      },
+      "start": {
+        "column": 19,
+        "line": 14
+      }
+    }
+  }
+]

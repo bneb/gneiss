@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/engine/ppp.rs
++++ replace > with >= in process_ppp
+@@ -87,17 +87,17 @@
+ 
+                 let l1_m = (cp1_cyc + windup) * lam1;
+                 let l2_m = (cp2_cyc + windup) * lam2;
+                 let l_if = crate::combinations::iono_free(l1_m, l2_m, *f1, *f2);
+                 let l_gf = l1_m - l2_m;
+                 
+                 let mut slip = false;
+                 if let Some(&prev_gf) = state.gf_values.get(&sat_obs.sat) {
+-                    if (l_gf - prev_gf).abs() > 0.05 { slip = true; }
++                    if (l_gf - prev_gf).abs() >= /* ~ changed by cargo-mutants ~ */ 0.05 { slip = true; }
+                 }
+                 state.gf_values.insert(sat_obs.sat, l_gf);
+                 
+                 let l1_lock = sat_obs.get_locktime(1);
+                 let prev_l1 = *state.locktimes.get(&(sat_obs.sat, 1)).unwrap_or(&0);
+                 let mut new_l1 = prev_l1.saturating_add(1);
+                 if let Some(lk) = l1_lock {
+                     if lk == 0 || lk < prev_l1 { slip = true; new_l1 = lk; } else { new_l1 = lk; }

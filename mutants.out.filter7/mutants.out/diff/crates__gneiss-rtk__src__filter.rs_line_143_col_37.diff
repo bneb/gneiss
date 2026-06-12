@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/filter.rs
++++ replace + with - in RtkState::update_mw
+@@ -135,17 +135,17 @@
+             }
+         }
+     }
+ 
+     pub fn update_mw(&mut self, sat: SatelliteId, mw_cycles: f64) {
+         let count = self.mw_sd_counts.entry(sat).or_insert(0);
+         let ema = self.mw_sd_ema.entry(sat).or_insert(mw_cycles);
+         let alpha = 1.0 / ((*count + 1) as f64).min(100.0);
+-        *ema = *ema * (1.0 - alpha) + mw_cycles * alpha;
++        *ema = *ema * (1.0 - alpha) - /* ~ changed by cargo-mutants ~ */ mw_cycles * alpha;
+         *count += 1;
+     }
+ 
+     pub fn resolve_ambiguities(&self, ephemerides: &[gneiss_core::ephemeris::Ephemeris], min_subset: usize, ar_min_epoch_count: u32, ar_min_lock: u32, lambda_min_ratio: f64) -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> {
+         let num_amb = self.ambiguities.len();
+         tracing::debug!("resolve_ambiguities check: num_amb={} (min_subset={}), epoch_count={} (ar_min_epoch={}), ar_min_lock={}", num_amb, min_subset, self.epoch_count, ar_min_epoch_count, ar_min_lock);
+         if num_amb < min_subset || self.epoch_count <= ar_min_epoch_count as usize { return Err("Insufficient data"); }
+         

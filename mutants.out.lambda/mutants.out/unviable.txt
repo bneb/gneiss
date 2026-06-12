@@ -1,0 +1,14 @@
+crates/gneiss-rtk/src/lambda.rs:32:5: replace resolve_lambda -> Result<LambdaResult, &'static str> with Ok(Default::default())
+crates/gneiss-rtk/src/lambda.rs:36:5: replace resolve_lambda_inner -> Result<LambdaResult, &'static str> with Ok(Default::default())
+crates/gneiss-rtk/src/lambda.rs:83:25: replace * with / in resolve_lambda_inner
+crates/gneiss-rtk/src/lambda.rs:84:32: replace * with / in resolve_lambda_inner
+crates/gneiss-rtk/src/lambda.rs:103:5: replace decorrelate -> Result<DecorrelateResult, &'static str> with Ok(Default::default())
+crates/gneiss-rtk/src/lambda.rs:131:32: replace * with / in decorrelate
+crates/gneiss-rtk/src/lambda.rs:132:39: replace * with / in decorrelate
+crates/gneiss-rtk/src/lambda.rs:133:44: replace * with / in decorrelate
+crates/gneiss-rtk/src/lambda.rs:133:37: replace * with / in decorrelate
+crates/gneiss-rtk/src/lambda.rs:149:28: replace * with / in decorrelate
+crates/gneiss-rtk/src/lambda.rs:150:35: replace * with / in decorrelate
+crates/gneiss-rtk/src/lambda.rs:151:40: replace * with / in decorrelate
+crates/gneiss-rtk/src/lambda.rs:151:33: replace * with / in decorrelate
+crates/gneiss-rtk/src/lambda.rs:164:5: replace ldlt_lower -> Result<LdltResult, &'static str> with Ok(Default::default())

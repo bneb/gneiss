@@ -1,0 +1,851 @@
+crates/gneiss-rtk/src/filter.rs:116:9: replace RtkState::decouple_position with ()
+crates/gneiss-rtk/src/filter.rs:129:9: replace RtkState::decouple_clock with ()
+crates/gneiss-rtk/src/filter.rs:132:18: replace != with == in RtkState::decouple_clock
+crates/gneiss-rtk/src/filter.rs:140:9: replace RtkState::update_mw with ()
+crates/gneiss-rtk/src/filter.rs:142:25: replace / with % in RtkState::update_mw
+crates/gneiss-rtk/src/filter.rs:142:25: replace / with * in RtkState::update_mw
+crates/gneiss-rtk/src/filter.rs:142:36: replace + with - in RtkState::update_mw
+crates/gneiss-rtk/src/filter.rs:142:36: replace + with * in RtkState::update_mw
+crates/gneiss-rtk/src/filter.rs:143:37: replace + with - in RtkState::update_mw
+crates/gneiss-rtk/src/filter.rs:143:37: replace + with * in RtkState::update_mw
+crates/gneiss-rtk/src/filter.rs:143:21: replace * with + in RtkState::update_mw
+crates/gneiss-rtk/src/filter.rs:143:21: replace * with / in RtkState::update_mw
+crates/gneiss-rtk/src/filter.rs:143:28: replace - with + in RtkState::update_mw
+crates/gneiss-rtk/src/filter.rs:143:28: replace - with / in RtkState::update_mw
+crates/gneiss-rtk/src/filter.rs:143:49: replace * with + in RtkState::update_mw
+crates/gneiss-rtk/src/filter.rs:143:49: replace * with / in RtkState::update_mw
+crates/gneiss-rtk/src/filter.rs:144:16: replace += with -= in RtkState::update_mw
+crates/gneiss-rtk/src/filter.rs:144:16: replace += with *= in RtkState::update_mw
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::new(), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::new(), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::new(), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::new(), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::new(), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::new(), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from_iter([0.0]), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from_iter([0.0]), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from_iter([0.0]), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from_iter([0.0]), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from_iter([0.0]), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from_iter([0.0]), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::new(0.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::new(0.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::new(0.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::new(0.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::new(0.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::new(0.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from(0.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from(0.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from(0.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from(0.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from(0.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from(0.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from_iter([1.0]), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from_iter([1.0]), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from_iter([1.0]), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from_iter([1.0]), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from_iter([1.0]), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from_iter([1.0]), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::new(1.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::new(1.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::new(1.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::new(1.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::new(1.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::new(1.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from(1.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from(1.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from(1.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from(1.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from(1.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from(1.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from_iter([-1.0]), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from_iter([-1.0]), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from_iter([-1.0]), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from_iter([-1.0]), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from_iter([-1.0]), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from_iter([-1.0]), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::new(-1.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::new(-1.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::new(-1.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::new(-1.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::new(-1.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::new(-1.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from(-1.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from(-1.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from(-1.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from(-1.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from(-1.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from(-1.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::new(), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::new(), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::new(), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::new(), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::new(), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::new(), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::from_iter([0.0]), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::from_iter([0.0]), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::from_iter([0.0]), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::from_iter([0.0]), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::from_iter([0.0]), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::from_iter([0.0]), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::new(0.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::new(0.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::new(0.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::new(0.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::new(0.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::new(0.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::from(0.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::from(0.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::from(0.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::from(0.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::from(0.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::from(0.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::from_iter([1.0]), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::from_iter([1.0]), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::from_iter([1.0]), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::from_iter([1.0]), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::from_iter([1.0]), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::from_iter([1.0]), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::new(1.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::new(1.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::new(1.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::new(1.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::new(1.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::new(1.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::from(1.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::from(1.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::from(1.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::from(1.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::from(1.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::from(1.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::from_iter([-1.0]), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::from_iter([-1.0]), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::from_iter([-1.0]), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::from_iter([-1.0]), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::from_iter([-1.0]), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::from_iter([-1.0]), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::new(-1.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::new(-1.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::new(-1.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::new(-1.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::new(-1.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::new(-1.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::from(-1.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::from(-1.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::from(-1.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::from(-1.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::from(-1.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::from(-1.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::new(), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::new(), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::new(), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::new(), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::new(), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::new(), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::from_iter([0.0]), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::from_iter([0.0]), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::from_iter([0.0]), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::from_iter([0.0]), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::from_iter([0.0]), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::from_iter([0.0]), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::new(0.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::new(0.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::new(0.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::new(0.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::new(0.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::new(0.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::from(0.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::from(0.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::from(0.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::from(0.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::from(0.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::from(0.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::from_iter([1.0]), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::from_iter([1.0]), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::from_iter([1.0]), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::from_iter([1.0]), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::from_iter([1.0]), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::from_iter([1.0]), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::new(1.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::new(1.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::new(1.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::new(1.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::new(1.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::new(1.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::from(1.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::from(1.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::from(1.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::from(1.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::from(1.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::from(1.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::from_iter([-1.0]), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::from_iter([-1.0]), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::from_iter([-1.0]), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::from_iter([-1.0]), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::from_iter([-1.0]), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::from_iter([-1.0]), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::new(-1.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::new(-1.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::new(-1.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::new(-1.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::new(-1.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::new(-1.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::from(-1.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::from(-1.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::from(-1.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::from(-1.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::from(-1.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(0.0), DMatrix::from(-1.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::new(), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::new(), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::new(), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::new(), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::new(), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::new(), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::from_iter([0.0]), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::from_iter([0.0]), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::from_iter([0.0]), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::from_iter([0.0]), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::from_iter([0.0]), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::from_iter([0.0]), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::new(0.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::new(0.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::new(0.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::new(0.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::new(0.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::new(0.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::from(0.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::from(0.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::from(0.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::from(0.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::from(0.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::from(0.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::from_iter([1.0]), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::from_iter([1.0]), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::from_iter([1.0]), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::from_iter([1.0]), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::from_iter([1.0]), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::from_iter([1.0]), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::new(1.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::new(1.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::new(1.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::new(1.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::new(1.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::new(1.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::from(1.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::from(1.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::from(1.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::from(1.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::from(1.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::from(1.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::from_iter([-1.0]), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::from_iter([-1.0]), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::from_iter([-1.0]), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::from_iter([-1.0]), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::from_iter([-1.0]), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::from_iter([-1.0]), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::new(-1.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::new(-1.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::new(-1.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::new(-1.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::new(-1.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::new(-1.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::from(-1.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::from(-1.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::from(-1.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::from(-1.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::from(-1.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(0.0), DMatrix::from(-1.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::new(), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::new(), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::new(), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::new(), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::new(), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::new(), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::from_iter([0.0]), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::from_iter([0.0]), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::from_iter([0.0]), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::from_iter([0.0]), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::from_iter([0.0]), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::from_iter([0.0]), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::new(0.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::new(0.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::new(0.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::new(0.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::new(0.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::new(0.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::from(0.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::from(0.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::from(0.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::from(0.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::from(0.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::from(0.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::from_iter([1.0]), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::from_iter([1.0]), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::from_iter([1.0]), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::from_iter([1.0]), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::from_iter([1.0]), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::from_iter([1.0]), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::new(1.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::new(1.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::new(1.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::new(1.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::new(1.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::new(1.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::from(1.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::from(1.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::from(1.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::from(1.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::from(1.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::from(1.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::from_iter([-1.0]), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::from_iter([-1.0]), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::from_iter([-1.0]), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::from_iter([-1.0]), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::from_iter([-1.0]), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::from_iter([-1.0]), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::new(-1.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::new(-1.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::new(-1.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::new(-1.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::new(-1.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::new(-1.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::from(-1.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::from(-1.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::from(-1.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::from(-1.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::from(-1.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([1.0]), DMatrix::from(-1.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::new(), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::new(), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::new(), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::new(), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::new(), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::new(), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::from_iter([0.0]), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::from_iter([0.0]), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::from_iter([0.0]), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::from_iter([0.0]), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::from_iter([0.0]), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::from_iter([0.0]), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::new(0.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::new(0.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::new(0.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::new(0.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::new(0.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::new(0.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::from(0.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::from(0.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::from(0.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::from(0.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::from(0.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::from(0.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::from_iter([1.0]), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::from_iter([1.0]), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::from_iter([1.0]), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::from_iter([1.0]), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::from_iter([1.0]), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::from_iter([1.0]), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::new(1.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::new(1.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::new(1.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::new(1.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::new(1.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::new(1.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::from(1.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::from(1.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::from(1.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::from(1.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::from(1.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::from(1.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::from_iter([-1.0]), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::from_iter([-1.0]), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::from_iter([-1.0]), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::from_iter([-1.0]), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::from_iter([-1.0]), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::from_iter([-1.0]), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::new(-1.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::new(-1.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::new(-1.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::new(-1.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::new(-1.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::new(-1.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::from(-1.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::from(-1.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::from(-1.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::from(-1.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::from(-1.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(1.0), DMatrix::from(-1.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::new(), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::new(), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::new(), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::new(), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::new(), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::new(), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::from_iter([0.0]), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::from_iter([0.0]), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::from_iter([0.0]), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::from_iter([0.0]), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::from_iter([0.0]), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::from_iter([0.0]), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::new(0.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::new(0.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::new(0.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::new(0.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::new(0.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::new(0.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::from(0.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::from(0.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::from(0.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::from(0.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::from(0.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::from(0.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::from_iter([1.0]), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::from_iter([1.0]), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::from_iter([1.0]), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::from_iter([1.0]), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::from_iter([1.0]), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::from_iter([1.0]), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::new(1.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::new(1.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::new(1.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::new(1.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::new(1.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::new(1.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::from(1.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::from(1.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::from(1.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::from(1.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::from(1.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::from(1.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::from_iter([-1.0]), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::from_iter([-1.0]), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::from_iter([-1.0]), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::from_iter([-1.0]), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::from_iter([-1.0]), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::from_iter([-1.0]), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::new(-1.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::new(-1.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::new(-1.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::new(-1.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::new(-1.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::new(-1.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::from(-1.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::from(-1.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::from(-1.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::from(-1.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::from(-1.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(1.0), DMatrix::from(-1.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::new(), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::new(), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::new(), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::new(), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::new(), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::new(), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::from_iter([0.0]), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::from_iter([0.0]), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::from_iter([0.0]), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::from_iter([0.0]), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::from_iter([0.0]), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::from_iter([0.0]), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::new(0.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::new(0.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::new(0.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::new(0.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::new(0.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::new(0.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::from(0.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::from(0.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::from(0.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::from(0.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::from(0.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::from(0.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::from_iter([1.0]), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::from_iter([1.0]), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::from_iter([1.0]), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::from_iter([1.0]), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::from_iter([1.0]), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::from_iter([1.0]), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::new(1.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::new(1.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::new(1.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::new(1.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::new(1.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::new(1.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::from(1.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::from(1.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::from(1.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::from(1.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::from(1.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::from(1.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::from_iter([-1.0]), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::from_iter([-1.0]), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::from_iter([-1.0]), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::from_iter([-1.0]), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::from_iter([-1.0]), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::from_iter([-1.0]), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::new(-1.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::new(-1.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::new(-1.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::new(-1.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::new(-1.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::new(-1.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::from(-1.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::from(-1.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::from(-1.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::from(-1.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::from(-1.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([-1.0]), DMatrix::from(-1.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::new(), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::new(), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::new(), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::new(), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::new(), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::new(), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::from_iter([0.0]), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::from_iter([0.0]), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::from_iter([0.0]), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::from_iter([0.0]), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::from_iter([0.0]), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::from_iter([0.0]), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::new(0.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::new(0.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::new(0.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::new(0.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::new(0.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::new(0.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::from(0.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::from(0.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::from(0.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::from(0.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::from(0.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::from(0.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::from_iter([1.0]), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::from_iter([1.0]), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::from_iter([1.0]), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::from_iter([1.0]), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::from_iter([1.0]), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::from_iter([1.0]), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::new(1.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::new(1.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::new(1.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::new(1.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::new(1.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::new(1.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::from(1.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::from(1.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::from(1.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::from(1.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::from(1.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::from(1.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::from_iter([-1.0]), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::from_iter([-1.0]), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::from_iter([-1.0]), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::from_iter([-1.0]), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::from_iter([-1.0]), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::from_iter([-1.0]), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::new(-1.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::new(-1.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::new(-1.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::new(-1.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::new(-1.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::new(-1.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::from(-1.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::from(-1.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::from(-1.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::from(-1.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::from(-1.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(-1.0), DMatrix::from(-1.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::new(), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::new(), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::new(), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::new(), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::new(), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::new(), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::from_iter([0.0]), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::from_iter([0.0]), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::from_iter([0.0]), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::from_iter([0.0]), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::from_iter([0.0]), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::from_iter([0.0]), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::new(0.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::new(0.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::new(0.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::new(0.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::new(0.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::new(0.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::from(0.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::from(0.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::from(0.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::from(0.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::from(0.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::from(0.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::from_iter([1.0]), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::from_iter([1.0]), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::from_iter([1.0]), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::from_iter([1.0]), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::from_iter([1.0]), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::from_iter([1.0]), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::new(1.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::new(1.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::new(1.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::new(1.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::new(1.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::new(1.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::from(1.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::from(1.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::from(1.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::from(1.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::from(1.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::from(1.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::from_iter([-1.0]), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::from_iter([-1.0]), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::from_iter([-1.0]), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::from_iter([-1.0]), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::from_iter([-1.0]), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::from_iter([-1.0]), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::new(-1.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::new(-1.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::new(-1.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::new(-1.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::new(-1.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::new(-1.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::from(-1.0), 0.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::from(-1.0), 0.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::from(-1.0), 1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::from(-1.0), 1.0, 1))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::from(-1.0), -1.0, 0))
+crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from(-1.0), DMatrix::from(-1.0), -1.0, 1))
+crates/gneiss-rtk/src/filter.rs:150:33: replace || with && in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:150:20: replace < with == in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:150:20: replace < with > in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:150:20: replace < with <= in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:150:53: replace <= with > in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:167:50: replace || with && in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:167:38: replace != with == in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:167:58: replace != with == in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:169:47: replace && with || in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:169:25: replace >= with < in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:169:55: replace > with == in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:169:55: replace > with < in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:169:55: replace > with >= in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:177:96: replace && with || in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:177:82: replace == with != in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:177:101: replace == with != in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:180:37: replace || with && in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:180:26: replace == with != in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:180:48: replace == with != in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:182:46: replace != with == in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:185:29: replace >= with < in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:186:33: replace == with != in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:202:41: replace == with != in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:206:64: replace == with != in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:208:35: replace / with % in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:208:35: replace / with * in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:208:50: replace == with != in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:210:64: replace - with + in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:210:64: replace - with / in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:210:41: replace + with - in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:210:41: replace + with * in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:210:70: replace * with + in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:210:70: replace * with / in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:211:35: replace / with % in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:211:35: replace / with * in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:211:42: replace * with + in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:211:42: replace * with / in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:223:39: replace < with == in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:223:39: replace < with > in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:223:39: replace < with <= in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:227:33: replace >= with < in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:238:72: replace == with != in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:240:43: replace / with % in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:240:43: replace / with * in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:240:58: replace == with != in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:243:43: delete - in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:244:63: replace / with % in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:244:63: replace / with * in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:244:48: replace - with + in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:244:48: replace - with / in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:256:78: replace == with != in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:258:49: replace / with % in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:258:49: replace / with * in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:258:61: replace == with != in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:261:78: replace == with != in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:263:49: replace / with % in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:263:49: replace / with * in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:263:61: replace == with != in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:267:103: replace + with - in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:267:103: replace + with * in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:267:80: replace - with + in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:267:80: replace - with / in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:267:57: replace - with + in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:267:57: replace - with / in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:268:49: replace / with % in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:268:49: replace / with * in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:268:58: replace * with + in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:268:58: replace * with / in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:275:34: replace >= with < in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:283:80: replace == with != in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:285:51: replace / with % in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:285:51: replace / with * in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:285:66: replace == with != in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:286:87: replace * with + in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:286:87: replace * with / in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:286:70: replace - with + in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:286:70: replace - with / in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:287:68: replace * with + in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:287:68: replace * with / in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:294:58: replace + with - in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:294:58: replace + with * in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:295:58: replace + with - in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:295:58: replace + with * in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:295:70: delete - in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:298:60: replace * with + in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:298:60: replace * with / in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:298:41: replace * with + in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:298:41: replace * with / in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:300:80: replace * with + in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:300:80: replace * with / in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:300:59: replace * with + in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:300:59: replace * with / in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:306:39: replace > with == in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:306:39: replace > with < in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:306:39: replace > with >= in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:314:42: replace * with + in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:314:42: replace * with / in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:316:53: replace += with -= in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:316:53: replace += with *= in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:317:46: replace += with -= in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:317:46: replace += with *= in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:321:34: replace > with == in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:321:34: replace > with < in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:321:34: replace > with >= in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:322:117: replace / with % in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:322:117: replace / with * in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:323:55: replace * with + in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:323:55: replace * with / in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:327:50: replace += with -= in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:327:50: replace += with *= in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:328:50: replace += with -= in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:328:50: replace += with *= in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:329:50: replace += with -= in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:329:50: replace += with *= in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:330:49: replace += with -= in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:330:49: replace += with *= in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:331:49: replace += with -= in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:331:49: replace += with *= in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:332:49: replace += with -= in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:332:49: replace += with *= in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:334:44: replace > with == in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:334:44: replace > with < in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:334:44: replace > with >= in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:335:54: replace += with -= in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:335:54: replace += with *= in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:336:55: replace += with -= in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:336:55: replace += with *= in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:337:45: replace += with -= in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:337:45: replace += with *= in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:342:56: replace += with -= in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:342:56: replace += with *= in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:342:78: replace + with - in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:342:78: replace + with * in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:347:45: replace - with + in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:347:45: replace - with / in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:347:55: replace * with + in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:347:55: replace * with / in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:348:68: replace * with + in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:348:68: replace * with / in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:348:49: replace * with + in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:348:49: replace * with / in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:351:79: replace * with + in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:351:79: replace * with / in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:351:60: replace + with - in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:351:60: replace + with * in RtkState::resolve_ambiguities
+crates/gneiss-rtk/src/filter.rs:371:9: replace RtkState::prune_stale_ambiguities with ()
+crates/gneiss-rtk/src/filter.rs:374:37: replace && with || in RtkState::prune_stale_ambiguities
+crates/gneiss-rtk/src/filter.rs:374:30: replace > with == in RtkState::prune_stale_ambiguities
+crates/gneiss-rtk/src/filter.rs:374:30: replace > with < in RtkState::prune_stale_ambiguities
+crates/gneiss-rtk/src/filter.rs:374:30: replace > with >= in RtkState::prune_stale_ambiguities
+crates/gneiss-rtk/src/filter.rs:374:61: replace > with == in RtkState::prune_stale_ambiguities
+crates/gneiss-rtk/src/filter.rs:374:61: replace > with < in RtkState::prune_stale_ambiguities
+crates/gneiss-rtk/src/filter.rs:374:61: replace > with >= in RtkState::prune_stale_ambiguities
+crates/gneiss-rtk/src/filter.rs:374:54: replace - with + in RtkState::prune_stale_ambiguities
+crates/gneiss-rtk/src/filter.rs:374:54: replace - with / in RtkState::prune_stale_ambiguities
+crates/gneiss-rtk/src/filter.rs:387:9: replace RtkState::add_ambiguity with ()
+crates/gneiss-rtk/src/filter.rs:391:28: replace += with -= in RtkState::add_ambiguity
+crates/gneiss-rtk/src/filter.rs:391:28: replace += with *= in RtkState::add_ambiguity
+crates/gneiss-rtk/src/filter.rs:395:27: replace + with - in RtkState::add_ambiguity
+crates/gneiss-rtk/src/filter.rs:395:27: replace + with * in RtkState::add_ambiguity
+crates/gneiss-rtk/src/filter.rs:403:9: replace RtkState::remove_ambiguity with ()
+crates/gneiss-rtk/src/filter.rs:403:83: replace && with || in RtkState::remove_ambiguity
+crates/gneiss-rtk/src/filter.rs:403:76: replace == with != in RtkState::remove_ambiguity
+crates/gneiss-rtk/src/filter.rs:403:88: replace == with != in RtkState::remove_ambiguity
+crates/gneiss-rtk/src/filter.rs:410:31: replace - with + in RtkState::remove_ambiguity
+crates/gneiss-rtk/src/filter.rs:410:31: replace - with / in RtkState::remove_ambiguity
+crates/gneiss-rtk/src/filter.rs:412:43: replace + with - in RtkState::remove_ambiguity
+crates/gneiss-rtk/src/filter.rs:412:43: replace + with * in RtkState::remove_ambiguity
+crates/gneiss-rtk/src/filter.rs:414:24: replace > with == in RtkState::remove_ambiguity
+crates/gneiss-rtk/src/filter.rs:414:24: replace > with < in RtkState::remove_ambiguity
+crates/gneiss-rtk/src/filter.rs:414:24: replace > with >= in RtkState::remove_ambiguity
+crates/gneiss-rtk/src/filter.rs:415:24: replace < with == in RtkState::remove_ambiguity
+crates/gneiss-rtk/src/filter.rs:415:24: replace < with > in RtkState::remove_ambiguity
+crates/gneiss-rtk/src/filter.rs:415:24: replace < with <= in RtkState::remove_ambiguity
+crates/gneiss-rtk/src/filter.rs:416:64: replace - with + in RtkState::remove_ambiguity
+crates/gneiss-rtk/src/filter.rs:416:64: replace - with / in RtkState::remove_ambiguity
+crates/gneiss-rtk/src/filter.rs:416:120: replace + with - in RtkState::remove_ambiguity
+crates/gneiss-rtk/src/filter.rs:416:120: replace + with * in RtkState::remove_ambiguity
+crates/gneiss-rtk/src/filter.rs:416:152: replace - with + in RtkState::remove_ambiguity
+crates/gneiss-rtk/src/filter.rs:416:152: replace - with / in RtkState::remove_ambiguity
+crates/gneiss-rtk/src/filter.rs:416:142: replace - with + in RtkState::remove_ambiguity
+crates/gneiss-rtk/src/filter.rs:416:142: replace - with / in RtkState::remove_ambiguity
+crates/gneiss-rtk/src/filter.rs:417:55: replace - with + in RtkState::remove_ambiguity
+crates/gneiss-rtk/src/filter.rs:417:55: replace - with / in RtkState::remove_ambiguity
+crates/gneiss-rtk/src/filter.rs:417:117: replace + with - in RtkState::remove_ambiguity
+crates/gneiss-rtk/src/filter.rs:417:117: replace + with * in RtkState::remove_ambiguity
+crates/gneiss-rtk/src/filter.rs:417:143: replace - with + in RtkState::remove_ambiguity
+crates/gneiss-rtk/src/filter.rs:417:143: replace - with / in RtkState::remove_ambiguity
+crates/gneiss-rtk/src/filter.rs:417:133: replace - with + in RtkState::remove_ambiguity
+crates/gneiss-rtk/src/filter.rs:417:133: replace - with / in RtkState::remove_ambiguity
+crates/gneiss-rtk/src/filter.rs:418:61: replace - with + in RtkState::remove_ambiguity
+crates/gneiss-rtk/src/filter.rs:418:61: replace - with / in RtkState::remove_ambiguity
+crates/gneiss-rtk/src/filter.rs:418:78: replace - with + in RtkState::remove_ambiguity
+crates/gneiss-rtk/src/filter.rs:418:78: replace - with / in RtkState::remove_ambiguity
+crates/gneiss-rtk/src/filter.rs:418:131: replace + with - in RtkState::remove_ambiguity
+crates/gneiss-rtk/src/filter.rs:418:131: replace + with * in RtkState::remove_ambiguity
+crates/gneiss-rtk/src/filter.rs:418:144: replace + with - in RtkState::remove_ambiguity
+crates/gneiss-rtk/src/filter.rs:418:144: replace + with * in RtkState::remove_ambiguity
+crates/gneiss-rtk/src/filter.rs:418:167: replace - with + in RtkState::remove_ambiguity
+crates/gneiss-rtk/src/filter.rs:418:167: replace - with / in RtkState::remove_ambiguity
+crates/gneiss-rtk/src/filter.rs:418:157: replace - with + in RtkState::remove_ambiguity
+crates/gneiss-rtk/src/filter.rs:418:157: replace - with / in RtkState::remove_ambiguity
+crates/gneiss-rtk/src/filter.rs:418:188: replace - with + in RtkState::remove_ambiguity
+crates/gneiss-rtk/src/filter.rs:418:188: replace - with / in RtkState::remove_ambiguity
+crates/gneiss-rtk/src/filter.rs:418:178: replace - with + in RtkState::remove_ambiguity
+crates/gneiss-rtk/src/filter.rs:418:178: replace - with / in RtkState::remove_ambiguity
+crates/gneiss-rtk/src/filter.rs:425:9: replace RtkState::clear_ambiguities with ()
+crates/gneiss-rtk/src/filter.rs:444:5: replace compute_if_combination -> f64 with 0.0
+crates/gneiss-rtk/src/filter.rs:444:5: replace compute_if_combination -> f64 with 1.0
+crates/gneiss-rtk/src/filter.rs:444:5: replace compute_if_combination -> f64 with -1.0
+crates/gneiss-rtk/src/filter.rs:445:23: replace * with + in compute_if_combination
+crates/gneiss-rtk/src/filter.rs:445:23: replace * with / in compute_if_combination
+crates/gneiss-rtk/src/filter.rs:446:23: replace * with + in compute_if_combination
+crates/gneiss-rtk/src/filter.rs:446:23: replace * with / in compute_if_combination
+crates/gneiss-rtk/src/filter.rs:447:37: replace / with % in compute_if_combination
+crates/gneiss-rtk/src/filter.rs:447:37: replace / with * in compute_if_combination
+crates/gneiss-rtk/src/filter.rs:447:20: replace - with + in compute_if_combination
+crates/gneiss-rtk/src/filter.rs:447:20: replace - with / in compute_if_combination
+crates/gneiss-rtk/src/filter.rs:447:15: replace * with + in compute_if_combination
+crates/gneiss-rtk/src/filter.rs:447:15: replace * with / in compute_if_combination
+crates/gneiss-rtk/src/filter.rs:447:27: replace * with + in compute_if_combination
+crates/gneiss-rtk/src/filter.rs:447:27: replace * with / in compute_if_combination
+crates/gneiss-rtk/src/filter.rs:447:45: replace - with + in compute_if_combination
+crates/gneiss-rtk/src/filter.rs:447:45: replace - with / in compute_if_combination
+crates/gneiss-rtk/src/filter.rs:458:5: replace compute_double_difference -> f64 with 0.0
+crates/gneiss-rtk/src/filter.rs:458:5: replace compute_double_difference -> f64 with 1.0
+crates/gneiss-rtk/src/filter.rs:458:5: replace compute_double_difference -> f64 with -1.0
+crates/gneiss-rtk/src/filter.rs:462:25: replace - with + in compute_double_difference
+crates/gneiss-rtk/src/filter.rs:462:25: replace - with / in compute_double_difference
+crates/gneiss-rtk/src/filter.rs:462:14: replace - with + in compute_double_difference
+crates/gneiss-rtk/src/filter.rs:462:14: replace - with / in compute_double_difference
+crates/gneiss-rtk/src/filter.rs:462:36: replace - with + in compute_double_difference
+crates/gneiss-rtk/src/filter.rs:462:36: replace - with / in compute_double_difference

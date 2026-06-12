@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/doppler.rs
++++ replace * with + in compute_doppler_update
+@@ -80,17 +80,17 @@
+         // Range-rate = ė · (v_sat - v_rcv), so ∂(range_rate)/∂v_rcv = -ė
+         let mut h_row = vec![0.0; state_size];
+         // Velocity is at state indices 3, 4, 5
+         h_row[3] = -e_los.x;
+         h_row[4] = -e_los.y;
+         h_row[5] = -e_los.z;
+ 
+         // Variance: scaled by elevation and SNR
+-        let var = 0.04 * gneiss_core::variance::observation_variance(meas.snr, meas.elevation, 45.0);
++        let var = 0.04 + /* ~ changed by cargo-mutants ~ */ gneiss_core::variance::observation_variance(meas.snr, meas.elevation, 45.0);
+ 
+         z_vals.push(z_i);
+         h_rows.push(h_row);
+         r_vals.push(var);
+     }
+ 
+     if z_vals.len() < 4 {
+         return None;

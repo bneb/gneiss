@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/lambda.rs
++++ replace > with >= in resolve_lambda_inner
+@@ -64,17 +64,17 @@
+         &mut best_z,
+         &mut best_dist,
+         &mut second_best_z,
+         &mut second_best_dist,
+         &mut iter_count,
+         max_iters,
+     );
+ 
+-    if iter_count > max_iters {
++    if iter_count >= /* ~ changed by cargo-mutants ~ */ max_iters {
+         return Err("LAMBDA search iteration limit exceeded");
+     }
+ 
+     if best_dist == f64::MAX || second_best_dist == f64::MAX {
+         return Err("Search failed to find two integer candidates");
+     }
+ 
+     // 3. Back-transformation to original space: a = Z^-T * z

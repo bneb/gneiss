@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/lambda.rs
++++ replace - with / in resolve_lambda_inner
+@@ -48,17 +48,17 @@
+ 
+     let mut current_z = DVector::zeros(n);
+     let mut iter_count = 0;
+ 
+     // Workspace for the search
+     let mut y = DVector::zeros(n);
+ 
+     search_recursive(
+-        (n - 1) as isize,
++        (n / /* ~ changed by cargo-mutants ~ */ 1) as isize,
+         n,
+         &l,
+         &d,
+         &z_hat,
+         &mut y,
+         &mut current_z,
+         0.0,
+         &mut best_z,

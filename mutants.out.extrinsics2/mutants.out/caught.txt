@@ -1,0 +1,22 @@
+crates/gneiss-rtk/src/calibration/extrinsics.rs:19:10: replace < with == in estimate_lever_arm
+crates/gneiss-rtk/src/calibration/extrinsics.rs:19:10: replace < with > in estimate_lever_arm
+crates/gneiss-rtk/src/calibration/extrinsics.rs:19:10: replace < with <= in estimate_lever_arm
+crates/gneiss-rtk/src/calibration/extrinsics.rs:22:25: replace != with == in estimate_lever_arm
+crates/gneiss-rtk/src/calibration/extrinsics.rs:25:22: replace != with == in estimate_lever_arm
+crates/gneiss-rtk/src/calibration/extrinsics.rs:28:20: replace != with == in estimate_lever_arm
+crates/gneiss-rtk/src/calibration/extrinsics.rs:39:48: replace * with + in estimate_lever_arm
+crates/gneiss-rtk/src/calibration/extrinsics.rs:39:48: replace * with / in estimate_lever_arm
+crates/gneiss-rtk/src/calibration/extrinsics.rs:40:48: replace * with + in estimate_lever_arm
+crates/gneiss-rtk/src/calibration/extrinsics.rs:40:48: replace * with / in estimate_lever_arm
+crates/gneiss-rtk/src/calibration/extrinsics.rs:45:18: delete - in estimate_lever_arm
+crates/gneiss-rtk/src/calibration/extrinsics.rs:46:25: delete - in estimate_lever_arm
+crates/gneiss-rtk/src/calibration/extrinsics.rs:47:13: delete - in estimate_lever_arm
+crates/gneiss-rtk/src/calibration/extrinsics.rs:50:28: replace * with + in estimate_lever_arm
+crates/gneiss-rtk/src/calibration/extrinsics.rs:51:31: replace - with + in estimate_lever_arm
+crates/gneiss-rtk/src/calibration/extrinsics.rs:53:43: replace * with + in estimate_lever_arm
+crates/gneiss-rtk/src/calibration/extrinsics.rs:53:43: replace * with / in estimate_lever_arm
+crates/gneiss-rtk/src/calibration/extrinsics.rs:54:40: replace * with + in estimate_lever_arm
+crates/gneiss-rtk/src/calibration/extrinsics.rs:54:40: replace * with / in estimate_lever_arm
+crates/gneiss-rtk/src/calibration/extrinsics.rs:59:22: replace * with + in estimate_lever_arm
+crates/gneiss-rtk/src/calibration/extrinsics.rs:64:38: replace * with + in estimate_lever_arm
+crates/gneiss-rtk/src/calibration/extrinsics.rs:64:31: replace * with + in estimate_lever_arm

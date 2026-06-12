@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/lambda.rs
++++ replace * with + in search_recursive
+@@ -213,17 +213,17 @@
+         return false;
+     }
+ 
+     let k_u = k as usize;
+     
+     // Calculate conditional mean offset
+     let mut s = 0.0;
+     for j in (k_u + 1)..n {
+-        s += l[(j, k_u)] * y[j];
++        s += l[(j, k_u)] + /* ~ changed by cargo-mutants ~ */ y[j];
+     }
+     
+     let z_cond_k = z_hat[k_u] + s; // Fixed sign: L y = z - z_hat => y_k = z_k - z_hat_k - s
+     let center_z = z_cond_k.round();
+ 
+     let mut offset = 0.0;
+     let mut step = 1.0;
+     let mut direction = if z_cond_k > center_z { 1.0 } else { -1.0 };

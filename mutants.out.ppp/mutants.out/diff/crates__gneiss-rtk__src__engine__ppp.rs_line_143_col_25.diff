@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/engine/ppp.rs
++++ replace * with + in process_ppp
+@@ -135,17 +135,17 @@
+         h_row_p[2] = -los.z;
+         h_row_p[17] = *map_wet;
+         h_row_p[15] = 1.0;
+ 
+         h_rows.push(h_row_p);
+         z_vec.push(res_p);
+         sat_vec.push(sat_obs.sat);
+         
+-        let var_p = 9.0 * snr_scale(*snr as i32) / libm::sin(*el);
++        let var_p = 9.0 + /* ~ changed by cargo-mutants ~ */ snr_scale(*snr as i32) / libm::sin(*el);
+         r_vec.push(var_p);
+ 
+         if let (Some(cp1_cyc), Some(cp2_cyc)) = (cp1, cp2) {
+             if *cp1_cyc != 0.0 && *cp2_cyc != 0.0 {
+                 let windup = *state.windup.get(&sat_obs.sat).unwrap_or(&0.0);
+                 let l1_m = (cp1_cyc + windup) * lam1;
+                 let l2_m = (cp2_cyc + windup) * lam2;
+                 let l_if = crate::combinations::iono_free(l1_m, l2_m, *f1, *f2);

@@ -1,0 +1,16 @@
+--- crates/gneiss-rtk/src/engine/ppp_fg.rs
++++ crates/gneiss-rtk/src/engine/ppp_fg.rs
+@@ -481,6 +481,13 @@
+     
+     let (opt_delta, cov) = fg.optimize(&initial_delta, 10, 1e-4);
+     
++    if state.epoch_count < 20 {
++        println!("Epoch {}: delta norm = {:.2}", state.epoch_count, opt_delta.norm());
++        println!("Pos correction: {:.2}, {:.2}, {:.2}", opt_delta[0], opt_delta[1], opt_delta[2]);
++        println!("Clk correction: gps={:.2}, gal={:.2}, bds={:.2}, glo={:.2}", opt_delta[15], 
++            if crate::filter::CORE_STATE_SIZE >= 21 { opt_delta[18] } else { 0.0 }, 
++            if crate::filter::CORE_STATE_SIZE >= 21 { opt_delta[19] } else { 0.0 }, 
++            if crate::filter::CORE_STATE_SIZE >= 21 { opt_delta[20] } else { 0.0 });
++    }
++    
+     if state.epoch_count == 100 { println!("P_pos: {:.3}, P_amb: {:.3}", cov[(0,0)], cov[(crate::filter::CORE_STATE_SIZE, crate::filter::CORE_STATE_SIZE)]); }

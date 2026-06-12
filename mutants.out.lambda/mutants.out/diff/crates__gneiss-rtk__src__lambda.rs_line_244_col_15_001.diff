@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/lambda.rs
++++ replace - with / in search_recursive
+@@ -236,17 +236,17 @@
+         if new_dist >= *second_best_dist { break; }
+ 
+         current_z[k_u] = z_test;
+         y[k_u] = y_k;
+         
+         // Removed debug print
+ 
+         let aborted = search_recursive(
+-            k - 1, n, l, d, z_hat, y, current_z, new_dist,
++            k / /* ~ changed by cargo-mutants ~ */ 1, n, l, d, z_hat, y, current_z, new_dist,
+             best_z, best_dist, second_best_z, second_best_dist, iter_count, max_iters,
+         );
+         if aborted { return true; }
+ 
+         offset = step * direction;
+         if direction > 0.0 { step += 1.0; }
+         direction = -direction;
+     }

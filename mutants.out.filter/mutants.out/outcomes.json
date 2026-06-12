@@ -1,0 +1,4850 @@
+{
+  "outcomes": [
+    {
+      "scenario": "Baseline",
+      "summary": "Success",
+      "log_path": "log/baseline.log",
+      "diff_path": null,
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 23.307319833,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.860421666,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:116:9: replace RtkState::decouple_position with ()",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::decouple_position",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 112,
+                "column": 5
+              },
+              "end": {
+                "line": 123,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 116,
+              "column": 9
+            },
+            "end": {
+              "line": 122,
+              "column": 10
+            }
+          },
+          "replacement": "()",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_116_col_9.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_116_col_9.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 2.0912635,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.079935667,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:129:9: replace RtkState::decouple_clock with ()",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::decouple_clock",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 125,
+                "column": 5
+              },
+              "end": {
+                "line": 137,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 129,
+              "column": 9
+            },
+            "end": {
+              "line": 136,
+              "column": 10
+            }
+          },
+          "replacement": "()",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_129_col_9.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_129_col_9.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.917365041,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.281396541,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:132:18: replace != with == in RtkState::decouple_clock",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::decouple_clock",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 125,
+                "column": 5
+              },
+              "end": {
+                "line": 137,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 132,
+              "column": 18
+            },
+            "end": {
+              "line": 132,
+              "column": 20
+            }
+          },
+          "replacement": "==",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_132_col_18.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_132_col_18.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.6033314170000001,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.032425125,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:140:9: replace RtkState::update_mw with ()",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::update_mw",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 139,
+                "column": 5
+              },
+              "end": {
+                "line": 145,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 140,
+              "column": 9
+            },
+            "end": {
+              "line": 144,
+              "column": 21
+            }
+          },
+          "replacement": "()",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_140_col_9.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_140_col_9.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.302660583,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.042972916,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:142:25: replace / with % in RtkState::update_mw",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::update_mw",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 139,
+                "column": 5
+              },
+              "end": {
+                "line": 145,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 142,
+              "column": 25
+            },
+            "end": {
+              "line": 142,
+              "column": 26
+            }
+          },
+          "replacement": "%",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_142_col_25.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_142_col_25.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.131210375,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.916010625,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:142:25: replace / with * in RtkState::update_mw",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::update_mw",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 139,
+                "column": 5
+              },
+              "end": {
+                "line": 145,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 142,
+              "column": 25
+            },
+            "end": {
+              "line": 142,
+              "column": 26
+            }
+          },
+          "replacement": "*",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_142_col_25_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_142_col_25_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.031089833,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.18301925,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:142:36: replace + with - in RtkState::update_mw",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::update_mw",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 139,
+                "column": 5
+              },
+              "end": {
+                "line": 145,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 142,
+              "column": 36
+            },
+            "end": {
+              "line": 142,
+              "column": 37
+            }
+          },
+          "replacement": "-",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_142_col_36.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_142_col_36.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.381508667,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.395987958,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:142:36: replace + with * in RtkState::update_mw",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::update_mw",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 139,
+                "column": 5
+              },
+              "end": {
+                "line": 145,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 142,
+              "column": 36
+            },
+            "end": {
+              "line": 142,
+              "column": 37
+            }
+          },
+          "replacement": "*",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_142_col_36_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_142_col_36_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.655072042,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.33274425,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:143:37: replace + with - in RtkState::update_mw",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::update_mw",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 139,
+                "column": 5
+              },
+              "end": {
+                "line": 145,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 143,
+              "column": 37
+            },
+            "end": {
+              "line": 143,
+              "column": 38
+            }
+          },
+          "replacement": "-",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_143_col_37.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_143_col_37.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.242621958,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.188986542,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:143:37: replace + with * in RtkState::update_mw",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::update_mw",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 139,
+                "column": 5
+              },
+              "end": {
+                "line": 145,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 143,
+              "column": 37
+            },
+            "end": {
+              "line": 143,
+              "column": 38
+            }
+          },
+          "replacement": "*",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_143_col_37_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_143_col_37_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.320607083,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.617851125,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:143:21: replace * with + in RtkState::update_mw",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::update_mw",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 139,
+                "column": 5
+              },
+              "end": {
+                "line": 145,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 143,
+              "column": 21
+            },
+            "end": {
+              "line": 143,
+              "column": 22
+            }
+          },
+          "replacement": "+",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_143_col_21.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_143_col_21.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.274812,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.605088708,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:143:21: replace * with / in RtkState::update_mw",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::update_mw",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 139,
+                "column": 5
+              },
+              "end": {
+                "line": 145,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 143,
+              "column": 21
+            },
+            "end": {
+              "line": 143,
+              "column": 22
+            }
+          },
+          "replacement": "/",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_143_col_21_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_143_col_21_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.976068375,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.179407791,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:143:28: replace - with + in RtkState::update_mw",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::update_mw",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 139,
+                "column": 5
+              },
+              "end": {
+                "line": 145,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 143,
+              "column": 28
+            },
+            "end": {
+              "line": 143,
+              "column": 29
+            }
+          },
+          "replacement": "+",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_143_col_28.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_143_col_28.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.911383416,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.972602833,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:143:28: replace - with / in RtkState::update_mw",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::update_mw",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 139,
+                "column": 5
+              },
+              "end": {
+                "line": 145,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 143,
+              "column": 28
+            },
+            "end": {
+              "line": 143,
+              "column": 29
+            }
+          },
+          "replacement": "/",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_143_col_28_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_143_col_28_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.014319791,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.918742625,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:143:49: replace * with + in RtkState::update_mw",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::update_mw",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 139,
+                "column": 5
+              },
+              "end": {
+                "line": 145,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 143,
+              "column": 49
+            },
+            "end": {
+              "line": 143,
+              "column": 50
+            }
+          },
+          "replacement": "+",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_143_col_49.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_143_col_49.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.81129475,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.015070708,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:143:49: replace * with / in RtkState::update_mw",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::update_mw",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 139,
+                "column": 5
+              },
+              "end": {
+                "line": 145,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 143,
+              "column": 49
+            },
+            "end": {
+              "line": 143,
+              "column": 50
+            }
+          },
+          "replacement": "/",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_143_col_49_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_143_col_49_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.341408042,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.08331475,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:144:16: replace += with -= in RtkState::update_mw",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::update_mw",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 139,
+                "column": 5
+              },
+              "end": {
+                "line": 145,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 144,
+              "column": 16
+            },
+            "end": {
+              "line": 144,
+              "column": 18
+            }
+          },
+          "replacement": "-=",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_144_col_16.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_144_col_16.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.35749225,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.14386825,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:144:16: replace += with *= in RtkState::update_mw",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::update_mw",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 139,
+                "column": 5
+              },
+              "end": {
+                "line": 145,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 144,
+              "column": 16
+            },
+            "end": {
+              "line": 144,
+              "column": 18
+            }
+          },
+          "replacement": "*=",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_144_col_16_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_144_col_16_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.1395596669999999,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 2.729899666,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::new(), 0.0, 0))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::new(), 0.0, 0))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.893920958,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::new(), 0.0, 1))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::new(), 0.0, 1))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.738072042,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::new(), 1.0, 0))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::new(), 1.0, 0))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_002.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_002.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.695920125,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::new(), 1.0, 1))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::new(), 1.0, 1))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_003.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_003.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.705623875,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::new(), -1.0, 0))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::new(), -1.0, 0))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_004.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_004.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.675433041,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::new(), -1.0, 1))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::new(), -1.0, 1))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_005.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_005.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.739148125,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from_iter([0.0]), 0.0, 0))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::from_iter([0.0]), 0.0, 0))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_006.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_006.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.694244459,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from_iter([0.0]), 0.0, 1))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::from_iter([0.0]), 0.0, 1))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_007.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_007.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.841781584,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from_iter([0.0]), 1.0, 0))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::from_iter([0.0]), 1.0, 0))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_008.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_008.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.752247209,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from_iter([0.0]), 1.0, 1))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::from_iter([0.0]), 1.0, 1))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_009.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_009.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.681036333,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from_iter([0.0]), -1.0, 0))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::from_iter([0.0]), -1.0, 0))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_010.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_010.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.809274542,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from_iter([0.0]), -1.0, 1))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::from_iter([0.0]), -1.0, 1))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_011.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_011.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.699485708,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::new(0.0), 0.0, 0))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::new(0.0), 0.0, 0))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_012.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_012.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.736797375,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::new(0.0), 0.0, 1))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::new(0.0), 0.0, 1))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_013.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_013.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.685672,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::new(0.0), 1.0, 0))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::new(0.0), 1.0, 0))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_014.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_014.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.79722825,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::new(0.0), 1.0, 1))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::new(0.0), 1.0, 1))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_015.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_015.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.913634166,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::new(0.0), -1.0, 0))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::new(0.0), -1.0, 0))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_016.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_016.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.753809917,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::new(0.0), -1.0, 1))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::new(0.0), -1.0, 1))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_017.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_017.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.955629458,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from(0.0), 0.0, 0))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::from(0.0), 0.0, 0))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_018.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_018.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.680942375,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from(0.0), 0.0, 1))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::from(0.0), 0.0, 1))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_019.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_019.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.6869145,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from(0.0), 1.0, 0))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::from(0.0), 1.0, 0))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_020.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_020.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.745547375,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from(0.0), 1.0, 1))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::from(0.0), 1.0, 1))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_021.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_021.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.691368667,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from(0.0), -1.0, 0))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::from(0.0), -1.0, 0))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_022.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_022.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.626316666,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from(0.0), -1.0, 1))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::from(0.0), -1.0, 1))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_023.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_023.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.638568292,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from_iter([1.0]), 0.0, 0))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::from_iter([1.0]), 0.0, 0))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_024.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_024.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.745142042,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from_iter([1.0]), 0.0, 1))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::from_iter([1.0]), 0.0, 1))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_025.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_025.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.74676675,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from_iter([1.0]), 1.0, 0))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::from_iter([1.0]), 1.0, 0))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_026.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_026.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.751599791,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from_iter([1.0]), 1.0, 1))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::from_iter([1.0]), 1.0, 1))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_027.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_027.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.587108792,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from_iter([1.0]), -1.0, 0))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::from_iter([1.0]), -1.0, 0))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_028.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_028.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.579482791,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from_iter([1.0]), -1.0, 1))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::from_iter([1.0]), -1.0, 1))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_029.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_029.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.530304292,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::new(1.0), 0.0, 0))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::new(1.0), 0.0, 0))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_030.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_030.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.426407292,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::new(1.0), 0.0, 1))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::new(1.0), 0.0, 1))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_031.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_031.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.628370666,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::new(1.0), 1.0, 0))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::new(1.0), 1.0, 0))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_032.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_032.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.588849291,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::new(1.0), 1.0, 1))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::new(1.0), 1.0, 1))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_033.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_033.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.488752834,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::new(1.0), -1.0, 0))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::new(1.0), -1.0, 0))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_034.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_034.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.422239667,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::new(1.0), -1.0, 1))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::new(1.0), -1.0, 1))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_035.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_035.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.478557916,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from(1.0), 0.0, 0))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::from(1.0), 0.0, 0))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_036.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_036.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.534367459,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from(1.0), 0.0, 1))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::from(1.0), 0.0, 1))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_037.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_037.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.486629625,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from(1.0), 1.0, 0))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::from(1.0), 1.0, 0))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_038.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_038.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.434068417,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from(1.0), 1.0, 1))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::from(1.0), 1.0, 1))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_039.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_039.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.485022292,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from(1.0), -1.0, 0))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::from(1.0), -1.0, 0))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_040.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_040.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.485044083,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from(1.0), -1.0, 1))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::from(1.0), -1.0, 1))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_041.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_041.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.472993959,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from_iter([-1.0]), 0.0, 0))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::from_iter([-1.0]), 0.0, 0))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_042.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_042.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.629552,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from_iter([-1.0]), 0.0, 1))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::from_iter([-1.0]), 0.0, 1))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_043.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_043.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.630813458,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from_iter([-1.0]), 1.0, 0))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::from_iter([-1.0]), 1.0, 0))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_044.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_044.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.589836,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from_iter([-1.0]), 1.0, 1))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::from_iter([-1.0]), 1.0, 1))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_045.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_045.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.533220916,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from_iter([-1.0]), -1.0, 0))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::from_iter([-1.0]), -1.0, 0))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_046.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_046.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.4714045,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from_iter([-1.0]), -1.0, 1))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::from_iter([-1.0]), -1.0, 1))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_047.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_047.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.479826667,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::new(-1.0), 0.0, 0))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::new(-1.0), 0.0, 0))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_048.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_048.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.538323333,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::new(-1.0), 0.0, 1))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::new(-1.0), 0.0, 1))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_049.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_049.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.478057458,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::new(-1.0), 1.0, 0))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::new(-1.0), 1.0, 0))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_050.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_050.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.524151792,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::new(-1.0), 1.0, 1))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::new(-1.0), 1.0, 1))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_051.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_051.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.530443292,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::new(-1.0), -1.0, 0))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::new(-1.0), -1.0, 0))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_052.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_052.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.483269959,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::new(-1.0), -1.0, 1))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::new(-1.0), -1.0, 1))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_053.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_053.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.472778833,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from(-1.0), 0.0, 0))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::from(-1.0), 0.0, 0))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_054.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_054.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.5356565,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from(-1.0), 0.0, 1))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::from(-1.0), 0.0, 1))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_055.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_055.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.632034708,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from(-1.0), 1.0, 0))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::from(-1.0), 1.0, 0))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_056.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_056.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.640185041,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from(-1.0), 1.0, 1))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::from(-1.0), 1.0, 1))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_057.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_057.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.694155417,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from(-1.0), -1.0, 0))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::from(-1.0), -1.0, 0))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_058.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_058.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.753410416,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::new(), DMatrix::from(-1.0), -1.0, 1))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::new(), DMatrix::from(-1.0), -1.0, 1))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_059.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_059.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.648365917,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::new(), 0.0, 0))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::new(), 0.0, 0))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_060.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_060.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.587543375,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::new(), 0.0, 1))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::new(), 0.0, 1))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_061.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_061.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.475902584,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::new(), 1.0, 0))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::new(), 1.0, 0))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_062.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_062.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.631481292,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::new(), 1.0, 1))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::new(), 1.0, 1))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_063.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_063.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.536502792,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::new(), -1.0, 0))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::new(), -1.0, 0))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_064.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_064.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.480774916,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::new(), -1.0, 1))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::new(), -1.0, 1))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_065.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_065.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.466652333,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::from_iter([0.0]), 0.0, 0))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::from_iter([0.0]), 0.0, 0))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_066.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_066.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.527981416,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/filter.rs:148:9: replace RtkState::resolve_ambiguities -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> with Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::from_iter([0.0]), 0.0, 1))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/filter.rs",
+          "function": {
+            "function_name": "RtkState::resolve_ambiguities",
+            "return_type": "-> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str>",
+            "span": {
+              "start": {
+                "line": 147,
+                "column": 5
+              },
+              "end": {
+                "line": 366,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 148,
+              "column": 9
+            },
+            "end": {
+              "line": 365,
+              "column": 36
+            }
+          },
+          "replacement": "Ok((Default::default(), DVector::from_iter([0.0]), DMatrix::from_iter([0.0]), 0.0, 1))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__filter.rs_line_148_col_9_067.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__filter.rs_line_148_col_9_067.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.479257,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    }
+  ],
+  "total_mutants": 86,
+  "missed": 18,
+  "caught": 0,
+  "timeout": 0,
+  "unviable": 68,
+  "success": 0,
+  "start_time": "2026-06-12T14:14:03.33919Z",
+  "end_time": null,
+  "cargo_mutants_version": "27.1.0"
+}

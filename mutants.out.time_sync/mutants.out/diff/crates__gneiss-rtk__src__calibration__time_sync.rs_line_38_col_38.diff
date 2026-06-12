@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/calibration/time_sync.rs
++++ replace - with + in cross_correlate_time_offset
+@@ -30,17 +30,17 @@
+             let idx = match imu_time.binary_search_by(|t| t.partial_cmp(&t_eval).unwrap_or(core::cmp::Ordering::Equal)) {
+                 Ok(j) => j,
+                 Err(j) => j,
+             };
+ 
+             if idx > 0 && idx < imu_time.len() {
+                 let t0 = imu_time[idx - 1];
+                 let t1 = imu_time[idx];
+-                let v0 = imu_vel[idx - 1];
++                let v0 = imu_vel[idx + /* ~ changed by cargo-mutants ~ */ 1];
+                 let v1 = imu_vel[idx];
+ 
+                 let dt = t1 - t0;
+                 if dt > 0.0 {
+                     let alpha = (t_eval - t0) / dt;
+                     let v_interp = v0 + (v1 - v0) * alpha;
+                     
+                     let x = gnss_vel[i];

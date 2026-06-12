@@ -1,0 +1,14 @@
+crates/gneiss-rtk/src/calibration/variance.rs:8:5: replace dynamic_variance -> f64 with 0.0
+crates/gneiss-rtk/src/calibration/variance.rs:8:5: replace dynamic_variance -> f64 with 1.0
+crates/gneiss-rtk/src/calibration/variance.rs:8:5: replace dynamic_variance -> f64 with -1.0
+crates/gneiss-rtk/src/calibration/variance.rs:9:58: replace / with % in dynamic_variance
+crates/gneiss-rtk/src/calibration/variance.rs:9:43: replace - with + in dynamic_variance
+crates/gneiss-rtk/src/calibration/variance.rs:9:43: replace - with / in dynamic_variance
+crates/gneiss-rtk/src/calibration/variance.rs:12:24: replace / with % in dynamic_variance
+crates/gneiss-rtk/src/calibration/variance.rs:12:24: replace / with * in dynamic_variance
+crates/gneiss-rtk/src/calibration/variance.rs:12:34: replace * with + in dynamic_variance
+crates/gneiss-rtk/src/calibration/variance.rs:12:34: replace * with / in dynamic_variance
+crates/gneiss-rtk/src/calibration/variance.rs:14:31: replace * with + in dynamic_variance
+crates/gneiss-rtk/src/calibration/variance.rs:14:31: replace * with / in dynamic_variance
+crates/gneiss-rtk/src/calibration/variance.rs:14:19: replace * with + in dynamic_variance
+crates/gneiss-rtk/src/calibration/variance.rs:14:19: replace * with / in dynamic_variance

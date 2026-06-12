@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/engine/ppp.rs
++++ replace snr_scale -> f64 with -1.0
+@@ -1,17 +1,17 @@
+ use gneiss_core::obs::EpochObs;
+ use crate::filter::RtkState;
+ use crate::engine::{EngineError, ProcessingEngine};
+ use nalgebra::{Vector3, DMatrix, DVector};
+ 
+ const LIGHT_SPEED: f64 = 299792458.0;
+ 
+ fn snr_scale(snr: i32) -> f64 {
+-    (10.0f64).powf((45.0 - snr as f64) / 10.0)
++    -1.0 /* ~ changed by cargo-mutants ~ */
+ }
+ 
+ pub fn process_ppp<'a>(engine: &'a mut ProcessingEngine, rover_obs: &EpochObs) -> Result<&'a RtkState, EngineError> {
+     let valid_pos = {
+         if engine.current_state.is_none() {
+             return engine.process_spp(rover_obs);
+         }
+         let state = engine.current_state.as_ref().unwrap();

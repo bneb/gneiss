@@ -1,0 +1,37 @@
+--- crates/gneiss-rtk/src/lambda.rs
++++ replace ldlt_lower -> Result<LdltResult, &'static str> with Ok(Default::default())
+@@ -156,33 +156,17 @@
+     }
+     
+     let res = ldlt_lower(&q_z)?;
+     let (l_final, d_final) = (res.l, res.d);
+     Ok(DecorrelateResult { z_hat, q_z, z_mat, l: l_final, d: d_final })
+ }
+ 
+ fn ldlt_lower(q: &DMatrix<f64>) -> Result<LdltResult, &'static str> {
+-    let n = q.nrows();
+-    let mut l = DMatrix::<f64>::identity(n, n);
+-    let mut d = DVector::<f64>::zeros(n);
+-    let mut q_tmp = q.clone();
+-
+-    for j in (0..n).rev() {
+-        d[j] = q_tmp[(j, j)];
+-        if d[j] <= 1e-18 { return Err("Covariance matrix is not positive definite"); }
+-        for i in 0..j {
+-            l[(j, i)] = q_tmp[(j, i)] / d[j];
+-            for k in 0..=i {
+-                q_tmp[(i, k)] -= l[(j, i)] * q_tmp[(j, k)];
+-                q_tmp[(k, i)] = q_tmp[(i, k)];
+-            }
+-        }
+-    }
+-    Ok(LdltResult { l, d })
++    Ok(Default::default()) /* ~ changed by cargo-mutants ~ */
+ }
+ 
+ fn search_recursive(
+     k: isize,
+     n: usize,
+     l: &DMatrix<f64>,
+     d: &DVector<f64>,
+     z_hat: &DVector<f64>,

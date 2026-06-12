@@ -1,0 +1,18 @@
+crates/gneiss-rtk/src/filter.rs:116:9: replace RtkState::decouple_position with ()
+crates/gneiss-rtk/src/filter.rs:129:9: replace RtkState::decouple_clock with ()
+crates/gneiss-rtk/src/filter.rs:132:18: replace != with == in RtkState::decouple_clock
+crates/gneiss-rtk/src/filter.rs:140:9: replace RtkState::update_mw with ()
+crates/gneiss-rtk/src/filter.rs:142:25: replace / with % in RtkState::update_mw
+crates/gneiss-rtk/src/filter.rs:142:25: replace / with * in RtkState::update_mw
+crates/gneiss-rtk/src/filter.rs:142:36: replace + with - in RtkState::update_mw
+crates/gneiss-rtk/src/filter.rs:142:36: replace + with * in RtkState::update_mw
+crates/gneiss-rtk/src/filter.rs:143:37: replace + with - in RtkState::update_mw
+crates/gneiss-rtk/src/filter.rs:143:37: replace + with * in RtkState::update_mw
+crates/gneiss-rtk/src/filter.rs:143:21: replace * with + in RtkState::update_mw
+crates/gneiss-rtk/src/filter.rs:143:21: replace * with / in RtkState::update_mw
+crates/gneiss-rtk/src/filter.rs:143:28: replace - with + in RtkState::update_mw
+crates/gneiss-rtk/src/filter.rs:143:28: replace - with / in RtkState::update_mw
+crates/gneiss-rtk/src/filter.rs:143:49: replace * with + in RtkState::update_mw
+crates/gneiss-rtk/src/filter.rs:143:49: replace * with / in RtkState::update_mw
+crates/gneiss-rtk/src/filter.rs:144:16: replace += with -= in RtkState::update_mw
+crates/gneiss-rtk/src/filter.rs:144:16: replace += with *= in RtkState::update_mw

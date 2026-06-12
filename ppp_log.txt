@@ -1,0 +1,58 @@
+warning: unused variable: `max_innovation`
+   --> crates/gneiss-rtk/src/engine/updater.rs:237:5
+    |
+237 |     max_innovation: f64,
+    |     ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_max_innovation`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `res_p`
+   --> crates/gneiss-rtk/src/engine/ppp.rs:201:13
+    |
+201 |         let res_p = p_if - expected_p;
+    |             ^^^^^ help: if this is intentional, prefix it with an underscore: `_res_p`
+
+warning: unused variable: `res_l`
+   --> crates/gneiss-rtk/src/engine/ppp.rs:293:21
+    |
+293 |                 let res_l = l_if - expected_l;
+    |                     ^^^^^ help: if this is intentional, prefix it with an underscore: `_res_l`
+
+warning: variable does not need to be mutable
+   --> crates/gneiss-rtk/src/engine/ppp_fg.rs:120:9
+    |
+120 |     let mut cp1 = sat_obs.get_observable_phase(b1);
+    |         ----^^^
+    |         |
+    |         help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `res_p`
+   --> crates/gneiss-rtk/src/engine/ppp_fg.rs:276:17
+    |
+276 |             let res_p = s.p_meas - expected_p;
+    |                 ^^^^^ help: if this is intentional, prefix it with an underscore: `_res_p`
+
+warning: unused variable: `obs`
+   --> crates/gneiss-rtk/src/engine/tight_fg.rs:223:45
+    |
+223 | fn handle_cycle_slips(state: &mut RtkState, obs: &EpochObs, sats: &[ProcessedSat]) -> Vec<gneiss_core::sat::SatelliteId> {
+    |                                             ^^^ help: if this is intentional, prefix it with an underscore: `_obs`
+
+warning: function `add_doppler_factors` is never used
+   --> crates/gneiss-rtk/src/engine/ppp_fg.rs:310:4
+    |
+310 | fn add_doppler_factors(fg: &mut FactorGraphOptimizer, state: &RtkState, sats: &[ProcessedSat]) {
+    |    ^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `gneiss-rtk` (lib) generated 7 warnings (run `cargo fix --lib -p gneiss-rtk` to apply 6 suggestions)
+    Finished `release` profile [optimized] target(s) in 0.07s
+     Running `target/release/gneiss-cli process datasets/gsdc/gsdc_config.json --mode ppp`
+error: unexpected argument 'datasets/gsdc/gsdc_config.json' found
+
+Usage: gneiss-cli process [OPTIONS] --rover <ROVER> --output <OUTPUT>
+
+For more information, try '--help'.

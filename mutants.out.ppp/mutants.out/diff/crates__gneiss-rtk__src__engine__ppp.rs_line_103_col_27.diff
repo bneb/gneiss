@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/engine/ppp.rs
++++ replace == with != in process_ppp
+@@ -95,17 +95,17 @@
+                     if (l_gf - prev_gf).abs() > 0.05 { slip = true; }
+                 }
+                 state.gf_values.insert(sat_obs.sat, l_gf);
+                 
+                 let l1_lock = sat_obs.get_locktime(1);
+                 let prev_l1 = *state.locktimes.get(&(sat_obs.sat, 1)).unwrap_or(&0);
+                 let mut new_l1 = prev_l1.saturating_add(1);
+                 if let Some(lk) = l1_lock {
+-                    if lk == 0 || lk < prev_l1 { slip = true; new_l1 = lk; } else { new_l1 = lk; }
++                    if lk != /* ~ changed by cargo-mutants ~ */ 0 || lk < prev_l1 { slip = true; new_l1 = lk; } else { new_l1 = lk; }
+                 } else if new_l1 == 0 && state.locktimes.contains_key(&(sat_obs.sat, 1)) { slip = true; }
+                 state.locktimes.insert((sat_obs.sat, 1), new_l1);
+                 
+                 let l2_lock = sat_obs.get_locktime(2);
+                 let prev_l2 = *state.locktimes.get(&(sat_obs.sat, 2)).unwrap_or(&0);
+                 let mut new_l2 = prev_l2.saturating_add(1);
+                 if let Some(lk) = l2_lock {
+                     if lk == 0 || lk < prev_l2 { slip = true; new_l2 = lk; } else { new_l2 = lk; }

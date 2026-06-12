@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/calibration/extrinsics.rs
++++ replace * with / in estimate_lever_arm
+@@ -47,17 +47,17 @@
+ 
+     // Solve using normal equations: x = (H^T * H)^-1 * H^T * Z
+     let h_t = h_matrix.transpose();
+     let h_t_h = &h_t * &h_matrix;
+     
+     // Check if the matrix is invertible (requires dynamic excitation/turning)
+     let h_t_h_inv = h_t_h.try_inverse().ok_or("Matrix is singular; insufficient dynamic excitation to observe lever arm")?;
+     
+-    let lever_arm = h_t_h_inv * &h_t * z_vector;
++    let lever_arm = h_t_h_inv / /* ~ changed by cargo-mutants ~ */ &h_t * z_vector;
+ 
+     Ok(Vector3::new(lever_arm[0], lever_arm[1], lever_arm[2]))
+ }
+ 
+ #[cfg(test)]
+ mod tests {
+     use super::*;
+     use nalgebra::{Vector3, Rotation3};

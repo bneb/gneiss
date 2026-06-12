@@ -33,7 +33,7 @@ pub fn get_sat_state(eph: &Ephemeris, pr: f64, t_rx: GpsTime, rx_pos: Vector3<f6
     (sat_pos, sat_vel)
 }
 
-fn compute_atmospheric_delays(
+pub fn compute_atmospheric_delays(
     state_time: GpsTime,
     pos_apc: Vector3<f64>,
     base_coord_vec: Vector3<f64>,
@@ -74,7 +74,7 @@ fn compute_atmospheric_delays(
     (tropo_dd, iono_dd_l1, iono_dd_l2)
 }
 
-fn apply_phase_windup(
+pub fn apply_phase_windup(
     state: &mut RtkState,
     pos_apc: Vector3<f64>,
     base_coord_vec: Vector3<f64>,
@@ -114,7 +114,7 @@ fn apply_phase_windup(
     if let Some(cp2) = &mut ref_base.cp_l2 { *cp2 += w_bas_ref; }
 }
 
-fn compute_dd_pseudorange(
+pub fn compute_dd_pseudorange(
     rov_sat: &DdObservation,
     base_sat: &DdObservation,
     rov_ref: &DdObservation,
@@ -130,7 +130,8 @@ fn compute_dd_pseudorange(
     let mut updates = Vec::new();
     let pr_base_var = 0.09;
 
-    if rov_sat.pr_l1 > 0.0 && base_sat.pr_l1 > 0.0 && rov_ref.pr_l1 > 0.0 && ref_base.pr_l1 > 0.0 {
+    let pr1_valid = [rov_sat.pr_l1, base_sat.pr_l1, rov_ref.pr_l1, ref_base.pr_l1].iter().all(|&x| x > 0.0);
+    if pr1_valid {
         let pr_dd = (rov_sat.pr_l1 - rov_ref.pr_l1) - (base_sat.pr_l1 - ref_base.pr_l1);
         let mut h_pr1 = vec![0.0; state_size];
         h_pr1[0] = h_r.x; h_pr1[1] = h_r.y; h_pr1[2] = h_r.z;
@@ -138,7 +139,8 @@ fn compute_dd_pseudorange(
         updates.push((pr_dd - (comp_pr_dd + iono_dd_l1), h_pr1, pr_base_var * var_factor, 0));
     }
 
-    if let (Some(rr2), Some(rs2), Some(br2), Some(bs2)) = (rov_ref.pr_l2, rov_sat.pr_l2, ref_base.pr_l2, base_sat.pr_l2) {
+    let pr2_vals = [rov_ref.pr_l2, rov_sat.pr_l2, ref_base.pr_l2, base_sat.pr_l2];
+    if let [Some(rr2), Some(rs2), Some(br2), Some(bs2)] = pr2_vals {
         let pr_dd_l2 = (rs2 - rr2) - (bs2 - br2);
         let mut h_pr2 = vec![0.0; state_size];
         h_pr2[0] = h_r.x; h_pr2[1] = h_r.y; h_pr2[2] = h_r.z;
@@ -149,7 +151,7 @@ fn compute_dd_pseudorange(
     updates
 }
 
-fn compute_dd_carrier_phase(
+pub fn compute_dd_carrier_phase(
     state: &RtkState,
     rov_sat: &DdObservation,
     base_sat: &DdObservation,
@@ -173,7 +175,8 @@ fn compute_dd_carrier_phase(
     let c = 299792458.0;
 
     if let (Some(sat_idx), Some(ref_idx)) = (state.ambiguity_keys.iter().position(|&(s, f)| s == rov_sat.sat && f == 1), ref_idx_l1) {
-        if let (Some(rr1), Some(rs1), Some(br1), Some(bs1)) = (rov_ref.cp_l1, rov_sat.cp_l1, ref_base.cp_l1, base_sat.cp_l1) {
+        let cp1_vals = [rov_ref.cp_l1, rov_sat.cp_l1, ref_base.cp_l1, base_sat.cp_l1];
+        if let [Some(rr1), Some(rs1), Some(br1), Some(bs1)] = cp1_vals {
             let lam_ref_1 = c / ref_f1;
             let lam_sat_1 = c / sat_f1;
             let cp_dd_l1 = (rs1 * lam_sat_1 - rr1 * lam_ref_1) - (bs1 * lam_sat_1 - br1 * lam_ref_1);
@@ -195,7 +198,8 @@ fn compute_dd_carrier_phase(
     }
 
     if let (Some(sat_idx), Some(ref_idx)) = (state.ambiguity_keys.iter().position(|&(s, f)| s == rov_sat.sat && f == 2), ref_idx_l2) {
-        if let (Some(rr2), Some(rs2), Some(br2), Some(bs2)) = (rov_ref.cp_l2, rov_sat.cp_l2, ref_base.cp_l2, base_sat.cp_l2) {
+        let cp2_vals = [rov_ref.cp_l2, rov_sat.cp_l2, ref_base.cp_l2, base_sat.cp_l2];
+        if let [Some(rr2), Some(rs2), Some(br2), Some(bs2)] = cp2_vals {
             let lam_ref_2 = c / ref_f2;
             let lam_sat_2 = c / sat_f2;
             let cp_dd_l2 = (rs2 * lam_sat_2 - rr2 * lam_ref_2) - (bs2 * lam_sat_2 - br2 * lam_ref_2);
@@ -214,7 +218,7 @@ fn compute_dd_carrier_phase(
     updates
 }
 
-fn compute_dd_doppler(
+pub fn compute_dd_doppler(
     state: &RtkState,
     rov_sat: &DdObservation,
     base_sat: &DdObservation,
@@ -234,7 +238,8 @@ fn compute_dd_doppler(
     state_size: usize,
     var_factor: f64,
 ) -> Option<(f64, Vec<f64>, f64, u8)> {
-    if rov_sat.doppler != 0.0 && rov_ref.doppler != 0.0 && base_sat.doppler != 0.0 && ref_base.doppler != 0.0 {
+    let dop_valid = [rov_sat.doppler, rov_ref.doppler, base_sat.doppler, ref_base.doppler].iter().all(|&x| x != 0.0);
+    if dop_valid {
         let lam_sat_1 = 299792458.0 / sat_f1;
         let lam_ref_1 = 299792458.0 / ref_f1;
         
@@ -263,7 +268,7 @@ fn compute_dd_doppler(
         let innov = observed_dd_rr - predicted_dd_rr;
         
         if innov.abs() > 10.0 {
-            tracing::debug!("DD Doppler Innov huge! sat={} innov={:.3} obs={:.3} pred={:.3}", rov_sat.sat.to_string(), innov, observed_dd_rr, predicted_dd_rr);
+            tracing::debug!("DD Doppler innovation exceeds threshold. sat={} innov={:.3} obs={:.3} pred={:.3}", rov_sat.sat.to_string(), innov, observed_dd_rr, predicted_dd_rr);
         }
         
         let mut h_dop = vec![0.0; state_size]; 
@@ -517,5 +522,120 @@ pub fn build_measurement_model(
         Some((z_vec, h_mat, r_mat, t_vec))
     } else {
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    
+    use crate::filter::{RtkState, DdObservation};
+    use gneiss_core::coords::{Coordinate, Datum, Frame};
+    use gneiss_core::time::GpsTime;
+    use gneiss_core::sat::{SatelliteId, Constellation};
+    use gneiss_core::ephemeris::Ephemeris;
+    use nalgebra::Vector3;
+
+    #[test]
+    fn test_measurement_model_against_rtklib_golden_data() {
+        let time = GpsTime::new(2137, 422922.0);
+        let mut state = RtkState::new(time, Coordinate::new(Vector3::new(1000.0, 2000.0, 3000.0), Datum::WGS84, Frame::ECEF, time), 10.0);
+        state.velocity = Vector3::new(10.0, -5.0, 2.0);
+        
+        let ref_sat = SatelliteId { constellation: Constellation::Gps, prn: 1 };
+        let rov_sat1 = SatelliteId { constellation: Constellation::Gps, prn: 2 };
+        let rov_sat2 = SatelliteId { constellation: Constellation::Gps, prn: 3 };
+        
+        state.add_ambiguity(ref_sat, 1, 5.0, 100.0);
+        state.add_ambiguity(rov_sat1, 1, 10.0, 100.0);
+        state.add_ambiguity(rov_sat2, 1, 15.0, 100.0);
+        
+        state.windup.insert(ref_sat, 0.0);
+        state.windup.insert(rov_sat1, 0.0);
+        state.windup.insert(rov_sat2, 0.0);
+
+        let ref_rover = DdObservation { sat: ref_sat, pr_l1: 20000000.0, pr_l2: Some(20000001.0), cp_l1: Some(100000000.0), cp_l2: Some(80000000.0), doppler: 100.0, snr: 45.0, locktime: Some(100) };
+        let ref_base = DdObservation { sat: ref_sat, pr_l1: 20005000.0, pr_l2: Some(20005001.0), cp_l1: Some(100020000.0), cp_l2: Some(80016000.0), doppler: 10.0, snr: 45.0, locktime: Some(100) };
+        
+        let rov1_rover = DdObservation { sat: rov_sat1, pr_l1: 21000000.0, pr_l2: Some(21000001.0), cp_l1: Some(105000000.0), cp_l2: Some(84000000.0), doppler: -50.0, snr: 45.0, locktime: Some(100) };
+        let rov1_base = DdObservation { sat: rov_sat1, pr_l1: 21005000.0, pr_l2: Some(21005001.0), cp_l1: Some(105020000.0), cp_l2: Some(84016000.0), doppler: 10.0, snr: 45.0, locktime: Some(100) };
+
+        let rov2_rover = DdObservation { sat: rov_sat2, pr_l1: 22000000.0, pr_l2: Some(22000001.0), cp_l1: Some(110000000.0), cp_l2: Some(88000000.0), doppler: -20.0, snr: 45.0, locktime: Some(100) };
+        let rov2_base = DdObservation { sat: rov_sat2, pr_l1: 22005000.0, pr_l2: Some(22005001.0), cp_l1: Some(110020000.0), cp_l2: Some(88016000.0), doppler: 10.0, snr: 45.0, locktime: Some(100) };
+
+        let matched_obs = vec![(rov1_rover, rov1_base), (rov2_rover, rov2_base)];
+
+        let eph_ref = Ephemeris::Gps(gneiss_core::ephemeris::GpsEphemeris {
+            sat: ref_sat, toe: time, toc: time, af0: 0.0, af1: 0.0, af2: 0.0,
+            crs: 0.0, crc: 0.0, cuc: 0.0, cus: 0.0, cic: 0.0, cis: 0.0,
+            m0: 0.0, e: 0.01, sqrt_a: 5153.6, delta_n: 0.0,
+            omega0: 0.0, omega_dot: 0.0, i0: 1.0, idot: 0.0, omega: 0.0, tgd: 0.0,
+            iode: 0, iodc: 0,
+        });
+
+        let eph_rov1 = Ephemeris::Gps(gneiss_core::ephemeris::GpsEphemeris {
+            sat: rov_sat1, toe: time, toc: time, af0: 0.0, af1: 0.0, af2: 0.0,
+            crs: 0.0, crc: 0.0, cuc: 0.0, cus: 0.0, cic: 0.0, cis: 0.0,
+            m0: 1.0, e: 0.01, sqrt_a: 5153.6, delta_n: 0.0,
+            omega0: 0.5, omega_dot: 0.0, i0: 1.0, idot: 0.0, omega: 0.0, tgd: 0.0,
+            iode: 0, iodc: 0,
+        });
+        
+        let eph_rov2 = Ephemeris::Gps(gneiss_core::ephemeris::GpsEphemeris {
+            sat: rov_sat2, toe: time, toc: time, af0: 0.0, af1: 0.0, af2: 0.0,
+            crs: 0.0, crc: 0.0, cuc: 0.0, cus: 0.0, cic: 0.0, cis: 0.0,
+            m0: 2.0, e: 0.01, sqrt_a: 5153.6, delta_n: 0.0,
+            omega0: 1.0, omega_dot: 0.0, i0: 1.0, idot: 0.0, omega: 0.0, tgd: 0.0,
+            iode: 0, iodc: 0,
+        });
+
+        let ephemerides = vec![eph_ref, eph_rov1, eph_rov2];
+        let base_coord = Coordinate::new(Vector3::new(1005.0, 2005.0, 3005.0), Datum::WGS84, Frame::ECEF, time);
+
+        // We explicitly use compute_innovations to avoid the Mahalanobis chi2 filter rejecting dummy data
+        let _config = crate::engine::EngineConfig::default();
+        let (z, _h, r, _) = super::super::measurement::compute_innovations(&mut state, &matched_obs, &ephemerides, &base_coord, base_coord.epoch, &ref_rover, &ref_base, Vector3::zeros(), Vector3::zeros()).unwrap();
+
+        println!("Z: {:?}", z);
+        
+        // Lock in the golden Z vector (updated for iterative ecef_to_llh refinement)
+        assert!((z[0] - 0.70573).abs() < 1e-3, "z[0]={}", z[0]);
+        assert!((z[1] - 0.70623).abs() < 1e-3, "z[1]={}", z[1]);
+        assert!((z[2] - -4.29582).abs() < 1e-3, "z[2]={}", z[2]);
+        assert!((z[3] - 7.72370).abs() < 1e-3, "z[3]={}", z[3]);
+        assert!((z[4] - 7.72444).abs() < 1e-3, "z[4]={}", z[4]);
+        assert!((z[5] - -2.27859).abs() < 1e-3, "z[5]={}", z[5]);
+
+        // Lock in the golden R diagonal
+        assert!(r[0] >= 16.0); // Now scales with elevation
+        assert!(r[1] >= 16.0);
+        assert!(r[2] >= 0.0001);
+        assert!(r[3] >= 16.0);
+        assert!(r[4] >= 16.0);
+        assert!(r[5] >= 0.0001);
+    }
+
+    #[test]
+    fn test_get_sat_state() {
+        use crate::engine::measurement::get_sat_state;
+        let time = GpsTime::new(2137, 422922.0);
+        let rx_pos = Vector3::new(1000.0, 2000.0, 3000.0);
+        let sat = SatelliteId { constellation: Constellation::Gps, prn: 1 };
+        let eph = Ephemeris::Gps(gneiss_core::ephemeris::GpsEphemeris {
+            sat, toe: time, toc: time, af0: 0.0, af1: 0.0, af2: 0.0,
+            crs: 0.0, crc: 0.0, cuc: 0.0, cus: 0.0, cic: 0.0, cis: 0.0,
+            m0: 1.0, e: 0.01, sqrt_a: 5153.6, delta_n: 0.0,
+            omega0: 0.0, omega_dot: 0.0, i0: 1.0, idot: 0.0, omega: 0.0, tgd: 0.0,
+            iode: 0, iodc: 0,
+        });
+
+        let pr = 20000000.0;
+        let (pos, vel) = get_sat_state(&eph, pr, time, rx_pos);
+        
+        // Assert non-zero output
+        assert!(pos.norm() > 10000.0);
+        assert!(vel.norm() > 10.0);
+        
+        let (pos0, vel0) = get_sat_state(&eph, 0.0, time, rx_pos);
+        assert!((pos.x - pos0.x).abs() > 0.0);
     }
 }

@@ -1,0 +1,28 @@
+crates/gneiss-rtk/src/doppler.rs:44:27: replace < with == in compute_doppler_update
+crates/gneiss-rtk/src/doppler.rs:44:27: replace < with > in compute_doppler_update
+crates/gneiss-rtk/src/doppler.rs:44:27: replace < with <= in compute_doppler_update
+crates/gneiss-rtk/src/doppler.rs:54:61: replace == with != in compute_doppler_update
+crates/gneiss-rtk/src/doppler.rs:63:27: replace - with + in compute_doppler_update
+crates/gneiss-rtk/src/doppler.rs:63:27: replace - with / in compute_doppler_update
+crates/gneiss-rtk/src/doppler.rs:65:18: replace < with == in compute_doppler_update
+crates/gneiss-rtk/src/doppler.rs:65:18: replace < with > in compute_doppler_update
+crates/gneiss-rtk/src/doppler.rs:65:18: replace < with <= in compute_doppler_update
+crates/gneiss-rtk/src/doppler.rs:68:25: replace / with % in compute_doppler_update
+crates/gneiss-rtk/src/doppler.rs:68:25: replace / with * in compute_doppler_update
+crates/gneiss-rtk/src/doppler.rs:71:34: replace / with % in compute_doppler_update
+crates/gneiss-rtk/src/doppler.rs:71:34: replace / with * in compute_doppler_update
+crates/gneiss-rtk/src/doppler.rs:72:52: replace * with + in compute_doppler_update
+crates/gneiss-rtk/src/doppler.rs:72:52: replace * with / in compute_doppler_update
+crates/gneiss-rtk/src/doppler.rs:72:35: delete - in compute_doppler_update
+crates/gneiss-rtk/src/doppler.rs:76:31: replace - with + in compute_doppler_update
+crates/gneiss-rtk/src/doppler.rs:76:31: replace - with / in compute_doppler_update
+crates/gneiss-rtk/src/doppler.rs:80:39: replace - with + in compute_doppler_update
+crates/gneiss-rtk/src/doppler.rs:80:39: replace - with / in compute_doppler_update
+crates/gneiss-rtk/src/doppler.rs:86:20: delete - in compute_doppler_update
+crates/gneiss-rtk/src/doppler.rs:87:20: delete - in compute_doppler_update
+crates/gneiss-rtk/src/doppler.rs:88:20: delete - in compute_doppler_update
+crates/gneiss-rtk/src/doppler.rs:91:24: replace * with + in compute_doppler_update
+crates/gneiss-rtk/src/doppler.rs:91:24: replace * with / in compute_doppler_update
+crates/gneiss-rtk/src/doppler.rs:98:21: replace < with == in compute_doppler_update
+crates/gneiss-rtk/src/doppler.rs:98:21: replace < with > in compute_doppler_update
+crates/gneiss-rtk/src/doppler.rs:98:21: replace < with <= in compute_doppler_update

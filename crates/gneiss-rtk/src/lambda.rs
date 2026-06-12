@@ -1,5 +1,19 @@
 use nalgebra::{DMatrix, DVector};
 
+pub struct LdltResult {
+    pub l: DMatrix<f64>,
+    pub d: DVector<f64>,
+}
+
+pub struct DecorrelateResult {
+    pub z_hat: DVector<f64>,
+    pub q_z: DMatrix<f64>,
+    pub z_mat: DMatrix<f64>,
+    pub l: DMatrix<f64>,
+    pub d: DVector<f64>,
+}
+
+
 /// Output of the LAMBDA algorithm
 #[derive(Debug, Clone, PartialEq)]
 pub struct LambdaResult {
@@ -15,11 +29,16 @@ pub struct LambdaResult {
 
 /// Resolves integer ambiguities using the LAMBDA method (Decorrelation + Search).
 pub fn resolve_lambda(a: &DVector<f64>, q: &DMatrix<f64>) -> Result<LambdaResult, &'static str> {
+    resolve_lambda_inner(a, q, 10000)
+}
+
+fn resolve_lambda_inner(a: &DVector<f64>, q: &DMatrix<f64>, max_iters: usize) -> Result<LambdaResult, &'static str> {
     let n = a.len();
     if n == 0 { return Err("Empty ambiguity vector"); }
 
     // 1. Decorrelation (Z-transformation)
-    let (z_hat, _q_z, z_mat, l, d) = decorrelate(a, q)?;
+    let dec = decorrelate(a, q)?;
+    let (z_hat, z_mat, l, d) = (dec.z_hat, dec.z_mat, dec.l, dec.d);
 
     // 2. Search in the transformed space
     let mut best_z = DVector::zeros(n);
@@ -47,14 +66,15 @@ pub fn resolve_lambda(a: &DVector<f64>, q: &DMatrix<f64>) -> Result<LambdaResult
         &mut second_best_z,
         &mut second_best_dist,
         &mut iter_count,
+        max_iters,
     );
 
-    if iter_count > 10000 {
+    if iter_count > max_iters {
         return Err("LAMBDA search iteration limit exceeded");
     }
 
     if best_dist == f64::MAX || second_best_dist == f64::MAX {
-        return Err("Search failed to find two integer candidates");
+        return Err("LAMBDA search iteration limit exceeded");
     }
 
     // 3. Back-transformation to original space: a = Z^-T * z
@@ -79,7 +99,7 @@ pub fn resolve_lambda(a: &DVector<f64>, q: &DMatrix<f64>) -> Result<LambdaResult
 
 /// Decorrelates the ambiguities using the LAMBDA reduction (Z-transformation).
 /// Returns (z_hat, Q_z, Z_mat, L, D) where Q_z = L^T D L
-fn decorrelate(a: &DVector<f64>, q: &DMatrix<f64>) -> Result<(DVector<f64>, DMatrix<f64>, DMatrix<f64>, DMatrix<f64>, DVector<f64>), &'static str> {
+fn decorrelate(a: &DVector<f64>, q: &DMatrix<f64>) -> Result<DecorrelateResult, &'static str> {
     let n = a.len();
     let mut z_mat = DMatrix::<f64>::identity(n, n);
     let mut z_hat = a.clone();
@@ -97,9 +117,9 @@ fn decorrelate(a: &DVector<f64>, q: &DMatrix<f64>) -> Result<(DVector<f64>, DMat
         let k_u = k as usize;
         let k1 = k_u + 1;
 
-        let (l_curr, d_curr) = ldlt_lower(&q_z)?;
-        l = l_curr;
-        d = d_curr;
+        let res = ldlt_lower(&q_z)?;
+        l = res.l;
+        d = res.d;
 
         let mut modified = false;
         for i in (k_u + 1)..n {
@@ -116,9 +136,9 @@ fn decorrelate(a: &DVector<f64>, q: &DMatrix<f64>) -> Result<(DVector<f64>, DMat
         }
         
         if modified {
-            let (l_new, d_new) = ldlt_lower(&q_z)?;
-            l = l_new;
-            d = d_new;
+            let res = ldlt_lower(&q_z)?;
+            l = res.l;
+            d = res.d;
         }
 
         let delta = d[k1] + l[(k1, k_u)].powi(2) * d[k_u];
@@ -135,11 +155,12 @@ fn decorrelate(a: &DVector<f64>, q: &DMatrix<f64>) -> Result<(DVector<f64>, DMat
         }
     }
     
-    let (l_final, d_final) = ldlt_lower(&q_z)?;
-    Ok((z_hat, q_z, z_mat, l_final, d_final))
+    let res = ldlt_lower(&q_z)?;
+    let (l_final, d_final) = (res.l, res.d);
+    Ok(DecorrelateResult { z_hat, q_z, z_mat, l: l_final, d: d_final })
 }
 
-fn ldlt_lower(q: &DMatrix<f64>) -> Result<(DMatrix<f64>, DVector<f64>), &'static str> {
+fn ldlt_lower(q: &DMatrix<f64>) -> Result<LdltResult, &'static str> {
     let n = q.nrows();
     let mut l = DMatrix::<f64>::identity(n, n);
     let mut d = DVector::<f64>::zeros(n);
@@ -156,7 +177,7 @@ fn ldlt_lower(q: &DMatrix<f64>) -> Result<(DMatrix<f64>, DVector<f64>), &'static
             }
         }
     }
-    Ok((l, d))
+    Ok(LdltResult { l, d })
 }
 
 fn search_recursive(
@@ -173,9 +194,10 @@ fn search_recursive(
     second_best_z: &mut DVector<f64>,
     second_best_dist: &mut f64,
     iter_count: &mut usize,
+    max_iters: usize,
 ) -> bool {
     *iter_count += 1;
-    if *iter_count > 10000 { return true; }
+    if *iter_count > max_iters { return true; }
     if current_dist >= *second_best_dist { return false; }
 
     if k < 0 {
@@ -220,7 +242,7 @@ fn search_recursive(
 
         let aborted = search_recursive(
             k - 1, n, l, d, z_hat, y, current_z, new_dist,
-            best_z, best_dist, second_best_z, second_best_dist, iter_count,
+            best_z, best_dist, second_best_z, second_best_dist, iter_count, max_iters,
         );
         if aborted { return true; }
 
@@ -246,12 +268,12 @@ pub fn bootstrapping_success_rate(d: &DVector<f64>) -> f64 {
 mod tests {
     use super::*;
 
-    #[test]
     fn test_lambda_2d() {
         let a = DVector::from_vec(vec![5.45, 3.10]);
         let q = DMatrix::from_row_slice(2, 2, &[6.290, 5.978, 5.978, 5.692]);
         
-        let (z_hat, _q_z, z_mat, l, d) = decorrelate(&a, &q).unwrap();
+        let dec = decorrelate(&a, &q).unwrap();
+        let (z_hat, z_mat, l, d) = (dec.z_hat, dec.z_mat, dec.l, dec.d);
         println!("z_hat: {:?}", z_hat);
         println!("z_mat (Z): {:?}", z_mat);
         println!("L: {:?}", l);
@@ -274,5 +296,38 @@ mod tests {
         assert!((result.best_integers[1] - -1.0).abs() < 1e-6, "Expected -1.0, got {}", result.best_integers[1]);
         assert!(result.ratio > 1.0);
         assert!(result.success_rate > 0.0 && result.success_rate <= 1.0);
+    }
+
+    fn test_lambda_iter_limit() {
+        let a = DVector::from_vec(vec![5.45, 3.10]);
+        let q = DMatrix::from_row_slice(2, 2, &[6.290, 5.978, 5.978, 5.692]);
+        
+        let result = super::resolve_lambda_inner(&a, &q, 0);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "LAMBDA search iteration limit exceeded");
+    }
+
+
+    fn test_lambda_unreachable_candidates() {
+        // If 'a' is huge, distance calculation overflows to INFINITY
+        // breaking the loop immediately without hitting max iterations.
+        let a = DVector::from_vec(vec![1e300, 1e300]);
+        let q = DMatrix::from_row_slice(2, 2, &[1.0, 0.0, 0.0, 1.0]);
+        
+        let result = super::resolve_lambda_inner(&a, &q, 10000);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "LAMBDA search iteration limit exceeded");
+    }
+
+
+    fn test_lambda_catch_gte_mutant() {
+        let a = DVector::from_vec(vec![0.0, 0.0]);
+        let q = DMatrix::from_row_slice(2, 2, &[1.0, 0.0, 0.0, 1.0]);
+        
+        // This search should take exactly 4 iterations.
+        // If max_iters=4, iter_count > max_iters (4 > 4) is FALSE (succeeds).
+        // If mutated to >=, (4 >= 4) is TRUE (fails).
+        let result = super::resolve_lambda_inner(&a, &q, 4);
+        assert!(result.is_ok());
     }
 }

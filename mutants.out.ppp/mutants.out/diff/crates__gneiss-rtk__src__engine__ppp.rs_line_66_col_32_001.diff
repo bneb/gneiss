@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/engine/ppp.rs
++++ replace - with / in process_ppp
+@@ -58,17 +58,17 @@
+         let rcv_pos_llh = gneiss_core::coords::ecef_to_llh(rcv_pos_ecef);
+         let (_az, el) = gneiss_core::coords::az_el(rcv_pos_llh, rcv_pos_ecef, sat_pos_rot);
+ 
+         if el < libm::asin(0.261799) { continue; }
+ 
+         let dt_sat_m = sat_clk * LIGHT_SPEED;
+         let snr = sat_obs.get_snr(1).unwrap_or(45);
+ 
+-        let los = (sat_pos_rot - rcv_pos_ecef) / dist;
++        let los = (sat_pos_rot / /* ~ changed by cargo-mutants ~ */ rcv_pos_ecef) / dist;
+         let tropo_params = gneiss_core::atmosphere::TropoParams::default();
+         let z_dry = 0.0022768 * tropo_params.press_hpa / (1.0 - 0.00266 * libm::cos(2.0 * rcv_pos_llh.x) - 0.00028 * rcv_pos_llh.z / 1000.0);
+         let map_wet = 1.0 / libm::sin(el);
+         let tropo_dry = z_dry / libm::sin(el);
+ 
+         let lam1 = LIGHT_SPEED / gneiss_core::signal::satellite_frequencies(sat_obs.sat, eph.freq_num()).0;
+         let lam2 = LIGHT_SPEED / gneiss_core::signal::satellite_frequencies(sat_obs.sat, eph.freq_num()).1;
+ 

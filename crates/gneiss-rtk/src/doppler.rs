@@ -51,7 +51,10 @@ pub fn compute_doppler_update(
     let mut r_vals = Vec::new();
 
     for meas in measurements {
-        let eph = ephemerides.iter().find(|e| e.sat() == meas.sat)?;
+        let eph = match ephemerides.iter().find(|e| e.sat() == meas.sat) {
+            Some(e) => e,
+            None => continue,
+        };
 
         // Get satellite position and velocity
         let (sat_pos, sat_vel, _dt_s, _) = eph.position(state.time);
@@ -179,12 +182,13 @@ mod tests {
 
         let result = compute_doppler_update(&state, &measurements, &ephemerides);
         assert!(result.is_some(), "Should compute Doppler update with 5 sats");
-
-        let (z, _h, _r) = result.unwrap();
+        let (z, _h, r) = result.unwrap();
         // For a consistent stationary scenario, innovations should be near zero
         for i in 0..z.len() {
             assert!(z[i].abs() < 0.1,
                 "Doppler innovation[{}] should be near zero for stationary, got {}", i, z[i]);
+            let expected_var = 0.04 * gneiss_core::variance::observation_variance(45.0, measurements[i].elevation, 45.0);
+            assert!((r[(i, i)] - expected_var).abs() < 1e-6, "r matrix should have correct variance");
         }
     }
 
@@ -196,8 +200,9 @@ mod tests {
             Datum::WGS84, Frame::ECEF, time,
         );
         let mut state = RtkState::new(time, pos, 1.0);
-        // State thinks receiver is stationary
-        state.velocity = Vector3::zeros();
+        // State thinks receiver is moving! This catches the relative velocity mutant.
+        let receiver_velocity = Vector3::new(5.0, -2.0, 1.0);
+        state.velocity = receiver_velocity;
 
         let true_velocity = Vector3::new(10.0, 0.0, 0.0); // 10 m/s in ECEF X
 
@@ -325,20 +330,118 @@ mod tests {
 
         let (_, h, _) = compute_doppler_update(&state, &measurements, &ephemerides).unwrap();
 
-        // H matrix should only have non-zero entries in velocity columns (3, 4, 5)
         for i in 0..h.nrows() {
+            let eph = &ephemerides[i];
+            let (sat_pos, _, _, _) = eph.position(time);
+            let los = sat_pos - state.position.vector;
+            let range = los.norm();
+            let e_los = los / range;
+
             for j in 0..h.ncols() {
-                if (3..=5).contains(&j) {
-                    // Velocity columns can be non-zero
+                if j == 3 {
+                    assert!((h[(i, j)] - (-e_los.x)).abs() < 1e-6, "H[{},3] should be -e_los.x", i);
+                } else if j == 4 {
+                    assert!((h[(i, j)] - (-e_los.y)).abs() < 1e-6, "H[{},4] should be -e_los.y", i);
+                } else if j == 5 {
+                    assert!((h[(i, j)] - (-e_los.z)).abs() < 1e-6, "H[{},5] should be -e_los.z", i);
                 } else {
                     assert!(h[(i, j)].abs() < 1e-12,
                         "H[{},{}] should be zero for Doppler velocity, got {}", i, j, h[(i, j)]);
                 }
             }
-            // Each row should be a unit vector in velocity space
-            let row_norm = (h[(i, 3)].powi(2) + h[(i, 4)].powi(2) + h[(i, 5)].powi(2)).sqrt();
-            assert!((row_norm - 1.0).abs() < 1e-6,
-                "H row {} velocity components should form unit vector, norm={}", i, row_norm);
         }
+    }
+}
+
+#[cfg(test)]
+mod missing_eph_tests {
+    use super::*;
+    use nalgebra::Vector3;
+    use gneiss_core::coords::{Coordinate, Datum, Frame};
+    use gneiss_core::sat::{SatelliteId, Constellation};
+    use gneiss_core::ephemeris::{Ephemeris, GpsEphemeris};
+    use gneiss_core::time::GpsTime;
+
+    fn make_test_ephemeris(prn: u8, m0: f64, omega0: f64) -> Ephemeris {
+        let time = GpsTime::new(2137, 422922.0);
+        Ephemeris::Gps(GpsEphemeris {
+            sat: SatelliteId { constellation: Constellation::Gps, prn },
+            toe: time, toc: time,
+            af0: 0.0, af1: 0.0, af2: 0.0,
+            crs: 0.0, crc: 0.0, cuc: 0.0, cus: 0.0, cic: 0.0, cis: 0.0,
+            m0, e: 0.01, sqrt_a: 5153.6, delta_n: 0.0,
+            omega0, omega_dot: 0.0, i0: 1.0, idot: 0.0, omega: 0.0, tgd: 0.0,
+            iode: 0, iodc: 0,
+        })
+    }
+
+    #[test]
+    fn test_missing_ephemeris() {
+        let time = GpsTime::new(2137, 422922.0);
+        let pos = Coordinate::new(
+            Vector3::new(6378137.0, 0.0, 0.0),
+            Datum::WGS84, Frame::ECEF, time,
+        );
+        let mut state = RtkState::new(time, pos, 1.0);
+        state.velocity = Vector3::zeros();
+
+        let ephemerides = vec![
+            make_test_ephemeris(1, 0.0, 0.0),
+            make_test_ephemeris(2, 1.0, 0.5),
+            make_test_ephemeris(3, 2.0, 1.0),
+            make_test_ephemeris(4, 3.0, 1.5),
+        ];
+
+        let mut measurements = Vec::new();
+        for prn in 1..=5 {
+            let sat = SatelliteId { constellation: Constellation::Gps, prn };
+            measurements.push(DopplerMeasurement {
+                sat,
+                doppler_hz: 0.0,
+                frequency: 1575.42e6,
+                elevation: 0.5,
+                snr: 45.0,
+            });
+        }
+
+        let result = compute_doppler_update(&state, &measurements, &ephemerides);
+        assert!(result.is_some(), "Should succeed with 4 valid ephemerides out of 5 measurements");
+        assert_eq!(result.unwrap().0.len(), 4, "Should process exactly 4 valid measurements");
+    }
+
+    #[test]
+    fn test_doppler_short_range() {
+        let time = GpsTime::new(2137, 422922.0);
+        let pos = Coordinate::new(
+            Vector3::new(6378137.0, 0.0, 0.0),
+            Datum::WGS84, Frame::ECEF, time,
+        );
+        let mut state = RtkState::new(time, pos, 1.0);
+        state.velocity = Vector3::zeros();
+
+        let ephemerides = vec![
+            make_test_ephemeris(1, 0.0, 0.0),
+            make_test_ephemeris(2, 1.0, 0.5),
+            make_test_ephemeris(3, 2.0, 1.0),
+            make_test_ephemeris(4, 3.0, 1.5),
+        ];
+
+        let (sat_pos, _, _, _) = ephemerides[0].position(time);
+        state.position.vector = sat_pos + Vector3::new(0.5, 0.0, 0.0); // range = 0.5 < 1.0
+
+        let mut measurements = Vec::new();
+        for prn in 1..=4 {
+            let sat = SatelliteId { constellation: Constellation::Gps, prn };
+            measurements.push(DopplerMeasurement {
+                sat,
+                doppler_hz: 0.0,
+                frequency: 1575.42e6,
+                elevation: 0.5,
+                snr: 45.0,
+            });
+        }
+
+        let result = compute_doppler_update(&state, &measurements, &ephemerides);
+        assert!(result.is_none(), "Should fail because short range satellite is skipped");
     }
 }

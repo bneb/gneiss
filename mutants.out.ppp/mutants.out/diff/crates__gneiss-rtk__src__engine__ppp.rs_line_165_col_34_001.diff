@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/engine/ppp.rs
++++ replace - with / in process_ppp
+@@ -157,17 +157,17 @@
+                 h_row_l[0] = -los.x;
+                 h_row_l[1] = -los.y;
+                 h_row_l[2] = -los.z;
+                 h_row_l[17] = *map_wet;
+                 h_row_l[15] = 1.0;
+                 h_row_l[crate::filter::CORE_STATE_SIZE + amb_idx] = 1.0;
+ 
+                 let expected_l = expected_p + n_if_est;
+-                let res_l = l_if - expected_l;
++                let res_l = l_if / /* ~ changed by cargo-mutants ~ */ expected_l;
+ 
+                 h_rows.push(h_row_l);
+                 z_vec.push(res_l);
+                 sat_vec.push(sat_obs.sat);
+                 
+                 let f1_4 = f1 * f1 * f1 * f1;
+                 let f2_4 = f2 * f2 * f2 * f2;
+                 let if_factor = (f1_4 + f2_4) / (f1 * f1 - f2 * f2).powi(2);

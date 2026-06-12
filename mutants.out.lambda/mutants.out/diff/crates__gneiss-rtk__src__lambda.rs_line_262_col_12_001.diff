@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/lambda.rs
++++ replace *= with /= in bootstrapping_success_rate
+@@ -254,17 +254,17 @@
+     false
+ }
+ 
+ pub fn bootstrapping_success_rate(d: &DVector<f64>) -> f64 {
+     let mut ps = 1.0;
+     for &di in d.as_slice() {
+         if di <= 0.0 { continue; }
+         let x = 1.0 / (2.0 * f64::sqrt(di));
+-        ps *= libm::erf(x / std::f64::consts::SQRT_2);
++        ps /= /* ~ changed by cargo-mutants ~ */ libm::erf(x / std::f64::consts::SQRT_2);
+     }
+     ps.max(0.0).min(1.0)
+ }
+ 
+ #[cfg(test)]
+ mod tests {
+     use super::*;
+ 

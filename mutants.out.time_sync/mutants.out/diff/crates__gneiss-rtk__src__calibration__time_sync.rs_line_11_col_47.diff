@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/calibration/time_sync.rs
++++ replace < with == in cross_correlate_time_offset
+@@ -3,17 +3,17 @@
+ /// Computes the time offset between GNSS and IMU sensors using cross-correlation of velocity profiles.
+ /// Returns the offset in seconds. A positive offset means GNSS time is lagging behind IMU time.
+ pub fn cross_correlate_time_offset(
+     gnss_time: &[f64],
+     gnss_vel: &[Vector3<f64>],
+     imu_time: &[f64],
+     imu_vel: &[Vector3<f64>],
+ ) -> f64 {
+-    if gnss_time.is_empty() || imu_time.len() < 2 {
++    if gnss_time.is_empty() || imu_time.len() == /* ~ changed by cargo-mutants ~ */ 2 {
+         return 0.0;
+     }
+ 
+     let mut best_tau = 0.0;
+     let mut max_corr = f64::NEG_INFINITY;
+ 
+     // Sweep from -0.5 to +0.5 seconds with 1 ms resolution
+     let steps = 500;

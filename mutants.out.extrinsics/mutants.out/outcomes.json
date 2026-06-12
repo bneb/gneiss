@@ -1,0 +1,2469 @@
+{
+  "outcomes": [
+    {
+      "scenario": "Baseline",
+      "summary": "Success",
+      "log_path": "log/baseline.log",
+      "diff_path": null,
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 18.155078083,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.067047333,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:18:5: replace estimate_lever_arm -> Result<Vector3<f64>, &'static str> with Ok(Vector3::new())",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+          "function": {
+            "function_name": "estimate_lever_arm",
+            "return_type": "-> Result<Vector3<f64>, &'static str>",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 58,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 18,
+              "column": 5
+            },
+            "end": {
+              "line": 57,
+              "column": 63
+            }
+          },
+          "replacement": "Ok(Vector3::new())",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_18_col_5.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_18_col_5.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.524213792,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:18:5: replace estimate_lever_arm -> Result<Vector3<f64>, &'static str> with Ok(Vector3::from_iter([0.0]))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+          "function": {
+            "function_name": "estimate_lever_arm",
+            "return_type": "-> Result<Vector3<f64>, &'static str>",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 58,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 18,
+              "column": 5
+            },
+            "end": {
+              "line": 57,
+              "column": 63
+            }
+          },
+          "replacement": "Ok(Vector3::from_iter([0.0]))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_18_col_5_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_18_col_5_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.597520709,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:18:5: replace estimate_lever_arm -> Result<Vector3<f64>, &'static str> with Ok(Vector3::new(0.0))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+          "function": {
+            "function_name": "estimate_lever_arm",
+            "return_type": "-> Result<Vector3<f64>, &'static str>",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 58,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 18,
+              "column": 5
+            },
+            "end": {
+              "line": 57,
+              "column": 63
+            }
+          },
+          "replacement": "Ok(Vector3::new(0.0))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_18_col_5_002.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_18_col_5_002.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.535141542,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:18:5: replace estimate_lever_arm -> Result<Vector3<f64>, &'static str> with Ok(Vector3::from(0.0))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+          "function": {
+            "function_name": "estimate_lever_arm",
+            "return_type": "-> Result<Vector3<f64>, &'static str>",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 58,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 18,
+              "column": 5
+            },
+            "end": {
+              "line": 57,
+              "column": 63
+            }
+          },
+          "replacement": "Ok(Vector3::from(0.0))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_18_col_5_003.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_18_col_5_003.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.6348055,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:18:5: replace estimate_lever_arm -> Result<Vector3<f64>, &'static str> with Ok(Vector3::from_iter([1.0]))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+          "function": {
+            "function_name": "estimate_lever_arm",
+            "return_type": "-> Result<Vector3<f64>, &'static str>",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 58,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 18,
+              "column": 5
+            },
+            "end": {
+              "line": 57,
+              "column": 63
+            }
+          },
+          "replacement": "Ok(Vector3::from_iter([1.0]))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_18_col_5_004.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_18_col_5_004.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.583270958,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:18:5: replace estimate_lever_arm -> Result<Vector3<f64>, &'static str> with Ok(Vector3::new(1.0))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+          "function": {
+            "function_name": "estimate_lever_arm",
+            "return_type": "-> Result<Vector3<f64>, &'static str>",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 58,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 18,
+              "column": 5
+            },
+            "end": {
+              "line": 57,
+              "column": 63
+            }
+          },
+          "replacement": "Ok(Vector3::new(1.0))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_18_col_5_005.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_18_col_5_005.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.38092725,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:18:5: replace estimate_lever_arm -> Result<Vector3<f64>, &'static str> with Ok(Vector3::from(1.0))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+          "function": {
+            "function_name": "estimate_lever_arm",
+            "return_type": "-> Result<Vector3<f64>, &'static str>",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 58,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 18,
+              "column": 5
+            },
+            "end": {
+              "line": 57,
+              "column": 63
+            }
+          },
+          "replacement": "Ok(Vector3::from(1.0))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_18_col_5_006.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_18_col_5_006.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.478055625,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:18:5: replace estimate_lever_arm -> Result<Vector3<f64>, &'static str> with Ok(Vector3::from_iter([-1.0]))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+          "function": {
+            "function_name": "estimate_lever_arm",
+            "return_type": "-> Result<Vector3<f64>, &'static str>",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 58,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 18,
+              "column": 5
+            },
+            "end": {
+              "line": 57,
+              "column": 63
+            }
+          },
+          "replacement": "Ok(Vector3::from_iter([-1.0]))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_18_col_5_007.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_18_col_5_007.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.53736575,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:18:5: replace estimate_lever_arm -> Result<Vector3<f64>, &'static str> with Ok(Vector3::new(-1.0))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+          "function": {
+            "function_name": "estimate_lever_arm",
+            "return_type": "-> Result<Vector3<f64>, &'static str>",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 58,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 18,
+              "column": 5
+            },
+            "end": {
+              "line": 57,
+              "column": 63
+            }
+          },
+          "replacement": "Ok(Vector3::new(-1.0))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_18_col_5_008.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_18_col_5_008.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.587549042,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:18:5: replace estimate_lever_arm -> Result<Vector3<f64>, &'static str> with Ok(Vector3::from(-1.0))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+          "function": {
+            "function_name": "estimate_lever_arm",
+            "return_type": "-> Result<Vector3<f64>, &'static str>",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 58,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 18,
+              "column": 5
+            },
+            "end": {
+              "line": 57,
+              "column": 63
+            }
+          },
+          "replacement": "Ok(Vector3::from(-1.0))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_18_col_5_009.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_18_col_5_009.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.526211375,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:19:61: replace || with && in estimate_lever_arm",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+          "function": {
+            "function_name": "estimate_lever_arm",
+            "return_type": "-> Result<Vector3<f64>, &'static str>",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 58,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 19,
+              "column": 61
+            },
+            "end": {
+              "line": 19,
+              "column": 63
+            }
+          },
+          "replacement": "&&",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_19_col_61.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_19_col_61.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.796210667,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.899192,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:19:39: replace || with && in estimate_lever_arm",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+          "function": {
+            "function_name": "estimate_lever_arm",
+            "return_type": "-> Result<Vector3<f64>, &'static str>",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 58,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 19,
+              "column": 39
+            },
+            "end": {
+              "line": 19,
+              "column": 41
+            }
+          },
+          "replacement": "&&",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_19_col_39.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_19_col_39.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.791468666,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.125178833,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:19:14: replace || with && in estimate_lever_arm",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+          "function": {
+            "function_name": "estimate_lever_arm",
+            "return_type": "-> Result<Vector3<f64>, &'static str>",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 58,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 19,
+              "column": 14
+            },
+            "end": {
+              "line": 19,
+              "column": 16
+            }
+          },
+          "replacement": "&&",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_19_col_14.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_19_col_14.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.286639333,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.062189208,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:19:10: replace < with == in estimate_lever_arm",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+          "function": {
+            "function_name": "estimate_lever_arm",
+            "return_type": "-> Result<Vector3<f64>, &'static str>",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 58,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 19,
+              "column": 10
+            },
+            "end": {
+              "line": 19,
+              "column": 11
+            }
+          },
+          "replacement": "==",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_19_col_10.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_19_col_10.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.848234209,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.009565125,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:19:10: replace < with > in estimate_lever_arm",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+          "function": {
+            "function_name": "estimate_lever_arm",
+            "return_type": "-> Result<Vector3<f64>, &'static str>",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 58,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 19,
+              "column": 10
+            },
+            "end": {
+              "line": 19,
+              "column": 11
+            }
+          },
+          "replacement": ">",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_19_col_10_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_19_col_10_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.061438375,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.858794209,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:19:10: replace < with <= in estimate_lever_arm",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+          "function": {
+            "function_name": "estimate_lever_arm",
+            "return_type": "-> Result<Vector3<f64>, &'static str>",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 58,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 19,
+              "column": 10
+            },
+            "end": {
+              "line": 19,
+              "column": 11
+            }
+          },
+          "replacement": "<=",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_19_col_10_002.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_19_col_10_002.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.959700542,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.283376083,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:19:34: replace != with == in estimate_lever_arm",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+          "function": {
+            "function_name": "estimate_lever_arm",
+            "return_type": "-> Result<Vector3<f64>, &'static str>",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 58,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 19,
+              "column": 34
+            },
+            "end": {
+              "line": 19,
+              "column": 36
+            }
+          },
+          "replacement": "==",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_19_col_34.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_19_col_34.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.853340792,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.534270625,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:19:56: replace != with == in estimate_lever_arm",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+          "function": {
+            "function_name": "estimate_lever_arm",
+            "return_type": "-> Result<Vector3<f64>, &'static str>",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 58,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 19,
+              "column": 56
+            },
+            "end": {
+              "line": 19,
+              "column": 58
+            }
+          },
+          "replacement": "==",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_19_col_56.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_19_col_56.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.792336167,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.47453875,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:19:76: replace != with == in estimate_lever_arm",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+          "function": {
+            "function_name": "estimate_lever_arm",
+            "return_type": "-> Result<Vector3<f64>, &'static str>",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 58,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 19,
+              "column": 76
+            },
+            "end": {
+              "line": 19,
+              "column": 78
+            }
+          },
+          "replacement": "==",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_19_col_76.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_19_col_76.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.966049584,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.489910334,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:30:48: replace * with + in estimate_lever_arm",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+          "function": {
+            "function_name": "estimate_lever_arm",
+            "return_type": "-> Result<Vector3<f64>, &'static str>",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 58,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 30,
+              "column": 48
+            },
+            "end": {
+              "line": 30,
+              "column": 49
+            }
+          },
+          "replacement": "+",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_30_col_48.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_30_col_48.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.009239,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.484933917,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:30:48: replace * with / in estimate_lever_arm",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+          "function": {
+            "function_name": "estimate_lever_arm",
+            "return_type": "-> Result<Vector3<f64>, &'static str>",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 58,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 30,
+              "column": 48
+            },
+            "end": {
+              "line": 30,
+              "column": 49
+            }
+          },
+          "replacement": "/",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_30_col_48_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_30_col_48_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.019346708,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.863421791,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:31:48: replace * with + in estimate_lever_arm",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+          "function": {
+            "function_name": "estimate_lever_arm",
+            "return_type": "-> Result<Vector3<f64>, &'static str>",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 58,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 31,
+              "column": 48
+            },
+            "end": {
+              "line": 31,
+              "column": 49
+            }
+          },
+          "replacement": "+",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_31_col_48.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_31_col_48.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.2414133330000001,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.7640240839999999,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:31:48: replace * with / in estimate_lever_arm",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+          "function": {
+            "function_name": "estimate_lever_arm",
+            "return_type": "-> Result<Vector3<f64>, &'static str>",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 58,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 31,
+              "column": 48
+            },
+            "end": {
+              "line": 31,
+              "column": 49
+            }
+          },
+          "replacement": "/",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_31_col_48_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_31_col_48_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.068021791,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.51050575,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:36:18: delete - in estimate_lever_arm",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+          "function": {
+            "function_name": "estimate_lever_arm",
+            "return_type": "-> Result<Vector3<f64>, &'static str>",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 58,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 36,
+              "column": 18
+            },
+            "end": {
+              "line": 36,
+              "column": 19
+            }
+          },
+          "replacement": "",
+          "genre": "UnaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_36_col_18.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_36_col_18.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.008161459,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.595197375,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:37:25: delete - in estimate_lever_arm",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+          "function": {
+            "function_name": "estimate_lever_arm",
+            "return_type": "-> Result<Vector3<f64>, &'static str>",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 58,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 37,
+              "column": 25
+            },
+            "end": {
+              "line": 37,
+              "column": 26
+            }
+          },
+          "replacement": "",
+          "genre": "UnaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_37_col_25.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_37_col_25.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.441650709,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.599665917,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:38:13: delete - in estimate_lever_arm",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+          "function": {
+            "function_name": "estimate_lever_arm",
+            "return_type": "-> Result<Vector3<f64>, &'static str>",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 58,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 38,
+              "column": 13
+            },
+            "end": {
+              "line": 38,
+              "column": 14
+            }
+          },
+          "replacement": "",
+          "genre": "UnaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_38_col_13.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_38_col_13.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.954769167,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.47455925,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:41:28: replace * with + in estimate_lever_arm",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+          "function": {
+            "function_name": "estimate_lever_arm",
+            "return_type": "-> Result<Vector3<f64>, &'static str>",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 58,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 41,
+              "column": 28
+            },
+            "end": {
+              "line": 41,
+              "column": 29
+            }
+          },
+          "replacement": "+",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_41_col_28.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_41_col_28.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.21918,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.582627292,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:41:28: replace * with / in estimate_lever_arm",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+          "function": {
+            "function_name": "estimate_lever_arm",
+            "return_type": "-> Result<Vector3<f64>, &'static str>",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 58,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 41,
+              "column": 28
+            },
+            "end": {
+              "line": 41,
+              "column": 29
+            }
+          },
+          "replacement": "/",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_41_col_28_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_41_col_28_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.633903083,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:42:31: replace - with + in estimate_lever_arm",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+          "function": {
+            "function_name": "estimate_lever_arm",
+            "return_type": "-> Result<Vector3<f64>, &'static str>",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 58,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 42,
+              "column": 31
+            },
+            "end": {
+              "line": 42,
+              "column": 32
+            }
+          },
+          "replacement": "+",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_42_col_31.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_42_col_31.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.43873725,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.537261084,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:42:31: replace - with / in estimate_lever_arm",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+          "function": {
+            "function_name": "estimate_lever_arm",
+            "return_type": "-> Result<Vector3<f64>, &'static str>",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 58,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 42,
+              "column": 31
+            },
+            "end": {
+              "line": 42,
+              "column": 32
+            }
+          },
+          "replacement": "/",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_42_col_31_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_42_col_31_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.472272,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:44:43: replace * with + in estimate_lever_arm",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+          "function": {
+            "function_name": "estimate_lever_arm",
+            "return_type": "-> Result<Vector3<f64>, &'static str>",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 58,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 44,
+              "column": 43
+            },
+            "end": {
+              "line": 44,
+              "column": 44
+            }
+          },
+          "replacement": "+",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_44_col_43.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_44_col_43.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.943871417,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.585358125,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:44:43: replace * with / in estimate_lever_arm",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+          "function": {
+            "function_name": "estimate_lever_arm",
+            "return_type": "-> Result<Vector3<f64>, &'static str>",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 58,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 44,
+              "column": 43
+            },
+            "end": {
+              "line": 44,
+              "column": 44
+            }
+          },
+          "replacement": "/",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_44_col_43_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_44_col_43_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.016700875,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.596274375,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:45:40: replace * with + in estimate_lever_arm",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+          "function": {
+            "function_name": "estimate_lever_arm",
+            "return_type": "-> Result<Vector3<f64>, &'static str>",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 58,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 45,
+              "column": 40
+            },
+            "end": {
+              "line": 45,
+              "column": 41
+            }
+          },
+          "replacement": "+",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_45_col_40.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_45_col_40.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.6830375,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.483479042,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:45:40: replace * with / in estimate_lever_arm",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+          "function": {
+            "function_name": "estimate_lever_arm",
+            "return_type": "-> Result<Vector3<f64>, &'static str>",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 58,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 45,
+              "column": 40
+            },
+            "end": {
+              "line": 45,
+              "column": 41
+            }
+          },
+          "replacement": "/",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_45_col_40_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_45_col_40_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.02087825,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.852336209,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:50:22: replace * with + in estimate_lever_arm",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+          "function": {
+            "function_name": "estimate_lever_arm",
+            "return_type": "-> Result<Vector3<f64>, &'static str>",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 58,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 50,
+              "column": 22
+            },
+            "end": {
+              "line": 50,
+              "column": 23
+            }
+          },
+          "replacement": "+",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_50_col_22.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_50_col_22.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.705390375,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.503775333,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:50:22: replace * with / in estimate_lever_arm",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+          "function": {
+            "function_name": "estimate_lever_arm",
+            "return_type": "-> Result<Vector3<f64>, &'static str>",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 58,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 50,
+              "column": 22
+            },
+            "end": {
+              "line": 50,
+              "column": 23
+            }
+          },
+          "replacement": "/",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_50_col_22_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_50_col_22_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.757804375,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:55:38: replace * with + in estimate_lever_arm",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+          "function": {
+            "function_name": "estimate_lever_arm",
+            "return_type": "-> Result<Vector3<f64>, &'static str>",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 58,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 55,
+              "column": 38
+            },
+            "end": {
+              "line": 55,
+              "column": 39
+            }
+          },
+          "replacement": "+",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_55_col_38.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_55_col_38.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.655303416,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.543002958,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:55:38: replace * with / in estimate_lever_arm",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+          "function": {
+            "function_name": "estimate_lever_arm",
+            "return_type": "-> Result<Vector3<f64>, &'static str>",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 58,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 55,
+              "column": 38
+            },
+            "end": {
+              "line": 55,
+              "column": 39
+            }
+          },
+          "replacement": "/",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_55_col_38_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_55_col_38_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.581604,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:55:31: replace * with + in estimate_lever_arm",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+          "function": {
+            "function_name": "estimate_lever_arm",
+            "return_type": "-> Result<Vector3<f64>, &'static str>",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 58,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 55,
+              "column": 31
+            },
+            "end": {
+              "line": 55,
+              "column": 32
+            }
+          },
+          "replacement": "+",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_55_col_31.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_55_col_31.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.328352333,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.581209458,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/extrinsics.rs:55:31: replace * with / in estimate_lever_arm",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/extrinsics.rs",
+          "function": {
+            "function_name": "estimate_lever_arm",
+            "return_type": "-> Result<Vector3<f64>, &'static str>",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 58,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 55,
+              "column": 31
+            },
+            "end": {
+              "line": 55,
+              "column": 32
+            }
+          },
+          "replacement": "/",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_55_col_31_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__extrinsics.rs_line_55_col_31_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.202123125,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    }
+  ],
+  "total_mutants": 40,
+  "missed": 5,
+  "caught": 20,
+  "timeout": 0,
+  "unviable": 15,
+  "success": 0,
+  "start_time": "2026-06-12T13:33:49.924045Z",
+  "end_time": "2026-06-12T13:35:10.956592Z",
+  "cargo_mutants_version": "27.1.0"
+}

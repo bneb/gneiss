@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/lambda.rs
++++ replace + with * in search_recursive
+@@ -224,17 +224,17 @@
+     let z_cond_k = z_hat[k_u] + s; // Fixed sign: L y = z - z_hat => y_k = z_k - z_hat_k - s
+     let center_z = z_cond_k.round();
+ 
+     let mut offset = 0.0;
+     let mut step = 1.0;
+     let mut direction = if z_cond_k > center_z { 1.0 } else { -1.0 };
+ 
+     loop {
+-        let z_test = center_z + offset;
++        let z_test = center_z * /* ~ changed by cargo-mutants ~ */ offset;
+         let y_k = z_test - z_cond_k;
+         let new_dist = current_dist + (y_k * y_k) / d[k_u];
+ 
+         if new_dist >= *second_best_dist { break; }
+ 
+         current_z[k_u] = z_test;
+         y[k_u] = y_k;
+         

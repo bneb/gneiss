@@ -1,0 +1,7 @@
+--- crates/gneiss-rtk/src/engine/ppp_fg.rs
++++ crates/gneiss-rtk/src/engine/ppp_fg.rs
+@@ -382,2 +382,4 @@
+     let (opt_delta, cov) = fg.optimize(&initial_delta, 10, 1e-4);
++    
++    if state.epoch_count == 100 { println!("P_pos: {:.3}, P_amb: {:.3}", cov[(0,0)], cov[(18,18)]); }
+     

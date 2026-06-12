@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/filter.rs
++++ replace != with == in RtkState::decouple_clock
+@@ -124,17 +124,17 @@
+ 
+     /// Decouples the receiver clock bias state (index 15) from the rest of the EKF state
+     /// by zeroing out the corresponding cross-covariance rows and columns.
+     /// This is mathematically required when teleporting the clock state.
+     pub fn decouple_clock(&mut self) {
+         let cols = self.covariance.ncols();
+         let i = 15; // rcv_clk_bias
+         for j in 0..cols {
+-            if i != j {
++            if i == /* ~ changed by cargo-mutants ~ */ j {
+                 self.covariance[(i, j)] = 0.0;
+                 self.covariance[(j, i)] = 0.0;
+             }
+         }
+     }
+ 
+     pub fn update_mw(&mut self, sat: SatelliteId, mw_cycles: f64) {
+         let count = self.mw_sd_counts.entry(sat).or_insert(0);

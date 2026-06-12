@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/calibration/extrinsics.rs
++++ replace != with == in estimate_lever_arm
+@@ -20,17 +20,17 @@
+         return Err("Insufficient or mismatched data for lever arm estimation");
+     }
+     if omega_ib_b.len() != n {
+         return Err("Insufficient or mismatched data for lever arm estimation");
+     }
+     if v_imu_e.len() != n {
+         return Err("Insufficient or mismatched data for lever arm estimation");
+     }
+-    if r_b_e.len() != n {
++    if r_b_e.len() == /* ~ changed by cargo-mutants ~ */ n {
+         return Err("Insufficient or mismatched data for lever arm estimation");
+     }
+ 
+     // We are solving: Z = H * x
+     // where x is the 3x1 lever arm vector.
+     // Z = V_gnss - V_imu
+     // V_gnss = V_imu + R_b_e * (omega_ib_b x lever_arm)
+     // omega x lever_arm = [omega x] * lever_arm

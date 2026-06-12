@@ -1,0 +1,3903 @@
+{
+  "outcomes": [
+    {
+      "scenario": "Baseline",
+      "summary": "Success",
+      "log_path": "log/baseline.log",
+      "diff_path": null,
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 6.978790083,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.579903833,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:11:5: replace cross_correlate_time_offset -> f64 with 0.0",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 11,
+              "column": 5
+            },
+            "end": {
+              "line": 62,
+              "column": 13
+            }
+          },
+          "replacement": "0.0",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_11_col_5.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_11_col_5.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.428471333,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.27035225,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:11:5: replace cross_correlate_time_offset -> f64 with 1.0",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 11,
+              "column": 5
+            },
+            "end": {
+              "line": 62,
+              "column": 13
+            }
+          },
+          "replacement": "1.0",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_11_col_5_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_11_col_5_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.420695042,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.265503292,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:11:5: replace cross_correlate_time_offset -> f64 with -1.0",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 11,
+              "column": 5
+            },
+            "end": {
+              "line": 62,
+              "column": 13
+            }
+          },
+          "replacement": "-1.0",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_11_col_5_002.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_11_col_5_002.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.420782916,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.266711166,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:16:17: delete - in cross_correlate_time_offset",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 16,
+              "column": 17
+            },
+            "end": {
+              "line": 16,
+              "column": 18
+            }
+          },
+          "replacement": "",
+          "genre": "UnaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_16_col_17.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_16_col_17.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.480117083,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.266137042,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:17:33: replace * with + in cross_correlate_time_offset",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 17,
+              "column": 33
+            },
+            "end": {
+              "line": 17,
+              "column": 34
+            }
+          },
+          "replacement": "+",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_17_col_33.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_17_col_33.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.433938458,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.270319458,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:17:33: replace * with / in cross_correlate_time_offset",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 17,
+              "column": 33
+            },
+            "end": {
+              "line": 17,
+              "column": 34
+            }
+          },
+          "replacement": "/",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_17_col_33_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_17_col_33_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.473665291,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.266866167,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:24:39: replace - with + in cross_correlate_time_offset",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 24,
+              "column": 39
+            },
+            "end": {
+              "line": 24,
+              "column": 40
+            }
+          },
+          "replacement": "+",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_24_col_39.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_24_col_39.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.480666167,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.273293625,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:24:39: replace - with / in cross_correlate_time_offset",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 24,
+              "column": 39
+            },
+            "end": {
+              "line": 24,
+              "column": 40
+            }
+          },
+          "replacement": "/",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_24_col_39_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_24_col_39_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.432584541,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.266841875,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:31:24: replace && with || in cross_correlate_time_offset",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 31,
+              "column": 24
+            },
+            "end": {
+              "line": 31,
+              "column": 26
+            }
+          },
+          "replacement": "||",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_31_col_24.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_31_col_24.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.434745917,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.267042792,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:31:20: replace > with == in cross_correlate_time_offset",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 31,
+              "column": 20
+            },
+            "end": {
+              "line": 31,
+              "column": 21
+            }
+          },
+          "replacement": "==",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_31_col_20.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_31_col_20.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.484596958,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.268815083,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:31:20: replace > with < in cross_correlate_time_offset",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 31,
+              "column": 20
+            },
+            "end": {
+              "line": 31,
+              "column": 21
+            }
+          },
+          "replacement": "<",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_31_col_20_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_31_col_20_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.480416708,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.255735125,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:31:20: replace > with >= in cross_correlate_time_offset",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 31,
+              "column": 20
+            },
+            "end": {
+              "line": 31,
+              "column": 21
+            }
+          },
+          "replacement": ">=",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_31_col_20_002.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_31_col_20_002.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.489777083,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.260491667,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:31:31: replace < with == in cross_correlate_time_offset",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 31,
+              "column": 31
+            },
+            "end": {
+              "line": 31,
+              "column": 32
+            }
+          },
+          "replacement": "==",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_31_col_31.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_31_col_31.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.480527041,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.267207333,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:31:31: replace < with > in cross_correlate_time_offset",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 31,
+              "column": 31
+            },
+            "end": {
+              "line": 31,
+              "column": 32
+            }
+          },
+          "replacement": ">",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_31_col_31_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_31_col_31_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.48438125,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.270811791,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:31:31: replace < with <= in cross_correlate_time_offset",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 31,
+              "column": 31
+            },
+            "end": {
+              "line": 31,
+              "column": 32
+            }
+          },
+          "replacement": "<=",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_31_col_31_002.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_31_col_31_002.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.47664575,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.270921709,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:32:39: replace - with + in cross_correlate_time_offset",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 32,
+              "column": 39
+            },
+            "end": {
+              "line": 32,
+              "column": 40
+            }
+          },
+          "replacement": "+",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_32_col_39.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_32_col_39.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.469104708,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.26501,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:32:39: replace - with / in cross_correlate_time_offset",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 32,
+              "column": 39
+            },
+            "end": {
+              "line": 32,
+              "column": 40
+            }
+          },
+          "replacement": "/",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_32_col_39_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_32_col_39_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.475144458,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.268257083,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:34:38: replace - with + in cross_correlate_time_offset",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 34,
+              "column": 38
+            },
+            "end": {
+              "line": 34,
+              "column": 39
+            }
+          },
+          "replacement": "+",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_34_col_38.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_34_col_38.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.484392375,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.270368375,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:34:38: replace - with / in cross_correlate_time_offset",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 34,
+              "column": 38
+            },
+            "end": {
+              "line": 34,
+              "column": 39
+            }
+          },
+          "replacement": "/",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_34_col_38_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_34_col_38_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.477030875,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.267193667,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:37:29: replace - with + in cross_correlate_time_offset",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 37,
+              "column": 29
+            },
+            "end": {
+              "line": 37,
+              "column": 30
+            }
+          },
+          "replacement": "+",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_37_col_29.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_37_col_29.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.484973,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.263058125,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:37:29: replace - with / in cross_correlate_time_offset",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 37,
+              "column": 29
+            },
+            "end": {
+              "line": 37,
+              "column": 30
+            }
+          },
+          "replacement": "/",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_37_col_29_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_37_col_29_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.536459292,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.322534334,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:38:23: replace > with == in cross_correlate_time_offset",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 38,
+              "column": 23
+            },
+            "end": {
+              "line": 38,
+              "column": 24
+            }
+          },
+          "replacement": "==",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_38_col_23.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_38_col_23.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.481843375,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.275049041,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:38:23: replace > with < in cross_correlate_time_offset",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 38,
+              "column": 23
+            },
+            "end": {
+              "line": 38,
+              "column": 24
+            }
+          },
+          "replacement": "<",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_38_col_23_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_38_col_23_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.47985275,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.259839167,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:38:23: replace > with >= in cross_correlate_time_offset",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 38,
+              "column": 23
+            },
+            "end": {
+              "line": 38,
+              "column": 24
+            }
+          },
+          "replacement": ">=",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_38_col_23_002.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_38_col_23_002.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.479164,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.809996791,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:39:47: replace / with % in cross_correlate_time_offset",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 39,
+              "column": 47
+            },
+            "end": {
+              "line": 39,
+              "column": 48
+            }
+          },
+          "replacement": "%",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_39_col_47.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_39_col_47.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.477701625,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.273056125,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:39:47: replace / with * in cross_correlate_time_offset",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 39,
+              "column": 47
+            },
+            "end": {
+              "line": 39,
+              "column": 48
+            }
+          },
+          "replacement": "*",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_39_col_47_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_39_col_47_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.532971083,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.31982575,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:39:41: replace - with + in cross_correlate_time_offset",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 39,
+              "column": 41
+            },
+            "end": {
+              "line": 39,
+              "column": 42
+            }
+          },
+          "replacement": "+",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_39_col_41.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_39_col_41.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.647397667,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.275016791,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:39:41: replace - with / in cross_correlate_time_offset",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 39,
+              "column": 41
+            },
+            "end": {
+              "line": 39,
+              "column": 42
+            }
+          },
+          "replacement": "/",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_39_col_41_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_39_col_41_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.530344541,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.270112167,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:40:39: replace + with - in cross_correlate_time_offset",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 40,
+              "column": 39
+            },
+            "end": {
+              "line": 40,
+              "column": 40
+            }
+          },
+          "replacement": "-",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_40_col_39.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_40_col_39.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.484582959,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.269733666,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:40:39: replace + with * in cross_correlate_time_offset",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 40,
+              "column": 39
+            },
+            "end": {
+              "line": 40,
+              "column": 40
+            }
+          },
+          "replacement": "*",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_40_col_39_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_40_col_39_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.2711335,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:40:51: replace * with + in cross_correlate_time_offset",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 40,
+              "column": 51
+            },
+            "end": {
+              "line": 40,
+              "column": 52
+            }
+          },
+          "replacement": "+",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_40_col_51.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_40_col_51.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.268375917,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:40:51: replace * with / in cross_correlate_time_offset",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 40,
+              "column": 51
+            },
+            "end": {
+              "line": 40,
+              "column": 52
+            }
+          },
+          "replacement": "/",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_40_col_51_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_40_col_51_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.486028959,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.26836175,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:40:45: replace - with + in cross_correlate_time_offset",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 40,
+              "column": 45
+            },
+            "end": {
+              "line": 40,
+              "column": 46
+            }
+          },
+          "replacement": "+",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_40_col_45.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_40_col_45.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.585580333,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.264205333,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:40:45: replace - with / in cross_correlate_time_offset",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 40,
+              "column": 45
+            },
+            "end": {
+              "line": 40,
+              "column": 46
+            }
+          },
+          "replacement": "/",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_40_col_45_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_40_col_45_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.267774208,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:45:28: replace += with -= in cross_correlate_time_offset",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 45,
+              "column": 28
+            },
+            "end": {
+              "line": 45,
+              "column": 30
+            }
+          },
+          "replacement": "-=",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_45_col_28.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_45_col_28.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.474725166,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.270708333,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:45:28: replace += with *= in cross_correlate_time_offset",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 45,
+              "column": 28
+            },
+            "end": {
+              "line": 45,
+              "column": 30
+            }
+          },
+          "replacement": "*=",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_45_col_28_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_45_col_28_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.533116083,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.274231709,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:46:28: replace += with -= in cross_correlate_time_offset",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 46,
+              "column": 28
+            },
+            "end": {
+              "line": 46,
+              "column": 30
+            }
+          },
+          "replacement": "-=",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_46_col_28.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_46_col_28.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.531531834,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.268385458,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:46:28: replace += with *= in cross_correlate_time_offset",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 46,
+              "column": 28
+            },
+            "end": {
+              "line": 46,
+              "column": 30
+            }
+          },
+          "replacement": "*=",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_46_col_28_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_46_col_28_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.534449083,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.272206292,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:47:28: replace += with -= in cross_correlate_time_offset",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 47,
+              "column": 28
+            },
+            "end": {
+              "line": 47,
+              "column": 30
+            }
+          },
+          "replacement": "-=",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_47_col_28.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_47_col_28.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.584084625,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.268618292,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:47:28: replace += with *= in cross_correlate_time_offset",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 47,
+              "column": 28
+            },
+            "end": {
+              "line": 47,
+              "column": 30
+            }
+          },
+          "replacement": "*=",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_47_col_28_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_47_col_28_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.539454625,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.272981459,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:48:27: replace += with -= in cross_correlate_time_offset",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 48,
+              "column": 27
+            },
+            "end": {
+              "line": 48,
+              "column": 29
+            }
+          },
+          "replacement": "-=",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_48_col_27.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_48_col_27.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.535645083,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.271490333,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:48:27: replace += with *= in cross_correlate_time_offset",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 48,
+              "column": 27
+            },
+            "end": {
+              "line": 48,
+              "column": 29
+            }
+          },
+          "replacement": "*=",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_48_col_27_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_48_col_27_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.536016375,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.320049042,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:53:40: replace && with || in cross_correlate_time_offset",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 53,
+              "column": 40
+            },
+            "end": {
+              "line": 53,
+              "column": 42
+            }
+          },
+          "replacement": "||",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_53_col_40.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_53_col_40.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.538263125,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.264824833,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:53:23: replace && with || in cross_correlate_time_offset",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 53,
+              "column": 23
+            },
+            "end": {
+              "line": 53,
+              "column": 25
+            }
+          },
+          "replacement": "||",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_53_col_23.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_53_col_23.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.602921,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.31686275,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:53:18: replace > with == in cross_correlate_time_offset",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 53,
+              "column": 18
+            },
+            "end": {
+              "line": 53,
+              "column": 19
+            }
+          },
+          "replacement": "==",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_53_col_18.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_53_col_18.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.528916333,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.271233333,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:53:18: replace > with < in cross_correlate_time_offset",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 53,
+              "column": 18
+            },
+            "end": {
+              "line": 53,
+              "column": 19
+            }
+          },
+          "replacement": "<",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_53_col_18_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_53_col_18_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.590837625,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.32009925,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:53:18: replace > with >= in cross_correlate_time_offset",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 53,
+              "column": 18
+            },
+            "end": {
+              "line": 53,
+              "column": 19
+            }
+          },
+          "replacement": ">=",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_53_col_18_002.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_53_col_18_002.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.536673958,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.805482125,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:53:33: replace > with == in cross_correlate_time_offset",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 53,
+              "column": 33
+            },
+            "end": {
+              "line": 53,
+              "column": 34
+            }
+          },
+          "replacement": "==",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_53_col_33.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_53_col_33.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.53206775,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.26951425,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:53:33: replace > with < in cross_correlate_time_offset",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 53,
+              "column": 33
+            },
+            "end": {
+              "line": 53,
+              "column": 34
+            }
+          },
+          "replacement": "<",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_53_col_33_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_53_col_33_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.573875833,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.320574958,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:53:33: replace > with >= in cross_correlate_time_offset",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 53,
+              "column": 33
+            },
+            "end": {
+              "line": 53,
+              "column": 34
+            }
+          },
+          "replacement": ">=",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_53_col_33_002.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_53_col_33_002.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.584821166,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.863556125,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:53:50: replace > with == in cross_correlate_time_offset",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 53,
+              "column": 50
+            },
+            "end": {
+              "line": 53,
+              "column": 51
+            }
+          },
+          "replacement": "==",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_53_col_50.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_53_col_50.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.531008333,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.270298,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:53:50: replace > with < in cross_correlate_time_offset",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 53,
+              "column": 50
+            },
+            "end": {
+              "line": 53,
+              "column": 51
+            }
+          },
+          "replacement": "<",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_53_col_50_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_53_col_50_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.57305,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.324120833,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:53:50: replace > with >= in cross_correlate_time_offset",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 53,
+              "column": 50
+            },
+            "end": {
+              "line": 53,
+              "column": 51
+            }
+          },
+          "replacement": ">=",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_53_col_50_002.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_53_col_50_002.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.588868875,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.804509083,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:54:31: replace / with % in cross_correlate_time_offset",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 54,
+              "column": 31
+            },
+            "end": {
+              "line": 54,
+              "column": 32
+            }
+          },
+          "replacement": "%",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_54_col_31.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_54_col_31.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.534360166,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.311572708,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:54:31: replace / with * in cross_correlate_time_offset",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 54,
+              "column": 31
+            },
+            "end": {
+              "line": 54,
+              "column": 32
+            }
+          },
+          "replacement": "*",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_54_col_31_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_54_col_31_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.5738365,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.27124275,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:54:48: replace * with + in cross_correlate_time_offset",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 54,
+              "column": 48
+            },
+            "end": {
+              "line": 54,
+              "column": 49
+            }
+          },
+          "replacement": "+",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_54_col_48.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_54_col_48.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.527337958,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.325382292,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:54:48: replace * with / in cross_correlate_time_offset",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 54,
+              "column": 48
+            },
+            "end": {
+              "line": 54,
+              "column": 49
+            }
+          },
+          "replacement": "/",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_54_col_48_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_54_col_48_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.53580175,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.319958917,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:55:21: replace > with == in cross_correlate_time_offset",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 55,
+              "column": 21
+            },
+            "end": {
+              "line": 55,
+              "column": 22
+            }
+          },
+          "replacement": "==",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_55_col_21.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_55_col_21.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.585719125,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.368121125,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:55:21: replace > with < in cross_correlate_time_offset",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 55,
+              "column": 21
+            },
+            "end": {
+              "line": 55,
+              "column": 22
+            }
+          },
+          "replacement": "<",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_55_col_21_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_55_col_21_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.67676275,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.317809458,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/calibration/time_sync.rs:55:21: replace > with >= in cross_correlate_time_offset",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/calibration/time_sync.rs",
+          "function": {
+            "function_name": "cross_correlate_time_offset",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 3,
+                "column": 1
+              },
+              "end": {
+                "line": 63,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 55,
+              "column": 21
+            },
+            "end": {
+              "line": 55,
+              "column": 22
+            }
+          },
+          "replacement": ">=",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__calibration__time_sync.rs_line_55_col_21_002.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__calibration__time_sync.rs_line_55_col_21_002.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.581043709,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.3176585,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    }
+  ],
+  "total_mutants": 60,
+  "missed": 4,
+  "caught": 53,
+  "timeout": 0,
+  "unviable": 3,
+  "success": 0,
+  "start_time": "2026-06-12T13:37:44.275282Z",
+  "end_time": "2026-06-12T13:38:43.737684Z",
+  "cargo_mutants_version": "27.1.0"
+}

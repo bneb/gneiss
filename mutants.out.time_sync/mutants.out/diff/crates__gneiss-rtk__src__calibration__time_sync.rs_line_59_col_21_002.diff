@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/calibration/time_sync.rs
++++ replace > with >= in cross_correlate_time_offset
+@@ -51,17 +51,17 @@
+                     sum_yy += y.norm_squared();
+                     count += 1;
+                 }
+             }
+         }
+ 
+         if count > 10 && sum_xx > 1e-6 && sum_yy > 1e-6 { 
+             let corr = sum_xy / (sum_xx.sqrt() * sum_yy.sqrt());
+-            if corr > max_corr {
++            if corr >= /* ~ changed by cargo-mutants ~ */ max_corr {
+                 max_corr = corr;
+                 best_tau = tau;
+             }
+         }
+     }
+ 
+     best_tau
+ }

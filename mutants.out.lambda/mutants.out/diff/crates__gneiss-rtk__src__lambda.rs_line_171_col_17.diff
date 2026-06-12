@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/lambda.rs
++++ replace <= with > in ldlt_lower
+@@ -163,17 +163,17 @@
+ fn ldlt_lower(q: &DMatrix<f64>) -> Result<LdltResult, &'static str> {
+     let n = q.nrows();
+     let mut l = DMatrix::<f64>::identity(n, n);
+     let mut d = DVector::<f64>::zeros(n);
+     let mut q_tmp = q.clone();
+ 
+     for j in (0..n).rev() {
+         d[j] = q_tmp[(j, j)];
+-        if d[j] <= 1e-18 { return Err("Covariance matrix is not positive definite"); }
++        if d[j] > /* ~ changed by cargo-mutants ~ */ 1e-18 { return Err("Covariance matrix is not positive definite"); }
+         for i in 0..j {
+             l[(j, i)] = q_tmp[(j, i)] / d[j];
+             for k in 0..=i {
+                 q_tmp[(i, k)] -= l[(j, i)] * q_tmp[(j, k)];
+                 q_tmp[(k, i)] = q_tmp[(i, k)];
+             }
+         }
+     }

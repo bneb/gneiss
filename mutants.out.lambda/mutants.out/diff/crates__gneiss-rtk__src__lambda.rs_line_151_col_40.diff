@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/lambda.rs
++++ replace * with + in decorrelate
+@@ -143,17 +143,17 @@
+ 
+         let delta = d[k1] + l[(k1, k_u)].powi(2) * d[k_u];
+         if delta < d[k_u] - 1e-6 {
+             let mut p = DMatrix::<f64>::identity(n, n);
+             p.swap_columns(k_u, k1);
+             
+             z_mat = &z_mat * &p;
+             z_hat = p.transpose() * &z_hat;
+-            q_z = p.transpose() * &q_z * &p;
++            q_z = p.transpose() * &q_z + /* ~ changed by cargo-mutants ~ */ &p;
+             k = (n - 2) as isize;
+         } else {
+             k -= 1;
+         }
+     }
+     
+     let res = ldlt_lower(&q_z)?;
+     let (l_final, d_final) = (res.l, res.d);

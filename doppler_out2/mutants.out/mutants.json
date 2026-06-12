@@ -1,0 +1,898 @@
+[
+  {
+    "diff": "--- crates/gneiss-rtk/src/doppler.rs\n+++ replace < with == in compute_doppler_update\n@@ -36,17 +36,17 @@\n /// - R: measurement noise covariance\n ///\n /// Returns None if fewer than 4 measurements are available.\n pub fn compute_doppler_update(\n     state: &RtkState,\n     measurements: &[DopplerMeasurement],\n     ephemerides: &[Ephemeris],\n ) -> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)> {\n-    if measurements.len() < 4 {\n+    if measurements.len() == /* ~ changed by cargo-mutants ~ */ 4 {\n         return None;\n     }\n \n     let state_size = state.covariance.ncols();\n     let mut z_vals = Vec::new();\n     let mut h_rows = Vec::new();\n     let mut r_vals = Vec::new();\n \n",
+    "file": "crates/gneiss-rtk/src/doppler.rs",
+    "function": {
+      "function_name": "compute_doppler_update",
+      "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 116
+        },
+        "start": {
+          "column": 1,
+          "line": 31
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/doppler.rs:44:27: replace < with == in compute_doppler_update",
+    "package": "gneiss-rtk",
+    "replacement": "==",
+    "span": {
+      "end": {
+        "column": 28,
+        "line": 44
+      },
+      "start": {
+        "column": 27,
+        "line": 44
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/doppler.rs\n+++ replace < with > in compute_doppler_update\n@@ -36,17 +36,17 @@\n /// - R: measurement noise covariance\n ///\n /// Returns None if fewer than 4 measurements are available.\n pub fn compute_doppler_update(\n     state: &RtkState,\n     measurements: &[DopplerMeasurement],\n     ephemerides: &[Ephemeris],\n ) -> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)> {\n-    if measurements.len() < 4 {\n+    if measurements.len() > /* ~ changed by cargo-mutants ~ */ 4 {\n         return None;\n     }\n \n     let state_size = state.covariance.ncols();\n     let mut z_vals = Vec::new();\n     let mut h_rows = Vec::new();\n     let mut r_vals = Vec::new();\n \n",
+    "file": "crates/gneiss-rtk/src/doppler.rs",
+    "function": {
+      "function_name": "compute_doppler_update",
+      "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 116
+        },
+        "start": {
+          "column": 1,
+          "line": 31
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/doppler.rs:44:27: replace < with > in compute_doppler_update",
+    "package": "gneiss-rtk",
+    "replacement": ">",
+    "span": {
+      "end": {
+        "column": 28,
+        "line": 44
+      },
+      "start": {
+        "column": 27,
+        "line": 44
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/doppler.rs\n+++ replace < with <= in compute_doppler_update\n@@ -36,17 +36,17 @@\n /// - R: measurement noise covariance\n ///\n /// Returns None if fewer than 4 measurements are available.\n pub fn compute_doppler_update(\n     state: &RtkState,\n     measurements: &[DopplerMeasurement],\n     ephemerides: &[Ephemeris],\n ) -> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)> {\n-    if measurements.len() < 4 {\n+    if measurements.len() <= /* ~ changed by cargo-mutants ~ */ 4 {\n         return None;\n     }\n \n     let state_size = state.covariance.ncols();\n     let mut z_vals = Vec::new();\n     let mut h_rows = Vec::new();\n     let mut r_vals = Vec::new();\n \n",
+    "file": "crates/gneiss-rtk/src/doppler.rs",
+    "function": {
+      "function_name": "compute_doppler_update",
+      "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 116
+        },
+        "start": {
+          "column": 1,
+          "line": 31
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/doppler.rs:44:27: replace < with <= in compute_doppler_update",
+    "package": "gneiss-rtk",
+    "replacement": "<=",
+    "span": {
+      "end": {
+        "column": 28,
+        "line": 44
+      },
+      "start": {
+        "column": 27,
+        "line": 44
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/doppler.rs\n+++ replace == with != in compute_doppler_update\n@@ -46,17 +46,17 @@\n     }\n \n     let state_size = state.covariance.ncols();\n     let mut z_vals = Vec::new();\n     let mut h_rows = Vec::new();\n     let mut r_vals = Vec::new();\n \n     for meas in measurements {\n-        let eph = match ephemerides.iter().find(|e| e.sat() == meas.sat) {\n+        let eph = match ephemerides.iter().find(|e| e.sat() != /* ~ changed by cargo-mutants ~ */ meas.sat) {\n             Some(e) => e,\n             None => continue,\n         };\n \n         // Get satellite position and velocity\n         let (sat_pos, sat_vel, _dt_s, _) = eph.position(state.time);\n \n         // Line-of-sight unit vector from receiver to satellite\n",
+    "file": "crates/gneiss-rtk/src/doppler.rs",
+    "function": {
+      "function_name": "compute_doppler_update",
+      "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 116
+        },
+        "start": {
+          "column": 1,
+          "line": 31
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/doppler.rs:54:61: replace == with != in compute_doppler_update",
+    "package": "gneiss-rtk",
+    "replacement": "!=",
+    "span": {
+      "end": {
+        "column": 63,
+        "line": 54
+      },
+      "start": {
+        "column": 61,
+        "line": 54
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/doppler.rs\n+++ replace - with + in compute_doppler_update\n@@ -55,17 +55,17 @@\n             Some(e) => e,\n             None => continue,\n         };\n \n         // Get satellite position and velocity\n         let (sat_pos, sat_vel, _dt_s, _) = eph.position(state.time);\n \n         // Line-of-sight unit vector from receiver to satellite\n-        let los = sat_pos - state.position.vector;\n+        let los = sat_pos + /* ~ changed by cargo-mutants ~ */ state.position.vector;\n         let range = los.norm();\n         if range < 1.0 {\n             continue;\n         }\n         let e_los = los / range;\n \n         // Observed range-rate from Doppler (negative sign: positive Doppler = approaching = negative range-rate)\n         let lambda = LIGHT_SPEED / meas.frequency;\n",
+    "file": "crates/gneiss-rtk/src/doppler.rs",
+    "function": {
+      "function_name": "compute_doppler_update",
+      "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 116
+        },
+        "start": {
+          "column": 1,
+          "line": 31
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/doppler.rs:63:27: replace - with + in compute_doppler_update",
+    "package": "gneiss-rtk",
+    "replacement": "+",
+    "span": {
+      "end": {
+        "column": 28,
+        "line": 63
+      },
+      "start": {
+        "column": 27,
+        "line": 63
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/doppler.rs\n+++ replace - with / in compute_doppler_update\n@@ -55,17 +55,17 @@\n             Some(e) => e,\n             None => continue,\n         };\n \n         // Get satellite position and velocity\n         let (sat_pos, sat_vel, _dt_s, _) = eph.position(state.time);\n \n         // Line-of-sight unit vector from receiver to satellite\n-        let los = sat_pos - state.position.vector;\n+        let los = sat_pos / /* ~ changed by cargo-mutants ~ */ state.position.vector;\n         let range = los.norm();\n         if range < 1.0 {\n             continue;\n         }\n         let e_los = los / range;\n \n         // Observed range-rate from Doppler (negative sign: positive Doppler = approaching = negative range-rate)\n         let lambda = LIGHT_SPEED / meas.frequency;\n",
+    "file": "crates/gneiss-rtk/src/doppler.rs",
+    "function": {
+      "function_name": "compute_doppler_update",
+      "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 116
+        },
+        "start": {
+          "column": 1,
+          "line": 31
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/doppler.rs:63:27: replace - with / in compute_doppler_update",
+    "package": "gneiss-rtk",
+    "replacement": "/",
+    "span": {
+      "end": {
+        "column": 28,
+        "line": 63
+      },
+      "start": {
+        "column": 27,
+        "line": 63
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/doppler.rs\n+++ replace < with == in compute_doppler_update\n@@ -57,17 +57,17 @@\n         };\n \n         // Get satellite position and velocity\n         let (sat_pos, sat_vel, _dt_s, _) = eph.position(state.time);\n \n         // Line-of-sight unit vector from receiver to satellite\n         let los = sat_pos - state.position.vector;\n         let range = los.norm();\n-        if range < 1.0 {\n+        if range == /* ~ changed by cargo-mutants ~ */ 1.0 {\n             continue;\n         }\n         let e_los = los / range;\n \n         // Observed range-rate from Doppler (negative sign: positive Doppler = approaching = negative range-rate)\n         let lambda = LIGHT_SPEED / meas.frequency;\n         let observed_range_rate = -meas.doppler_hz * lambda;\n \n",
+    "file": "crates/gneiss-rtk/src/doppler.rs",
+    "function": {
+      "function_name": "compute_doppler_update",
+      "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 116
+        },
+        "start": {
+          "column": 1,
+          "line": 31
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/doppler.rs:65:18: replace < with == in compute_doppler_update",
+    "package": "gneiss-rtk",
+    "replacement": "==",
+    "span": {
+      "end": {
+        "column": 19,
+        "line": 65
+      },
+      "start": {
+        "column": 18,
+        "line": 65
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/doppler.rs\n+++ replace < with > in compute_doppler_update\n@@ -57,17 +57,17 @@\n         };\n \n         // Get satellite position and velocity\n         let (sat_pos, sat_vel, _dt_s, _) = eph.position(state.time);\n \n         // Line-of-sight unit vector from receiver to satellite\n         let los = sat_pos - state.position.vector;\n         let range = los.norm();\n-        if range < 1.0 {\n+        if range > /* ~ changed by cargo-mutants ~ */ 1.0 {\n             continue;\n         }\n         let e_los = los / range;\n \n         // Observed range-rate from Doppler (negative sign: positive Doppler = approaching = negative range-rate)\n         let lambda = LIGHT_SPEED / meas.frequency;\n         let observed_range_rate = -meas.doppler_hz * lambda;\n \n",
+    "file": "crates/gneiss-rtk/src/doppler.rs",
+    "function": {
+      "function_name": "compute_doppler_update",
+      "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 116
+        },
+        "start": {
+          "column": 1,
+          "line": 31
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/doppler.rs:65:18: replace < with > in compute_doppler_update",
+    "package": "gneiss-rtk",
+    "replacement": ">",
+    "span": {
+      "end": {
+        "column": 19,
+        "line": 65
+      },
+      "start": {
+        "column": 18,
+        "line": 65
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/doppler.rs\n+++ replace < with <= in compute_doppler_update\n@@ -57,17 +57,17 @@\n         };\n \n         // Get satellite position and velocity\n         let (sat_pos, sat_vel, _dt_s, _) = eph.position(state.time);\n \n         // Line-of-sight unit vector from receiver to satellite\n         let los = sat_pos - state.position.vector;\n         let range = los.norm();\n-        if range < 1.0 {\n+        if range <= /* ~ changed by cargo-mutants ~ */ 1.0 {\n             continue;\n         }\n         let e_los = los / range;\n \n         // Observed range-rate from Doppler (negative sign: positive Doppler = approaching = negative range-rate)\n         let lambda = LIGHT_SPEED / meas.frequency;\n         let observed_range_rate = -meas.doppler_hz * lambda;\n \n",
+    "file": "crates/gneiss-rtk/src/doppler.rs",
+    "function": {
+      "function_name": "compute_doppler_update",
+      "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 116
+        },
+        "start": {
+          "column": 1,
+          "line": 31
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/doppler.rs:65:18: replace < with <= in compute_doppler_update",
+    "package": "gneiss-rtk",
+    "replacement": "<=",
+    "span": {
+      "end": {
+        "column": 19,
+        "line": 65
+      },
+      "start": {
+        "column": 18,
+        "line": 65
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/doppler.rs\n+++ replace / with % in compute_doppler_update\n@@ -60,17 +60,17 @@\n         let (sat_pos, sat_vel, _dt_s, _) = eph.position(state.time);\n \n         // Line-of-sight unit vector from receiver to satellite\n         let los = sat_pos - state.position.vector;\n         let range = los.norm();\n         if range < 1.0 {\n             continue;\n         }\n-        let e_los = los / range;\n+        let e_los = los % /* ~ changed by cargo-mutants ~ */ range;\n \n         // Observed range-rate from Doppler (negative sign: positive Doppler = approaching = negative range-rate)\n         let lambda = LIGHT_SPEED / meas.frequency;\n         let observed_range_rate = -meas.doppler_hz * lambda;\n \n         // Predicted range-rate: ė · (v_sat - v_rcv)\n         // Note: This ignores Earth rotation correction for simplicity\n         let rel_vel = sat_vel - state.velocity;\n",
+    "file": "crates/gneiss-rtk/src/doppler.rs",
+    "function": {
+      "function_name": "compute_doppler_update",
+      "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 116
+        },
+        "start": {
+          "column": 1,
+          "line": 31
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/doppler.rs:68:25: replace / with % in compute_doppler_update",
+    "package": "gneiss-rtk",
+    "replacement": "%",
+    "span": {
+      "end": {
+        "column": 26,
+        "line": 68
+      },
+      "start": {
+        "column": 25,
+        "line": 68
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/doppler.rs\n+++ replace / with * in compute_doppler_update\n@@ -60,17 +60,17 @@\n         let (sat_pos, sat_vel, _dt_s, _) = eph.position(state.time);\n \n         // Line-of-sight unit vector from receiver to satellite\n         let los = sat_pos - state.position.vector;\n         let range = los.norm();\n         if range < 1.0 {\n             continue;\n         }\n-        let e_los = los / range;\n+        let e_los = los * /* ~ changed by cargo-mutants ~ */ range;\n \n         // Observed range-rate from Doppler (negative sign: positive Doppler = approaching = negative range-rate)\n         let lambda = LIGHT_SPEED / meas.frequency;\n         let observed_range_rate = -meas.doppler_hz * lambda;\n \n         // Predicted range-rate: ė · (v_sat - v_rcv)\n         // Note: This ignores Earth rotation correction for simplicity\n         let rel_vel = sat_vel - state.velocity;\n",
+    "file": "crates/gneiss-rtk/src/doppler.rs",
+    "function": {
+      "function_name": "compute_doppler_update",
+      "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 116
+        },
+        "start": {
+          "column": 1,
+          "line": 31
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/doppler.rs:68:25: replace / with * in compute_doppler_update",
+    "package": "gneiss-rtk",
+    "replacement": "*",
+    "span": {
+      "end": {
+        "column": 26,
+        "line": 68
+      },
+      "start": {
+        "column": 25,
+        "line": 68
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/doppler.rs\n+++ replace / with % in compute_doppler_update\n@@ -63,17 +63,17 @@\n         let los = sat_pos - state.position.vector;\n         let range = los.norm();\n         if range < 1.0 {\n             continue;\n         }\n         let e_los = los / range;\n \n         // Observed range-rate from Doppler (negative sign: positive Doppler = approaching = negative range-rate)\n-        let lambda = LIGHT_SPEED / meas.frequency;\n+        let lambda = LIGHT_SPEED % /* ~ changed by cargo-mutants ~ */ meas.frequency;\n         let observed_range_rate = -meas.doppler_hz * lambda;\n \n         // Predicted range-rate: ė · (v_sat - v_rcv)\n         // Note: This ignores Earth rotation correction for simplicity\n         let rel_vel = sat_vel - state.velocity;\n         let predicted_range_rate = e_los.dot(&rel_vel);\n \n         // Innovation\n",
+    "file": "crates/gneiss-rtk/src/doppler.rs",
+    "function": {
+      "function_name": "compute_doppler_update",
+      "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 116
+        },
+        "start": {
+          "column": 1,
+          "line": 31
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/doppler.rs:71:34: replace / with % in compute_doppler_update",
+    "package": "gneiss-rtk",
+    "replacement": "%",
+    "span": {
+      "end": {
+        "column": 35,
+        "line": 71
+      },
+      "start": {
+        "column": 34,
+        "line": 71
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/doppler.rs\n+++ replace / with * in compute_doppler_update\n@@ -63,17 +63,17 @@\n         let los = sat_pos - state.position.vector;\n         let range = los.norm();\n         if range < 1.0 {\n             continue;\n         }\n         let e_los = los / range;\n \n         // Observed range-rate from Doppler (negative sign: positive Doppler = approaching = negative range-rate)\n-        let lambda = LIGHT_SPEED / meas.frequency;\n+        let lambda = LIGHT_SPEED * /* ~ changed by cargo-mutants ~ */ meas.frequency;\n         let observed_range_rate = -meas.doppler_hz * lambda;\n \n         // Predicted range-rate: ė · (v_sat - v_rcv)\n         // Note: This ignores Earth rotation correction for simplicity\n         let rel_vel = sat_vel - state.velocity;\n         let predicted_range_rate = e_los.dot(&rel_vel);\n \n         // Innovation\n",
+    "file": "crates/gneiss-rtk/src/doppler.rs",
+    "function": {
+      "function_name": "compute_doppler_update",
+      "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 116
+        },
+        "start": {
+          "column": 1,
+          "line": 31
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/doppler.rs:71:34: replace / with * in compute_doppler_update",
+    "package": "gneiss-rtk",
+    "replacement": "*",
+    "span": {
+      "end": {
+        "column": 35,
+        "line": 71
+      },
+      "start": {
+        "column": 34,
+        "line": 71
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/doppler.rs\n+++ replace * with + in compute_doppler_update\n@@ -64,17 +64,17 @@\n         let range = los.norm();\n         if range < 1.0 {\n             continue;\n         }\n         let e_los = los / range;\n \n         // Observed range-rate from Doppler (negative sign: positive Doppler = approaching = negative range-rate)\n         let lambda = LIGHT_SPEED / meas.frequency;\n-        let observed_range_rate = -meas.doppler_hz * lambda;\n+        let observed_range_rate = -meas.doppler_hz + /* ~ changed by cargo-mutants ~ */ lambda;\n \n         // Predicted range-rate: ė · (v_sat - v_rcv)\n         // Note: This ignores Earth rotation correction for simplicity\n         let rel_vel = sat_vel - state.velocity;\n         let predicted_range_rate = e_los.dot(&rel_vel);\n \n         // Innovation\n         let z_i = observed_range_rate - predicted_range_rate;\n",
+    "file": "crates/gneiss-rtk/src/doppler.rs",
+    "function": {
+      "function_name": "compute_doppler_update",
+      "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 116
+        },
+        "start": {
+          "column": 1,
+          "line": 31
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/doppler.rs:72:52: replace * with + in compute_doppler_update",
+    "package": "gneiss-rtk",
+    "replacement": "+",
+    "span": {
+      "end": {
+        "column": 53,
+        "line": 72
+      },
+      "start": {
+        "column": 52,
+        "line": 72
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/doppler.rs\n+++ replace * with / in compute_doppler_update\n@@ -64,17 +64,17 @@\n         let range = los.norm();\n         if range < 1.0 {\n             continue;\n         }\n         let e_los = los / range;\n \n         // Observed range-rate from Doppler (negative sign: positive Doppler = approaching = negative range-rate)\n         let lambda = LIGHT_SPEED / meas.frequency;\n-        let observed_range_rate = -meas.doppler_hz * lambda;\n+        let observed_range_rate = -meas.doppler_hz / /* ~ changed by cargo-mutants ~ */ lambda;\n \n         // Predicted range-rate: ė · (v_sat - v_rcv)\n         // Note: This ignores Earth rotation correction for simplicity\n         let rel_vel = sat_vel - state.velocity;\n         let predicted_range_rate = e_los.dot(&rel_vel);\n \n         // Innovation\n         let z_i = observed_range_rate - predicted_range_rate;\n",
+    "file": "crates/gneiss-rtk/src/doppler.rs",
+    "function": {
+      "function_name": "compute_doppler_update",
+      "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 116
+        },
+        "start": {
+          "column": 1,
+          "line": 31
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/doppler.rs:72:52: replace * with / in compute_doppler_update",
+    "package": "gneiss-rtk",
+    "replacement": "/",
+    "span": {
+      "end": {
+        "column": 53,
+        "line": 72
+      },
+      "start": {
+        "column": 52,
+        "line": 72
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/doppler.rs\n+++ delete - in compute_doppler_update\n@@ -64,17 +64,17 @@\n         let range = los.norm();\n         if range < 1.0 {\n             continue;\n         }\n         let e_los = los / range;\n \n         // Observed range-rate from Doppler (negative sign: positive Doppler = approaching = negative range-rate)\n         let lambda = LIGHT_SPEED / meas.frequency;\n-        let observed_range_rate = -meas.doppler_hz * lambda;\n+        let observed_range_rate =  /* ~ changed by cargo-mutants ~ */meas.doppler_hz * lambda;\n \n         // Predicted range-rate: ė · (v_sat - v_rcv)\n         // Note: This ignores Earth rotation correction for simplicity\n         let rel_vel = sat_vel - state.velocity;\n         let predicted_range_rate = e_los.dot(&rel_vel);\n \n         // Innovation\n         let z_i = observed_range_rate - predicted_range_rate;\n",
+    "file": "crates/gneiss-rtk/src/doppler.rs",
+    "function": {
+      "function_name": "compute_doppler_update",
+      "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 116
+        },
+        "start": {
+          "column": 1,
+          "line": 31
+        }
+      }
+    },
+    "genre": "UnaryOperator",
+    "name": "crates/gneiss-rtk/src/doppler.rs:72:35: delete - in compute_doppler_update",
+    "package": "gneiss-rtk",
+    "replacement": "",
+    "span": {
+      "end": {
+        "column": 36,
+        "line": 72
+      },
+      "start": {
+        "column": 35,
+        "line": 72
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/doppler.rs\n+++ replace - with + in compute_doppler_update\n@@ -68,17 +68,17 @@\n         let e_los = los / range;\n \n         // Observed range-rate from Doppler (negative sign: positive Doppler = approaching = negative range-rate)\n         let lambda = LIGHT_SPEED / meas.frequency;\n         let observed_range_rate = -meas.doppler_hz * lambda;\n \n         // Predicted range-rate: ė · (v_sat - v_rcv)\n         // Note: This ignores Earth rotation correction for simplicity\n-        let rel_vel = sat_vel - state.velocity;\n+        let rel_vel = sat_vel + /* ~ changed by cargo-mutants ~ */ state.velocity;\n         let predicted_range_rate = e_los.dot(&rel_vel);\n \n         // Innovation\n         let z_i = observed_range_rate - predicted_range_rate;\n \n         // H matrix row: ∂(range_rate)/∂(state)\n         // Range-rate = ė · (v_sat - v_rcv), so ∂(range_rate)/∂v_rcv = -ė\n         let mut h_row = vec![0.0; state_size];\n",
+    "file": "crates/gneiss-rtk/src/doppler.rs",
+    "function": {
+      "function_name": "compute_doppler_update",
+      "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 116
+        },
+        "start": {
+          "column": 1,
+          "line": 31
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/doppler.rs:76:31: replace - with + in compute_doppler_update",
+    "package": "gneiss-rtk",
+    "replacement": "+",
+    "span": {
+      "end": {
+        "column": 32,
+        "line": 76
+      },
+      "start": {
+        "column": 31,
+        "line": 76
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/doppler.rs\n+++ replace - with / in compute_doppler_update\n@@ -68,17 +68,17 @@\n         let e_los = los / range;\n \n         // Observed range-rate from Doppler (negative sign: positive Doppler = approaching = negative range-rate)\n         let lambda = LIGHT_SPEED / meas.frequency;\n         let observed_range_rate = -meas.doppler_hz * lambda;\n \n         // Predicted range-rate: ė · (v_sat - v_rcv)\n         // Note: This ignores Earth rotation correction for simplicity\n-        let rel_vel = sat_vel - state.velocity;\n+        let rel_vel = sat_vel / /* ~ changed by cargo-mutants ~ */ state.velocity;\n         let predicted_range_rate = e_los.dot(&rel_vel);\n \n         // Innovation\n         let z_i = observed_range_rate - predicted_range_rate;\n \n         // H matrix row: ∂(range_rate)/∂(state)\n         // Range-rate = ė · (v_sat - v_rcv), so ∂(range_rate)/∂v_rcv = -ė\n         let mut h_row = vec![0.0; state_size];\n",
+    "file": "crates/gneiss-rtk/src/doppler.rs",
+    "function": {
+      "function_name": "compute_doppler_update",
+      "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 116
+        },
+        "start": {
+          "column": 1,
+          "line": 31
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/doppler.rs:76:31: replace - with / in compute_doppler_update",
+    "package": "gneiss-rtk",
+    "replacement": "/",
+    "span": {
+      "end": {
+        "column": 32,
+        "line": 76
+      },
+      "start": {
+        "column": 31,
+        "line": 76
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/doppler.rs\n+++ replace - with + in compute_doppler_update\n@@ -72,17 +72,17 @@\n         let observed_range_rate = -meas.doppler_hz * lambda;\n \n         // Predicted range-rate: ė · (v_sat - v_rcv)\n         // Note: This ignores Earth rotation correction for simplicity\n         let rel_vel = sat_vel - state.velocity;\n         let predicted_range_rate = e_los.dot(&rel_vel);\n \n         // Innovation\n-        let z_i = observed_range_rate - predicted_range_rate;\n+        let z_i = observed_range_rate + /* ~ changed by cargo-mutants ~ */ predicted_range_rate;\n \n         // H matrix row: ∂(range_rate)/∂(state)\n         // Range-rate = ė · (v_sat - v_rcv), so ∂(range_rate)/∂v_rcv = -ė\n         let mut h_row = vec![0.0; state_size];\n         // Velocity is at state indices 3, 4, 5\n         h_row[3] = -e_los.x;\n         h_row[4] = -e_los.y;\n         h_row[5] = -e_los.z;\n",
+    "file": "crates/gneiss-rtk/src/doppler.rs",
+    "function": {
+      "function_name": "compute_doppler_update",
+      "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 116
+        },
+        "start": {
+          "column": 1,
+          "line": 31
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/doppler.rs:80:39: replace - with + in compute_doppler_update",
+    "package": "gneiss-rtk",
+    "replacement": "+",
+    "span": {
+      "end": {
+        "column": 40,
+        "line": 80
+      },
+      "start": {
+        "column": 39,
+        "line": 80
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/doppler.rs\n+++ replace - with / in compute_doppler_update\n@@ -72,17 +72,17 @@\n         let observed_range_rate = -meas.doppler_hz * lambda;\n \n         // Predicted range-rate: ė · (v_sat - v_rcv)\n         // Note: This ignores Earth rotation correction for simplicity\n         let rel_vel = sat_vel - state.velocity;\n         let predicted_range_rate = e_los.dot(&rel_vel);\n \n         // Innovation\n-        let z_i = observed_range_rate - predicted_range_rate;\n+        let z_i = observed_range_rate / /* ~ changed by cargo-mutants ~ */ predicted_range_rate;\n \n         // H matrix row: ∂(range_rate)/∂(state)\n         // Range-rate = ė · (v_sat - v_rcv), so ∂(range_rate)/∂v_rcv = -ė\n         let mut h_row = vec![0.0; state_size];\n         // Velocity is at state indices 3, 4, 5\n         h_row[3] = -e_los.x;\n         h_row[4] = -e_los.y;\n         h_row[5] = -e_los.z;\n",
+    "file": "crates/gneiss-rtk/src/doppler.rs",
+    "function": {
+      "function_name": "compute_doppler_update",
+      "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 116
+        },
+        "start": {
+          "column": 1,
+          "line": 31
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/doppler.rs:80:39: replace - with / in compute_doppler_update",
+    "package": "gneiss-rtk",
+    "replacement": "/",
+    "span": {
+      "end": {
+        "column": 40,
+        "line": 80
+      },
+      "start": {
+        "column": 39,
+        "line": 80
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/doppler.rs\n+++ delete - in compute_doppler_update\n@@ -78,17 +78,17 @@\n \n         // Innovation\n         let z_i = observed_range_rate - predicted_range_rate;\n \n         // H matrix row: ∂(range_rate)/∂(state)\n         // Range-rate = ė · (v_sat - v_rcv), so ∂(range_rate)/∂v_rcv = -ė\n         let mut h_row = vec![0.0; state_size];\n         // Velocity is at state indices 3, 4, 5\n-        h_row[3] = -e_los.x;\n+        h_row[3] =  /* ~ changed by cargo-mutants ~ */e_los.x;\n         h_row[4] = -e_los.y;\n         h_row[5] = -e_los.z;\n \n         // Variance: scaled by elevation and SNR\n         let var = 0.04 * gneiss_core::variance::observation_variance(meas.snr, meas.elevation, 45.0);\n \n         z_vals.push(z_i);\n         h_rows.push(h_row);\n",
+    "file": "crates/gneiss-rtk/src/doppler.rs",
+    "function": {
+      "function_name": "compute_doppler_update",
+      "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 116
+        },
+        "start": {
+          "column": 1,
+          "line": 31
+        }
+      }
+    },
+    "genre": "UnaryOperator",
+    "name": "crates/gneiss-rtk/src/doppler.rs:86:20: delete - in compute_doppler_update",
+    "package": "gneiss-rtk",
+    "replacement": "",
+    "span": {
+      "end": {
+        "column": 21,
+        "line": 86
+      },
+      "start": {
+        "column": 20,
+        "line": 86
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/doppler.rs\n+++ delete - in compute_doppler_update\n@@ -79,17 +79,17 @@\n         // Innovation\n         let z_i = observed_range_rate - predicted_range_rate;\n \n         // H matrix row: ∂(range_rate)/∂(state)\n         // Range-rate = ė · (v_sat - v_rcv), so ∂(range_rate)/∂v_rcv = -ė\n         let mut h_row = vec![0.0; state_size];\n         // Velocity is at state indices 3, 4, 5\n         h_row[3] = -e_los.x;\n-        h_row[4] = -e_los.y;\n+        h_row[4] =  /* ~ changed by cargo-mutants ~ */e_los.y;\n         h_row[5] = -e_los.z;\n \n         // Variance: scaled by elevation and SNR\n         let var = 0.04 * gneiss_core::variance::observation_variance(meas.snr, meas.elevation, 45.0);\n \n         z_vals.push(z_i);\n         h_rows.push(h_row);\n         r_vals.push(var);\n",
+    "file": "crates/gneiss-rtk/src/doppler.rs",
+    "function": {
+      "function_name": "compute_doppler_update",
+      "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 116
+        },
+        "start": {
+          "column": 1,
+          "line": 31
+        }
+      }
+    },
+    "genre": "UnaryOperator",
+    "name": "crates/gneiss-rtk/src/doppler.rs:87:20: delete - in compute_doppler_update",
+    "package": "gneiss-rtk",
+    "replacement": "",
+    "span": {
+      "end": {
+        "column": 21,
+        "line": 87
+      },
+      "start": {
+        "column": 20,
+        "line": 87
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/doppler.rs\n+++ delete - in compute_doppler_update\n@@ -80,17 +80,17 @@\n         let z_i = observed_range_rate - predicted_range_rate;\n \n         // H matrix row: ∂(range_rate)/∂(state)\n         // Range-rate = ė · (v_sat - v_rcv), so ∂(range_rate)/∂v_rcv = -ė\n         let mut h_row = vec![0.0; state_size];\n         // Velocity is at state indices 3, 4, 5\n         h_row[3] = -e_los.x;\n         h_row[4] = -e_los.y;\n-        h_row[5] = -e_los.z;\n+        h_row[5] =  /* ~ changed by cargo-mutants ~ */e_los.z;\n \n         // Variance: scaled by elevation and SNR\n         let var = 0.04 * gneiss_core::variance::observation_variance(meas.snr, meas.elevation, 45.0);\n \n         z_vals.push(z_i);\n         h_rows.push(h_row);\n         r_vals.push(var);\n     }\n",
+    "file": "crates/gneiss-rtk/src/doppler.rs",
+    "function": {
+      "function_name": "compute_doppler_update",
+      "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 116
+        },
+        "start": {
+          "column": 1,
+          "line": 31
+        }
+      }
+    },
+    "genre": "UnaryOperator",
+    "name": "crates/gneiss-rtk/src/doppler.rs:88:20: delete - in compute_doppler_update",
+    "package": "gneiss-rtk",
+    "replacement": "",
+    "span": {
+      "end": {
+        "column": 21,
+        "line": 88
+      },
+      "start": {
+        "column": 20,
+        "line": 88
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/doppler.rs\n+++ replace * with + in compute_doppler_update\n@@ -83,17 +83,17 @@\n         // Range-rate = ė · (v_sat - v_rcv), so ∂(range_rate)/∂v_rcv = -ė\n         let mut h_row = vec![0.0; state_size];\n         // Velocity is at state indices 3, 4, 5\n         h_row[3] = -e_los.x;\n         h_row[4] = -e_los.y;\n         h_row[5] = -e_los.z;\n \n         // Variance: scaled by elevation and SNR\n-        let var = 0.04 * gneiss_core::variance::observation_variance(meas.snr, meas.elevation, 45.0);\n+        let var = 0.04 + /* ~ changed by cargo-mutants ~ */ gneiss_core::variance::observation_variance(meas.snr, meas.elevation, 45.0);\n \n         z_vals.push(z_i);\n         h_rows.push(h_row);\n         r_vals.push(var);\n     }\n \n     if z_vals.len() < 4 {\n         return None;\n",
+    "file": "crates/gneiss-rtk/src/doppler.rs",
+    "function": {
+      "function_name": "compute_doppler_update",
+      "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 116
+        },
+        "start": {
+          "column": 1,
+          "line": 31
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/doppler.rs:91:24: replace * with + in compute_doppler_update",
+    "package": "gneiss-rtk",
+    "replacement": "+",
+    "span": {
+      "end": {
+        "column": 25,
+        "line": 91
+      },
+      "start": {
+        "column": 24,
+        "line": 91
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/doppler.rs\n+++ replace * with / in compute_doppler_update\n@@ -83,17 +83,17 @@\n         // Range-rate = ė · (v_sat - v_rcv), so ∂(range_rate)/∂v_rcv = -ė\n         let mut h_row = vec![0.0; state_size];\n         // Velocity is at state indices 3, 4, 5\n         h_row[3] = -e_los.x;\n         h_row[4] = -e_los.y;\n         h_row[5] = -e_los.z;\n \n         // Variance: scaled by elevation and SNR\n-        let var = 0.04 * gneiss_core::variance::observation_variance(meas.snr, meas.elevation, 45.0);\n+        let var = 0.04 / /* ~ changed by cargo-mutants ~ */ gneiss_core::variance::observation_variance(meas.snr, meas.elevation, 45.0);\n \n         z_vals.push(z_i);\n         h_rows.push(h_row);\n         r_vals.push(var);\n     }\n \n     if z_vals.len() < 4 {\n         return None;\n",
+    "file": "crates/gneiss-rtk/src/doppler.rs",
+    "function": {
+      "function_name": "compute_doppler_update",
+      "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 116
+        },
+        "start": {
+          "column": 1,
+          "line": 31
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/doppler.rs:91:24: replace * with / in compute_doppler_update",
+    "package": "gneiss-rtk",
+    "replacement": "/",
+    "span": {
+      "end": {
+        "column": 25,
+        "line": 91
+      },
+      "start": {
+        "column": 24,
+        "line": 91
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/doppler.rs\n+++ replace < with == in compute_doppler_update\n@@ -90,17 +90,17 @@\n         // Variance: scaled by elevation and SNR\n         let var = 0.04 * gneiss_core::variance::observation_variance(meas.snr, meas.elevation, 45.0);\n \n         z_vals.push(z_i);\n         h_rows.push(h_row);\n         r_vals.push(var);\n     }\n \n-    if z_vals.len() < 4 {\n+    if z_vals.len() == /* ~ changed by cargo-mutants ~ */ 4 {\n         return None;\n     }\n \n     let n_meas = z_vals.len();\n     let z = DVector::from_vec(z_vals);\n     let mut h = DMatrix::zeros(n_meas, state_size);\n     for (i, row) in h_rows.iter().enumerate() {\n         for (j, &val) in row.iter().enumerate() {\n",
+    "file": "crates/gneiss-rtk/src/doppler.rs",
+    "function": {
+      "function_name": "compute_doppler_update",
+      "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 116
+        },
+        "start": {
+          "column": 1,
+          "line": 31
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/doppler.rs:98:21: replace < with == in compute_doppler_update",
+    "package": "gneiss-rtk",
+    "replacement": "==",
+    "span": {
+      "end": {
+        "column": 22,
+        "line": 98
+      },
+      "start": {
+        "column": 21,
+        "line": 98
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/doppler.rs\n+++ replace < with > in compute_doppler_update\n@@ -90,17 +90,17 @@\n         // Variance: scaled by elevation and SNR\n         let var = 0.04 * gneiss_core::variance::observation_variance(meas.snr, meas.elevation, 45.0);\n \n         z_vals.push(z_i);\n         h_rows.push(h_row);\n         r_vals.push(var);\n     }\n \n-    if z_vals.len() < 4 {\n+    if z_vals.len() > /* ~ changed by cargo-mutants ~ */ 4 {\n         return None;\n     }\n \n     let n_meas = z_vals.len();\n     let z = DVector::from_vec(z_vals);\n     let mut h = DMatrix::zeros(n_meas, state_size);\n     for (i, row) in h_rows.iter().enumerate() {\n         for (j, &val) in row.iter().enumerate() {\n",
+    "file": "crates/gneiss-rtk/src/doppler.rs",
+    "function": {
+      "function_name": "compute_doppler_update",
+      "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 116
+        },
+        "start": {
+          "column": 1,
+          "line": 31
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/doppler.rs:98:21: replace < with > in compute_doppler_update",
+    "package": "gneiss-rtk",
+    "replacement": ">",
+    "span": {
+      "end": {
+        "column": 22,
+        "line": 98
+      },
+      "start": {
+        "column": 21,
+        "line": 98
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/doppler.rs\n+++ replace < with <= in compute_doppler_update\n@@ -90,17 +90,17 @@\n         // Variance: scaled by elevation and SNR\n         let var = 0.04 * gneiss_core::variance::observation_variance(meas.snr, meas.elevation, 45.0);\n \n         z_vals.push(z_i);\n         h_rows.push(h_row);\n         r_vals.push(var);\n     }\n \n-    if z_vals.len() < 4 {\n+    if z_vals.len() <= /* ~ changed by cargo-mutants ~ */ 4 {\n         return None;\n     }\n \n     let n_meas = z_vals.len();\n     let z = DVector::from_vec(z_vals);\n     let mut h = DMatrix::zeros(n_meas, state_size);\n     for (i, row) in h_rows.iter().enumerate() {\n         for (j, &val) in row.iter().enumerate() {\n",
+    "file": "crates/gneiss-rtk/src/doppler.rs",
+    "function": {
+      "function_name": "compute_doppler_update",
+      "return_type": "-> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)>",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 116
+        },
+        "start": {
+          "column": 1,
+          "line": 31
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/doppler.rs:98:21: replace < with <= in compute_doppler_update",
+    "package": "gneiss-rtk",
+    "replacement": "<=",
+    "span": {
+      "end": {
+        "column": 22,
+        "line": 98
+      },
+      "start": {
+        "column": 21,
+        "line": 98
+      }
+    }
+  }
+]

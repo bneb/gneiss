@@ -1,0 +1,3 @@
+crates/gneiss-rtk/src/calibration/time_sync.rs:44:39: replace + with * in cross_correlate_time_offset
+crates/gneiss-rtk/src/calibration/time_sync.rs:44:51: replace * with + in cross_correlate_time_offset
+crates/gneiss-rtk/src/calibration/time_sync.rs:44:45: replace - with / in cross_correlate_time_offset

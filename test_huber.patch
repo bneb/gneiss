@@ -1,0 +1,7 @@
+--- crates/gneiss-rtk/src/engine/ppp_fg.rs
++++ crates/gneiss-rtk/src/engine/ppp_fg.rs
+@@ -340,3 +340,3 @@
+             weight: 1.0 / var_p.sqrt(),
+-            k_robust: 3.0,
++            k_robust: 30.0,
+         }));

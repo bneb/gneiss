@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/doppler.rs
++++ replace < with > in compute_doppler_update
+@@ -36,17 +36,17 @@
+ /// - R: measurement noise covariance
+ ///
+ /// Returns None if fewer than 4 measurements are available.
+ pub fn compute_doppler_update(
+     state: &RtkState,
+     measurements: &[DopplerMeasurement],
+     ephemerides: &[Ephemeris],
+ ) -> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)> {
+-    if measurements.len() < 4 {
++    if measurements.len() > /* ~ changed by cargo-mutants ~ */ 4 {
+         return None;
+     }
+ 
+     let state_size = state.covariance.ncols();
+     let mut z_vals = Vec::new();
+     let mut h_rows = Vec::new();
+     let mut r_vals = Vec::new();
+ 

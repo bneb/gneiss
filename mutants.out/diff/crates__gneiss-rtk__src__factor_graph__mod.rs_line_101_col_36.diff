@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/factor_graph/mod.rs
++++ replace && with || in FactorGraphOptimizer::optimize
+@@ -93,17 +93,17 @@
+                 let maha_sq = (res.transpose() * &info * &res)[0];
+                 let mut cost = 0.5 * maha_sq;
+                 
+                 if let Some(k) = factor.robust_threshold() {
+                     let e = maha_sq.sqrt();
+                     if _iter == 0 {
+                         tracing::debug!("Iter 0 factor: res={:.2}, e={:.2}, k={:.2}, info={:.4}", res[0], e, k, info[(0,0)]);
+                     }
+-                    if e > k * 3.0 && factor.is_cauchy_rejectable() {
++                    if e > k * 3.0 || /* ~ changed by cargo-mutants ~ */ factor.is_cauchy_rejectable() {
+                         // Extreme outlier -> Cauchy-like aggressive downweighting or hard reject
+                         // We use a smooth aggressive downweighting: weight = (k/e)^3
+                         cost = k * (e - 0.5 * k); // keep cost monotonic for line search if we had one
+                         let weight = (k / e) * (k / e) * (k / e);
+                         info *= weight;
+                     } else if e > k {
+                         cost = k * (e - 0.5 * k);
+                         let weight = k / e;

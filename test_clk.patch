@@ -1,0 +1,6 @@
+--- crates/gneiss-rtk/src/engine/ppp_fg.rs
++++ crates/gneiss-rtk/src/engine/ppp_fg.rs
+@@ -155,2 +155,3 @@
+     let rcv_pos_ecef = rcv_pos_approx + set_disp;
++    if sat_obs.sat.prn == 1 && state.epoch_count == 100 { println!("p_meas: {}, cdt: {}", p_meas, state.rcv_clk_bias); }
+     let tof = p_meas / LIGHT_SPEED;

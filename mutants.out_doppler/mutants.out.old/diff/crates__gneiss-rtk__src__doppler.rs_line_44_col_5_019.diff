@@ -1,0 +1,89 @@
+--- crates/gneiss-rtk/src/doppler.rs
++++ replace compute_doppler_update -> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)> with Some((DVector::new(), DMatrix::from_iter([0.0]), DMatrix::new(-1.0)))
+@@ -36,85 +36,17 @@
+ /// - R: measurement noise covariance
+ ///
+ /// Returns None if fewer than 4 measurements are available.
+ pub fn compute_doppler_update(
+     state: &RtkState,
+     measurements: &[DopplerMeasurement],
+     ephemerides: &[Ephemeris],
+ ) -> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)> {
+-    if measurements.len() < 4 {
+-        return None;
+-    }
+-
+-    let state_size = state.covariance.ncols();
+-    let mut z_vals = Vec::new();
+-    let mut h_rows = Vec::new();
+-    let mut r_vals = Vec::new();
+-
+-    for meas in measurements {
+-        let eph = ephemerides.iter().find(|e| e.sat() == meas.sat)?;
+-
+-        // Get satellite position and velocity
+-        let (sat_pos, sat_vel, _dt_s, _) = eph.position(state.time);
+-
+-        // Line-of-sight unit vector from receiver to satellite
+-        let los = sat_pos - state.position.vector;
+-        let range = los.norm();
+-        if range < 1.0 {
+-            continue;
+-        }
+-        let e_los = los / range;
+-
+-        // Observed range-rate from Doppler (negative sign: positive Doppler = approaching = negative range-rate)
+-        let lambda = LIGHT_SPEED / meas.frequency;
+-        let observed_range_rate = -meas.doppler_hz * lambda;
+-
+-        // Predicted range-rate: ė · (v_sat - v_rcv)
+-        // Note: This ignores Earth rotation correction for simplicity
+-        let rel_vel = sat_vel - state.velocity;
+-        let predicted_range_rate = e_los.dot(&rel_vel);
+-
+-        // Innovation
+-        let z_i = observed_range_rate - predicted_range_rate;
+-
+-        // H matrix row: ∂(range_rate)/∂(state)
+-        // Range-rate = ė · (v_sat - v_rcv), so ∂(range_rate)/∂v_rcv = -ė
+-        let mut h_row = vec![0.0; state_size];
+-        // Velocity is at state indices 3, 4, 5
+-        h_row[3] = -e_los.x;
+-        h_row[4] = -e_los.y;
+-        h_row[5] = -e_los.z;
+-
+-        // Variance: scaled by elevation and SNR
+-        let var = 0.04 * gneiss_core::variance::observation_variance(meas.snr, meas.elevation, 45.0);
+-
+-        z_vals.push(z_i);
+-        h_rows.push(h_row);
+-        r_vals.push(var);
+-    }
+-
+-    if z_vals.len() < 4 {
+-        return None;
+-    }
+-
+-    let n_meas = z_vals.len();
+-    let z = DVector::from_vec(z_vals);
+-    let mut h = DMatrix::zeros(n_meas, state_size);
+-    for (i, row) in h_rows.iter().enumerate() {
+-        for (j, &val) in row.iter().enumerate() {
+-            h[(i, j)] = val;
+-        }
+-    }
+-    let mut r = DMatrix::zeros(n_meas, n_meas);
+-    for (i, &val) in r_vals.iter().enumerate() {
+-        r[(i, i)] = val;
+-    }
+-
+-    Some((z, h, r))
++    Some((DVector::new(), DMatrix::from_iter([0.0]), DMatrix::new(-1.0))) /* ~ changed by cargo-mutants ~ */
+ }
+ 
+ #[cfg(test)]
+ mod tests {
+     use super::*;
+     use gneiss_core::coords::{Coordinate, Datum, Frame};
+     use gneiss_core::sat::{SatelliteId, Constellation};
+     use gneiss_core::ephemeris::{Ephemeris, GpsEphemeris};

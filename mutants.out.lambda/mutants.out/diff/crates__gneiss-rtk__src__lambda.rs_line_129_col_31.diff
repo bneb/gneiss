@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/lambda.rs
++++ delete - in decorrelate
+@@ -121,17 +121,17 @@
+         l = res.l;
+         d = res.d;
+ 
+         let mut modified = false;
+         for i in (k_u + 1)..n {
+             let mu = l[(i, k_u)].round();
+             if mu != 0.0 {
+                 let mut e = DMatrix::<f64>::identity(n, n);
+-                e[(k_u, i)] = -mu;
++                e[(k_u, i)] =  /* ~ changed by cargo-mutants ~ */mu;
+                 
+                 z_mat = &z_mat * &e;
+                 z_hat = e.transpose() * &z_hat;
+                 q_z = e.transpose() * &q_z * &e;
+                 modified = true;
+             }
+         }
+         

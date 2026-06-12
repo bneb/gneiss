@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/doppler.rs
++++ replace - with + in compute_doppler_update
+@@ -72,17 +72,17 @@
+         let observed_range_rate = -meas.doppler_hz * lambda;
+ 
+         // Predicted range-rate: ė · (v_sat - v_rcv)
+         // Note: This ignores Earth rotation correction for simplicity
+         let rel_vel = sat_vel - state.velocity;
+         let predicted_range_rate = e_los.dot(&rel_vel);
+ 
+         // Innovation
+-        let z_i = observed_range_rate - predicted_range_rate;
++        let z_i = observed_range_rate + /* ~ changed by cargo-mutants ~ */ predicted_range_rate;
+ 
+         // H matrix row: ∂(range_rate)/∂(state)
+         // Range-rate = ė · (v_sat - v_rcv), so ∂(range_rate)/∂v_rcv = -ė
+         let mut h_row = vec![0.0; state_size];
+         // Velocity is at state indices 3, 4, 5
+         h_row[3] = -e_los.x;
+         h_row[4] = -e_los.y;
+         h_row[5] = -e_los.z;
