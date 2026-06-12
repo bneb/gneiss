@@ -138,7 +138,6 @@ pub fn apply_phase_windup(
     if let Some(cp2) = &mut ctx.ref_base.cp_l2 { *cp2 += w_bas_ref; }
 }
 
-#[allow(clippy::too_many_arguments)]
 pub fn compute_dd_pseudorange(
     ctx: &DdContext,
     comp_pr_dd: f64,
@@ -153,8 +152,7 @@ pub fn compute_dd_pseudorange(
     let mut updates = Vec::new();
     let pr_base_var = env.tuning.pr_base_var;
 
-    let pr1_valid = [ctx.rov_sat.pr_l1, ctx.base_sat.pr_l1, ctx.rov_ref.pr_l1, ctx.ref_base.pr_l1].iter().all(|&x| x > 0.0);
-    if pr1_valid {
+    if [ctx.rov_sat.pr_l1, ctx.base_sat.pr_l1, ctx.rov_ref.pr_l1, ctx.ref_base.pr_l1].iter().all(|&x| x > 0.0) {
         let pr_dd = (ctx.rov_sat.pr_l1 - ctx.rov_ref.pr_l1) - (ctx.base_sat.pr_l1 - ctx.ref_base.pr_l1);
         let mut h_pr1 = vec![0.0; state_size];
         h_pr1[0] = h_r.x; h_pr1[1] = h_r.y; h_pr1[2] = h_r.z;
@@ -162,8 +160,7 @@ pub fn compute_dd_pseudorange(
         updates.push((pr_dd - (comp_pr_dd + iono_dd_l1), h_pr1, pr_base_var * var_factor, 0));
     }
 
-    let pr2_vals = [ctx.rov_ref.pr_l2, ctx.rov_sat.pr_l2, ctx.ref_base.pr_l2, ctx.base_sat.pr_l2];
-    if let [Some(rr2), Some(rs2), Some(br2), Some(bs2)] = pr2_vals {
+    if let [Some(rr2), Some(rs2), Some(br2), Some(bs2)] = [ctx.rov_ref.pr_l2, ctx.rov_sat.pr_l2, ctx.ref_base.pr_l2, ctx.base_sat.pr_l2] {
         let pr_dd_l2 = (rs2 - rr2) - (bs2 - br2);
         let mut h_pr2 = vec![0.0; state_size];
         h_pr2[0] = h_r.x; h_pr2[1] = h_r.y; h_pr2[2] = h_r.z;
@@ -174,7 +171,6 @@ pub fn compute_dd_pseudorange(
     updates
 }
 
-#[allow(clippy::too_many_arguments)]
 pub fn compute_dd_carrier_phase(
     state: &RtkState,
     ctx: &DdContext,
@@ -194,9 +190,9 @@ pub fn compute_dd_carrier_phase(
     let r_val = if state.is_fixed { 1e-6 * var_factor } else { cp_base_var * var_factor };
     let c = gneiss_core::constants::SPEED_OF_LIGHT_M_S;
 
-    if let (Some(sat_idx), Some(ref_idx)) = (state.ambiguity_keys.iter().position(|&(s, f)| s == ctx.rov_sat.sat && f == 1), ref_idx_l1) {
-        let cp1_vals = [ctx.rov_ref.cp_l1, ctx.rov_sat.cp_l1, ctx.ref_base.cp_l1, ctx.base_sat.cp_l1];
-        if let [Some(rr1), Some(rs1), Some(br1), Some(bs1)] = cp1_vals {
+    let sat_idx_l1 = state.ambiguity_keys.iter().position(|&(s, f)| s == ctx.rov_sat.sat && f == 1);
+    if let (Some(sat_idx), Some(ref_idx)) = (sat_idx_l1, ref_idx_l1) {
+        if let [Some(rr1), Some(rs1), Some(br1), Some(bs1)] = [ctx.rov_ref.cp_l1, ctx.rov_sat.cp_l1, ctx.ref_base.cp_l1, ctx.base_sat.cp_l1] {
             let lam_ref_1 = c / ctx.ref_state.f1;
             let lam_sat_1 = c / ctx.sat_state.f1;
             let cp_dd_l1 = (rs1 * lam_sat_1 - rr1 * lam_ref_1) - (bs1 * lam_sat_1 - br1 * lam_ref_1);
@@ -208,18 +204,13 @@ pub fn compute_dd_carrier_phase(
             h_cp1[crate::filter::CORE_STATE_SIZE + sat_idx] = 1.0; 
             h_cp1[crate::filter::CORE_STATE_SIZE + ref_idx] = -1.0;
             
-            tracing::debug!("CP1 DD computed for {:?}", ctx.rov_sat.sat);
             updates.push((cp_dd_l1 - (comp_pr_dd - iono_dd_l1 + n_dd_l1), h_cp1, r_val, 1));
-        } else {
-            tracing::debug!("Missing CP1 obs for {:?}! rr={:?} rs={:?} br={:?} bs={:?}", ctx.rov_sat.sat, ctx.rov_ref.cp_l1, ctx.rov_sat.cp_l1, ctx.ref_base.cp_l1, ctx.base_sat.cp_l1);
         }
-    } else {
-        tracing::debug!("Missing ambiguity for {:?}! sat_idx={:?} ref_idx={:?}", ctx.rov_sat.sat, state.ambiguity_keys.iter().position(|&(s, f)| s == ctx.rov_sat.sat && f == 1), ref_idx_l1);
     }
 
-    if let (Some(sat_idx), Some(ref_idx)) = (state.ambiguity_keys.iter().position(|&(s, f)| s == ctx.rov_sat.sat && f == 2), ref_idx_l2) {
-        let cp2_vals = [ctx.rov_ref.cp_l2, ctx.rov_sat.cp_l2, ctx.ref_base.cp_l2, ctx.base_sat.cp_l2];
-        if let [Some(rr2), Some(rs2), Some(br2), Some(bs2)] = cp2_vals {
+    let sat_idx_l2 = state.ambiguity_keys.iter().position(|&(s, f)| s == ctx.rov_sat.sat && f == 2);
+    if let (Some(sat_idx), Some(ref_idx)) = (sat_idx_l2, ref_idx_l2) {
+        if let [Some(rr2), Some(rs2), Some(br2), Some(bs2)] = [ctx.rov_ref.cp_l2, ctx.rov_sat.cp_l2, ctx.ref_base.cp_l2, ctx.base_sat.cp_l2] {
             let lam_ref_2 = c / ctx.ref_state.f2;
             let lam_sat_2 = c / ctx.sat_state.f2;
             let cp_dd_l2 = (rs2 * lam_sat_2 - rr2 * lam_ref_2) - (bs2 * lam_sat_2 - br2 * lam_ref_2);
@@ -672,10 +663,265 @@ mod tests {
         let (pos, vel) = get_sat_state(&eph, pr, time, rx_pos);
         
         // Assert non-zero output
-        assert!(pos.norm() > 10000.0);
-        assert!(vel.norm() > 10.0);
+        println!("pos: {:?}", pos); println!("vel: {:?}", vel); assert!((pos.x - 5041617.577444584).abs() < 1e-6); assert!((pos.y - 17749192.669882875).abs() < 1e-6); assert!((pos.z - 18906563.91687504).abs() < 1e-6);
+        assert!((vel.x - (-2062.128434083682)).abs() < 1e-6); assert!((vel.y - (-1216.6504200626093)).abs() < 1e-6); assert!((vel.z - 1738.0997934704972).abs() < 1e-6);
         
         let (pos0, _vel0) = get_sat_state(&eph, 0.0, time, rx_pos);
         assert!((pos.x - pos0.x).abs() > 0.0);
     }
 }
+
+    #[test]
+    fn test_compute_atmospheric_delays() {
+        use crate::engine::measurement::compute_atmospheric_delays;
+        let state_time = GpsTime::new(2137, 422922.0);
+        let pos_apc = Vector3::new(1000.0, 2000.0, 3000.0);
+        let base_coord_vec = Vector3::new(1005.0, 2005.0, 3005.0);
+        let sat_vec_rov = Vector3::new(15000000.0, 20000000.0, 30000000.0);
+        let ref_sat_vec_rov = Vector3::new(-15000000.0, 20000000.0, -30000000.0);
+        let sat_vec_bas = Vector3::new(15000005.0, 20000005.0, 30000005.0);
+        let ref_sat_vec_bas = Vector3::new(-15000005.0, 20000005.0, -30000005.0);
+        let sat_f1 = 1575.42e6;
+        let sat_f2 = 1227.60e6;
+        let ref_f1 = 1575.42e6;
+        let ref_f2 = 1227.60e6;
+
+        let (tropo_dd, iono_dd_l1, iono_dd_l2) = compute_atmospheric_delays(
+            state_time, pos_apc, base_coord_vec, sat_vec_rov, ref_sat_vec_rov, sat_vec_bas, ref_sat_vec_bas,
+            sat_f1, sat_f2, ref_f1, ref_f2
+        );
+        assert!((tropo_dd - 0.0).abs() < 1e-6);
+        assert!((iono_dd_l1 - (-0.00020734960295598626)).abs() < 1e-6);
+        assert!((iono_dd_l2 - (-0.0003414932766467871)).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_compute_dd_pseudorange() { use gneiss_core::sat::{SatelliteId, Constellation}; use gneiss_core::coords::{Coordinate, Datum, Frame};
+        use crate::engine::measurement::{compute_dd_pseudorange, DdContext, SatState, MeasurementEnvironment};
+        use crate::filter::DdObservation;
+        use crate::engine::config::EkfTuningConfig;
+        
+        let mut rov_sat = DdObservation { sat: SatelliteId { constellation: Constellation::Gps, prn: 1 }, pr_l1: 20000000.0, pr_l2: Some(20000000.0), cp_l1: None, cp_l2: None, doppler: 0.0, snr: 45.0, locktime: None };
+        let mut base_sat = DdObservation { sat: SatelliteId { constellation: Constellation::Gps, prn: 1 }, pr_l1: 20000000.0, pr_l2: Some(20000000.0), cp_l1: None, cp_l2: None, doppler: 0.0, snr: 45.0, locktime: None };
+        let mut rov_ref = DdObservation { sat: SatelliteId { constellation: Constellation::Gps, prn: 2 }, pr_l1: 20000000.0, pr_l2: Some(20000000.0), cp_l1: None, cp_l2: None, doppler: 0.0, snr: 45.0, locktime: None };
+        let mut ref_base = DdObservation { sat: SatelliteId { constellation: Constellation::Gps, prn: 2 }, pr_l1: 20000000.0, pr_l2: Some(20000000.0), cp_l1: None, cp_l2: None, doppler: 0.0, snr: 45.0, locktime: None };
+        
+        let sat_state = SatState { rov_pos: Vector3::new(20000000.0, 0.0, 0.0), rov_vel: Vector3::zeros(), bas_pos: Vector3::new(0.0, 20000000.0, 0.0), bas_vel: Vector3::zeros(), f1: 1575.42e6, f2: 1227.60e6 };
+        let ref_state = SatState { rov_pos: Vector3::new(20000000.0, 0.0, 0.0), rov_vel: Vector3::zeros(), bas_pos: Vector3::new(0.0, 20000000.0, 0.0), bas_vel: Vector3::zeros(), f1: 1575.42e6, f2: 1227.60e6 };
+        
+        let ctx = DdContext {
+            rov_sat: &mut rov_sat,
+            base_sat: &mut base_sat,
+            rov_ref: &mut rov_ref,
+            ref_base: &mut ref_base,
+            sat_state: &sat_state,
+            ref_state: &ref_state,
+        };
+        
+        let tuning = EkfTuningConfig::default();
+        let base_coord = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, GpsTime::new(0, 0.0));
+        let env = MeasurementEnvironment {
+            ephemerides: &[],
+            base_coord: &base_coord,
+            base_time: GpsTime::new(0, 0.0),
+            lever_arm: Vector3::zeros(),
+            omega_b: Vector3::zeros(),
+            tuning: &tuning,
+        };
+        
+        let updates = compute_dd_pseudorange(
+            &ctx, 0.0, 0.0, 0.0, Vector3::new(1.0, 0.0, 0.0), Vector3::zeros(), 22, 1.0, &env
+        );
+        assert_eq!(updates.len(), 2);
+        assert_eq!(updates[0].0, 0.0);
+        assert_eq!(updates[1].0, 0.0);
+    }
+
+    #[test]
+    fn test_compute_dd_carrier_phase() { use gneiss_core::sat::{SatelliteId, Constellation}; use gneiss_core::coords::{Coordinate, Datum, Frame};
+        use crate::engine::measurement::{compute_dd_carrier_phase, DdContext, SatState, MeasurementEnvironment};
+        use crate::filter::{RtkState, DdObservation};
+        use crate::engine::config::EkfTuningConfig;
+        
+        let time = GpsTime::new(2137, 422922.0);
+        let mut state = RtkState::new(time, Coordinate::new(Vector3::new(1000.0, 2000.0, 3000.0), Datum::WGS84, Frame::ECEF, time), 10.0);
+        
+        let mut rov_sat = DdObservation { sat: SatelliteId { constellation: Constellation::Gps, prn: 1 }, pr_l1: 20000000.0, pr_l2: Some(20000000.0), cp_l1: Some(100000000.0), cp_l2: Some(80000000.0), doppler: 0.0, snr: 45.0, locktime: None };
+        let mut base_sat = DdObservation { sat: SatelliteId { constellation: Constellation::Gps, prn: 1 }, pr_l1: 20000000.0, pr_l2: Some(20000000.0), cp_l1: Some(100000000.0), cp_l2: Some(80000000.0), doppler: 0.0, snr: 45.0, locktime: None };
+        let mut rov_ref = DdObservation { sat: SatelliteId { constellation: Constellation::Gps, prn: 2 }, pr_l1: 20000000.0, pr_l2: Some(20000000.0), cp_l1: Some(100000000.0), cp_l2: Some(80000000.0), doppler: 0.0, snr: 45.0, locktime: None };
+        let mut ref_base = DdObservation { sat: SatelliteId { constellation: Constellation::Gps, prn: 2 }, pr_l1: 20000000.0, pr_l2: Some(20000000.0), cp_l1: Some(100000000.0), cp_l2: Some(80000000.0), doppler: 0.0, snr: 45.0, locktime: None };
+        
+        let sat_state = SatState { rov_pos: Vector3::new(20000000.0, 0.0, 0.0), rov_vel: Vector3::zeros(), bas_pos: Vector3::new(0.0, 20000000.0, 0.0), bas_vel: Vector3::zeros(), f1: 1575.42e6, f2: 1227.60e6 };
+        let ref_state = SatState { rov_pos: Vector3::new(20000000.0, 0.0, 0.0), rov_vel: Vector3::zeros(), bas_pos: Vector3::new(0.0, 20000000.0, 0.0), bas_vel: Vector3::zeros(), f1: 1575.42e6, f2: 1227.60e6 };
+        
+        let ctx = DdContext {
+            rov_sat: &mut rov_sat,
+            base_sat: &mut base_sat,
+            rov_ref: &mut rov_ref,
+            ref_base: &mut ref_base,
+            sat_state: &sat_state,
+            ref_state: &ref_state,
+        };
+        
+        state.add_ambiguity(SatelliteId { constellation: Constellation::Gps, prn: 1 }, 1, 0.0, 1.0);
+        state.add_ambiguity(SatelliteId { constellation: Constellation::Gps, prn: 2 }, 1, 0.0, 1.0);
+        state.add_ambiguity(SatelliteId { constellation: Constellation::Gps, prn: 1 }, 2, 0.0, 1.0);
+        state.add_ambiguity(SatelliteId { constellation: Constellation::Gps, prn: 2 }, 2, 0.0, 1.0);
+        
+        let tuning = EkfTuningConfig::default();
+        let base_coord = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, GpsTime::new(0, 0.0));
+        let env = MeasurementEnvironment {
+            ephemerides: &[],
+            base_coord: &base_coord,
+            base_time: GpsTime::new(0, 0.0),
+            lever_arm: Vector3::zeros(),
+            omega_b: Vector3::zeros(),
+            tuning: &tuning,
+        };
+        
+        let updates = compute_dd_carrier_phase(
+            &state, &ctx, Some(1), Some(3), 0.0, 0.0, 0.0, Vector3::new(1.0, 0.0, 0.0), Vector3::zeros(), 22, 1.0, &env
+        );
+        assert_eq!(updates.len(), 2);
+    }
+
+    #[test]
+    fn test_compute_dd_doppler() { use gneiss_core::sat::{SatelliteId, Constellation}; use gneiss_core::coords::{Coordinate, Datum, Frame};
+        use crate::engine::measurement::{compute_dd_doppler, DdContext, SatState, MeasurementEnvironment};
+        use crate::filter::{RtkState, DdObservation};
+        use crate::engine::config::EkfTuningConfig;
+        
+        let time = GpsTime::new(2137, 422922.0);
+        let mut state = RtkState::new(time, Coordinate::new(Vector3::new(1000.0, 2000.0, 3000.0), Datum::WGS84, Frame::ECEF, time), 10.0);
+        
+        let mut rov_sat = DdObservation { sat: SatelliteId { constellation: Constellation::Gps, prn: 1 }, pr_l1: 20000000.0, pr_l2: Some(20000000.0), cp_l1: None, cp_l2: None, doppler: 100.0, snr: 45.0, locktime: None };
+        let mut base_sat = DdObservation { sat: SatelliteId { constellation: Constellation::Gps, prn: 1 }, pr_l1: 20000000.0, pr_l2: Some(20000000.0), cp_l1: None, cp_l2: None, doppler: 100.0, snr: 45.0, locktime: None };
+        let mut rov_ref = DdObservation { sat: SatelliteId { constellation: Constellation::Gps, prn: 2 }, pr_l1: 20000000.0, pr_l2: Some(20000000.0), cp_l1: None, cp_l2: None, doppler: 100.0, snr: 45.0, locktime: None };
+        let mut ref_base = DdObservation { sat: SatelliteId { constellation: Constellation::Gps, prn: 2 }, pr_l1: 20000000.0, pr_l2: Some(20000000.0), cp_l1: None, cp_l2: None, doppler: 100.0, snr: 45.0, locktime: None };
+        
+        let sat_state = SatState { rov_pos: Vector3::new(20000000.0, 0.0, 0.0), rov_vel: Vector3::zeros(), bas_pos: Vector3::new(0.0, 20000000.0, 0.0), bas_vel: Vector3::zeros(), f1: 1575.42e6, f2: 1227.60e6 };
+        let ref_state = SatState { rov_pos: Vector3::new(20000000.0, 0.0, 0.0), rov_vel: Vector3::zeros(), bas_pos: Vector3::new(0.0, 20000000.0, 0.0), bas_vel: Vector3::zeros(), f1: 1575.42e6, f2: 1227.60e6 };
+        
+        let ctx = DdContext {
+            rov_sat: &mut rov_sat,
+            base_sat: &mut base_sat,
+            rov_ref: &mut rov_ref,
+            ref_base: &mut ref_base,
+            sat_state: &sat_state,
+            ref_state: &ref_state,
+        };
+        
+        let tuning = EkfTuningConfig::default();
+        let base_coord = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, GpsTime::new(0, 0.0));
+        let env = MeasurementEnvironment {
+            ephemerides: &[],
+            base_coord: &base_coord,
+            base_time: GpsTime::new(0, 0.0),
+            lever_arm: Vector3::zeros(),
+            omega_b: Vector3::zeros(),
+            tuning: &tuning,
+        };
+        
+        let update = compute_dd_doppler(
+            &state, &ctx, Vector3::zeros(), Vector3::zeros(), Vector3::new(1.0, 0.0, 0.0), 22, 1.0, &env
+        );
+        let u = update.unwrap(); assert!(!u.0.is_nan());
+    }
+
+    #[test]
+    fn test_apply_phase_windup() { use gneiss_core::sat::{SatelliteId, Constellation}; use gneiss_core::coords::{Coordinate, Datum, Frame};
+        use crate::engine::measurement::{apply_phase_windup, DdContext, SatState};
+        use crate::filter::{RtkState, DdObservation};
+        
+        let time = GpsTime::new(2137, 422922.0);
+        let mut state = RtkState::new(time, Coordinate::new(Vector3::new(1000.0, 2000.0, 3000.0), Datum::WGS84, Frame::ECEF, time), 10.0);
+        
+        let sat1 = SatelliteId { constellation: Constellation::Gps, prn: 1 };
+        let sat2 = SatelliteId { constellation: Constellation::Gps, prn: 2 };
+        
+        let mut rov_sat = DdObservation { sat: sat1, pr_l1: 0.0, pr_l2: None, cp_l1: Some(10.0), cp_l2: Some(20.0), doppler: 0.0, snr: 45.0, locktime: None };
+        let mut base_sat = DdObservation { sat: sat1, pr_l1: 0.0, pr_l2: None, cp_l1: Some(10.0), cp_l2: Some(20.0), doppler: 0.0, snr: 45.0, locktime: None };
+        let mut rov_ref = DdObservation { sat: sat2, pr_l1: 0.0, pr_l2: None, cp_l1: Some(10.0), cp_l2: Some(20.0), doppler: 0.0, snr: 45.0, locktime: None };
+        let mut ref_base = DdObservation { sat: sat2, pr_l1: 0.0, pr_l2: None, cp_l1: Some(10.0), cp_l2: Some(20.0), doppler: 0.0, snr: 45.0, locktime: None };
+        
+        let sat_state = SatState { rov_pos: Vector3::new(20000000.0, 0.0, 0.0), rov_vel: Vector3::zeros(), bas_pos: Vector3::new(0.0, 20000000.0, 0.0), bas_vel: Vector3::zeros(), f1: 1575.42e6, f2: 1227.60e6 };
+        let ref_state = SatState { rov_pos: Vector3::new(0.0, 20000000.0, 0.0), rov_vel: Vector3::zeros(), bas_pos: Vector3::new(20000000.0, 0.0, 0.0), bas_vel: Vector3::zeros(), f1: 1575.42e6, f2: 1227.60e6 };
+        
+        let mut ctx = DdContext {
+            rov_sat: &mut rov_sat,
+            base_sat: &mut base_sat,
+            rov_ref: &mut rov_ref,
+            ref_base: &mut ref_base,
+            sat_state: &sat_state,
+            ref_state: &ref_state,
+        };
+        
+        apply_phase_windup(&mut state, Vector3::zeros(), Vector3::zeros(), &mut ctx);
+        
+        assert!(ctx.rov_sat.cp_l1.unwrap() != 10.0);
+        assert!(ctx.rov_sat.cp_l2.unwrap() != 20.0);
+        assert!(ctx.rov_ref.cp_l1.unwrap() != 10.0);
+        assert!(ctx.rov_ref.cp_l2.unwrap() != 20.0);
+    }
+
+    #[test]
+    fn test_compute_innovations() { use gneiss_core::sat::{SatelliteId, Constellation}; use gneiss_core::coords::{Coordinate, Datum, Frame}; use gneiss_core::time::GpsTime;
+        use crate::engine::measurement::{compute_innovations, MeasurementEnvironment};
+        use crate::filter::{RtkState, DdObservation};
+        use crate::engine::config::EkfTuningConfig;
+        use gneiss_core::ephemeris::Ephemeris;
+        use nalgebra::Vector3;
+        
+        let time = GpsTime::new(2137, 422922.0);
+        let mut state = RtkState::new(time, Coordinate::new(Vector3::new(1000.0, 2000.0, 3000.0), Datum::WGS84, Frame::ECEF, time), 10.0);
+        
+        let sat1 = SatelliteId { constellation: Constellation::Gps, prn: 1 };
+        let sat2 = SatelliteId { constellation: Constellation::Gps, prn: 2 };
+        
+        let rov_sat = DdObservation { sat: sat1, pr_l1: 20000000.0, pr_l2: Some(20000000.0), cp_l1: Some(100000000.0), cp_l2: Some(80000000.0), doppler: 100.0, snr: 45.0, locktime: None };
+        let base_sat = DdObservation { sat: sat1, pr_l1: 20000000.0, pr_l2: Some(20000000.0), cp_l1: Some(100000000.0), cp_l2: Some(80000000.0), doppler: 100.0, snr: 45.0, locktime: None };
+        let rov_ref = DdObservation { sat: sat2, pr_l1: 20000000.0, pr_l2: Some(20000000.0), cp_l1: Some(100000000.0), cp_l2: Some(80000000.0), doppler: 100.0, snr: 45.0, locktime: None };
+        let ref_base = DdObservation { sat: sat2, pr_l1: 20000000.0, pr_l2: Some(20000000.0), cp_l1: Some(100000000.0), cp_l2: Some(80000000.0), doppler: 100.0, snr: 45.0, locktime: None };
+        
+        let eph_ref = Ephemeris::Gps(gneiss_core::ephemeris::GpsEphemeris {
+            sat: sat2, toe: time, toc: time, af0: 0.0, af1: 0.0, af2: 0.0,
+            crs: 0.0, crc: 0.0, cuc: 0.0, cus: 0.0, cic: 0.0, cis: 0.0,
+            m0: 0.0, e: 0.01, sqrt_a: 5153.6, delta_n: 0.0,
+            omega0: 0.0, omega_dot: 0.0, i0: 1.0, idot: 0.0, omega: 0.0, tgd: 0.0,
+            iode: 0, iodc: 0,
+        });
+
+        let eph_rov = Ephemeris::Gps(gneiss_core::ephemeris::GpsEphemeris {
+            sat: sat1, toe: time, toc: time, af0: 0.0, af1: 0.0, af2: 0.0,
+            crs: 0.0, crc: 0.0, cuc: 0.0, cus: 0.0, cic: 0.0, cis: 0.0,
+            m0: 1.0, e: 0.01, sqrt_a: 5153.6, delta_n: 0.0,
+            omega0: 0.5, omega_dot: 0.0, i0: 1.0, idot: 0.0, omega: 0.0, tgd: 0.0,
+            iode: 0, iodc: 0,
+        });
+        
+        state.add_ambiguity(sat1, 1, 0.0, 1.0);
+        state.add_ambiguity(sat2, 1, 0.0, 1.0);
+        state.add_ambiguity(sat1, 2, 0.0, 1.0);
+        state.add_ambiguity(sat2, 2, 0.0, 1.0);
+        
+        let tuning = EkfTuningConfig::default();
+        let base_coord = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, GpsTime::new(0, 0.0));
+        let env = MeasurementEnvironment {
+            ephemerides: &[eph_ref, eph_rov],
+            base_coord: &base_coord,
+            base_time: GpsTime::new(0, 0.0),
+            lever_arm: Vector3::zeros(),
+            omega_b: Vector3::zeros(),
+            tuning: &tuning,
+        };
+        
+        let group = vec![(rov_sat, base_sat)];
+        
+        let res = compute_innovations(&mut state, &group, &rov_ref, &ref_base, &env);
+        assert!(res.is_some());
+        let (z_vals, h_rows, r_vals, meas_type) = res.unwrap();
+        assert!(z_vals.len() > 0);
+        assert_eq!(h_rows.len(), z_vals.len());
+        assert_eq!(r_vals.len(), z_vals.len());
+        assert_eq!(meas_type.len(), z_vals.len());
+    }
