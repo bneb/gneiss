@@ -4,8 +4,36 @@ use gneiss_core::time::GpsTime;
 use gneiss_core::ephemeris::Ephemeris;
 use crate::filter::{RtkState, DdObservation};
 
+pub struct MeasurementEnvironment<'a> {
+    pub ephemerides: &'a [Ephemeris],
+    pub base_coord: &'a Coordinate,
+    pub base_time: GpsTime,
+    pub lever_arm: Vector3<f64>,
+    pub omega_b: Vector3<f64>,
+    pub tuning: &'a crate::engine::config::EkfTuningConfig,
+}
+
+pub struct SatState {
+    pub rov_pos: Vector3<f64>,
+    pub rov_vel: Vector3<f64>,
+    pub bas_pos: Vector3<f64>,
+    pub bas_vel: Vector3<f64>,
+    pub f1: f64,
+    pub f2: f64,
+}
+
+pub struct DdContext<'a> {
+    pub rov_sat: &'a mut DdObservation,
+    pub base_sat: &'a mut DdObservation,
+    pub rov_ref: &'a mut DdObservation,
+    pub ref_base: &'a mut DdObservation,
+    pub sat_state: &'a SatState,
+    pub ref_state: &'a SatState,
+}
+
+
 pub fn get_sat_state(eph: &Ephemeris, pr: f64, t_rx: GpsTime, rx_pos: Vector3<f64>) -> (Vector3<f64>, Vector3<f64>) {
-    let tau_pr = pr / 299792458.0;
+    let tau_pr = pr / gneiss_core::constants::SPEED_OF_LIGHT_M_S;
     let t_tx_nom = GpsTime::new(t_rx.week, t_rx.tow - tau_pr);
     let (_, _, dt_s, _) = eph.position(t_tx_nom);
     let t_tx_true = GpsTime::new(t_rx.week, t_rx.tow - tau_pr - dt_s);
@@ -15,8 +43,8 @@ pub fn get_sat_state(eph: &Ephemeris, pr: f64, t_rx: GpsTime, rx_pos: Vector3<f6
     let mut sat_vel = raw_vel;
     for _ in 0..2 {
         let geometric_range = (sat_pos - rx_pos).norm();
-        let true_tau = geometric_range / 299792458.0;
-        let theta = 7.2921151467e-5 * true_tau;
+        let true_tau = geometric_range / gneiss_core::constants::SPEED_OF_LIGHT_M_S;
+        let theta = gneiss_core::constants::EARTH_ROTATION_RATE_RAD_S * true_tau;
         let cos_t = f64::cos(theta);
         let sin_t = f64::sin(theta);
         sat_pos = nalgebra::Vector3::new(
@@ -33,6 +61,7 @@ pub fn get_sat_state(eph: &Ephemeris, pr: f64, t_rx: GpsTime, rx_pos: Vector3<f6
     (sat_pos, sat_vel)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn compute_atmospheric_delays(
     state_time: GpsTime,
     pos_apc: Vector3<f64>,
@@ -45,6 +74,8 @@ pub fn compute_atmospheric_delays(
     ref_f1: f64, ref_f2: f64,
 ) -> (f64, f64, f64) {
     let tropo_params = gneiss_core::atmosphere::TropoParams::default();
+    // Ideally we should pass klobuchar from EngineConfig, but we don't have access to Engine here.
+    // For RTK, ionosphere cancels out over short baselines anyway.
     let iono_params = gneiss_core::atmosphere::KlobucharParams::default();
     
     let base_llh = gneiss_core::coords::ecef_to_llh(base_coord_vec);
@@ -78,47 +109,38 @@ pub fn apply_phase_windup(
     state: &mut RtkState,
     pos_apc: Vector3<f64>,
     base_coord_vec: Vector3<f64>,
-    sat_vec_rov: Vector3<f64>,
-    ref_sat_vec_rov: Vector3<f64>,
-    sat_vec_bas: Vector3<f64>,
-    ref_sat_vec_bas: Vector3<f64>,
-    rover_sat: &mut DdObservation,
-    ref_rover: &mut DdObservation,
-    base_sat: &mut DdObservation,
-    ref_base: &mut DdObservation,
+    ctx: &mut DdContext,
 ) {
     let sun_pos = gneiss_core::sun::sun_position_ecef(state.time);
 
-    let prev_w_sat = *state.windup.get(&rover_sat.sat).unwrap_or(&0.0);
-    let prev_w_ref = *state.windup.get(&ref_rover.sat).unwrap_or(&0.0);
-    let w_sat = gneiss_core::windup::phase_windup(sat_vec_rov, sun_pos, pos_apc, prev_w_sat);
-    let w_ref = gneiss_core::windup::phase_windup(ref_sat_vec_rov, sun_pos, pos_apc, prev_w_ref);
-    state.windup.insert(rover_sat.sat, w_sat);
-    state.windup.insert(ref_rover.sat, w_ref);
+    let prev_w_sat = *state.windup.get(&ctx.rov_sat.sat).unwrap_or(&0.0);
+    let prev_w_ref = *state.windup.get(&ctx.rov_ref.sat).unwrap_or(&0.0);
+    let w_sat = gneiss_core::windup::phase_windup(ctx.sat_state.rov_pos, sun_pos, pos_apc, prev_w_sat);
+    let w_ref = gneiss_core::windup::phase_windup(ctx.ref_state.rov_pos, sun_pos, pos_apc, prev_w_ref);
+    state.windup.insert(ctx.rov_sat.sat, w_sat);
+    state.windup.insert(ctx.rov_ref.sat, w_ref);
 
-    if let Some(cp) = &mut rover_sat.cp_l1 { *cp += w_sat; }
-    if let Some(cp2) = &mut rover_sat.cp_l2 { *cp2 += w_sat; }
-    if let Some(cp) = &mut ref_rover.cp_l1 { *cp += w_ref; }
-    if let Some(cp2) = &mut ref_rover.cp_l2 { *cp2 += w_ref; }
+    if let Some(cp) = &mut ctx.rov_sat.cp_l1 { *cp += w_sat; }
+    if let Some(cp2) = &mut ctx.rov_sat.cp_l2 { *cp2 += w_sat; }
+    if let Some(cp) = &mut ctx.rov_ref.cp_l1 { *cp += w_ref; }
+    if let Some(cp2) = &mut ctx.rov_ref.cp_l2 { *cp2 += w_ref; }
 
-    let prev_w_bas_sat = *state.windup.get(&base_sat.sat).unwrap_or(&0.0);
-    let prev_w_bas_ref = *state.windup.get(&ref_base.sat).unwrap_or(&0.0);
-    let w_bas_sat = gneiss_core::windup::phase_windup(sat_vec_bas, sun_pos, base_coord_vec, prev_w_bas_sat);
-    let w_bas_ref = gneiss_core::windup::phase_windup(ref_sat_vec_bas, sun_pos, base_coord_vec, prev_w_bas_ref);
-    state.windup.insert(base_sat.sat, w_bas_sat);
-    state.windup.insert(ref_base.sat, w_bas_ref);
+    let prev_w_bas_sat = *state.windup.get(&ctx.base_sat.sat).unwrap_or(&0.0);
+    let prev_w_bas_ref = *state.windup.get(&ctx.ref_base.sat).unwrap_or(&0.0);
+    let w_bas_sat = gneiss_core::windup::phase_windup(ctx.sat_state.bas_pos, sun_pos, base_coord_vec, prev_w_bas_sat);
+    let w_bas_ref = gneiss_core::windup::phase_windup(ctx.ref_state.bas_pos, sun_pos, base_coord_vec, prev_w_bas_ref);
+    state.windup.insert(ctx.base_sat.sat, w_bas_sat);
+    state.windup.insert(ctx.ref_base.sat, w_bas_ref);
 
-    if let Some(cp) = &mut base_sat.cp_l1 { *cp += w_bas_sat; }
-    if let Some(cp2) = &mut base_sat.cp_l2 { *cp2 += w_bas_sat; }
-    if let Some(cp) = &mut ref_base.cp_l1 { *cp += w_bas_ref; }
-    if let Some(cp2) = &mut ref_base.cp_l2 { *cp2 += w_bas_ref; }
+    if let Some(cp) = &mut ctx.base_sat.cp_l1 { *cp += w_bas_sat; }
+    if let Some(cp2) = &mut ctx.base_sat.cp_l2 { *cp2 += w_bas_sat; }
+    if let Some(cp) = &mut ctx.ref_base.cp_l1 { *cp += w_bas_ref; }
+    if let Some(cp2) = &mut ctx.ref_base.cp_l2 { *cp2 += w_bas_ref; }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn compute_dd_pseudorange(
-    rov_sat: &DdObservation,
-    base_sat: &DdObservation,
-    rov_ref: &DdObservation,
-    ref_base: &DdObservation,
+    ctx: &DdContext,
     comp_pr_dd: f64,
     iono_dd_l1: f64,
     iono_dd_l2: f64,
@@ -126,20 +148,21 @@ pub fn compute_dd_pseudorange(
     h_att: Vector3<f64>,
     state_size: usize,
     var_factor: f64,
+    env: &MeasurementEnvironment,
 ) -> Vec<(f64, Vec<f64>, f64, u8)> {
     let mut updates = Vec::new();
-    let pr_base_var = 0.09;
+    let pr_base_var = env.tuning.pr_base_var;
 
-    let pr1_valid = [rov_sat.pr_l1, base_sat.pr_l1, rov_ref.pr_l1, ref_base.pr_l1].iter().all(|&x| x > 0.0);
+    let pr1_valid = [ctx.rov_sat.pr_l1, ctx.base_sat.pr_l1, ctx.rov_ref.pr_l1, ctx.ref_base.pr_l1].iter().all(|&x| x > 0.0);
     if pr1_valid {
-        let pr_dd = (rov_sat.pr_l1 - rov_ref.pr_l1) - (base_sat.pr_l1 - ref_base.pr_l1);
+        let pr_dd = (ctx.rov_sat.pr_l1 - ctx.rov_ref.pr_l1) - (ctx.base_sat.pr_l1 - ctx.ref_base.pr_l1);
         let mut h_pr1 = vec![0.0; state_size];
         h_pr1[0] = h_r.x; h_pr1[1] = h_r.y; h_pr1[2] = h_r.z;
         h_pr1[6] = h_att.x; h_pr1[7] = h_att.y; h_pr1[8] = h_att.z;
         updates.push((pr_dd - (comp_pr_dd + iono_dd_l1), h_pr1, pr_base_var * var_factor, 0));
     }
 
-    let pr2_vals = [rov_ref.pr_l2, rov_sat.pr_l2, ref_base.pr_l2, base_sat.pr_l2];
+    let pr2_vals = [ctx.rov_ref.pr_l2, ctx.rov_sat.pr_l2, ctx.ref_base.pr_l2, ctx.base_sat.pr_l2];
     if let [Some(rr2), Some(rs2), Some(br2), Some(bs2)] = pr2_vals {
         let pr_dd_l2 = (rs2 - rr2) - (bs2 - br2);
         let mut h_pr2 = vec![0.0; state_size];
@@ -151,34 +174,31 @@ pub fn compute_dd_pseudorange(
     updates
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn compute_dd_carrier_phase(
     state: &RtkState,
-    rov_sat: &DdObservation,
-    base_sat: &DdObservation,
-    rov_ref: &DdObservation,
-    ref_base: &DdObservation,
+    ctx: &DdContext,
     ref_idx_l1: Option<usize>,
     ref_idx_l2: Option<usize>,
     comp_pr_dd: f64,
     iono_dd_l1: f64,
     iono_dd_l2: f64,
-    sat_f1: f64, sat_f2: f64,
-    ref_f1: f64, ref_f2: f64,
     h_r: Vector3<f64>,
     h_att: Vector3<f64>,
     state_size: usize,
     var_factor: f64,
+    env: &MeasurementEnvironment,
 ) -> Vec<(f64, Vec<f64>, f64, u8)> {
     let mut updates = Vec::new();
-    let cp_base_var = 9e-6;
+    let cp_base_var = env.tuning.cp_base_var;
     let r_val = if state.is_fixed { 1e-6 * var_factor } else { cp_base_var * var_factor };
-    let c = 299792458.0;
+    let c = gneiss_core::constants::SPEED_OF_LIGHT_M_S;
 
-    if let (Some(sat_idx), Some(ref_idx)) = (state.ambiguity_keys.iter().position(|&(s, f)| s == rov_sat.sat && f == 1), ref_idx_l1) {
-        let cp1_vals = [rov_ref.cp_l1, rov_sat.cp_l1, ref_base.cp_l1, base_sat.cp_l1];
+    if let (Some(sat_idx), Some(ref_idx)) = (state.ambiguity_keys.iter().position(|&(s, f)| s == ctx.rov_sat.sat && f == 1), ref_idx_l1) {
+        let cp1_vals = [ctx.rov_ref.cp_l1, ctx.rov_sat.cp_l1, ctx.ref_base.cp_l1, ctx.base_sat.cp_l1];
         if let [Some(rr1), Some(rs1), Some(br1), Some(bs1)] = cp1_vals {
-            let lam_ref_1 = c / ref_f1;
-            let lam_sat_1 = c / sat_f1;
+            let lam_ref_1 = c / ctx.ref_state.f1;
+            let lam_sat_1 = c / ctx.sat_state.f1;
             let cp_dd_l1 = (rs1 * lam_sat_1 - rr1 * lam_ref_1) - (bs1 * lam_sat_1 - br1 * lam_ref_1);
             let n_dd_l1 = state.ambiguities[sat_idx] - state.ambiguities[ref_idx];
             
@@ -188,20 +208,20 @@ pub fn compute_dd_carrier_phase(
             h_cp1[crate::filter::CORE_STATE_SIZE + sat_idx] = 1.0; 
             h_cp1[crate::filter::CORE_STATE_SIZE + ref_idx] = -1.0;
             
-            tracing::debug!("CP1 DD computed for {:?}", rov_sat.sat);
+            tracing::debug!("CP1 DD computed for {:?}", ctx.rov_sat.sat);
             updates.push((cp_dd_l1 - (comp_pr_dd - iono_dd_l1 + n_dd_l1), h_cp1, r_val, 1));
         } else {
-            tracing::debug!("Missing CP1 obs for {:?}! rr={:?} rs={:?} br={:?} bs={:?}", rov_sat.sat, rov_ref.cp_l1, rov_sat.cp_l1, ref_base.cp_l1, base_sat.cp_l1);
+            tracing::debug!("Missing CP1 obs for {:?}! rr={:?} rs={:?} br={:?} bs={:?}", ctx.rov_sat.sat, ctx.rov_ref.cp_l1, ctx.rov_sat.cp_l1, ctx.ref_base.cp_l1, ctx.base_sat.cp_l1);
         }
     } else {
-        tracing::debug!("Missing ambiguity for {:?}! sat_idx={:?} ref_idx={:?}", rov_sat.sat, state.ambiguity_keys.iter().position(|&(s, f)| s == rov_sat.sat && f == 1), ref_idx_l1);
+        tracing::debug!("Missing ambiguity for {:?}! sat_idx={:?} ref_idx={:?}", ctx.rov_sat.sat, state.ambiguity_keys.iter().position(|&(s, f)| s == ctx.rov_sat.sat && f == 1), ref_idx_l1);
     }
 
-    if let (Some(sat_idx), Some(ref_idx)) = (state.ambiguity_keys.iter().position(|&(s, f)| s == rov_sat.sat && f == 2), ref_idx_l2) {
-        let cp2_vals = [rov_ref.cp_l2, rov_sat.cp_l2, ref_base.cp_l2, base_sat.cp_l2];
+    if let (Some(sat_idx), Some(ref_idx)) = (state.ambiguity_keys.iter().position(|&(s, f)| s == ctx.rov_sat.sat && f == 2), ref_idx_l2) {
+        let cp2_vals = [ctx.rov_ref.cp_l2, ctx.rov_sat.cp_l2, ctx.ref_base.cp_l2, ctx.base_sat.cp_l2];
         if let [Some(rr2), Some(rs2), Some(br2), Some(bs2)] = cp2_vals {
-            let lam_ref_2 = c / ref_f2;
-            let lam_sat_2 = c / sat_f2;
+            let lam_ref_2 = c / ctx.ref_state.f2;
+            let lam_sat_2 = c / ctx.sat_state.f2;
             let cp_dd_l2 = (rs2 * lam_sat_2 - rr2 * lam_ref_2) - (bs2 * lam_sat_2 - br2 * lam_ref_2);
             let n_dd_l2 = state.ambiguities[sat_idx] - state.ambiguities[ref_idx];
             
@@ -218,86 +238,73 @@ pub fn compute_dd_carrier_phase(
     updates
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn compute_dd_doppler(
     state: &RtkState,
-    rov_sat: &DdObservation,
-    base_sat: &DdObservation,
-    rov_ref: &DdObservation,
-    ref_base: &DdObservation,
-    sat_vec_rov: Vector3<f64>, sat_vel_rov: Vector3<f64>,
-    ref_sat_vec_rov: Vector3<f64>, ref_sat_vel_rov: Vector3<f64>,
-    sat_vec_bas: Vector3<f64>, sat_vel_bas: Vector3<f64>,
-    ref_sat_vec_bas: Vector3<f64>, ref_sat_vel_bas: Vector3<f64>,
+    ctx: &DdContext,
     pos_apc: Vector3<f64>,
     base_coord_vec: Vector3<f64>,
-    sat_f1: f64,
-    ref_f1: f64,
     h_r: Vector3<f64>,
-    lever_arm: Vector3<f64>,
-    omega_b: Vector3<f64>,
     state_size: usize,
     var_factor: f64,
+    env: &MeasurementEnvironment,
 ) -> Option<(f64, Vec<f64>, f64, u8)> {
-    let dop_valid = [rov_sat.doppler, rov_ref.doppler, base_sat.doppler, ref_base.doppler].iter().all(|&x| x != 0.0);
+    let dop_valid = [ctx.rov_sat.doppler, ctx.rov_ref.doppler, ctx.base_sat.doppler, ctx.ref_base.doppler].iter().all(|&x| x != 0.0);
     if dop_valid {
-        let lam_sat_1 = 299792458.0 / sat_f1;
-        let lam_ref_1 = 299792458.0 / ref_f1;
+        let lam_sat_1 = gneiss_core::constants::SPEED_OF_LIGHT_M_S / ctx.sat_state.f1;
+        let lam_ref_1 = gneiss_core::constants::SPEED_OF_LIGHT_M_S / ctx.ref_state.f1;
         
-        let e_sat_rov = (sat_vec_rov - pos_apc).normalize();
-        let e_ref_rov = (ref_sat_vec_rov - pos_apc).normalize();
-        let e_sat_bas = (sat_vec_bas - base_coord_vec).normalize();
-        let e_ref_bas = (ref_sat_vec_bas - base_coord_vec).normalize();
+        let e_sat_rov = (ctx.sat_state.rov_pos - pos_apc).normalize();
+        let e_ref_rov = (ctx.ref_state.rov_pos - pos_apc).normalize();
+        let e_sat_bas = (ctx.sat_state.bas_pos - base_coord_vec).normalize();
+        let e_ref_bas = (ctx.ref_state.bas_pos - base_coord_vec).normalize();
         
         let r_b_e = state.attitude.to_rotation_matrix();
-        let v_ant = state.velocity + r_b_e * omega_b.cross(&lever_arm);
+        let v_ant = state.velocity + r_b_e * env.omega_b.cross(&env.lever_arm);
         
         // dr/dt = e_los · (v_sat - v_rcv)
-        let rr_rov_sat = e_sat_rov.dot(&(sat_vel_rov - v_ant));
-        let rr_rov_ref = e_ref_rov.dot(&(ref_sat_vel_rov - v_ant));
-        let rr_bas_sat = e_sat_bas.dot(&(sat_vel_bas));
-        let rr_bas_ref = e_ref_bas.dot(&(ref_sat_vel_bas));
+        let rr_rov_sat = e_sat_rov.dot(&(ctx.sat_state.rov_vel - v_ant));
+        let rr_rov_ref = e_ref_rov.dot(&(ctx.ref_state.rov_vel - v_ant));
+        let rr_bas_sat = e_sat_bas.dot(&(ctx.sat_state.bas_vel));
+        let rr_bas_ref = e_ref_bas.dot(&(ctx.ref_state.bas_vel));
         
         let predicted_dd_rr = (rr_rov_sat - rr_rov_ref) - (rr_bas_sat - rr_bas_ref);
         
-        let obs_rov_sat = -rov_sat.doppler * lam_sat_1;
-        let obs_rov_ref = -rov_ref.doppler * lam_ref_1;
-        let obs_bas_sat = -base_sat.doppler * lam_sat_1;
-        let obs_bas_ref = -ref_base.doppler * lam_ref_1;
+        let obs_rov_sat = -ctx.rov_sat.doppler * lam_sat_1;
+        let obs_rov_ref = -ctx.rov_ref.doppler * lam_ref_1;
+        let obs_bas_sat = -ctx.base_sat.doppler * lam_sat_1;
+        let obs_bas_ref = -ctx.ref_base.doppler * lam_ref_1;
         
         let observed_dd_rr = (obs_rov_sat - obs_rov_ref) - (obs_bas_sat - obs_bas_ref);
         let innov = observed_dd_rr - predicted_dd_rr;
         
-        if innov.abs() > 10.0 {
-            tracing::debug!("DD Doppler innovation exceeds threshold. sat={} innov={:.3} obs={:.3} pred={:.3}", rov_sat.sat.to_string(), innov, observed_dd_rr, predicted_dd_rr);
-        }
+        let dop_base_var = env.tuning.dop_base_var;
+        tracing::trace!("Doppler Innov. var={:.3} innov={:.3} obs={:.3} pred={:.3}", dop_base_var, innov, observed_dd_rr, predicted_dd_rr);
         
         let mut h_dop = vec![0.0; state_size]; 
         h_dop[3] = h_r.x; h_dop[4] = h_r.y; h_dop[5] = h_r.z;
         
-        let a = r_b_e * omega_b.cross(&lever_arm);
+        let a = r_b_e * env.omega_b.cross(&env.lever_arm);
         let h_dop_att = a.cross(&h_r);
         h_dop[6] = h_dop_att.x; h_dop[7] = h_dop_att.y; h_dop[8] = h_dop_att.z;
         
-        let h_dop_bg = r_b_e.matrix() * lever_arm.cross_matrix();
+        let h_dop_bg = r_b_e.matrix() * env.lever_arm.cross_matrix();
         let h_dop_bg = h_r.transpose() * h_dop_bg;
         h_dop[12] = h_dop_bg[0]; h_dop[13] = h_dop_bg[1]; h_dop[14] = h_dop_bg[2];
         
-        let dop_base_var = 0.1;
+        let dop_base_var = env.tuning.dop_base_var;
         return Some((innov, h_dop, dop_base_var * var_factor, 3));
     }
     None
 }
 
+#[allow(clippy::type_complexity)]
 pub fn compute_innovations(
     state: &mut RtkState,
     group: &[(DdObservation, DdObservation)],
-    ephemerides: &[Ephemeris],
-    base_coord: &Coordinate,
-    base_time: GpsTime,
     ref_rover_orig: &DdObservation,
     ref_base_orig: &DdObservation,
-    lever_arm: Vector3<f64>,
-    omega_b: Vector3<f64>,
+    env: &MeasurementEnvironment,
 ) -> Option<(Vec<f64>, Vec<Vec<f64>>, Vec<f64>, Vec<(gneiss_core::sat::SatelliteId, u8)>)> {
     let mut z_vals = Vec::new();
     let mut h_rows = Vec::new();
@@ -307,17 +314,17 @@ pub fn compute_innovations(
     let state_size = crate::filter::CORE_STATE_SIZE + state.ambiguities.len();
     
     let r_b_e = state.attitude.to_rotation_matrix();
-    let pos_apc = state.position.vector + r_b_e * lever_arm;
+    let pos_apc = state.position.vector + r_b_e * env.lever_arm;
 
     let set_rov = gneiss_core::tides::solid_earth_tides_ecef(state.time, pos_apc);
-    let set_bas = gneiss_core::tides::solid_earth_tides_ecef(state.time, base_coord.vector);
+    let set_bas = gneiss_core::tides::solid_earth_tides_ecef(state.time, env.base_coord.vector);
     
     let pos_apc = pos_apc + set_rov;
-    let base_coord_vec = base_coord.vector + set_bas;
+    let base_coord_vec = env.base_coord.vector + set_bas;
 
     let time_tow = state.time.tow;
     let find_eph = |sat| {
-        ephemerides.iter()
+        env.ephemerides.iter()
             .filter(|e| e.sat() == sat)
             .min_by(|a, b| {
                 let da = (a.toe().tow - time_tow).abs();
@@ -328,7 +335,17 @@ pub fn compute_innovations(
 
     let ref_eph = find_eph(ref_rover_orig.sat)?;
     let (ref_sat_vec_rov, ref_sat_vel_rov) = get_sat_state(ref_eph, ref_rover_orig.pr_l1, state.time, pos_apc);
-    let (ref_sat_vec_bas, ref_sat_vel_bas) = get_sat_state(ref_eph, ref_base_orig.pr_l1, base_time, base_coord_vec);
+    let (ref_sat_vec_bas, ref_sat_vel_bas) = get_sat_state(ref_eph, ref_base_orig.pr_l1, env.base_time, base_coord_vec);
+    let (ref_f1, ref_f2) = gneiss_core::signal::satellite_frequencies(ref_rover_orig.sat, ref_eph.freq_num());
+
+    let ref_state = SatState {
+        rov_pos: ref_sat_vec_rov,
+        rov_vel: ref_sat_vel_rov,
+        bas_pos: ref_sat_vec_bas,
+        bas_vel: ref_sat_vel_bas,
+        f1: ref_f1,
+        f2: ref_f2,
+    };
 
     let e_ref_rov = (ref_sat_vec_rov - pos_apc).normalize();
     
@@ -342,16 +359,23 @@ pub fn compute_innovations(
         if let Some(sat_eph) = find_eph(rover_sat_orig.sat) {
             
             let (sat_vec_rov, sat_vel_rov) = get_sat_state(sat_eph, rover_sat_orig.pr_l1, state.time, pos_apc);
-            let (sat_vec_bas, sat_vel_bas) = get_sat_state(sat_eph, base_sat_orig.pr_l1, base_time, base_coord_vec);
+            let (sat_vec_bas, sat_vel_bas) = get_sat_state(sat_eph, base_sat_orig.pr_l1, env.base_time, base_coord_vec);
+            let (sat_f1, sat_f2) = gneiss_core::signal::satellite_frequencies(rover_sat_orig.sat, sat_eph.freq_num());
+
+            let sat_state = SatState {
+                rov_pos: sat_vec_rov,
+                rov_vel: sat_vel_rov,
+                bas_pos: sat_vec_bas,
+                bas_vel: sat_vel_bas,
+                f1: sat_f1,
+                f2: sat_f2,
+            };
 
             let e_sat_rov = (sat_vec_rov - pos_apc).normalize();
             let h_r = e_ref_rov - e_sat_rov; 
             
-            let lever_ecef = r_b_e * lever_arm;
+            let lever_ecef = r_b_e * env.lever_arm;
             let h_att = lever_ecef.cross(&h_r);
-
-            let (ref_f1, ref_f2) = gneiss_core::signal::satellite_frequencies(ref_rover_orig.sat, ref_eph.freq_num());
-            let (sat_f1, sat_f2) = gneiss_core::signal::satellite_frequencies(rover_sat_orig.sat, sat_eph.freq_num());
 
             let (tropo_dd, iono_dd_l1, iono_dd_l2) = compute_atmospheric_delays(
                 state.time, pos_apc, base_coord_vec, sat_vec_rov, ref_sat_vec_rov, sat_vec_bas, ref_sat_vec_bas,
@@ -363,9 +387,17 @@ pub fn compute_innovations(
             let mut rov_ref = ref_rover_orig.clone();
             let mut bas_ref = ref_base_orig.clone();
 
+            let mut ctx = DdContext {
+                rov_sat: &mut rov_sat,
+                base_sat: &mut bas_sat,
+                rov_ref: &mut rov_ref,
+                ref_base: &mut bas_ref,
+                sat_state: &sat_state,
+                ref_state: &ref_state,
+            };
+
             apply_phase_windup(
-                state, pos_apc, base_coord_vec, sat_vec_rov, ref_sat_vec_rov, sat_vec_bas, ref_sat_vec_bas,
-                &mut rov_sat, &mut rov_ref, &mut bas_sat, &mut bas_ref
+                state, pos_apc, base_coord_vec, &mut ctx
             );
 
             let base_llh = gneiss_core::coords::ecef_to_llh(base_coord_vec);
@@ -375,23 +407,23 @@ pub fn compute_innovations(
             let (_, el_bas_sat) = gneiss_core::coords::az_el(base_llh, base_coord_vec, sat_vec_bas);
             let (_, el_bas_ref) = gneiss_core::coords::az_el(base_llh, base_coord_vec, ref_sat_vec_bas);
 
-            let var_factor = gneiss_core::variance::observation_variance(rov_sat.snr, el_rov_sat, 45.0)
-                           + gneiss_core::variance::observation_variance(rov_ref.snr, el_rov_ref, 45.0)
+            let var_factor = gneiss_core::variance::observation_variance(ctx.rov_sat.snr, el_rov_sat, 45.0)
+                           + gneiss_core::variance::observation_variance(ctx.rov_ref.snr, el_rov_ref, 45.0)
                            + gneiss_core::variance::elevation_variance_scale(el_bas_sat)
                            + gneiss_core::variance::elevation_variance_scale(el_bas_ref);
 
             let comp_pr_dd = ( (pos_apc - sat_vec_rov).norm() - (pos_apc - ref_sat_vec_rov).norm() ) - ( (base_coord_vec - sat_vec_bas).norm() - (base_coord_vec - ref_sat_vec_bas).norm() ) + tropo_dd;
             
-            for update in compute_dd_pseudorange(&rov_sat, &bas_sat, &rov_ref, &bas_ref, comp_pr_dd, iono_dd_l1, iono_dd_l2, h_r, h_att, state_size, var_factor) {
-                z_vals.push(update.0); h_rows.push(update.1); r_vals.push(update.2); meas_type.push((rov_sat.sat, update.3));
+            for update in compute_dd_pseudorange(&ctx, comp_pr_dd, iono_dd_l1, iono_dd_l2, h_r, h_att, state_size, var_factor, env) {
+                z_vals.push(update.0); h_rows.push(update.1); r_vals.push(update.2); meas_type.push((ctx.rov_sat.sat, update.3));
             }
 
-            for update in compute_dd_carrier_phase(state, &rov_sat, &bas_sat, &rov_ref, &bas_ref, Some(ref_idx_l1), ref_idx_l2, comp_pr_dd, iono_dd_l1, iono_dd_l2, sat_f1, sat_f2, ref_f1, ref_f2, h_r, h_att, state_size, var_factor) {
-                z_vals.push(update.0); h_rows.push(update.1); r_vals.push(update.2); meas_type.push((rov_sat.sat, update.3));
+            for update in compute_dd_carrier_phase(state, &ctx, Some(ref_idx_l1), ref_idx_l2, comp_pr_dd, iono_dd_l1, iono_dd_l2, h_r, h_att, state_size, var_factor, env) {
+                z_vals.push(update.0); h_rows.push(update.1); r_vals.push(update.2); meas_type.push((ctx.rov_sat.sat, update.3));
             }
             
-            if let Some(update) = compute_dd_doppler(state, &rov_sat, &bas_sat, &rov_ref, &bas_ref, sat_vec_rov, sat_vel_rov, ref_sat_vec_rov, ref_sat_vel_rov, sat_vec_bas, sat_vel_bas, ref_sat_vec_bas, ref_sat_vel_bas, pos_apc, base_coord_vec, sat_f1, ref_f1, h_r, lever_arm, omega_b, state_size, var_factor) {
-                z_vals.push(update.0); h_rows.push(update.1); r_vals.push(update.2); meas_type.push((rov_sat.sat, update.3));
+            if let Some(update) = compute_dd_doppler(state, &ctx, pos_apc, base_coord_vec, h_r, state_size, var_factor, env) {
+                z_vals.push(update.0); h_rows.push(update.1); r_vals.push(update.2); meas_type.push((ctx.rov_sat.sat, update.3));
             }
         }
     }
@@ -399,15 +431,11 @@ pub fn compute_innovations(
     Some((z_vals, h_rows, r_vals, meas_type))
 }
 
+#[allow(clippy::type_complexity)]
 pub fn build_measurement_model(
     state: &mut RtkState,
     matched_obs: &[(DdObservation, DdObservation)],
-    ephemerides: &[Ephemeris],
-    base_coord: &Coordinate,
-    _rover_time: GpsTime,
-    base_time: GpsTime,
-    lever_arm: Vector3<f64>,
-    omega_b: Vector3<f64>,
+    env: &MeasurementEnvironment,
     chi_square_pr_threshold: f64,
     chi_square_cp_threshold: f64,
 ) -> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>, Vec<(gneiss_core::sat::SatelliteId, u8)>)> {
@@ -432,12 +460,12 @@ pub fn build_measurement_model(
         let rov_llh_ref = gneiss_core::coords::ecef_to_llh(state.position.vector);
         let time_tow = state.time.tow;
         for (i, (r, _)) in group.iter().enumerate() {
-            if let Some(eph) = ephemerides.iter().filter(|e| e.sat() == r.sat).min_by(|a, b| {
+            if let Some(eph) = env.ephemerides.iter().filter(|e| e.sat() == r.sat).min_by(|a, b| {
                 let da = (a.toe().tow - time_tow).abs();
                 let db = (b.toe().tow - time_tow).abs();
                 da.partial_cmp(&db).unwrap()
             }) {
-                let tau = r.pr_l1 / 299792458.0;
+                let tau = r.pr_l1 / gneiss_core::constants::SPEED_OF_LIGHT_M_S;
                 let t_tx = gneiss_core::time::GpsTime::new(state.time.week, state.time.tow - tau);
                 let (sat_pos, _, _, _) = eph.position(t_tx);
                 let (_, el) = gneiss_core::coords::az_el(rov_llh_ref, state.position.vector, sat_pos);
@@ -454,7 +482,7 @@ pub fn build_measurement_model(
         let mut group_clone = group.clone();
         let (ref_rover, ref_base) = group_clone.remove(ref_idx);
 
-        if let Some((z, h, r, mt)) = compute_innovations(state, &group_clone, ephemerides, base_coord, base_time, &ref_rover, &ref_base, lever_arm, omega_b) {
+        if let Some((z, h, r, mt)) = compute_innovations(state, &group_clone, &ref_rover, &ref_base, env) {
             z_all.extend(z);
             h_all.extend(h);
             r_all.extend(r);
@@ -592,8 +620,16 @@ mod tests {
         let base_coord = Coordinate::new(Vector3::new(1005.0, 2005.0, 3005.0), Datum::WGS84, Frame::ECEF, time);
 
         // We explicitly use compute_innovations to avoid the Mahalanobis chi2 filter rejecting dummy data
-        let _config = crate::engine::EngineConfig::default();
-        let (z, _h, r, _) = super::super::measurement::compute_innovations(&mut state, &matched_obs, &ephemerides, &base_coord, base_coord.epoch, &ref_rover, &ref_base, Vector3::zeros(), Vector3::zeros()).unwrap();
+        let config = crate::engine::EngineConfig::default();
+        let env = super::super::measurement::MeasurementEnvironment {
+            ephemerides: &ephemerides,
+            base_coord: &base_coord,
+            base_time: base_coord.epoch,
+            lever_arm: Vector3::zeros(),
+            omega_b: Vector3::zeros(),
+            tuning: &config.tuning,
+        };
+        let (z, _h, r, _) = super::super::measurement::compute_innovations(&mut state, &matched_obs, &ref_rover, &ref_base, &env).unwrap();
 
         println!("Z: {:?}", z);
         
@@ -601,17 +637,21 @@ mod tests {
         assert!((z[0] - 0.70573).abs() < 1e-3, "z[0]={}", z[0]);
         assert!((z[1] - 0.70623).abs() < 1e-3, "z[1]={}", z[1]);
         assert!((z[2] - -4.29582).abs() < 1e-3, "z[2]={}", z[2]);
-        assert!((z[3] - 7.72370).abs() < 1e-3, "z[3]={}", z[3]);
-        assert!((z[4] - 7.72444).abs() < 1e-3, "z[4]={}", z[4]);
-        assert!((z[5] - -2.27859).abs() < 1e-3, "z[5]={}", z[5]);
+        assert!((z[3] - 19.36016).abs() < 1e-3, "z[3]={}", z[3]);
+        assert!((z[4] - 7.72370).abs() < 1e-3, "z[4]={}", z[4]);
+        assert!((z[5] - 7.72444).abs() < 1e-3, "z[5]={}", z[5]);
+        assert!((z[6] - -2.27859).abs() < 1e-3, "z[6]={}", z[6]);
+        assert!((z[7] - 16.01613).abs() < 1e-3, "z[7]={}", z[7]);
 
         // Lock in the golden R diagonal
         assert!(r[0] >= 16.0); // Now scales with elevation
         assert!(r[1] >= 16.0);
         assert!(r[2] >= 0.0001);
-        assert!(r[3] >= 16.0);
+        assert!(r[3] >= 0.1); // Doppler var
         assert!(r[4] >= 16.0);
-        assert!(r[5] >= 0.0001);
+        assert!(r[5] >= 16.0);
+        assert!(r[6] >= 0.0001);
+        assert!(r[7] >= 0.1); // Doppler var
     }
 
     #[test]
@@ -635,7 +675,7 @@ mod tests {
         assert!(pos.norm() > 10000.0);
         assert!(vel.norm() > 10.0);
         
-        let (pos0, vel0) = get_sat_state(&eph, 0.0, time, rx_pos);
+        let (pos0, _vel0) = get_sat_state(&eph, 0.0, time, rx_pos);
         assert!((pos.x - pos0.x).abs() > 0.0);
     }
 }

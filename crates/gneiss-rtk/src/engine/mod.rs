@@ -8,6 +8,8 @@ pub mod updater;
 pub mod measurement;
 pub mod ppp;
 pub mod ambiguity;
+pub mod config;
+pub mod auto_tuner;
 
 use nalgebra::{Vector3, DMatrix, DVector};
 use gneiss_core::obs::EpochObs;
@@ -78,6 +80,16 @@ pub struct EngineConfig {
     pub initial_ambiguity_variance: f64,
     pub ar_min_epoch_count: u32,
     pub ar_min_lock: u32,
+    
+    // Process Noise
+    pub process_noise_cb: f64,
+    pub process_noise_cd: f64,
+    pub process_noise_zwd: f64,
+    pub process_noise_amb_float: f64,
+    pub process_noise_amb_fixed: f64,
+    
+    // External Tuning configuration
+    pub tuning: crate::engine::config::EkfTuningConfig,
 }
 
 impl Default for EngineConfig {
@@ -96,17 +108,23 @@ impl Default for EngineConfig {
             lambda_min_subset: 5,
             enabled_constellations: None,
             raim_pseudorange_outlier_m: 25.0,
-            chi_square_pr_threshold: 15.0,
+            chi_square_pr_threshold: 3.0,
             chi_square_cp_threshold: 1000000.0,
             nominal_snr_dbhz: 40.0,
             dynamics_model: DynamicsModel::Automotive,
             doppler_slip_threshold_cycles: 5.0,
             max_reject_count: 3,
             max_base_age_s: 5.0,
-            spp_consistency_threshold_m: 50.0,
+            spp_consistency_threshold_m: 15.0,
             initial_ambiguity_variance: 10000.0,
             ar_min_epoch_count: 5,
             ar_min_lock: 3,
+            process_noise_cb: 1e6,
+            process_noise_cd: 1e4,
+            process_noise_zwd: 1e-8,
+            process_noise_amb_float: 1e-8,
+            process_noise_amb_fixed: 1e-12,
+            tuning: Default::default(),
         }
     }
 }
@@ -138,6 +156,7 @@ impl std::error::Error for EngineError {}
 
 pub struct ProcessingEngine {
     pub config: EngineConfig,
+    pub klobuchar_params: Option<gneiss_core::atmosphere::KlobucharParams>,
     pub current_state: Option<RtkState>,
     pub gnss_only_state: Option<RtkState>, // For loosely coupled modes
     pub ephemerides: Vec<Ephemeris>,
@@ -155,6 +174,7 @@ impl ProcessingEngine {
         }
         Self {
             config,
+            klobuchar_params: None,
             current_state: None,
             gnss_only_state: None,
             ephemerides: Vec::new(),
@@ -184,16 +204,36 @@ impl ProcessingEngine {
         if let Some(state) = self.current_state.as_mut() {
             let enable_imu = matches!(self.config.mode, EngineMode::SppIns | EngineMode::RtkIns | EngineMode::PppIns | EngineMode::RtkInsLooselyCoupled | EngineMode::SppInsLooselyCoupled | EngineMode::PppInsLooselyCoupled);
             let imu_data = if enable_imu { &self.imu_buffer[..] } else { &[] };
-            crate::engine::predictor::predict(state, dt, self.config.dynamics_model, imu_data);
+            crate::engine::predictor::predict(state, dt, &self.config, imu_data);
             
-            state.predicted_position = Some(state.position.clone());
-            state.predicted_velocity = Some(state.velocity.clone());
-            state.predicted_attitude = Some(state.attitude.clone());
-            state.predicted_accel_bias = Some(state.accel_bias.clone());
-            state.predicted_gyro_bias = Some(state.gyro_bias.clone());
+            state.predicted_position = Some(state.position);
+            state.predicted_velocity = Some(state.velocity);
+            state.predicted_attitude = Some(state.attitude);
+            state.predicted_accel_bias = Some(state.accel_bias);
+            state.predicted_gyro_bias = Some(state.gyro_bias);
         }
         self.imu_history.push(self.imu_buffer.clone());
         self.imu_buffer.clear();
+    }
+
+    pub fn reset_for_multipass(&mut self) {
+        if let Some(first) = self.state_history.first() {
+            let mut reset_state = first.clone();
+            reset_state.predicted_position = None;
+            reset_state.predicted_velocity = None;
+            reset_state.predicted_attitude = None;
+            reset_state.predicted_accel_bias = None;
+            reset_state.predicted_gyro_bias = None;
+            self.current_state = Some(reset_state);
+        } else {
+            self.current_state = None;
+        }
+        self.gnss_only_state = None;
+        self.state_history.clear();
+        self.obs_history.clear();
+        self.imu_buffer.clear();
+        self.imu_history.clear();
+        self.ref_sat = None;
     }
 
     pub fn process_epoch(&mut self, rover_obs: &EpochObs, base_obs: Option<&EpochObs>) -> Result<&RtkState, EngineError> {
@@ -264,7 +304,7 @@ impl ProcessingEngine {
             } else { nalgebra::Vector3::zeros() }
         } else { nalgebra::Vector3::zeros() };
 
-        if crate::engine::updater::update_loosely_coupled(state, gnss_state, self.config.imu_to_antenna_lever_arm.into(), omega_b).is_err() {
+        if crate::engine::updater::update_loosely_coupled(state, gnss_state, self.config.imu_to_antenna_lever_arm.into(), omega_b, &self.config.tuning).is_err() {
             state.consecutive_rejections += 1;
             if state.consecutive_rejections > 5 {
                 tracing::warn!("SPP-INS EKF rejected for {} epochs. Hard resetting INS to SPP.", state.consecutive_rejections);
@@ -331,7 +371,7 @@ impl ProcessingEngine {
             nalgebra::Vector3::zeros()
         };
 
-        if crate::engine::updater::update_loosely_coupled(state, &gnss_state, lever_arm, omega_b).is_err() {
+        if crate::engine::updater::update_loosely_coupled(state, &gnss_state, lever_arm, omega_b, &self.config.tuning).is_err() {
             state.consecutive_rejections += 1;
             if state.consecutive_rejections > 5 {
                 tracing::warn!("Loose coupling rejected for {} epochs. Hard resetting INS to GNSS.", state.consecutive_rejections);
@@ -377,7 +417,7 @@ impl ProcessingEngine {
     pub fn process_spp(&mut self, rover_obs: &EpochObs) -> Result<&RtkState, EngineError> {
         let mut spp_pos = None;
         let mut spp_cdt = 0.0;
-        match crate::spp::compute_spp(rover_obs, &self.ephemerides, Some(&gneiss_core::atmosphere::KlobucharParams::default()), &crate::spp::SppConfig::default(), None) {
+        match crate::spp::compute_spp(rover_obs, &self.ephemerides, self.klobuchar_params.as_ref(), &crate::spp::SppConfig::default(), None) {
             Ok(spp_res) => {
                 spp_pos = Some(spp_res.position);
                 spp_cdt = spp_res.cdt;
@@ -410,6 +450,7 @@ impl ProcessingEngine {
                 state.position = pos;
                 state.position.epoch = rover_obs.time;
                 state.velocity = nalgebra::Vector3::zeros();
+                tracing::info!("process_spp: SPP mode return, rcv_clk_bias = {}", state.rcv_clk_bias);
                 self.state_history.push(state.clone());
                 self.obs_history.push((rover_obs.clone(), None));
                 return Ok(self.current_state.as_ref().unwrap());
@@ -460,7 +501,7 @@ impl ProcessingEngine {
             // Using a tighter variance of 9.0 (3m std dev) forces the INS to track the clean SPP positions
             r_mat.fill_diagonal(9.0);
 
-            if crate::engine::updater::update(state, &z_vec, &h_mat, &r_mat, self.config.chi_square_pr_threshold, None, self.config.mode.is_tightly_coupled()).is_err() {
+            if crate::engine::updater::update(state, &z_vec, &h_mat, &r_mat, self.config.spp_consistency_threshold_m, None, self.config.mode.is_tightly_coupled(), &self.config.tuning).is_err() {
                 state.consecutive_rejections += 1;
                 if state.consecutive_rejections > 5 {
                     tracing::warn!("SPP EKF rejected for {} epochs. Hard resetting INS to SPP.", state.consecutive_rejections);
@@ -536,7 +577,7 @@ impl ProcessingEngine {
 
                 if is_stationary {
                     let zupt_var = (accel_var * 0.1).clamp(0.001, 0.1).sqrt();
-                    let _ = crate::nhc::apply_zupt(state, zupt_var);
+                    let _ = crate::nhc::apply_zupt(state, zupt_var, &self.config.tuning);
                 } else {
                     let omega_b = if let Some(imu_buf) = self.imu_history.last() {
                         if let Some(last_imu) = imu_buf.last() {
@@ -547,12 +588,15 @@ impl ProcessingEngine {
                     } else {
                         nalgebra::Vector3::zeros()
                     };
-                    let _ = crate::nhc::apply_nhc(state, 0.1, 0.1, &self.config.imu_mounting_angles, &self.config.imu_to_nhc_lever_arm, &omega_b);
+                    let _ = crate::nhc::apply_nhc(state, 0.1, 0.1, &self.config.imu_mounting_angles, &self.config.imu_to_nhc_lever_arm, &omega_b, &self.config.tuning);
                 }
             }
         }
 
-        if let Some(state) = &self.current_state { self.state_history.push(state.clone()); }
+        if let Some(state) = &self.current_state {
+            tracing::info!("process_spp: Returning state, rcv_clk_bias = {}", state.rcv_clk_bias);
+            self.state_history.push(state.clone());
+        }
         self.obs_history.push((rover_obs.clone(), None));
         self.current_state.as_ref().ok_or(EngineError::StateDisappeared)
     }
@@ -561,7 +605,7 @@ impl ProcessingEngine {
 
         let mut spp_pos = None;
         let mut spp_cdt = 0.0;
-        if let Ok(spp_res) = crate::spp::compute_spp(rover_obs, &self.ephemerides, Some(&gneiss_core::atmosphere::KlobucharParams::default()), &crate::spp::SppConfig::default(), None) {
+        if let Ok(spp_res) = crate::spp::compute_spp(rover_obs, &self.ephemerides, self.klobuchar_params.as_ref(), &crate::spp::SppConfig::default(), None) {
             spp_pos = Some(spp_res.position);
             spp_cdt = spp_res.cdt;
         } else {
@@ -713,20 +757,24 @@ impl ProcessingEngine {
                         nalgebra::Vector3::zeros()
                     };
 
+                    let env = crate::engine::measurement::MeasurementEnvironment {
+                        ephemerides: &self.ephemerides,
+                        base_coord: &base_coord,
+                        base_time: base.time,
+                        lever_arm: Vector3::from_column_slice(&self.config.imu_to_antenna_lever_arm),
+                        omega_b,
+                        tuning: &self.config.tuning,
+                    };
+
                     if let Some((z_safe, h_safe, r_safe, type_safe)) = crate::engine::measurement::build_measurement_model(
                         state,
                         &matched_obs,
-                        &self.ephemerides,
-                        &base_coord,
-                        rover_obs.time,
-                        base.time,
-                        Vector3::from_column_slice(&self.config.imu_to_antenna_lever_arm),
-                        omega_b,
+                        &env,
                         self.config.chi_square_pr_threshold,
                         self.config.chi_square_cp_threshold,
                     ) {
                     
-                    if crate::engine::updater::update(state, &z_safe, &h_safe, &r_safe, self.config.chi_square_pr_threshold, Some(&type_safe), self.config.mode.is_tightly_coupled()).is_err() { 
+                    if crate::engine::updater::update(state, &z_safe, &h_safe, &r_safe, self.config.chi_square_pr_threshold, Some(&type_safe), self.config.mode.is_tightly_coupled(), &self.config.tuning).is_err() { 
                         state.consecutive_rejections += 1;
                         tracing::warn!("GNSS EKF rejected for {} epochs.", state.consecutive_rejections);
                     } else {
@@ -757,7 +805,7 @@ impl ProcessingEngine {
             let mut r_mat = nalgebra::DMatrix::zeros(3, 3);
             r_mat.fill_diagonal(25.0);
 
-            if let Err(e) = crate::engine::updater::update(state, &z_vec, &h_mat, &r_mat, 15.0, None, self.config.mode.is_tightly_coupled()) {
+            if let Err(e) = crate::engine::updater::update(state, &z_vec, &h_mat, &r_mat, self.config.spp_consistency_threshold_m, None, self.config.mode.is_tightly_coupled(), &self.config.tuning) {
                 tracing::debug!("SPP Fallback update failed: {:?}", e);
             }
         }
@@ -801,9 +849,7 @@ impl ProcessingEngine {
 
                 if is_stationary {
                     let zupt_var = (accel_var * 0.1).clamp(0.001, 0.1).sqrt();
-                    if let Err(e) = crate::nhc::apply_zupt(state, zupt_var) {
-                        tracing::debug!("ZUPT failed: {}", e);
-                    }
+                    let _ = crate::nhc::apply_zupt(state, zupt_var, &self.config.tuning);
                 } else {
                     let omega_b = if let Some(imu_buf) = self.imu_history.last() {
                         if let Some(last_imu) = imu_buf.last() {
@@ -814,9 +860,7 @@ impl ProcessingEngine {
                     } else {
                         nalgebra::Vector3::zeros()
                     };
-                    if let Err(e) = crate::nhc::apply_nhc(state, 0.1, 0.1, &self.config.imu_mounting_angles, &self.config.imu_to_nhc_lever_arm, &omega_b) {
-                        tracing::debug!("NHC failed: {}", e);
-                    }
+                    let _ = crate::nhc::apply_nhc(state, 0.1, 0.1, &self.config.imu_mounting_angles, &self.config.imu_to_nhc_lever_arm, &omega_b, &self.config.tuning);
                 }
             }
         }
@@ -832,8 +876,8 @@ impl ProcessingEngine {
         
         let mut smoothed_states = self.state_history.clone();
 
-        if matches!(self.config.mode, EngineMode::Spp) {
-            // Pure SPP is an epoch-by-epoch solution. No kinematics or IMU bias states exist to smooth.
+        if matches!(self.config.mode, EngineMode::Spp | EngineMode::Ppp | EngineMode::PppIns | EngineMode::PppInsLooselyCoupled) {
+            // Pure SPP/PPP are epoch-by-epoch solutions. No kinematics or IMU bias states exist to smooth.
             // Return forward solutions without smoothing.
             return Ok(smoothed_states);
         }
@@ -1054,7 +1098,7 @@ mod tests {
     #[test]
     fn test_engine_detects_movement() {
         let mut engine = ProcessingEngine::new(EngineConfig::default());
-        let initial_pos = Coordinate::new(Vector3::new(6378137.0, 0.0, 0.0), Datum::WGS84, Frame::ECEF, GpsTime::new(0, 0.0));
+        let initial_pos = Coordinate::new(Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0), Datum::WGS84, Frame::ECEF, GpsTime::new(0, 0.0));
         engine.current_state = Some(RtkState::new(GpsTime::new(0, 0.0), initial_pos, 1.0));
         engine.predict_state(1.0);
         let pos1 = engine.current_state.as_ref().unwrap().position.vector;
@@ -1071,7 +1115,7 @@ mod tests {
         let time1 = GpsTime::new(2000, 1.0);
         
         let pos0 = Coordinate::new(Vector3::new(10.0, 0.0, 0.0), Datum::WGS84, Frame::ECEF, time0);
-        let mut state0 = RtkState::new(time0, pos0, 1.0);
+        let state0 = RtkState::new(time0, pos0, 1.0);
         
         let pos1 = Coordinate::new(Vector3::new(12.0, 0.0, 0.0), Datum::WGS84, Frame::ECEF, time1);
         let mut state1 = RtkState::new(time1, pos1, 0.5);

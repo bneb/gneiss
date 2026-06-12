@@ -8,27 +8,30 @@ use gneiss_core::obs::{EpochObs, SatObs, Observation, ObsCode, ObsType, SignalCo
 use gneiss_core::sat::{SatelliteId, Constellation};
 use gneiss_parsers::ubx::UbxRxmRawx;
 
+pub struct LiveConfig {
+    pub port: String,
+    pub baud: u32,
+    pub ntrip_url: Option<String>,
+    pub ntrip_mount: Option<String>,
+    pub ntrip_user: Option<String>,
+    pub ntrip_pass: Option<String>,
+    pub _output: Option<String>,
+}
 
 pub async fn run_live(
-    port: String,
-    baud: u32,
-    ntrip_url: Option<String>,
-    ntrip_mount: Option<String>,
-    ntrip_user: Option<String>,
-    ntrip_pass: Option<String>,
+    live_cfg: LiveConfig,
     config: EngineConfig,
-    _output: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    info!("Starting Live Real-Time GNSS Engine on port {} @ {}", port, baud);
+    info!("Starting Live Real-Time GNSS Engine on port {} @ {}", live_cfg.port, live_cfg.baud);
     
     let (rtcm_tx, mut rtcm_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(100);
     
-    if let (Some(url), Some(mount)) = (ntrip_url, ntrip_mount) {
+    if let (Some(url), Some(mount)) = (live_cfg.ntrip_url, live_cfg.ntrip_mount) {
         let ntrip_config = NtripConfig {
             server_url: url,
             mountpoint: mount,
-            username: ntrip_user,
-            password: ntrip_pass,
+            username: live_cfg.ntrip_user,
+            password: live_cfg.ntrip_pass,
         };
         let client = NtripClient::new(ntrip_config);
         info!("Connecting to NTRIP...");
@@ -59,7 +62,7 @@ pub async fn run_live(
         });
     }
 
-    let mut serial_port = tokio_serial::new(port, baud).open_native_async()?;
+    let mut serial_port = tokio_serial::new(live_cfg.port, live_cfg.baud).open_native_async()?;
     let mut buffer = Vec::new();
     let mut read_buf = [0u8; 4096];
     

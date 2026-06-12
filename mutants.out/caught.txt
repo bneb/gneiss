@@ -1,8 +1,0 @@
-crates/gneiss-rtk/src/factor_graph/mod.rs:19:9: replace Factor::robust_threshold -> Option<f64> with Some(0.0)
-crates/gneiss-rtk/src/factor_graph/mod.rs:19:9: replace Factor::robust_threshold -> Option<f64> with Some(-1.0)
-crates/gneiss-rtk/src/factor_graph/mod.rs:36:9: delete - in <impl Factor for PriorFactor>::residual
-crates/gneiss-rtk/src/factor_graph/mod.rs:40:9: delete - in <impl Factor for PriorFactor>::jacobian
-crates/gneiss-rtk/src/factor_graph/mod.rs:65:9: replace FactorGraphOptimizer::add_factor with ()
-crates/gneiss-rtk/src/factor_graph/mod.rs:93:56: replace * with + in FactorGraphOptimizer::optimize
-crates/gneiss-rtk/src/factor_graph/mod.rs:93:48: replace * with + in FactorGraphOptimizer::optimize
-crates/gneiss-rtk/src/factor_graph/mod.rs:94:36: replace * with / in FactorGraphOptimizer::optimize

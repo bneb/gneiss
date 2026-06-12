@@ -79,7 +79,7 @@ pub fn moon_position_ecef(t: GpsTime) -> Vector3<f64> {
            + 0.66 * libm::sin(2.0 * f[3]) + 0.21 * libm::sin(2.0 * f[0]) - 0.19 * libm::sin(f[1]) - 0.11 * libm::sin(2.0 * f[2]);
     let pm = 5.13 * libm::sin(f[2]) + 0.28 * libm::sin(f[0] + f[2]) - 0.28 * libm::sin(f[2] - f[0])
            - 0.17 * libm::sin(f[2] - 2.0 * f[3]);
-    let rm = 6378137.0 / libm::sin((0.9508 + 0.0518 * libm::cos(f[0]) + 0.0095 * libm::cos(f[0] - 2.0 * f[3])
+    let rm = crate::constants::WGS84_SEMI_MAJOR_AXIS_M / libm::sin((0.9508 + 0.0518 * libm::cos(f[0]) + 0.0095 * libm::cos(f[0] - 2.0 * f[3])
            + 0.0078 * libm::cos(2.0 * f[3]) + 0.0028 * libm::cos(2.0 * f[0])) * core::f64::consts::PI / 180.0);
 
     let sinl = libm::sin(lm * core::f64::consts::PI / 180.0);

@@ -92,7 +92,7 @@ mod tests {
     #[test]
     fn test_dop_well_distributed_geometry() {
         // 6 satellites well-distributed in sky (approximate tetrahedron + 2)
-        let rcv = Vector3::new(6378137.0, 0.0, 0.0);
+        let rcv = Vector3::new(crate::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0);
         let sats = vec![
             Vector3::new(20000000.0, 5000000.0, 5000000.0),
             Vector3::new(22000000.0, -5000000.0, 5000000.0),
@@ -123,7 +123,7 @@ mod tests {
     #[test]
     fn test_dop_coplanar_degenerate() {
         // All satellites in the same plane → poor VDOP, may not invert
-        let rcv = Vector3::new(6378137.0, 0.0, 0.0);
+        let rcv = Vector3::new(crate::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0);
         let sats = vec![
             Vector3::new(20000000.0, 5000000.0, 0.0),
             Vector3::new(20000000.0, -5000000.0, 0.0),
@@ -143,7 +143,7 @@ mod tests {
 
     #[test]
     fn test_dop_insufficient_sats() {
-        let rcv = Vector3::new(6378137.0, 0.0, 0.0);
+        let rcv = Vector3::new(crate::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0);
         let sats = vec![
             Vector3::new(20000000.0, 0.0, 0.0),
             Vector3::new(22000000.0, 0.0, 0.0),
@@ -157,7 +157,7 @@ mod tests {
 
     #[test]
     fn test_dop_more_sats_improves() {
-        let rcv = Vector3::new(6378137.0, 0.0, 0.0);
+        let rcv = Vector3::new(crate::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0);
         let base_sats = vec![
             Vector3::new(20000000.0, 5000000.0, 5000000.0),
             Vector3::new(22000000.0, -5000000.0, 5000000.0),

@@ -8,7 +8,7 @@ pub fn run_combined_ppk(engine: &mut ProcessingEngine) -> Result<Vec<RtkState>, 
     
     let mut smoothed_states = engine.state_history.clone();
 
-    if matches!(engine.config.mode, EngineMode::Spp) {
+    if matches!(engine.config.mode, EngineMode::Spp | EngineMode::Ppp | EngineMode::PppIns | EngineMode::PppInsLooselyCoupled) {
         return Ok(smoothed_states);
     }
     

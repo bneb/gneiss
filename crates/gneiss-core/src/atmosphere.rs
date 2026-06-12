@@ -67,7 +67,7 @@ impl AtmosphereModel {
             5e-9
         };
 
-        delay * f * 299792458.0 // Return in meters
+        delay * f * crate::constants::SPEED_OF_LIGHT_M_S // Return in meters
     }
 
     /// Computes Tropospheric delay in meters using the Saastamoinen model.

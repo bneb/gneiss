@@ -110,6 +110,10 @@ impl SatObs {
         self.observations.iter().find(|o| o.code.obs_type == ObsType::CarrierPhase && o.code.signal.freq_band == freq_band).map(|o| o.value)
     }
 
+    pub fn get_doppler(&self, freq_band: u8) -> Option<f64> {
+        self.observations.iter().find(|o| o.code.obs_type == ObsType::Doppler && o.code.signal.freq_band == freq_band).map(|o| o.value)
+    }
+
     pub fn get_locktime(&self, freq_band: u8) -> Option<u16> {
         self.observations.iter().find(|o| o.code.obs_type == ObsType::CarrierPhase && o.code.signal.freq_band == freq_band).and_then(|o| o.lock_time)
     }

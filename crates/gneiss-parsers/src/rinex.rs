@@ -414,16 +414,45 @@ fn build_ephemeris(
     }
 }
 
-pub fn parse_rinex_nav<R: BufRead>(reader: R) -> Result<Vec<gneiss_core::ephemeris::Ephemeris>, String> {
+pub fn parse_rinex_nav<R: BufRead>(reader: R) -> Result<(Vec<gneiss_core::ephemeris::Ephemeris>, Option<gneiss_core::atmosphere::KlobucharParams>), String> {
     let mut ephemerides = Vec::new();
     let mut lines = reader.lines().map(|l| l.unwrap_or_default());
 
     let mut is_rinex_3 = false;
+    let mut alpha = [0.0; 4];
+    let mut beta = [0.0; 4];
+    let mut has_alpha = false;
+    let mut has_beta = false;
+
     for line in lines.by_ref() {
         if line.contains("RINEX VERSION / TYPE")
             && line.trim().starts_with('3') { is_rinex_3 = true; }
+        
+        if line.contains("ION ALPHA") || line.contains("IONOSPHERIC CORR") && line.contains("GPSA") {
+            let offset = if line.contains("GPSA") { 5 } else { 2 };
+            alpha[0] = parse_rinex_f64(if line.len() >= offset + 12 { &line[offset..offset+12] } else { "" }).unwrap_or(0.0);
+            alpha[1] = parse_rinex_f64(if line.len() >= offset + 24 { &line[offset+12..offset+24] } else { "" }).unwrap_or(0.0);
+            alpha[2] = parse_rinex_f64(if line.len() >= offset + 36 { &line[offset+24..offset+36] } else { "" }).unwrap_or(0.0);
+            alpha[3] = parse_rinex_f64(if line.len() >= offset + 48 { &line[offset+36..offset+48] } else { "" }).unwrap_or(0.0);
+            has_alpha = true;
+        }
+        if line.contains("ION BETA") || line.contains("IONOSPHERIC CORR") && line.contains("GPSB") {
+            let offset = if line.contains("GPSB") { 5 } else { 2 };
+            beta[0] = parse_rinex_f64(if line.len() >= offset + 12 { &line[offset..offset+12] } else { "" }).unwrap_or(0.0);
+            beta[1] = parse_rinex_f64(if line.len() >= offset + 24 { &line[offset+12..offset+24] } else { "" }).unwrap_or(0.0);
+            beta[2] = parse_rinex_f64(if line.len() >= offset + 36 { &line[offset+24..offset+36] } else { "" }).unwrap_or(0.0);
+            beta[3] = parse_rinex_f64(if line.len() >= offset + 48 { &line[offset+36..offset+48] } else { "" }).unwrap_or(0.0);
+            has_beta = true;
+        }
+
         if line.contains("END OF HEADER") { break; }
     }
+
+    let klobuchar = if has_alpha && has_beta {
+        Some(gneiss_core::atmosphere::KlobucharParams { alpha, beta })
+    } else {
+        None
+    };
 
     let mut current_constellation = Constellation::Gps;
     let mut current_prn = 0;
@@ -546,7 +575,7 @@ pub fn parse_rinex_nav<R: BufRead>(reader: R) -> Result<Vec<gneiss_core::ephemer
             }
         }
     }
-    Ok(ephemerides)
+    Ok((ephemerides, klobuchar))
 }
 
 #[cfg(test)]
@@ -558,7 +587,7 @@ mod test_nav_parser {
     fn test_phone_nav() {
         let file = fs::File::open("../../datasets/rtkexplorer/rtklib-py/data/phone/Pixel4_GnssLog.nav").unwrap();
         let reader = std::io::BufReader::new(file);
-        let eph = parse_rinex_nav(reader).unwrap();
+        let (eph, _klob) = parse_rinex_nav(reader).unwrap();
         println!("Loaded {} ephemerides", eph.len());
         assert!(!eph.is_empty());
     }
@@ -584,7 +613,7 @@ mod tests {
 ";
         use std::io::BufReader;
         let mut reader = BufReader::new(file_contents.as_bytes());
-        let ephemerides = parse_rinex_nav(&mut reader).unwrap();
+        let (ephemerides, _klob) = parse_rinex_nav(&mut reader).unwrap();
         
         assert_eq!(ephemerides.len(), 1);
         let eph = &ephemerides[0];
@@ -606,7 +635,7 @@ R 6 2020 12 24 21 15  0  .189751386642E-03  .000000000000E+00  .422910000000E+06
 ";
         use std::io::BufReader;
         let mut reader = BufReader::new(file_contents.as_bytes());
-        let ephemerides = parse_rinex_nav(&mut reader).unwrap();
+        let (ephemerides, _klob) = parse_rinex_nav(&mut reader).unwrap();
         
         assert_eq!(ephemerides.len(), 1);
         let eph = &ephemerides[0];

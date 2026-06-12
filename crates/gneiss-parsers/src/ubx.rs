@@ -328,7 +328,7 @@ impl EsfMeasData {
                 // Gyroscope: 2^-12 deg/s -> convert to rad/s
                 val * 2.0f64.powi(-12) * (std::f64::consts::PI / 180.0)
             },
-            16 | 17 | 18 => {
+            16..=18 => {
                 // Accelerometer: 2^-10 m/s^2
                 val * 2.0f64.powi(-10)
             },

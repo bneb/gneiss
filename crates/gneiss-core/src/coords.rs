@@ -14,7 +14,7 @@ pub trait GeodeticModel {
 
 pub struct Wgs84Model;
 impl GeodeticModel for Wgs84Model {
-    fn a(&self) -> f64 { 6378137.0 }
+    fn a(&self) -> f64 { crate::constants::WGS84_SEMI_MAJOR_AXIS_M }
     fn f(&self) -> f64 { 1.0 / 298.257223563 }
 }
 

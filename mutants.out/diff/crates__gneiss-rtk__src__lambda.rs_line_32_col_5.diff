@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/lambda.rs
++++ replace resolve_lambda -> Result<LambdaResult, &'static str> with Ok(Default::default())
+@@ -24,17 +24,17 @@
+     /// The ratio test value (sq_norm_second_best / sq_norm_best)
+     pub ratio: f64,
+     /// The bootstrapping success rate of the float solution
+     pub success_rate: f64,
+ }
+ 
+ /// Resolves integer ambiguities using the LAMBDA method (Decorrelation + Search).
+ pub fn resolve_lambda(a: &DVector<f64>, q: &DMatrix<f64>) -> Result<LambdaResult, &'static str> {
+-    resolve_lambda_inner(a, q, 10000)
++    Ok(Default::default()) /* ~ changed by cargo-mutants ~ */
+ }
+ 
+ fn resolve_lambda_inner(a: &DVector<f64>, q: &DMatrix<f64>, max_iters: usize) -> Result<LambdaResult, &'static str> {
+     let n = a.len();
+     if n == 0 { return Err("Empty ambiguity vector"); }
+ 
+     // 1. Decorrelation (Z-transformation)
+     let dec = decorrelate(a, q)?;

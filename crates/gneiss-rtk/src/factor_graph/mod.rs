@@ -139,7 +139,7 @@ impl FactorGraphOptimizer {
                 tracing::debug!("Iter 0: max H diag is at index {}, value {}", max_h_idx, max_h_diag);
             }
             
-            let mut delta = match h.clone().cholesky() {
+            let delta = match h.clone().cholesky() {
                 Some(d) => d.solve(&b),
                 None => {
                     // Fallback to SVD if Cholesky fails
@@ -281,4 +281,3 @@ mod tests {
         assert_eq!(info_out, info);
     }
 }
-pub fn foo(a: i32, b: i32) -> i32 { a + b }

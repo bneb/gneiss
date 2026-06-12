@@ -1,6 +1,6 @@
-/// Numerical Jacobian verification utilities for validating EKF analytic derivatives.
-/// Uses central finite differences to compute numerical Jacobians and compare against
-/// the analytically derived Phi and H matrices.
+//! Numerical Jacobian verification utilities for validating EKF analytic derivatives.
+//! Uses central finite differences to compute numerical Jacobians and compare against
+//! the analytically derived Phi and H matrices.
 
 use nalgebra::{DMatrix, DVector, Vector3, Matrix3};
 use crate::engine::predictor::gravity_wgs84;
@@ -136,7 +136,7 @@ mod tests {
         use nalgebra::{UnitQuaternion, Vector3, DVector, DMatrix};
 
         let time = GpsTime::new(2000, 0.0);
-        let pos = Coordinate::new(Vector3::new(6378137.0, 0.0, 0.0), Datum::WGS84, Frame::ECEF, time);
+        let pos = Coordinate::new(Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0), Datum::WGS84, Frame::ECEF, time);
         let mut state0 = RtkState::new(time, pos, 1.0);
         state0.velocity = Vector3::new(10.0, 20.0, 30.0);
         state0.attitude = UnitQuaternion::from_euler_angles(0.1, -0.2, 0.3);
@@ -238,8 +238,8 @@ mod tests {
     fn test_gravity_jacobian_matches_numerical() {
         // Test at several points on and near Earth's surface
         let test_positions = [
-            Vector3::new(6378137.0, 0.0, 0.0),              // Equator, prime meridian
-            Vector3::new(0.0, 6378137.0, 0.0),              // Equator, 90°E
+            Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0),              // Equator, prime meridian
+            Vector3::new(0.0, gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0),              // Equator, 90°E
             Vector3::new(0.0, 0.0, 6356752.0),              // North pole
             Vector3::new(4500000.0, 4500000.0, 3000000.0),   // Mid-latitude
         ];
@@ -278,7 +278,7 @@ mod tests {
         use gneiss_core::coords::{Coordinate, Datum, Frame};
 
         let time = GpsTime::new(2000, 0.0);
-        let pos = Coordinate::new(Vector3::new(6378137.0, 0.0, 0.0), Datum::WGS84, Frame::ECEF, time);
+        let pos = Coordinate::new(Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0), Datum::WGS84, Frame::ECEF, time);
         let dt = 1.0;
 
         // Numerical check: perturb velocity, measure position change
@@ -303,8 +303,8 @@ mod tests {
                 _ => unreachable!()
             }
 
-            crate::engine::predictor::predict(&mut state_plus, dt, crate::engine::DynamicsModel::Automotive, &[]);
-            crate::engine::predictor::predict(&mut state_minus, dt, crate::engine::DynamicsModel::Automotive, &[]);
+            crate::engine::predictor::predict(&mut state_plus, dt, &crate::engine::EngineConfig::default(), &[]);
+            crate::engine::predictor::predict(&mut state_minus, dt, &crate::engine::EngineConfig::default(), &[]);
 
             let d_pos = state_plus.position.vector - state_minus.position.vector;
             let numerical_dphi = d_pos / (2.0 * eps);
@@ -340,7 +340,7 @@ mod tests {
         use nalgebra::UnitQuaternion;
         
         let lever_arm = Vector3::new(1.0, 2.0, 3.0);
-        let state_pos = Vector3::new(6378137.0, 0.0, 0.0);
+        let state_pos = Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0);
         let sat_pos = state_pos + Vector3::new(100.0, 100.0, 100.0);
         let q = UnitQuaternion::from_euler_angles(0.1, -0.2, 0.3);
         let r_b_e = q.to_rotation_matrix();
@@ -374,7 +374,7 @@ mod tests {
         
         let lever_arm = Vector3::new(1.0, 2.0, 3.0);
         let omega_b = Vector3::new(0.01, -0.02, 0.05);
-        let state_pos = Vector3::new(6378137.0, 0.0, 0.0);
+        let state_pos = Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0);
         let state_vel = Vector3::new(10.0, 20.0, 30.0);
         let sat_pos = Vector3::new(20000000.0, 0.0, 0.0);
         let sat_vel = Vector3::new(100.0, 200.0, 300.0);

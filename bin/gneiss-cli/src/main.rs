@@ -52,6 +52,8 @@ enum Commands {
         config: Option<String>,
         #[arg(long, help = "Enable multi-pass backward smoothing")]
         enable_backward_smoothing: bool,
+        #[arg(long, help = "Enable automatic multi-pass tuning of EKF hyperparameters")]
+        enable_auto_tune: bool,
         #[arg(long, help = "Engine mode (spp, spp-ins, rtk, rtk-ins, ppp, ppp-ins)")]
         mode: Option<String>,
         #[arg(long, help = "LAMBDA PAR min ratio threshold")]
@@ -125,12 +127,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 };
             }
             
-            live::run_live(port, baud, ntrip_url, ntrip_mount, ntrip_user, ntrip_pass, engine_config, output).await?;
+            let live_cfg = live::LiveConfig { port, baud, ntrip_url, ntrip_mount, ntrip_user, ntrip_pass, _output: output };
+            live::run_live(live_cfg, engine_config).await?;
             Ok(())
         },
         Commands::Process { 
             rover, base, nav, output, config, 
-            enable_backward_smoothing, mode, 
+            enable_backward_smoothing, enable_auto_tune, mode, 
             lambda_ratio, lambda_subset, max_epochs, 
             lever_arm, calibrate_imu,
             raim_outlier_m, chi_square_pr, chi_square_cp, nominal_snr,
@@ -291,8 +294,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             if std::path::Path::new(&nav_file).exists() {
                 if let Ok(file) = std::fs::File::open(&nav_file) {
                     match gneiss_parsers::rinex::parse_rinex_nav(std::io::BufReader::new(file)) {
-                        Ok(ephemerides) => {
+                        Ok((ephemerides, klobuchar)) => {
                             for eph in ephemerides { engine.add_ephemeris(eph); }
+                            if let Some(klob) = klobuchar { engine.klobuchar_params = Some(klob); }
                         },
                         Err(e) => error!("Failed to parse nav file {}: {}", nav_file, e),
                     }
@@ -356,47 +360,77 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 info!("IMU Re-alignment Complete.");
             }
 
-            let mut imu_idx = 0;
-            let mut processed_epochs = 0;
+            let mut final_results = Vec::new();
+            let mut final_processed_epochs = 0;
+            
+            let passes = if enable_auto_tune { 2 } else { 1 };
+            
+            for pass in 1..=passes {
+                if pass == 1 && enable_auto_tune {
+                    info!("Running Pass 1 (Auto-Tuning Calibration)...");
+                    engine.config.tuning.auto_tune.enabled = true;
+                } else if pass == 2 {
+                    info!("Running Pass 2 (Final Execution)...");
+                    // Turn off auto-tune for the final pass
+                    let mut new_tuning = engine.config.tuning.clone();
+                    new_tuning.auto_tune.enabled = false;
+                    engine.reset_for_multipass();
+                    engine.config.tuning = new_tuning;
+                }
 
-            if let Some(r_epochs) = &mut rover_rinex_epochs {
-                let b_epochs = base_rinex_epochs.as_ref();
-                for r_ref in r_epochs.iter_mut() {
-                    let r = r_ref.clone();
-                    if let Some(max) = max_epochs { if processed_epochs >= max { break; } }
-                    
-                    let current_tow = r.time.tow + time_offset; // Extract IMU up to the true aligned time
-                    
-                    let b = if let Some(b_epochs) = b_epochs {
-                        b_epochs.iter().min_by(|a, b| 
-                            (a.time.tow - r.time.tow).abs().partial_cmp(&(b.time.tow - r.time.tow).abs()).unwrap()
-                        )
-                    } else { None };
-                    
-                    while imu_idx < imu_measurements.len() && (imu_measurements[imu_idx].time_tag as f64 / 1000.0) <= current_tow {
-                        engine.add_imu_measurement(imu_measurements[imu_idx].clone());
-                        imu_idx += 1;
+                let mut imu_idx = 0;
+                let mut processed_epochs = 0;
+
+                if let Some(r_epochs) = &mut rover_rinex_epochs {
+                    let b_epochs = base_rinex_epochs.as_ref();
+                    for r_ref in r_epochs.iter_mut() {
+                        let r = r_ref.clone();
+                        if let Some(max) = max_epochs { if processed_epochs >= max { break; } }
+                        
+                        let current_tow = r.time.tow + time_offset; // Extract IMU up to the true aligned time
+                        
+                        let b = if let Some(b_epochs) = b_epochs {
+                            b_epochs.iter().min_by(|a, b| 
+                                (a.time.tow - r.time.tow).abs().partial_cmp(&(b.time.tow - r.time.tow).abs()).unwrap()
+                            )
+                        } else { None };
+                        
+                        while imu_idx < imu_measurements.len() && (imu_measurements[imu_idx].time_tag as f64 / 1000.0) <= current_tow {
+                            engine.add_imu_measurement(imu_measurements[imu_idx].clone());
+                            imu_idx += 1;
+                        }
+                        
+                        if let Err(e) = engine.process_epoch(&r, b) { error!("Fail: {}", e); }
+                        else { processed_epochs += 1; }
                     }
-                    
-                    if let Err(e) = engine.process_epoch(&r, b) { error!("Fail: {}", e); }
-                    else { processed_epochs += 1; }
+                }
+
+                if pass == 1 && enable_auto_tune {
+                    info!("Analyzing Pass 1 telemetry...");
+                    engine.config.tuning = gneiss_rtk::engine::auto_tuner::tune_ekf_parameters(
+                        &engine.state_history,
+                        &engine.imu_history,
+                        engine.config.tuning.clone()
+                    );
+                } else {
+                    final_results = if engine.config.enable_backward_smoothing {
+                        info!("Running backward smoothing pass...");
+                        engine.run_combined_ppk().unwrap_or(engine.state_history.clone())
+                    } else {
+                        engine.state_history.clone()
+                    };
+                    final_processed_epochs = processed_epochs;
                 }
             }
 
-            let results = if engine.config.enable_backward_smoothing {
-                info!("Running backward smoothing pass...");
-                engine.run_combined_ppk().unwrap_or(engine.state_history.clone())
-            } else {
-                engine.state_history.clone()
-            };
             let mut file = tokio::fs::File::create(&output).await?;
             file.write_all(b"% Gneiss Solution\n").await?;
-            for s in results {
+            for s in final_results {
                 let out_state = s.fixed_state.as_deref().unwrap_or(&s);
                 let line = format!("{} {:.3} {:.4} {:.4} {:.4} {}\n", out_state.time.week, out_state.time.tow, out_state.position.vector.x, out_state.position.vector.y, out_state.position.vector.z, if out_state.is_fixed {1} else {2});
                 file.write_all(line.as_bytes()).await?;
             }
-            info!("Wrote {} epochs to {}", processed_epochs, output);
+            info!("Wrote {} epochs to {}", final_processed_epochs, output);
             Ok(())
         },
         Commands::Eval { solution, truth } => {

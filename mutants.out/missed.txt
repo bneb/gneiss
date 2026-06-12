@@ -1,9 +1,0 @@
-crates/gneiss-rtk/src/factor_graph/mod.rs:19:9: replace Factor::robust_threshold -> Option<f64> with Some(1.0)
-crates/gneiss-rtk/src/factor_graph/mod.rs:23:9: replace Factor::is_cauchy_rejectable -> bool with true
-crates/gneiss-rtk/src/factor_graph/mod.rs:77:74: replace || with && in FactorGraphOptimizer::optimize
-crates/gneiss-rtk/src/factor_graph/mod.rs:77:44: replace || with && in FactorGraphOptimizer::optimize
-crates/gneiss-rtk/src/factor_graph/mod.rs:77:29: replace != with == in FactorGraphOptimizer::optimize
-crates/gneiss-rtk/src/factor_graph/mod.rs:77:59: replace != with == in FactorGraphOptimizer::optimize
-crates/gneiss-rtk/src/factor_graph/mod.rs:77:89: replace != with == in FactorGraphOptimizer::optimize
-crates/gneiss-rtk/src/factor_graph/mod.rs:94:36: replace * with + in FactorGraphOptimizer::optimize
-crates/gneiss-rtk/src/factor_graph/mod.rs:98:30: replace == with != in FactorGraphOptimizer::optimize

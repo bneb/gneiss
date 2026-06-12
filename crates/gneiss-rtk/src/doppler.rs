@@ -12,7 +12,7 @@ use gneiss_core::ephemeris::Ephemeris;
 use gneiss_core::time::GpsTime;
 use crate::filter::RtkState;
 
-const LIGHT_SPEED: f64 = 299792458.0;
+const LIGHT_SPEED: f64 = gneiss_core::constants::SPEED_OF_LIGHT_M_S;
 
 /// Represents a Doppler measurement for one satellite.
 #[derive(Debug, Clone)]
@@ -141,7 +141,7 @@ mod tests {
     fn test_doppler_velocity_stationary() {
         let time = GpsTime::new(2137, 422922.0);
         let pos = Coordinate::new(
-            Vector3::new(6378137.0, 0.0, 0.0),
+            Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0),
             Datum::WGS84, Frame::ECEF, time,
         );
         let state = RtkState::new(time, pos, 1.0);
@@ -196,7 +196,7 @@ mod tests {
     fn test_doppler_velocity_known_motion() {
         let time = GpsTime::new(2137, 422922.0);
         let pos = Coordinate::new(
-            Vector3::new(6378137.0, 0.0, 0.0),
+            Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0),
             Datum::WGS84, Frame::ECEF, time,
         );
         let mut state = RtkState::new(time, pos, 1.0);
@@ -266,7 +266,7 @@ mod tests {
     fn test_doppler_insufficient_sats() {
         let time = GpsTime::new(2137, 422922.0);
         let pos = Coordinate::new(
-            Vector3::new(6378137.0, 0.0, 0.0),
+            Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0),
             Datum::WGS84, Frame::ECEF, time,
         );
         let state = RtkState::new(time, pos, 1.0);
@@ -302,7 +302,7 @@ mod tests {
     fn test_doppler_h_matrix_structure() {
         let time = GpsTime::new(2137, 422922.0);
         let pos = Coordinate::new(
-            Vector3::new(6378137.0, 0.0, 0.0),
+            Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0),
             Datum::WGS84, Frame::ECEF, time,
         );
         let state = RtkState::new(time, pos, 1.0);
@@ -379,7 +379,7 @@ mod missing_eph_tests {
     fn test_missing_ephemeris() {
         let time = GpsTime::new(2137, 422922.0);
         let pos = Coordinate::new(
-            Vector3::new(6378137.0, 0.0, 0.0),
+            Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0),
             Datum::WGS84, Frame::ECEF, time,
         );
         let mut state = RtkState::new(time, pos, 1.0);
@@ -413,7 +413,7 @@ mod missing_eph_tests {
     fn test_doppler_short_range() {
         let time = GpsTime::new(2137, 422922.0);
         let pos = Coordinate::new(
-            Vector3::new(6378137.0, 0.0, 0.0),
+            Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0),
             Datum::WGS84, Frame::ECEF, time,
         );
         let mut state = RtkState::new(time, pos, 1.0);

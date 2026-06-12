@@ -2,7 +2,7 @@ use nalgebra::Vector3;
 use gneiss_core::obs::SatObs;
 use gneiss_core::sat::SatelliteId;
 
-const C: f64 = 299792458.0;
+const C: f64 = gneiss_core::constants::SPEED_OF_LIGHT_M_S;
 
 /// Frequencies for GPS L1, L2, L5
 const F1: f64 = 1575.42e6;
@@ -86,7 +86,7 @@ pub fn resolve_nl(sat_obs: &SatObs, _n_wl_fixed: i64, rover_pos: &Vector3<f64>, 
 /// Full TCAR pipeline for a single epoch.
 pub fn process_tcar_epoch(
     rover_obs: &gneiss_core::obs::EpochObs,
-    base_obs: Option<&gneiss_core::obs::EpochObs>,
+    _base_obs: Option<&gneiss_core::obs::EpochObs>,
     rover_pos: &Vector3<f64>,
     rcv_clk: f64,
     ephemerides: &[gneiss_core::ephemeris::Ephemeris]
@@ -95,8 +95,8 @@ pub fn process_tcar_epoch(
     
     for r_sat in &rover_obs.satellites {
         // Attempt EWL
-        let mut n_ewl = resolve_ewl(r_sat);
-        let mut n_wl = None;
+        let n_ewl = resolve_ewl(r_sat);
+        let n_wl;
         let mut n_nl = None;
 
         if let Some(ewl) = n_ewl {

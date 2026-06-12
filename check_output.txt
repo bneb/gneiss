@@ -1,0 +1,258 @@
+warning: variable does not need to be mutable
+  --> crates/gneiss-rtk/src/engine/tight_fg.rs:70:13
+   |
+70 |         let mut lambda = 0.001;
+   |             ----^^^^^^
+   |             |
+   |             help: remove this `mut`
+   |
+   = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: variable does not need to be mutable
+  --> crates/gneiss-rtk/src/engine/tight_fg.rs:73:17
+   |
+73 |             let mut h_mat: DMatrix<f64> = DMatrix::zeros(0, num_states);
+   |                 ----^^^^^
+   |                 |
+   |                 help: remove this `mut`
+
+warning: variable does not need to be mutable
+  --> crates/gneiss-rtk/src/engine/tight_fg.rs:74:17
+   |
+74 |             let mut r_vec: DVector<f64> = DVector::zeros(0);
+   |                 ----^^^^^
+   |                 |
+   |                 help: remove this `mut`
+
+warning: unused variable: `rover_obs`
+  --> crates/gneiss-rtk/src/engine/tight_fg.rs:28:71
+   |
+28 |     pub fn solve(&self, engine: &mut crate::engine::ProcessingEngine, rover_obs: &EpochObs, spp_cdt: Option<f64>) {
+   |                                                                       ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_rover_obs`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `spp_cdt`
+  --> crates/gneiss-rtk/src/engine/tight_fg.rs:28:93
+   |
+28 |     pub fn solve(&self, engine: &mut crate::engine::ProcessingEngine, rover_obs: &EpochObs, spp_cdt: Option<f64>) {
+   |                                                                                             ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_spp_cdt`
+
+warning: unused variable: `rcv_pos`
+  --> crates/gneiss-rtk/src/engine/tight_fg.rs:38:13
+   |
+38 |         let rcv_pos = Vector3::new(state.position.vector.x, state.position.vector.y, state.position.vector.z);
+   |             ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_rcv_pos`
+
+warning: unused variable: `rcv_clk`
+  --> crates/gneiss-rtk/src/engine/tight_fg.rs:39:13
+   |
+39 |         let rcv_clk = state.rcv_clk_bias;
+   |             ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_rcv_clk`
+
+warning: unused variable: `lambda`
+  --> crates/gneiss-rtk/src/engine/tight_fg.rs:70:13
+   |
+70 |         let mut lambda = 0.001;
+   |             ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_lambda`
+
+warning: unused variable: `h_mat`
+  --> crates/gneiss-rtk/src/engine/tight_fg.rs:73:17
+   |
+73 |             let mut h_mat: DMatrix<f64> = DMatrix::zeros(0, num_states);
+   |                 ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_h_mat`
+
+warning: unused variable: `r_vec`
+  --> crates/gneiss-rtk/src/engine/tight_fg.rs:74:17
+   |
+74 |             let mut r_vec: DVector<f64> = DVector::zeros(0);
+   |                 ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_r_vec`
+
+warning: variable does not need to be mutable
+  --> crates/gneiss-rtk/src/engine/tcar.rs:98:13
+   |
+98 |         let mut n_ewl = resolve_ewl(r_sat);
+   |             ----^^^^^
+   |             |
+   |             help: remove this `mut`
+
+warning: unused variable: `base_obs`
+  --> crates/gneiss-rtk/src/engine/tcar.rs:89:5
+   |
+89 |     base_obs: Option<&gneiss_core::obs::EpochObs>,
+   |     ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_base_obs`
+
+warning: value assigned to `n_wl` is never read
+  --> crates/gneiss-rtk/src/engine/tcar.rs:99:24
+   |
+99 |         let mut n_wl = None;
+   |                        ^^^^
+   |
+   = help: maybe it is overwritten before being read?
+   = note: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default
+
+warning: variable does not need to be mutable
+  --> crates/gneiss-rtk/src/engine/ppp.rs:26:9
+   |
+26 |     let mut fg = PppFactorGraph::new();
+   |         ----^^
+   |         |
+   |         help: remove this `mut`
+
+warning: unused variable: `zwd`
+  --> crates/gneiss-rtk/src/factor_graph/gnss_factors.rs:26:13
+   |
+26 |         let zwd = self.index_zwd.map(|idx| state[idx]).unwrap_or(0.0);
+   |             ^^^ help: if this is intentional, prefix it with an underscore: `_zwd`
+
+warning: unused variable: `zwd`
+   --> crates/gneiss-rtk/src/factor_graph/gnss_factors.rs:102:13
+    |
+102 |         let zwd = self.index_zwd.map(|idx| state[idx]).unwrap_or(0.0);
+    |             ^^^ help: if this is intentional, prefix it with an underscore: `_zwd`
+
+warning: unused variable: `var_cp`
+   --> crates/gneiss-rtk/src/factor_graph/gnss_factors.rs:103:13
+    |
+103 |         let var_cp = if is_iono_free { 0.001 } else { 0.01 }; // 10cm stddev for phase
+    |             ^^^^^^ help: if this is intentional, prefix it with an underscore: `_var_cp`
+
+warning: unused variable: `huber_cp`
+   --> crates/gneiss-rtk/src/factor_graph/gnss_factors.rs:104:13
+    |
+104 |         let huber_cp = 3.0; // 3-sigma (30cm) to reject cycle slips.
+    |             ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_huber_cp`
+
+warning: variable does not need to be mutable
+   --> crates/gneiss-rtk/src/factor_graph/mod.rs:142:17
+    |
+142 |             let mut delta = match h.clone().cholesky() {
+    |                 ----^^^^^
+    |                 |
+    |                 help: remove this `mut`
+
+warning: constant `CARRIER_PHASE_VARIANCE_BASE` is never used
+  --> crates/gneiss-rtk/src/engine/ppp_fg.rs:10:7
+   |
+10 | const CARRIER_PHASE_VARIANCE_BASE: f64 = 0.0001;
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: constant `C` is never used
+ --> crates/gneiss-rtk/src/engine/tight_fg.rs:5:7
+  |
+5 | const C: f64 = gneiss_core::constants::SPEED_OF_LIGHT_M_S;
+  |       ^
+
+    Checking gneiss-rtk v0.1.0 (/Users/kevin/projects/gneiss/crates/gneiss-rtk)
+warning: `gneiss-rtk` (lib) generated 21 warnings (run `cargo fix --lib -p gneiss-rtk` to apply 18 suggestions)
+warning: unused import: `crate::engine::updater::update`
+  --> crates/gneiss-rtk/src/tests_ekf.rs:26:13
+   |
+26 |         use crate::engine::updater::update;
+   |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `crate::engine::updater::update`
+ --> crates/gneiss-rtk/src/tests_updater.rs:3:9
+  |
+3 |     use crate::engine::updater::update;
+  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `DMatrix` and `DVector`
+ --> crates/gneiss-rtk/src/tests_updater.rs:7:20
+  |
+7 |     use nalgebra::{DMatrix, DVector, Vector3};
+  |                    ^^^^^^^  ^^^^^^^
+
+error[E0308]: mismatched types
+   --> crates/gneiss-rtk/src/engine/auto_tuner.rs:134:34
+    |
+134 |                     temperature: 20.0,
+    |                                  ^^^^ expected `Option<f64>`, found floating-point number
+    |
+    = note: expected enum `std::option::Option<f64>`
+               found type `{float}`
+help: try wrapping the expression in `Some`
+    |
+134 |                     temperature: Some(20.0),
+    |                                  +++++    +
+
+error[E0308]: mismatched types
+   --> crates/gneiss-rtk/src/engine/auto_tuner.rs:140:34
+    |
+140 |                     temperature: 20.0,
+    |                                  ^^^^ expected `Option<f64>`, found floating-point number
+    |
+    = note: expected enum `std::option::Option<f64>`
+               found type `{float}`
+help: try wrapping the expression in `Some`
+    |
+140 |                     temperature: Some(20.0),
+    |                                  +++++    +
+
+warning: unused variable: `dd`
+   --> crates/gneiss-rtk/src/filter.rs:557:13
+    |
+557 |         let dd = compute_double_difference(&rover_ref_obs, &rover_a_obs, &base_ref_obs, &base_a_obs, f1, f2, f1, f2);
+    |             ^^ help: if this is intentional, prefix it with an underscore: `_dd`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `rover_obs`
+  --> crates/gneiss-rtk/src/engine/tight_fg.rs:28:71
+   |
+28 |     pub fn solve(&self, engine: &mut crate::engine::ProcessingEngine, rover_obs: &EpochObs, spp_cdt: Option<f64>) {
+   |                                                                       ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_rover_obs`
+
+warning: unused variable: `vel0`
+   --> crates/gneiss-rtk/src/engine/measurement.rs:649:20
+    |
+649 |         let (pos0, vel0) = get_sat_state(&eph, 0.0, time, rx_pos);
+    |                    ^^^^ help: if this is intentional, prefix it with an underscore: `_vel0`
+
+warning: variable does not need to be mutable
+    --> crates/gneiss-rtk/src/engine/mod.rs:1115:13
+     |
+1115 |         let mut state0 = RtkState::new(time0, pos0, 1.0);
+     |             ----^^^^^^
+     |             |
+     |             help: remove this `mut`
+
+warning: variable does not need to be mutable
+  --> crates/gneiss-rtk/src/tests_ekf.rs:11:13
+   |
+11 |         let mut state = RtkState::new(GpsTime::new(0, 0.0), initial_pos, 10.0);
+   |             ----^^^^^
+   |             |
+   |             help: remove this `mut`
+
+warning: unused variable: `state`
+  --> crates/gneiss-rtk/src/tests_ekf.rs:11:13
+   |
+11 |         let mut state = RtkState::new(GpsTime::new(0, 0.0), initial_pos, 10.0);
+   |             ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_state`
+
+warning: unused variable: `z`
+  --> crates/gneiss-rtk/src/tests_ekf.rs:14:13
+   |
+14 |         let z = DVector::from_vec(vec![1.0, 2.0]);
+   |             ^ help: if this is intentional, prefix it with an underscore: `_z`
+
+warning: unused variable: `r`
+  --> crates/gneiss-rtk/src/tests_ekf.rs:18:13
+   |
+18 |         let r = DMatrix::from_diagonal(&DVector::from_vec(vec![0.1, 0.1]));
+   |             ^ help: if this is intentional, prefix it with an underscore: `_r`
+
+warning: unused variable: `rx_vel`
+   --> crates/gneiss-rtk/src/factor_graph/gnss_factors.rs:539:13
+    |
+539 |         let rx_vel = Vector3::new(2.0, 0.0, 0.0);   // moving towards sat at 2 m/s
+    |             ^^^^^^ help: if this is intentional, prefix it with an underscore: `_rx_vel`
+
+For more information about this error, try `rustc --explain E0308`.
+warning: `gneiss-rtk` (lib test) generated 30 warnings (18 duplicates)
+error: could not compile `gneiss-rtk` (lib test) due to 2 previous errors; 30 warnings emitted

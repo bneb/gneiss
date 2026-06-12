@@ -55,12 +55,15 @@ pub struct RtkState {
 impl RtkState {
     pub fn new(time: GpsTime, initial_pos: Coordinate, initial_var: f64) -> Self {
         let mut cov = DMatrix::zeros(CORE_STATE_SIZE, CORE_STATE_SIZE);
-        for i in 0..3 { cov[(i, i)] = initial_var; }
-        for i in 3..6 { cov[(i, i)] = 100.0; }
+        for i in 0..3 { cov[(i, i)] = initial_var; } // position
+        for i in 3..6 { cov[(i, i)] = 100.0; } // velocity
         let att_var = (1.0f64.to_radians()).powi(2);
-        for i in 6..9 { cov[(i, i)] = att_var; }
-        for i in 9..12 { cov[(i, i)] = 0.01; }
-        for i in 12..CORE_STATE_SIZE { cov[(i, i)] = 1e-4; }
+        for i in 6..9 { cov[(i, i)] = att_var; } // attitude
+        for i in 9..12 { cov[(i, i)] = 0.01; } // accel bias
+        for i in 12..15 { cov[(i, i)] = 1e-4; } // gyro bias
+        cov[(15, 15)] = 100000.0; // rcv_clk_bias
+        cov[(16, 16)] = 1000.0;   // rcv_clk_drift
+        cov[(17, 17)] = 1e-4;     // zwd
 
         Self {
             time,
@@ -144,6 +147,7 @@ impl RtkState {
         *count += 1;
     }
 
+    #[allow(clippy::type_complexity)]
     pub fn resolve_ambiguities(&self, ephemerides: &[gneiss_core::ephemeris::Ephemeris], min_subset: usize, ar_min_epoch_count: u32, ar_min_lock: u32, lambda_min_ratio: f64) -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> {
         let num_amb = self.ambiguities.len();
         tracing::debug!("resolve_ambiguities check: num_amb={} (min_subset={}), epoch_count={} (ar_min_epoch={}), ar_min_lock={}", num_amb, min_subset, self.epoch_count, ar_min_epoch_count, ar_min_lock);
@@ -205,7 +209,7 @@ impl RtkState {
 
             let freq_num = ephemerides.iter().find(|e| e.sat() == rov_sat_id).map(|e| e.freq_num()).unwrap_or(0);
             let (f1, f2) = gneiss_core::signal::satellite_frequencies(rov_sat_id, freq_num);
-            let lam = 299792458.0 / if freq_band == 1 { f1 } else { f2 };
+            let lam = gneiss_core::constants::SPEED_OF_LIGHT_M_S / if freq_band == 1 { f1 } else { f2 };
             
             let q_dd = q_sd[(rov, rov)] + q_sd[(r_idx, r_idx)] - 2.0 * q_sd[(rov, r_idx)];
             let var_cycles = q_dd / (lam * lam);
@@ -237,7 +241,7 @@ impl RtkState {
                     
                     let freq_num = ephemerides.iter().find(|e| e.sat() == rov_sat_id).map(|e| e.freq_num()).unwrap_or(0);
                     let (f1, f2) = gneiss_core::signal::satellite_frequencies(rov_sat_id, freq_num);
-                    let lam = 299792458.0 / if freq_band == 1 { f1 } else { f2 };
+                    let lam = gneiss_core::constants::SPEED_OF_LIGHT_M_S / if freq_band == 1 { f1 } else { f2 };
 
                     d_mat[(row, rov)] = 1.0;
                     d_mat[(row, r_idx)] = -1.0;
@@ -255,12 +259,12 @@ impl RtkState {
                         let (sat_r, _) = self.ambiguity_keys[rov_r];
                         let freq_num_r = ephemerides.iter().find(|e| e.sat() == sat_r).map(|e| e.freq_num()).unwrap_or(0);
                         let (f1_r, f2_r) = gneiss_core::signal::satellite_frequencies(sat_r, freq_num_r);
-                        let lam_r = 299792458.0 / if freq_r == 1 { f1_r } else { f2_r };
+                        let lam_r = gneiss_core::constants::SPEED_OF_LIGHT_M_S / if freq_r == 1 { f1_r } else { f2_r };
                         
                         let (sat_c, _) = self.ambiguity_keys[rov_c];
                         let freq_num_c = ephemerides.iter().find(|e| e.sat() == sat_c).map(|e| e.freq_num()).unwrap_or(0);
                         let (f1_c, f2_c) = gneiss_core::signal::satellite_frequencies(sat_c, freq_num_c);
-                        let lam_c = 299792458.0 / if freq_c == 1 { f1_c } else { f2_c };
+                        let lam_c = gneiss_core::constants::SPEED_OF_LIGHT_M_S / if freq_c == 1 { f1_c } else { f2_c };
                         
                         let (rov_r, ref_r, _, _) = candidate_vars[r];
                         let (rov_c, ref_c, _, _) = candidate_vars[c];
@@ -282,7 +286,7 @@ impl RtkState {
                             let (rov_sat_id, freq_band) = self.ambiguity_keys[rov];
                             let freq_num = ephemerides.iter().find(|e| e.sat() == rov_sat_id).map(|e| e.freq_num()).unwrap_or(0);
                             let (f1, f2) = gneiss_core::signal::satellite_frequencies(rov_sat_id, freq_num);
-                            let lam = 299792458.0 / if freq_band == 1 { f1 } else { f2 };
+                            let lam = gneiss_core::constants::SPEED_OF_LIGHT_M_S / if freq_band == 1 { f1 } else { f2 };
                             da_meters[row] = (res.best_integers[row] - a_cycles[row]) * lam;
                             z_meters[row] = res.best_integers[row] * lam;
                         }
@@ -431,6 +435,7 @@ pub fn compute_if_combination(v1: f64, v2: Option<f64>, f1: f64, f2: f64) -> f64
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn compute_double_difference(
     rover_ref: &DdObservation, rover_sat: &DdObservation, 
     base_ref: &DdObservation, base_sat: &DdObservation,
@@ -551,7 +556,7 @@ mod tests {
         let base_a_obs = DdObservation { sat: sat_a, pr_l1: true_r_base_a + base_clk - sat_a_clk, pr_l2: None, cp_l1: Some(0.0), cp_l2: None, doppler: 0.0, snr: 45.0, locktime: Some(1000) };
         let f1 = 1575.42e6;
         let f2 = 1227.60e6;
-        let dd = compute_double_difference(&rover_ref_obs, &rover_a_obs, &base_ref_obs, &base_a_obs, f1, f2, f1, f2);
+        let _dd = compute_double_difference(&rover_ref_obs, &rover_a_obs, &base_ref_obs, &base_a_obs, f1, f2, f1, f2);
     }
 
     #[test]

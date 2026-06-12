@@ -120,16 +120,16 @@ mod tests {
 
     #[test]
     fn test_horizontal_error_zero_at_same_point() {
-        let pos = Vector3::new(6378137.0, 0.0, 0.0);
+        let pos = Vector3::new(crate::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0);
         assert!(horizontal_error(pos, pos) < 1e-10);
     }
 
     #[test]
     fn test_horizontal_error_north_displacement() {
         // At equator/prime meridian, a 1m north displacement is +1m in Z (approximately)
-        let truth = Vector3::new(6378137.0, 0.0, 0.0);
+        let truth = Vector3::new(crate::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0);
         // Move 1m north at equator = move in +Z direction
-        let pos = Vector3::new(6378137.0, 0.0, 1.0);
+        let pos = Vector3::new(crate::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 1.0);
         let h_err = horizontal_error(pos, truth);
         // Should be approximately 1m
         assert!((h_err - 1.0).abs() < 0.01, "Expected ~1m horizontal error, got {}", h_err);
@@ -138,7 +138,7 @@ mod tests {
     #[test]
     fn test_vertical_error_upward_displacement() {
         // At equator/prime meridian, radial displacement = vertical
-        let truth = Vector3::new(6378137.0, 0.0, 0.0);
+        let truth = Vector3::new(crate::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0);
         let pos = Vector3::new(6378138.0, 0.0, 0.0); // 1m radially outward
         let v_err = vertical_error(pos, truth);
         assert!((v_err - 1.0).abs() < 0.01, "Expected ~1m vertical error, got {}", v_err);
@@ -146,7 +146,7 @@ mod tests {
 
     #[test]
     fn test_vertical_error_signed() {
-        let truth = Vector3::new(6378137.0, 0.0, 0.0);
+        let truth = Vector3::new(crate::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0);
         let above = Vector3::new(6378138.0, 0.0, 0.0);
         let below = Vector3::new(6378136.0, 0.0, 0.0);
         assert!(vertical_error(above, truth) > 0.0, "Above should be positive");
@@ -155,7 +155,7 @@ mod tests {
 
     #[test]
     fn test_error_3d() {
-        let truth = Vector3::new(6378137.0, 0.0, 0.0);
+        let truth = Vector3::new(crate::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0);
         let pos = Vector3::new(6378138.0, 1.0, 1.0);
         let err = error_3d(pos, truth);
         let expected = libm::sqrt(1.0 + 1.0 + 1.0);

@@ -6,8 +6,8 @@ const MU_GPS: f64 = 3.986005e14;
 const MU_GAL: f64 = 3.986004418e14;
 const MU_BDS: f64 = 3.986004418e14;
 const MU_GLO: f64 = 3.9860044e14;
-const OMEGA_E_GPS: f64 = 7.2921151467e-5;
-const OMEGA_E_GAL: f64 = 7.2921151467e-5; // Same as GPS
+const OMEGA_E_GPS: f64 = crate::constants::EARTH_ROTATION_RATE_RAD_S;
+const OMEGA_E_GAL: f64 = crate::constants::EARTH_ROTATION_RATE_RAD_S; // Same as GPS
 const OMEGA_E_BDS: f64 = 7.292115e-5;
 const OMEGA_E_GLO: f64 = 7.292115e-5;
 const J2_GLO: f64 = 1.0826257e-3;
@@ -268,6 +268,7 @@ fn calc_keplerian(
     };
 
     let tc = t - toc;
+    
     let dt_rel = F * e * sqrt_a * sin_ek;
     let clk_err = af0 + af1 * tc + af2 * tc * tc + dt_rel - tgd;
     let clk_drift = af1 + 2.0 * af2 * tc;
