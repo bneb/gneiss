@@ -316,7 +316,7 @@ mod tests {
         let eph = GpsEphemeris {
             sat: SatelliteId { constellation: Constellation::Gps, prn: 1 },
             toe: GpsTime::new(2000, 100000.0),
-            toc: GpsTime::new(2000, 100000.0),
+            toc: GpsTime::new(2000, 100010.0),
             af0: 0.0, af1: 0.0, af2: 0.0,
             crs: 0.0, crc: 0.0, cuc: 0.0, cus: 0.0, cic: 0.0, cis: 0.0,
             m0: 0.0, e: 0.01, sqrt_a: 5153.6, delta_n: 0.0,
@@ -356,7 +356,7 @@ mod tests {
     fn test_ephemeris_enum_dispatch() {
         let gal_eph = GalileoEphemeris {
             sat: SatelliteId { constellation: Constellation::Galileo, prn: 2 },
-            toe: GpsTime::new(2000, 100000.0), toc: GpsTime::new(2000, 100000.0),
+            toe: GpsTime::new(2000, 100000.0), toc: GpsTime::new(2000, 100010.0),
             af0: 0.0, af1: 0.0, af2: 0.0, crs: 0.0, crc: 0.0, cuc: 0.0, cus: 0.0, cic: 0.0, cis: 0.0,
             m0: 0.0, e: 0.01, sqrt_a: 5440.6, delta_n: 0.0, omega0: 0.0, omega_dot: -2.0e-9,
             i0: 0.95, idot: 0.0, omega: 0.0, bgd_e1_e5a: 0.0, iod_nav: 1,
@@ -374,35 +374,35 @@ mod tests {
     fn test_ephemeris_exact() {
         let gps_eph = GpsEphemeris {
             sat: SatelliteId { constellation: Constellation::Gps, prn: 1 },
-            toe: GpsTime::new(2000, 100000.0), toc: GpsTime::new(2000, 100000.0),
+            toe: GpsTime::new(2000, 100000.0), toc: GpsTime::new(2000, 100010.0),
             af0: 1.0, af1: 2.0, af2: 3.0, crs: 4.0, crc: 5.0, cuc: 6.0, cus: 7.0, cic: 8.0, cis: 9.0,
             m0: 0.1, e: 0.01, sqrt_a: 5153.6, delta_n: 0.001, omega0: 0.2, omega_dot: -2.0e-9,
             i0: 0.95, idot: 0.01, omega: 0.3, tgd: 0.02, iode: 1, iodc: 1,
         };
         let gal_eph = GalileoEphemeris {
             sat: SatelliteId { constellation: Constellation::Galileo, prn: 2 },
-            toe: GpsTime::new(2000, 100000.0), toc: GpsTime::new(2000, 100000.0),
+            toe: GpsTime::new(2000, 100000.0), toc: GpsTime::new(2000, 100010.0),
             af0: 1.0, af1: 2.0, af2: 3.0, crs: 4.0, crc: 5.0, cuc: 6.0, cus: 7.0, cic: 8.0, cis: 9.0,
             m0: 0.1, e: 0.01, sqrt_a: 5153.6, delta_n: 0.001, omega0: 0.2, omega_dot: -2.0e-9,
             i0: 0.95, idot: 0.01, omega: 0.3, bgd_e1_e5a: 0.02, iod_nav: 1,
         };
         let bds_geo_eph = BeidouEphemeris {
             sat: SatelliteId { constellation: Constellation::Beidou, prn: 1 }, // Geo
-            toe: GpsTime::new(2000, 100000.0), toc: GpsTime::new(2000, 100000.0),
+            toe: GpsTime::new(2000, 100000.0), toc: GpsTime::new(2000, 100010.0),
             af0: 1.0, af1: 2.0, af2: 3.0, crs: 4.0, crc: 5.0, cuc: 6.0, cus: 7.0, cic: 8.0, cis: 9.0,
             m0: 0.1, e: 0.01, sqrt_a: 5153.6, delta_n: 0.001, omega0: 0.2, omega_dot: -2.0e-9,
             i0: 0.95, idot: 0.01, omega: 0.3, tgd1: 0.02, aode: 1, aodc: 1,
         };
         let bds_igso_eph = BeidouEphemeris {
             sat: SatelliteId { constellation: Constellation::Beidou, prn: 6 }, // Not Geo
-            toe: GpsTime::new(2000, 100000.0), toc: GpsTime::new(2000, 100000.0),
+            toe: GpsTime::new(2000, 100000.0), toc: GpsTime::new(2000, 100010.0),
             af0: 1.0, af1: 2.0, af2: 3.0, crs: 4.0, crc: 5.0, cuc: 6.0, cus: 7.0, cic: 8.0, cis: 9.0,
             m0: 0.1, e: 0.01, sqrt_a: 5153.6, delta_n: 0.001, omega0: 0.2, omega_dot: -2.0e-9,
             i0: 0.95, idot: 0.01, omega: 0.3, tgd1: 0.02, aode: 1, aodc: 1,
         };
         let qzss_eph = QzssEphemeris {
             sat: SatelliteId { constellation: Constellation::Qzss, prn: 4 },
-            toe: GpsTime::new(2000, 100000.0), toc: GpsTime::new(2000, 100000.0),
+            toe: GpsTime::new(2000, 100000.0), toc: GpsTime::new(2000, 100010.0),
             af0: 1.0, af1: 2.0, af2: 3.0, crs: 4.0, crc: 5.0, cuc: 6.0, cus: 7.0, cic: 8.0, cis: 9.0,
             m0: 0.1, e: 0.01, sqrt_a: 5153.6, delta_n: 0.001, omega0: 0.2, omega_dot: -2.0e-9,
             i0: 0.95, idot: 0.01, omega: 0.3, tgd: 0.02, iode: 1, iodc: 1,
@@ -472,28 +472,30 @@ mod tests {
         
         assert_vec_eq!(p_gps.0, Vector3::new(-20111686.91105315, 16173621.585368361, -5050844.794698619));
         assert_vec_eq!(p_gps.1, Vector3::new(-42915.9866782879, -49950.87879784308, -59327.05664687349));
-        assert!((p_gps.2 - 10920.979999996116).abs() < 1e-12);
-        assert!((p_gps.3 - 362.0).abs() < 1e-12);
+        extern crate std;
+        std::println!("p_gps.2 = {:.15}", p_gps.2);
+        assert!((p_gps.2 - 7600.979999996116).abs() < 1e-12);
+        assert!((p_gps.3 - 302.0).abs() < 1e-12);
 
         assert_vec_eq!(p_gal.0, Vector3::new(-20111686.90739729, 16173621.585960612, -5050844.807207882));
         assert_vec_eq!(p_gal.1, Vector3::new(-42915.98666471951, -49950.87870889442, -59327.056414597435));
-        assert!((p_gal.2 - 10920.979999996116).abs() < 1e-12);
-        assert!((p_gal.3 - 362.0).abs() < 1e-12);
+        assert!((p_gal.2 - 7600.979999996116).abs() < 1e-12);
+        assert!((p_gal.3 - 302.0).abs() < 1e-12);
 
         assert_vec_eq!(p_bds_geo.0, Vector3::new(-20530859.400528494, 16091202.889367301, -3331282.3000197206));
         assert_vec_eq!(p_bds_geo.1, Vector3::new(-42143.353117060804, -43745.76008367346, -67353.04008649733));
-        assert!((p_bds_geo.2 - 6440.979999996482).abs() < 1e-12);
-        assert!((p_bds_geo.3 - 278.0).abs() < 1e-12);
+        assert!((p_bds_geo.2 - 3960.9799999964825).abs() < 1e-12);
+        assert!((p_bds_geo.3 - 218.0).abs() < 1e-12);
 
         assert_vec_eq!(p_bds_igso.0, Vector3::new(-20532037.822592802, 15739895.005709056, -4715036.370416497));
         assert_vec_eq!(p_bds_igso.1, Vector3::new(-42188.08236021536, -49443.13151989598, -63140.92184141916));
-        assert!((p_bds_igso.2 - 6440.979999996482).abs() < 1e-12);
-        assert!((p_bds_igso.3 - 278.0).abs() < 1e-12);
+        assert!((p_bds_igso.2 - 3960.9799999964825).abs() < 1e-12);
+        assert!((p_bds_igso.3 - 218.0).abs() < 1e-12);
 
         assert_vec_eq!(p_qzss.0, Vector3::new(-20111686.91105315, 16173621.585368361, -5050844.794698619));
         assert_vec_eq!(p_qzss.1, Vector3::new(-42915.9866782879, -49950.87879784308, -59327.05664687349));
-        assert!((p_qzss.2 - 10920.979999996116).abs() < 1e-12);
-        assert!((p_qzss.3 - 362.0).abs() < 1e-12);
+        assert!((p_qzss.2 - 7600.979999996116).abs() < 1e-12);
+        assert!((p_qzss.3 - 302.0).abs() < 1e-12);
 
         assert_vec_eq!(p_glo_fwd.0, Vector3::new(9880305.169245299, 15090476.713825395, 20059805.549791936));
         assert_vec_eq!(p_glo_fwd.1, Vector3::new(-1989.7750855530473, 1515.879262912734, 993.5292177774875));
@@ -511,7 +513,7 @@ mod tests {
     fn test_bds_boundaries() {
         let mut eph = BeidouEphemeris {
             sat: SatelliteId { constellation: Constellation::Beidou, prn: 5 },
-            toe: GpsTime::new(2000, 100000.0), toc: GpsTime::new(2000, 100000.0),
+            toe: GpsTime::new(2000, 100000.0), toc: GpsTime::new(2000, 100010.0),
             af0: 1.0, af1: 2.0, af2: 3.0, crs: 4.0, crc: 5.0, cuc: 6.0, cus: 7.0, cic: 8.0, cis: 9.0,
             m0: 0.1, e: 0.01, sqrt_a: 5153.6, delta_n: 0.001, omega0: 0.2, omega_dot: -2.0e-9,
             i0: 0.95, idot: 0.01, omega: 0.3, tgd1: 0.02, aode: 1, aodc: 1,
