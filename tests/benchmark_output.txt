@@ -1,0 +1,9 @@
+Building Gneiss...
+
+============================================================
+  Dataset: PPP (f9p_ppp)
+============================================================
+
+  --- SPP ---
+  Running RTKLIB (SPP)...
+    RTKLIB cmd: /tmp/RTKLIB/app/consapp/rnx2rtkp/gcc/rnx2rtkp -p 0 -e -t -k datasets/rtkexplorer/sample_1/f9p_ppp_1224/ppk.conf datasets/rtkexplorer/sample_1/f9p_ppp_1224/rover.obs datasets/rtkexplorer/sample_1/f9p_ppp_1224/rover.nav

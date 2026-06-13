@@ -1,0 +1,11 @@
+@@ -509,6 +509,10 @@
+ 
+             if crate::engine::updater::update(state, &z_vec, &h_mat, &r_mat, self.config.spp_consistency_threshold_m, None, self.config.mode.is_tightly_coupled(), &self.config.tuning).is_err() {
+                 tracing::warn!("TOW {} SPP EKF rejected for {} epochs. Hard resetting INS to SPP.", rover_obs.time.tow, state.consecutive_rejections);
++                
++                if rover_obs.time.tow > 427000.0 && rover_obs.time.tow < 427050.0 {
++                    println!("DEBUG_MOD_REJECT: TOW {}", rover_obs.time.tow);
++                }
+                 state.consecutive_rejections += 1;
+                 if state.consecutive_rejections > 5 {
+                     self.current_state = Some(crate::spp::compute_spp(rover_obs, &self.ephemerides, self.klobuchar_params.as_ref(), &crate::spp::SppConfig::default(), None)?);

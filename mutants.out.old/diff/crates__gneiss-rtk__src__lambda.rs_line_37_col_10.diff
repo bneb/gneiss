@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/lambda.rs
++++ replace == with != in resolve_lambda_inner
+@@ -29,17 +29,17 @@
+ 
+ /// Resolves integer ambiguities using the LAMBDA method (Decorrelation + Search).
+ pub fn resolve_lambda(a: &DVector<f64>, q: &DMatrix<f64>) -> Result<LambdaResult, &'static str> {
+     resolve_lambda_inner(a, q, 10000)
+ }
+ 
+ fn resolve_lambda_inner(a: &DVector<f64>, q: &DMatrix<f64>, max_iters: usize) -> Result<LambdaResult, &'static str> {
+     let n = a.len();
+-    if n == 0 { return Err("Empty ambiguity vector"); }
++    if n != /* ~ changed by cargo-mutants ~ */ 0 { return Err("Empty ambiguity vector"); }
+ 
+     // 1. Decorrelation (Z-transformation)
+     let dec = decorrelate(a, q)?;
+     let (z_hat, z_mat, l, d) = (dec.z_hat, dec.z_mat, dec.l, dec.d);
+ 
+     // 2. Search in the transformed space
+     let mut best_z = DVector::zeros(n);
+     let mut best_dist = f64::MAX;

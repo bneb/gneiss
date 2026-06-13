@@ -1,0 +1,65 @@
+--- crates/gneiss-rtk/src/filter.rs
++++ crates/gneiss-rtk/src/filter.rs
+@@ -4,7 +4,7 @@
+ use std::collections::{HashMap, HashSet};
+ use crate::spp::Coordinate;
+ 
+-pub const CORE_STATE_SIZE: usize = 18;
++pub const CORE_STATE_SIZE: usize = 21;
+ 
+ /// Represents the state of the RTK Extended Kalman Filter (EKF).
+ #[derive(Debug, Clone)]
+@@ -16,6 +16,9 @@
+     pub accel_bias: Vector3<f64>,
+     pub gyro_bias: Vector3<f64>,
+     pub rcv_clk_bias: f64,
++    pub isb_glo: f64,
++    pub isb_gal: f64,
++    pub isb_bds: f64,
+     pub rcv_clk_drift: f64,
+     pub zwd: f64,
+     pub gf_values: std::collections::HashMap<SatelliteId, f64>,
+@@ -56,8 +59,11 @@
+         let mut cov = DMatrix::zeros(CORE_STATE_SIZE, CORE_STATE_SIZE);
+         for i in 0..3 { cov[(i, i)] = initial_pos_var; }
+         for i in 3..6 { cov[(i, i)] = 100.0; } // velocity
+         for i in 6..9 { cov[(i, i)] = 0.01; } // attitude
+         for i in 9..12 { cov[(i, i)] = 1e-4; } // accel bias
+         for i in 12..15 { cov[(i, i)] = 1e-6; } // gyro bias
+         cov[(15, 15)] = 100000.0; // rcv_clk_bias
+-        cov[(16, 16)] = 1000.0;   // rcv_clk_drift
+-        cov[(17, 17)] = 1e-4;     // zwd
++        cov[(16, 16)] = 100000.0; // isb_glo
++        cov[(17, 17)] = 100000.0; // isb_gal
++        cov[(18, 18)] = 100000.0; // isb_bds
++        cov[(19, 19)] = 1000.0;   // rcv_clk_drift
++        cov[(20, 20)] = 1e-4;     // zwd
+ 
+         Self {
+             time,
+@@ -77,6 +83,9 @@
+             accel_bias: Vector3::zeros(),
+             gyro_bias: Vector3::zeros(),
+             rcv_clk_bias: 0.0,
++            isb_glo: 0.0,
++            isb_gal: 0.0,
++            isb_bds: 0.0,
+             rcv_clk_drift: 0.0,
+             zwd: 0.1,
+             gf_values: std::collections::HashMap::new(),
+@@ -131,7 +140,8 @@
+         let cols = self.covariance.ncols();
+         
+         // Clock bias is index 15
+-        let i = 15; // rcv_clk_bias
++        let indices = [15, 16, 17, 18];
++        for &i in &indices {
+             for j in 0..cols {
+                 if i != j {
+                     self.covariance[(i, j)] = 0.0;
+                     self.covariance[(j, i)] = 0.0;
+                 }
+             }
+             self.covariance[(i, i)] = 100000.0;
++        }
+     }

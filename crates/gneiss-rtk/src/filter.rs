@@ -161,8 +161,7 @@ impl RtkState {
         *count += 1;
     }
 
-        #[allow(clippy::type_complexity)]
-    pub fn resolve_ambiguities(&self, ephemerides: &[gneiss_core::ephemeris::Ephemeris], min_subset: usize, ar_min_epoch_count: u32, ar_min_lock: u32, lambda_min_ratio: f64) -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> {
+    pub fn resolve_ambiguities(&self, ephemerides: &[gneiss_core::ephemeris::Ephemeris], min_subset: usize, ar_min_epoch_count: u32, ar_min_lock: u32, lambda_min_ratio: f64, ffrt_prob: f64) -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> {
         let num_amb = self.ambiguities.len();
         if num_amb < min_subset || self.epoch_count <= ar_min_epoch_count as usize { return Err("Insufficient data"); }
         
@@ -174,7 +173,7 @@ impl RtkState {
             let (_d_mat_small, a_cycles, q_cycles) = build_lambda_matrices(self, &candidate_vars, subset_size, ephemerides);
             
             if let Ok(res) = crate::lambda::resolve_lambda(&a_cycles, &q_cycles) {
-                let dynamic_threshold = crate::ffrt::calculate_threshold(subset_size, 0.001).max(lambda_min_ratio);
+                let dynamic_threshold = crate::ffrt::calculate_threshold(subset_size, ffrt_prob).max(lambda_min_ratio);
                 if res.ratio >= dynamic_threshold {
                     let (fixed_state, da_meters, d_full) = self.apply_ar_fix(subset_size, &candidate_vars, &res, ephemerides)?;
                     return Ok((fixed_state, da_meters, d_full, res.ratio, subset_size));
@@ -387,7 +386,7 @@ mod tests {
             }),
         ];
 
-        let (fixed_state, _, _, _, _) = state.resolve_ambiguities(&ephemerides, 4, 5, 3, 3.0).expect("AR should run");
+        let (fixed_state, _, _, _, _) = state.resolve_ambiguities(&ephemerides, 4, 5, 3, 3.0, 0.001).expect("AR should run");
         assert!(fixed_state.is_fixed, "Should achieve fix with multi-constellation support");
         
         let idx_ref = fixed_state.ambiguity_keys.iter().position(|&(s, f)| s == gps_ref && f == 1).unwrap();
