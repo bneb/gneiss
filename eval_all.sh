@@ -17,6 +17,10 @@ for d in "${datasets[@]}"; do
     echo "RTKLIB:"
     cargo run --release --quiet --bin gneiss-cli -- eval --solution benchmarks/rtklib_comparison/rtklib_GSDC_Pixel_4_SPP.pos --truth $truth | grep "Horiz"
     
+    echo "--- SPP-INS ---"
+    echo "Gneiss:"
+    cargo run --release --quiet --bin gneiss-cli -- eval --solution benchmarks/rtklib_comparison/gneiss_${d}_spp-ins.pos --truth $truth | grep "Horiz"
+    
     echo "--- RTK Forward ---"
     echo "Gneiss:"
     cargo run --release --quiet --bin gneiss-cli -- eval --solution benchmarks/rtklib_comparison/gneiss_${d}_rtk_forward.pos --truth $truth | grep "Horiz"
@@ -36,6 +40,10 @@ for d in "${datasets[@]}"; do
     echo "Gneiss:"
     cargo run --release --quiet --bin gneiss-cli -- eval --solution benchmarks/rtklib_comparison/gneiss_${d}_spp.pos --truth $truth | grep "Horiz"
     
+    echo "--- SPP-INS ---"
+    echo "Gneiss:"
+    cargo run --release --quiet --bin gneiss-cli -- eval --solution benchmarks/rtklib_comparison/gneiss_${d}_spp-ins.pos --truth $truth | grep "Horiz"
+    
     echo "--- RTK Forward ---"
     echo "Gneiss:"
     cargo run --release --quiet --bin gneiss-cli -- eval --solution benchmarks/rtklib_comparison/gneiss_${d}_rtk_forward.pos --truth $truth | grep "Horiz"
@@ -52,6 +60,10 @@ for d in "${datasets[@]}"; do
     cargo run --release --quiet --bin gneiss-cli -- eval --solution benchmarks/rtklib_comparison/gneiss_${d}_spp.pos --truth $truth | grep "Horiz"
     echo "RTKLIB:"
     cargo run --release --quiet --bin gneiss-cli -- eval --solution benchmarks/rtklib_comparison/rtklib_${d}_u-blox_SPP.pos --truth $truth | grep "Horiz"
+    
+    echo "--- SPP-INS ---"
+    echo "Gneiss:"
+    cargo run --release --quiet --bin gneiss-cli -- eval --solution benchmarks/rtklib_comparison/gneiss_${d}_spp-ins.pos --truth $truth | grep "Horiz"
     
     echo "--- RTK Forward ---"
     echo "Gneiss:"

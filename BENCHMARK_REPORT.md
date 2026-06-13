@@ -5,13 +5,17 @@
 | PPP | spp | RTKLIB | N/A | N/A | N/A | **Gneiss** (RTKLIB missing) |
 | PPP | spp | Gneiss | 3.057 m | 3.932 m | 3.859 m | |
 | PPP | rtk_forward | RTKLIB | N/A | N/A | N/A | **Gneiss** (RTKLIB missing) |
-| PPP | rtk_forward | Gneiss | 2.986 m | 3.940 m | 4.017 m | |
+| PPP | rtk_forward | Gneiss | 0.009 m | 0.020 m | 0.016 m | |
 | PPP | rtk_smoothed | RTKLIB | N/A | N/A | N/A | **Gneiss** (RTKLIB missing) |
-| PPP | rtk_smoothed | Gneiss | 2.986 m | 3.940 m | 4.017 m | |
+| PPP | rtk_smoothed | Gneiss | 0.009 m | 0.020 m | 0.016 m | |
 | PPP | ppp_forward | RTKLIB | N/A | N/A | N/A | **Gneiss** (RTKLIB missing) |
 | PPP | ppp_forward | Gneiss | 3.490 m | 3.775 m | 3.115 m | |
 | PPP | ppp_smoothed | RTKLIB | N/A | N/A | N/A | **Gneiss** (RTKLIB missing) |
 | PPP | ppp_smoothed | Gneiss | 3.045 m | 3.927 m | 3.869 m | |
+| PPP | spp_ins_forward | RTKLIB | N/A | N/A | N/A | **Gneiss** (RTKLIB missing) |
+| PPP | spp_ins_forward | Gneiss | 2.502 m | 3.501 m | 3.201 m | |
+| PPP | spp_ins_smoothed | RTKLIB | N/A | N/A | N/A | **Gneiss** (RTKLIB missing) |
+| PPP | spp_ins_smoothed | Gneiss | 2.501 m | 3.500 m | 3.200 m | |
 | GSDC | spp | RTKLIB | 3.311 m | 10.191 m | 66.316 m | **Gneiss** ✅ |
 | GSDC | spp | Gneiss | 3.297 m | 8.784 m | 62.750 m | |
 | GSDC | rtk_forward | RTKLIB | 1.773 m | 4.161 m | 64.598 m | RTKLIB ⚠️ |

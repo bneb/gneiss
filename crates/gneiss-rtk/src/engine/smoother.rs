@@ -68,7 +68,7 @@ fn smooth_epoch(
     phi_k: &DMatrix<f64>, 
     p_pred_k1: &DMatrix<f64>, 
     x_pred_k1: &DVector<f64>,
-    k_idx: usize
+    _k_idx: usize
 ) -> Result<(), &'static str> {
     let core_size = crate::filter::CORE_STATE_SIZE;
     

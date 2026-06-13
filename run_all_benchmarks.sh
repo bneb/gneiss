@@ -13,6 +13,9 @@ for d in "${datasets[@]}"; do
     # SPP
     target/release/gneiss-cli process --mode spp --rover datasets/gsdc/Pixel4_GnssLog.20o --base datasets/gsdc/p2221350.20o --nav datasets/gsdc/Pixel4_GnssLog.nav --output benchmarks/rtklib_comparison/gneiss_${d}_spp.pos --config datasets/gsdc/gsdc_config.json
     
+    # SPP-INS
+    target/release/gneiss-cli process --mode spp-ins --rover datasets/gsdc/Pixel4_GnssLog.20o --base datasets/gsdc/p2221350.20o --nav datasets/gsdc/Pixel4_GnssLog.nav --output benchmarks/rtklib_comparison/gneiss_${d}_spp-ins.pos --config datasets/gsdc/gsdc_config.json
+    
     # RTK Forward
     target/release/gneiss-cli process --mode rtk --rover datasets/gsdc/Pixel4_GnssLog.20o --base datasets/gsdc/p2221350.20o --nav datasets/gsdc/Pixel4_GnssLog.nav --output benchmarks/rtklib_comparison/gneiss_${d}_rtk_forward.pos --config datasets/gsdc/gsdc_config.json
 
@@ -21,17 +24,23 @@ for d in "${datasets[@]}"; do
     
   elif [ "$d" == "PPP" ]; then
     # SPP
-    target/release/gneiss-cli process --mode spp --rover datasets/rtkexplorer/sample_1/f9p_ppp_1224/rover.obs --base datasets/rtkexplorer/sample_1/base.rtcm3 --nav datasets/rtkexplorer/sample_1/f9p_ppp_1224/rover.nav --output benchmarks/rtklib_comparison/gneiss_${d}_spp.pos --config datasets/rtkexplorer/sample_1/f9p_ppp_1224/f9p_config.json
+    target/release/gneiss-cli process --mode spp --rover datasets/rtkexplorer/sample_1/f9p_ppp_1224/rover.obs --base datasets/rtkexplorer/sample_1/f9p_ppp_1224/tmg23590.20o --nav datasets/rtkexplorer/sample_1/f9p_ppp_1224/rover.nav --output benchmarks/rtklib_comparison/gneiss_${d}_spp.pos --config datasets/rtkexplorer/sample_1/f9p_ppp_1224/f9p_config.json
+    
+    # SPP-INS
+    target/release/gneiss-cli process --mode spp-ins --rover datasets/rtkexplorer/sample_1/f9p_ppp_1224/rover.obs --base datasets/rtkexplorer/sample_1/f9p_ppp_1224/tmg23590.20o --nav datasets/rtkexplorer/sample_1/f9p_ppp_1224/rover.nav --output benchmarks/rtklib_comparison/gneiss_${d}_spp-ins.pos --config datasets/rtkexplorer/sample_1/f9p_ppp_1224/f9p_config.json
     
     # RTK Forward
-    target/release/gneiss-cli process --mode rtk --rover datasets/rtkexplorer/sample_1/f9p_ppp_1224/rover.obs --base datasets/rtkexplorer/sample_1/base.rtcm3 --nav datasets/rtkexplorer/sample_1/f9p_ppp_1224/rover.nav --output benchmarks/rtklib_comparison/gneiss_${d}_rtk_forward.pos --config datasets/rtkexplorer/sample_1/f9p_ppp_1224/f9p_config.json
+    target/release/gneiss-cli process --mode rtk --rover datasets/rtkexplorer/sample_1/f9p_ppp_1224/rover.obs --base datasets/rtkexplorer/sample_1/f9p_ppp_1224/tmg23590.20o --nav datasets/rtkexplorer/sample_1/f9p_ppp_1224/rover.nav --output benchmarks/rtklib_comparison/gneiss_${d}_rtk_forward.pos --config datasets/rtkexplorer/sample_1/f9p_ppp_1224/f9p_config.json
 
     # RTK Smoothed
-    target/release/gneiss-cli process --mode rtk --enable-backward-smoothing --rover datasets/rtkexplorer/sample_1/f9p_ppp_1224/rover.obs --base datasets/rtkexplorer/sample_1/base.rtcm3 --nav datasets/rtkexplorer/sample_1/f9p_ppp_1224/rover.nav --output benchmarks/rtklib_comparison/gneiss_${d}_rtk_smoothed.pos --config datasets/rtkexplorer/sample_1/f9p_ppp_1224/f9p_config.json
+    target/release/gneiss-cli process --mode rtk --enable-backward-smoothing --rover datasets/rtkexplorer/sample_1/f9p_ppp_1224/rover.obs --base datasets/rtkexplorer/sample_1/f9p_ppp_1224/tmg23590.20o --nav datasets/rtkexplorer/sample_1/f9p_ppp_1224/rover.nav --output benchmarks/rtklib_comparison/gneiss_${d}_rtk_smoothed.pos --config datasets/rtkexplorer/sample_1/f9p_ppp_1224/f9p_config.json
     
   else
     # SPP
     target/release/gneiss-cli process --mode spp --rover datasets/urbannav/tokyo/Tokyo_Data/$d/rover_ublox.obs --output benchmarks/rtklib_comparison/gneiss_${d}_spp.pos --base datasets/urbannav/tokyo/Tokyo_Data/$d/base_trimble.obs --nav datasets/urbannav/tokyo/Tokyo_Data/$d/base.nav --config datasets/urbannav/tokyo/tokyo_config.json
+
+    # SPP-INS
+    target/release/gneiss-cli process --mode spp-ins --rover datasets/urbannav/tokyo/Tokyo_Data/$d/rover_ublox.obs --output benchmarks/rtklib_comparison/gneiss_${d}_spp-ins.pos --base datasets/urbannav/tokyo/Tokyo_Data/$d/base_trimble.obs --nav datasets/urbannav/tokyo/Tokyo_Data/$d/base.nav --config datasets/urbannav/tokyo/tokyo_config.json
 
     # RTK Forward
     target/release/gneiss-cli process --mode rtk --rover datasets/urbannav/tokyo/Tokyo_Data/$d/rover_ublox.obs --output benchmarks/rtklib_comparison/gneiss_${d}_rtk_forward.pos --base datasets/urbannav/tokyo/Tokyo_Data/$d/base_trimble.obs --nav datasets/urbannav/tokyo/Tokyo_Data/$d/base.nav --config datasets/urbannav/tokyo/tokyo_config.json

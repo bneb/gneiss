@@ -176,6 +176,36 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let epochs = gneiss_parsers::rinex::parse_rinex_obs(std::io::BufReader::new(file2))?;
                     info!("Loaded {} RINEX base epochs.", epochs.len());
                     base_rinex_epochs = Some(epochs);
+                } else if base_file.ends_with(".rtcm3") {
+                    info!("Parsing RTCM3 base file...");
+                    let file_data = std::fs::read(base_file)?;
+                    let mut b_epochs = Vec::new();
+                    let mut buffer = file_data.as_slice();
+                    while !buffer.is_empty() {
+                        if let Ok((rem, frame)) = gneiss_parsers::rtcm3::parse_rtcm3_frame(buffer) {
+                            if let Ok(msg) = gneiss_parsers::rtcm3::msm::parse_msm_message(frame.payload) {
+                                b_epochs.push(msg.into_epoch_obs());
+                            }
+                            buffer = rem;
+                        } else {
+                            buffer = &buffer[1..];
+                        }
+                    }
+                    
+                    // Merge epochs with same timestamp (e.g. GPS + GLONASS in same second)
+                    let mut merged_epochs: std::collections::BTreeMap<i64, gneiss_core::obs::EpochObs> = std::collections::BTreeMap::new();
+                    for epoch in b_epochs {
+                        let ms = (epoch.time.tow * 1000.0).round() as i64;
+                        if let Some(existing) = merged_epochs.get_mut(&ms) {
+                            existing.satellites.extend(epoch.satellites);
+                        } else {
+                            merged_epochs.insert(ms, epoch);
+                        }
+                    }
+                    
+                    let final_b_epochs: Vec<_> = merged_epochs.into_values().collect();
+                    info!("Loaded {} merged RTCM3 base epochs.", final_b_epochs.len());
+                    base_rinex_epochs = Some(final_b_epochs);
                 }
             }
 

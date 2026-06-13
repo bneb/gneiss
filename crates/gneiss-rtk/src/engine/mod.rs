@@ -13,7 +13,7 @@ pub mod auto_tuner;
 pub mod smoother;
 pub mod spp_tight;
 
-use nalgebra::{Vector3, DMatrix, DVector};
+use nalgebra::Vector3;
 use gneiss_core::obs::{EpochObs, ObsType};
 use gneiss_core::coords::{Coordinate, Datum, Frame};
 use gneiss_core::ephemeris::Ephemeris;
@@ -688,6 +688,7 @@ impl ProcessingEngine {
             || (matches!(self.config.mode, EngineMode::RtkIns | EngineMode::PppIns | EngineMode::SppIns | EngineMode::RtkInsLooselyCoupled | EngineMode::SppInsLooselyCoupled | EngineMode::PppInsLooselyCoupled) && !had_imu_data);
         
         if use_gnss_only_seed {
+            tracing::warn!("epoch_count = {}", state.epoch_count);
             let need_spp_reset = if let Some(_pos) = spp_pos {
                 // Also reset for early epochs when the filter hasn't converged yet
                 state.epoch_count < 3
@@ -742,6 +743,7 @@ impl ProcessingEngine {
 
         if let Some(base) = valid_base {
             state.epoch_count += 1;
+            tracing::warn!("valid_base IS SOME! incrementing epoch_count to {}", state.epoch_count + 1);
             let mut base_coord = if let Some(base_pos_arr) = self.config.base_position {
                 // Base station is physically static, so its coordinate is valid at the rover's epoch time
                 Coordinate::new(Vector3::new(base_pos_arr[0], base_pos_arr[1], base_pos_arr[2]), Datum::WGS84, Frame::ECEF, rover_obs.time)
@@ -821,6 +823,7 @@ impl ProcessingEngine {
                             }
                         }
                     }
+        tracing::warn!("End of RTK loop, epoch_count = {}", state.epoch_count);
                     state.prune_stale_ambiguities(state.epoch_count as u32, 10);
                 } else {
                     tracing::warn!("Not enough valid measurements for EKF update. Riding through outage.");
@@ -829,6 +832,7 @@ impl ProcessingEngine {
             }
         } else if let Some(pos) = spp_pos {
             // RTK Coasting Fallback to SPP
+            tracing::warn!("valid_base IS NONE! Falling back to SPP!");
             tracing::debug!("RTK base missing or stale. Falling back to SPP update.");
             let z_diff = pos.vector - state.position.vector;
             let z_vec = nalgebra::DVector::from_column_slice(z_diff.as_slice());
@@ -914,6 +918,7 @@ pub fn snr_scale(snr: f64) -> f64 { gneiss_core::variance::snr_variance_scale(sn
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nalgebra::{DMatrix, DVector};
     use gneiss_core::time::GpsTime;
     #[test]
     fn test_engine_detects_movement() {
