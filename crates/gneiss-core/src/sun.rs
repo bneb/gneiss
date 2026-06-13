@@ -39,7 +39,7 @@ pub fn sun_position_ecef(t: GpsTime) -> Vector3<f64> {
     
     // Greenwich Mean Sidereal Time (GMST) to rotate ECI to ECEF
     // Simplified GMST approximation based on GPS time (this ignores precise UT1-UTC, but is enough for attitude)
-    let gmst = (4.8949612128230587e-5 * d * 86400.0 + 1.7533685592333) % (2.0 * core::f64::consts::PI);
+    let gmst = ((18.697374558 + 24.06570982441908 * d) * (core::f64::consts::PI / 12.0)) % (2.0 * core::f64::consts::PI);
     
     let cos_gmst = libm::cos(gmst);
     let sin_gmst = libm::sin(gmst);
@@ -96,7 +96,7 @@ pub fn moon_position_ecef(t: GpsTime) -> Vector3<f64> {
     let y_eci = rm * (cose * cosp * sinl - sine * sinp);
     let z_eci = rm * (sine * cosp * sinl + cose * sinp);
 
-    let gmst = (4.8949612128230587e-5 * d * 86400.0 + 1.7533685592333) % (2.0 * core::f64::consts::PI);
+    let gmst = ((18.697374558 + 24.06570982441908 * d) * (core::f64::consts::PI / 12.0)) % (2.0 * core::f64::consts::PI);
     let cos_gmst = libm::cos(gmst);
     let sin_gmst = libm::sin(gmst);
     

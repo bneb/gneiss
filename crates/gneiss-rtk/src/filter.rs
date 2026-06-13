@@ -4,7 +4,7 @@ use gneiss_core::coords::Coordinate;
 
 use gneiss_core::time::GpsTime;
 
-pub const CORE_STATE_SIZE: usize = 18;
+pub const CORE_STATE_SIZE: usize = 21;
 
 /// Represents the state of the RTK Extended Kalman Filter (EKF).
 #[derive(Debug, Clone)]
@@ -16,6 +16,9 @@ pub struct RtkState {
     pub accel_bias: Vector3<f64>,
     pub gyro_bias: Vector3<f64>,
     pub rcv_clk_bias: f64,
+    pub isb_glo: f64,
+    pub isb_gal: f64,
+    pub isb_bds: f64,
     pub rcv_clk_drift: f64,
     pub zwd: f64,
     pub gf_values: std::collections::HashMap<SatelliteId, f64>,
@@ -60,10 +63,13 @@ impl RtkState {
         let att_var = (1.0f64.to_radians()).powi(2);
         for i in 6..9 { cov[(i, i)] = att_var; } // attitude
         for i in 9..12 { cov[(i, i)] = 0.01; } // accel bias
-        for i in 12..15 { cov[(i, i)] = 1e-4; } // gyro bias
+        for i in 12..15 { cov[(i, i)] = 1e-6; } // gyro bias
         cov[(15, 15)] = 100000.0; // rcv_clk_bias
-        cov[(16, 16)] = 1000.0;   // rcv_clk_drift
-        cov[(17, 17)] = 1e-4;     // zwd
+        cov[(16, 16)] = 100000.0; // isb_glo
+        cov[(17, 17)] = 100000.0; // isb_gal
+        cov[(18, 18)] = 100000.0; // isb_bds
+        cov[(19, 19)] = 1000.0;   // rcv_clk_drift
+        cov[(20, 20)] = 1e-4;     // zwd
 
         Self {
             time,
@@ -78,6 +84,9 @@ impl RtkState {
             accel_bias: Vector3::zeros(),
             gyro_bias: Vector3::zeros(),
             rcv_clk_bias: 0.0,
+            isb_glo: 0.0,
+            isb_gal: 0.0,
+            isb_bds: 0.0,
             rcv_clk_drift: 0.0,
             zwd: 0.1,
             gf_values: std::collections::HashMap::new(),
@@ -130,12 +139,17 @@ impl RtkState {
     /// This is mathematically required when teleporting the clock state.
     pub fn decouple_clock(&mut self) {
         let cols = self.covariance.ncols();
-        let i = 15; // rcv_clk_bias
-        for j in 0..cols {
-            if i != j {
-                self.covariance[(i, j)] = 0.0;
-                self.covariance[(j, i)] = 0.0;
+        
+        // Clock bias is index 15
+        let indices = [15, 16, 17, 18];
+        for &i in &indices {
+            for j in 0..cols {
+                if i != j {
+                    self.covariance[(i, j)] = 0.0;
+                    self.covariance[(j, i)] = 0.0;
+                }
             }
+            self.covariance[(i, i)] = 100000.0;
         }
     }
 
@@ -150,68 +164,63 @@ impl RtkState {
         #[allow(clippy::type_complexity)]
     pub fn resolve_ambiguities(&self, ephemerides: &[gneiss_core::ephemeris::Ephemeris], min_subset: usize, ar_min_epoch_count: u32, ar_min_lock: u32, lambda_min_ratio: f64) -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> {
         let num_amb = self.ambiguities.len();
-        tracing::debug!("resolve_ambiguities check: num_amb={} (min_subset={}), epoch_count={} (ar_min_epoch={}), ar_min_lock={}", num_amb, min_subset, self.epoch_count, ar_min_epoch_count, ar_min_lock);
         if num_amb < min_subset || self.epoch_count <= ar_min_epoch_count as usize { return Err("Insufficient data"); }
         
         let candidate_vars = select_ar_candidates(self, ephemerides, ar_min_lock);
-        tracing::debug!("AR candidates retained: {}", candidate_vars.len());
+        if candidate_vars.len() < min_subset { return Err("Insufficient candidates"); }
         
-        if candidate_vars.len() >= min_subset {
-            let max_subset = candidate_vars.len().min(24);
+        let max_subset = candidate_vars.len().min(24);
+        for subset_size in (min_subset..=max_subset).rev() {
+            let (d_mat_small, a_cycles, q_cycles) = build_lambda_matrices(self, &candidate_vars, subset_size, ephemerides);
             
-            for subset_size in (min_subset..=max_subset).rev() {
-                let (d_mat_small, a_cycles, q_cycles) = build_lambda_matrices(self, &candidate_vars, subset_size, ephemerides);
-                
-                if let Ok(res) = crate::lambda::resolve_lambda(&a_cycles, &q_cycles) {
-                    let dynamic_threshold = crate::ffrt::calculate_threshold(subset_size, 0.001).max(lambda_min_ratio);
-                    tracing::debug!("LAMBDA res ratio: {:.2}, threshold: {:.2}", res.ratio, dynamic_threshold);
-                    if res.ratio >= dynamic_threshold {
-                        tracing::info!("Multi-Const PAR Fixed & Validated (subset {}/{})! Ratio={:.2}, Ps={:.4}", subset_size, max_subset, res.ratio, res.success_rate);
-
-                        let mut da_meters = DVector::zeros(subset_size);
-                        let a_sd = nalgebra::DVector::from_vec(self.ambiguities.clone());
-                        for row in 0..subset_size {
-                            let (rov, r_idx, _, _) = candidate_vars[row];
-                            let (rov_sat_id, freq_band) = self.ambiguity_keys[rov];
-                            let freq_num = ephemerides.iter().find(|e| e.sat() == rov_sat_id).map(|e| e.freq_num()).unwrap_or(0);
-                            let (f1, f2) = gneiss_core::signal::satellite_frequencies(rov_sat_id, freq_num);
-                            let lam = gneiss_core::constants::SPEED_OF_LIGHT_M_S / if freq_band == 1 { f1 } else { f2 };
-                            let a_cycle_float = (a_sd[rov] - a_sd[r_idx]) / lam;
-                            da_meters[row] = (res.best_integers[row] - a_cycle_float) * lam;
-                        }
-
-                        let state_size = self.covariance.nrows();
-                        let mut d_full = DMatrix::zeros(subset_size, state_size);
-                        for row in 0..subset_size {
-                            let (rov, r_idx, _, _) = candidate_vars[row];
-                            d_full[(row, CORE_STATE_SIZE + rov)] = 1.0;
-                            d_full[(row, CORE_STATE_SIZE + r_idx)] = -1.0;
-                        }
-
-                        let s = &d_full * &self.covariance * d_full.transpose();
-                        let s_inv = s.try_inverse().ok_or("Fix covariance inversion failed")?;
-                        let mut k_full = &self.covariance * d_full.transpose() * &s_inv;
-                        
-                        for i in 6..15 {
-                            for j in 0..k_full.ncols() { k_full[(i, j)] = 0.0; }
-                        }
-                        
-                        let dx = &k_full * &da_meters;
-                        let mut fixed_state = self.clone();
-                        
-                        crate::engine::updater::apply_state_correction(&mut fixed_state, &dx);
-                        
-                        let r_zero = DMatrix::zeros(subset_size, subset_size);
-                        fixed_state.covariance = crate::engine::updater::apply_joseph_covariance_update(&self.covariance, &k_full, &d_full, &r_zero);
-                        fixed_state.is_fixed = true;
-
-                        return Ok((fixed_state, da_meters, d_full, res.ratio, subset_size));
-                    }
+            if let Ok(res) = crate::lambda::resolve_lambda(&a_cycles, &q_cycles) {
+                let dynamic_threshold = crate::ffrt::calculate_threshold(subset_size, 0.001).max(lambda_min_ratio);
+                if res.ratio >= dynamic_threshold {
+                    let (fixed_state, da_meters, d_full) = self.apply_ar_fix(subset_size, &candidate_vars, &res, ephemerides)?;
+                    return Ok((fixed_state, da_meters, d_full, res.ratio, subset_size));
                 }
             }
         }
-
         Err("AR failed to resolve")
+    }
+
+    fn apply_ar_fix(&self, subset_size: usize, candidate_vars: &[(usize, usize, u16, f64)], res: &crate::lambda::LambdaResult, ephemerides: &[gneiss_core::ephemeris::Ephemeris]) -> Result<(RtkState, DVector<f64>, DMatrix<f64>), &'static str> {
+        let mut da_meters = DVector::zeros(subset_size);
+        let a_sd = nalgebra::DVector::from_vec(self.ambiguities.clone());
+        for row in 0..subset_size {
+            let (rov, r_idx, _, _) = candidate_vars[row];
+            let (rov_sat_id, freq_band) = self.ambiguity_keys[rov];
+            let freq_num = ephemerides.iter().find(|e| e.sat() == rov_sat_id).map(|e| e.freq_num()).unwrap_or(0);
+            let (f1, f2) = gneiss_core::signal::satellite_frequencies(rov_sat_id, freq_num);
+            let lam = gneiss_core::constants::SPEED_OF_LIGHT_M_S / if freq_band == 1 { f1 } else { f2 };
+            let a_cycle_float = (a_sd[rov] - a_sd[r_idx]) / lam;
+            da_meters[row] = (res.best_integers[row] - a_cycle_float) * lam;
+        }
+
+        let state_size = self.covariance.nrows();
+        let mut d_full = DMatrix::zeros(subset_size, state_size);
+        for row in 0..subset_size {
+            let (rov, r_idx, _, _) = candidate_vars[row];
+            d_full[(row, CORE_STATE_SIZE + rov)] = 1.0;
+            d_full[(row, CORE_STATE_SIZE + r_idx)] = -1.0;
+        }
+
+        let s = &d_full * &self.covariance * d_full.transpose();
+        let s_inv = s.try_inverse().ok_or("Fix covariance inversion failed")?;
+        let mut k_full = &self.covariance * d_full.transpose() * &s_inv;
+        
+        for i in 6..15 {
+            for j in 0..k_full.ncols() { k_full[(i, j)] = 0.0; }
+        }
+        
+        let dx = &k_full * &da_meters;
+        let mut fixed_state = self.clone();
+        crate::engine::updater::apply_state_correction(&mut fixed_state, &dx);
+        let r_zero = DMatrix::zeros(subset_size, subset_size);
+        fixed_state.covariance = crate::engine::updater::apply_joseph_covariance_update(&self.covariance, &k_full, &d_full, &r_zero);
+        fixed_state.is_fixed = true;
+
+        Ok((fixed_state, da_meters, d_full))
     }
 
     pub fn prune_stale_ambiguities(&mut self, current_epoch: u32, threshold: u32) {
@@ -447,20 +456,32 @@ mod tests {
         state.decouple_clock();
 
         let cols = state.covariance.ncols();
-        let rcv_clk = 15;
-        for j in 0..cols {
-            if j != rcv_clk {
-                assert_eq!(state.covariance[(rcv_clk, j)], 0.0);
-                assert_eq!(state.covariance[(j, rcv_clk)], 0.0);
+        let clock_indices = [15, 16, 17, 18]; // rcv_clk_bias, isb_glo, isb_gal, isb_bds
+        
+        // Verify all 4 clock-related diagonals are reset to 100000.0
+        for &idx in &clock_indices {
+            assert_eq!(state.covariance[(idx, idx)], 100000.0,
+                "diagonal at index {} should be 100000.0", idx);
+        }
+        
+        // Verify all cross-covariance terms involving clock indices are zeroed
+        for &idx in &clock_indices {
+            for j in 0..cols {
+                if !clock_indices.contains(&j) {
+                    assert_eq!(state.covariance[(idx, j)], 0.0,
+                        "cross-covariance ({}, {}) should be 0.0", idx, j);
+                    assert_eq!(state.covariance[(j, idx)], 0.0,
+                        "cross-covariance ({}, {}) should be 0.0", j, idx);
+                }
             }
         }
         
-        assert_eq!(state.covariance[(rcv_clk, rcv_clk)], 1.0);
-        
+        // Verify non-clock entries are untouched (still 1.0)
         for i in 0..cols {
             for j in 0..cols {
-                if i != rcv_clk && j != rcv_clk {
-                    assert_eq!(state.covariance[(i, j)], 1.0);
+                if !clock_indices.contains(&i) && !clock_indices.contains(&j) {
+                    assert_eq!(state.covariance[(i, j)], 1.0,
+                        "non-clock entry ({}, {}) should remain 1.0", i, j);
                 }
             }
         }
@@ -642,66 +663,74 @@ pub fn select_ar_candidates(
     ephemerides: &[gneiss_core::ephemeris::Ephemeris],
     ar_min_lock: u32,
 ) -> Vec<(usize, usize, u16, f64)> {
-    let num_amb = state.ambiguities.len();
-    let q_sd = state.covariance.view((CORE_STATE_SIZE, CORE_STATE_SIZE), (num_amb, num_amb));
     let constellations = [gneiss_core::sat::Constellation::Gps, gneiss_core::sat::Constellation::Galileo];
+    let candidates = filter_by_locktime(state, &constellations, ar_min_lock);
+    let mut candidate_vars = compute_candidate_variance(state, ephemerides, &candidates);
+    candidate_vars.sort_by(|a, b| a.3.partial_cmp(&b.3).unwrap_or(std::cmp::Ordering::Equal));
+    candidate_vars
+}
+
+fn filter_by_locktime(
+    state: &RtkState, constellations: &[gneiss_core::sat::Constellation], ar_min_lock: u32,
+) -> Vec<(usize, usize, u16)> {
     let mut candidates = Vec::new();
-
-    for &constell in &constellations {
-        let mut best_ref_idx = None;
-        let mut max_lock = 0;
-        
-        for i in 0..num_amb {
-            let (sat, freq) = state.ambiguity_keys[i];
-            if sat.constellation != constell || freq != 1 { continue; }
-            let lock = *state.locktimes.get(&(sat, freq)).unwrap_or(&0);
-            if lock >= ar_min_lock as u16 && lock > max_lock {
-                max_lock = lock;
-                best_ref_idx = Some(i);
-            }
-        }
-
-        if let Some(ref_idx) = best_ref_idx {
-            let ref_sat_id = state.ambiguity_keys[ref_idx].0;
-            let l2_ref_idx = state.ambiguity_keys.iter().position(|&(s, f)| s == ref_sat_id && f == 2);
-
-            for i in 0..num_amb {
-                if i == ref_idx || Some(i) == l2_ref_idx { continue; }
-                let (rov_sat, freq) = state.ambiguity_keys[i];
-                if rov_sat.constellation != constell { continue; }
-                let lock = *state.locktimes.get(&(rov_sat, freq)).unwrap_or(&0);
-                
-                if lock >= ar_min_lock as u16 {
-                    if freq == 1 {
-                        candidates.push((i, ref_idx, lock));
-                    } else if let Some(r2_idx) = l2_ref_idx {
-                        candidates.push((i, r2_idx, lock));
-                    }
-                }
-            }
+    for &constell in constellations {
+        if let Some(ref_idx) = find_best_reference_sat(state, constell, ar_min_lock) {
+            collect_candidates_for_constellation(state, constell, ref_idx, ar_min_lock, &mut candidates);
         }
     }
-        
-    let mut candidate_vars = Vec::new();
-    for &(rov, r_idx, lock) in &candidates {
-        let (rov_sat_id, freq_band) = state.ambiguity_keys[rov];
-        if rov_sat_id.constellation == gneiss_core::sat::Constellation::Glonass {
-            continue;
-        }
+    candidates
+}
 
+fn find_best_reference_sat(state: &RtkState, constell: gneiss_core::sat::Constellation, ar_min_lock: u32) -> Option<usize> {
+    let mut best_ref_idx = None;
+    let mut max_lock = 0;
+    for i in 0..state.ambiguities.len() {
+        let (sat, freq) = state.ambiguity_keys[i];
+        if sat.constellation != constell || freq != 1 { continue; }
+        let lock = *state.locktimes.get(&(sat, freq)).unwrap_or(&0);
+        if lock >= ar_min_lock as u16 && lock > max_lock {
+            max_lock = lock; best_ref_idx = Some(i);
+        }
+    }
+    best_ref_idx
+}
+
+fn collect_candidates_for_constellation(
+    state: &RtkState, constell: gneiss_core::sat::Constellation, ref_idx: usize, ar_min_lock: u32, candidates: &mut Vec<(usize, usize, u16)>
+) {
+    let ref_sat_id = state.ambiguity_keys[ref_idx].0;
+    let l2_ref_idx = state.ambiguity_keys.iter().position(|&(s, f)| s == ref_sat_id && f == 2);
+    for i in 0..state.ambiguities.len() {
+        if i == ref_idx || Some(i) == l2_ref_idx { continue; }
+        let (rov_sat, freq) = state.ambiguity_keys[i];
+        if rov_sat.constellation != constell { continue; }
+        let lock = *state.locktimes.get(&(rov_sat, freq)).unwrap_or(&0);
+        if lock >= ar_min_lock as u16 {
+            if freq == 1 { candidates.push((i, ref_idx, lock)); }
+            else if let Some(r2_idx) = l2_ref_idx { candidates.push((i, r2_idx, lock)); }
+        }
+    }
+}
+
+fn compute_candidate_variance(
+    state: &RtkState,
+    ephemerides: &[gneiss_core::ephemeris::Ephemeris],
+    candidates: &[(usize, usize, u16)],
+) -> Vec<(usize, usize, u16, f64)> {
+    let num_amb = state.ambiguities.len();
+    let q_sd = state.covariance.view((CORE_STATE_SIZE, CORE_STATE_SIZE), (num_amb, num_amb));
+    let mut candidate_vars = Vec::new();
+    for &(rov, r_idx, lock) in candidates {
+        let (rov_sat_id, freq_band) = state.ambiguity_keys[rov];
+        if rov_sat_id.constellation == gneiss_core::sat::Constellation::Glonass { continue; }
         let freq_num = ephemerides.iter().find(|e| e.sat() == rov_sat_id).map(|e| e.freq_num()).unwrap_or(0);
         let (f1, f2) = gneiss_core::signal::satellite_frequencies(rov_sat_id, freq_num);
         let lam = gneiss_core::constants::SPEED_OF_LIGHT_M_S / if freq_band == 1 { f1 } else { f2 };
-        
         let q_dd = q_sd[(rov, rov)] + q_sd[(r_idx, r_idx)] - 2.0 * q_sd[(rov, r_idx)];
         let var_cycles = q_dd / (lam * lam);
-        
-        if var_cycles < 10000.0 {
-            candidate_vars.push((rov, r_idx, lock, var_cycles));
-        }
+        if var_cycles < 10000.0 { candidate_vars.push((rov, r_idx, lock, var_cycles)); }
     }
-    
-    candidate_vars.sort_by(|a, b| a.3.partial_cmp(&b.3).unwrap_or(std::cmp::Ordering::Equal));
     candidate_vars
 }
 
@@ -711,49 +740,60 @@ pub fn build_lambda_matrices(
     subset_size: usize,
     ephemerides: &[gneiss_core::ephemeris::Ephemeris],
 ) -> (DMatrix<f64>, DVector<f64>, DMatrix<f64>) {
+    let (d_mat, a_cycles) = build_lambda_design_matrix(state, candidates, subset_size, ephemerides);
+    let q_cycles = build_lambda_variance_matrix(state, candidates, subset_size, ephemerides);
+    (d_mat, a_cycles, q_cycles)
+}
+
+fn build_lambda_design_matrix(
+    state: &RtkState,
+    candidates: &[(usize, usize, u16, f64)],
+    subset_size: usize,
+    ephemerides: &[gneiss_core::ephemeris::Ephemeris],
+) -> (DMatrix<f64>, DVector<f64>) {
     let num_amb = state.ambiguities.len();
     let a_sd = nalgebra::DVector::from_vec(state.ambiguities.clone());
-    let q_sd = state.covariance.view((CORE_STATE_SIZE, CORE_STATE_SIZE), (num_amb, num_amb));
-    
     let mut d_mat = DMatrix::zeros(subset_size, num_amb);
     let mut a_cycles = DVector::zeros(subset_size);
-    let mut q_cycles = DMatrix::zeros(subset_size, subset_size);
-    
     for row in 0..subset_size {
         let (rov, r_idx, _, _) = candidates[row];
         let (rov_sat_id, freq_band) = state.ambiguity_keys[rov];
-        
         let freq_num = ephemerides.iter().find(|e| e.sat() == rov_sat_id).map(|e| e.freq_num()).unwrap_or(0);
         let (f1, f2) = gneiss_core::signal::satellite_frequencies(rov_sat_id, freq_num);
         let lam = gneiss_core::constants::SPEED_OF_LIGHT_M_S / if freq_band == 1 { f1 } else { f2 };
-
         d_mat[(row, rov)] = 1.0;
         d_mat[(row, r_idx)] = -1.0;
         a_cycles[row] = (a_sd[rov] - a_sd[r_idx]) / lam;
     }
-    
+    (d_mat, a_cycles)
+}
+
+fn build_lambda_variance_matrix(
+    state: &RtkState,
+    candidates: &[(usize, usize, u16, f64)],
+    subset_size: usize,
+    ephemerides: &[gneiss_core::ephemeris::Ephemeris],
+) -> DMatrix<f64> {
+    let num_amb = state.ambiguities.len();
+    let q_sd = state.covariance.view((CORE_STATE_SIZE, CORE_STATE_SIZE), (num_amb, num_amb));
+    let mut q_cycles = DMatrix::zeros(subset_size, subset_size);
     for r in 0..subset_size {
         for c in 0..subset_size {
             let (rov_r, ref_r, _, _) = candidates[r];
             let (rov_c, ref_c, _, _) = candidates[c];
-            
             let freq_r = state.ambiguity_keys[rov_r].1;
             let freq_c = state.ambiguity_keys[rov_c].1;
-            
             let (sat_r, _) = state.ambiguity_keys[rov_r];
             let freq_num_r = ephemerides.iter().find(|e| e.sat() == sat_r).map(|e| e.freq_num()).unwrap_or(0);
             let (f1_r, f2_r) = gneiss_core::signal::satellite_frequencies(sat_r, freq_num_r);
             let lam_r = gneiss_core::constants::SPEED_OF_LIGHT_M_S / if freq_r == 1 { f1_r } else { f2_r };
-            
             let (sat_c, _) = state.ambiguity_keys[rov_c];
             let freq_num_c = ephemerides.iter().find(|e| e.sat() == sat_c).map(|e| e.freq_num()).unwrap_or(0);
             let (f1_c, f2_c) = gneiss_core::signal::satellite_frequencies(sat_c, freq_num_c);
             let lam_c = gneiss_core::constants::SPEED_OF_LIGHT_M_S / if freq_c == 1 { f1_c } else { f2_c };
-            
             let q_dd = q_sd[(rov_r, rov_c)] - q_sd[(rov_r, ref_c)] - q_sd[(ref_r, rov_c)] + q_sd[(ref_r, ref_c)];
             q_cycles[(r, c)] = q_dd / (lam_r * lam_c);
         }
     }
-    (d_mat, a_cycles, q_cycles)
+    q_cycles
 }
-

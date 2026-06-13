@@ -64,7 +64,7 @@ fn smooth_epoch(
     x_pred_k1: &DVector<f64>,
     k_idx: usize
 ) -> Result<(), &'static str> {
-    let core_size = 15;
+    let core_size = crate::filter::CORE_STATE_SIZE;
     
     let (matched_k_indices, matched_k1_indices) = find_matched_ambiguities(state_k, state_k1);
     let smooth_len = core_size + matched_k_indices.len();
@@ -129,6 +129,14 @@ fn build_x_vector(state: &RtkState, core_size: usize, len: usize, matched_indice
     if core_size > 6 {
         x.rows_mut(9, 3).copy_from(&state.accel_bias);
         x.rows_mut(12, 3).copy_from(&state.gyro_bias);
+    }
+    if core_size > 15 {
+        x[15] = state.rcv_clk_bias;
+        x[16] = state.isb_glo;
+        x[17] = state.isb_gal;
+        x[18] = state.isb_bds;
+        x[19] = state.rcv_clk_drift;
+        x[20] = state.zwd;
     }
     for (i, &idx) in matched_indices.iter().enumerate() {
         x[core_size + i] = state.ambiguities[idx - crate::filter::CORE_STATE_SIZE];
@@ -201,8 +209,22 @@ fn update_smoothed_state(
     state.position.vector = x_k_n.fixed_rows::<3>(0).into_owned();
     state.velocity = x_k_n.fixed_rows::<3>(3).into_owned();
     if core_size > 6 {
+        let d_theta = x_k_n.fixed_rows::<3>(6).into_owned();
+        if d_theta.norm() > 1e-10 {
+            let dq = nalgebra::UnitQuaternion::from_axis_angle(&nalgebra::Unit::new_normalize(d_theta), d_theta.norm());
+            state.attitude = dq * state.attitude;
+            state.attitude.renormalize();
+        }
         state.accel_bias = x_k_n.fixed_rows::<3>(9).into_owned();
         state.gyro_bias = x_k_n.fixed_rows::<3>(12).into_owned();
+    }
+    if core_size > 15 {
+        state.rcv_clk_bias = x_k_n[15];
+        state.isb_glo = x_k_n[16];
+        state.isb_gal = x_k_n[17];
+        state.isb_bds = x_k_n[18];
+        state.rcv_clk_drift = x_k_n[19];
+        state.zwd = x_k_n[20];
     }
     for (i, &idx) in matched_indices.iter().enumerate() {
         let amb_idx = idx - crate::filter::CORE_STATE_SIZE;

@@ -15,34 +15,28 @@ pub fn apply_state_correction(state: &mut RtkState, dx: &DVector<f64>) {
     state.velocity.x += dx[3];
     state.velocity.y += dx[4];
     state.velocity.z += dx[5];
-    
-    if dx.len() >= crate::filter::CORE_STATE_SIZE {
-        let d_theta = Vector3::new(dx[6], dx[7], dx[8]);
-        if d_theta.norm() > 1e-10 {
-            let dq = UnitQuaternion::from_axis_angle(&nalgebra::Unit::new_normalize(d_theta), d_theta.norm());
-            state.attitude = state.attitude * dq;
-            state.attitude.renormalize();
-        }
-        
-        state.accel_bias.x += dx[9];
-        state.accel_bias.y += dx[10];
-        state.accel_bias.z += dx[11];
-        state.gyro_bias.x += dx[12];
-        state.gyro_bias.y += dx[13];
-        state.gyro_bias.z += dx[14];
-        
-        if crate::filter::CORE_STATE_SIZE > 15 {
-            state.rcv_clk_bias += dx[15];
-            state.rcv_clk_drift += dx[16];
-            state.zwd += dx[17];
-            state.zwd = state.zwd.max(0.0);
-        }
-    }
-    
+    if dx.len() >= crate::filter::CORE_STATE_SIZE { apply_imu_and_clock_correction(state, dx); }
     if dx.len() > crate::filter::CORE_STATE_SIZE {
-        for i in 0..state.ambiguities.len() {
-            state.ambiguities[i] += dx[crate::filter::CORE_STATE_SIZE + i];
-        }
+        for i in 0..state.ambiguities.len() { state.ambiguities[i] += dx[crate::filter::CORE_STATE_SIZE + i]; }
+    }
+}
+
+fn apply_imu_and_clock_correction(state: &mut RtkState, dx: &DVector<f64>) {
+    let d_theta = Vector3::new(dx[6], dx[7], dx[8]);
+    if d_theta.norm() > 1e-10 {
+        let dq = UnitQuaternion::from_axis_angle(&nalgebra::Unit::new_normalize(d_theta), d_theta.norm());
+        state.attitude = dq * state.attitude;
+        state.attitude.renormalize();
+    }
+    state.accel_bias.x += dx[9]; state.accel_bias.y += dx[10]; state.accel_bias.z += dx[11];
+    state.gyro_bias.x += dx[12]; state.gyro_bias.y += dx[13]; state.gyro_bias.z += dx[14];
+    if crate::filter::CORE_STATE_SIZE > 15 {
+        state.rcv_clk_bias += dx[15];
+        state.isb_glo += dx[16];
+        state.isb_gal += dx[17];
+        state.isb_bds += dx[18];
+        state.rcv_clk_drift += dx[19];
+        state.zwd = (state.zwd + dx[20]).max(0.0);
     }
 }
 

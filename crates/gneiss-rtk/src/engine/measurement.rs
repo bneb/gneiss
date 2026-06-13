@@ -157,7 +157,7 @@ pub fn compute_dd_pseudorange(
         let mut h_pr1 = vec![0.0; state_size];
         h_pr1[0] = h_r.x; h_pr1[1] = h_r.y; h_pr1[2] = h_r.z;
         h_pr1[6] = h_att.x; h_pr1[7] = h_att.y; h_pr1[8] = h_att.z;
-        if state_size > 17 { h_pr1[17] = h_zwd; }
+        if state_size > 20 { h_pr1[20] = h_zwd; }
         updates.push((pr_dd - (comp_pr_dd + iono_dd_l1), h_pr1, pr_base_var * var_factor, 0, pr_base_var * ref_var_factor));
     }
 
@@ -166,7 +166,7 @@ pub fn compute_dd_pseudorange(
         let mut h_pr2 = vec![0.0; state_size];
         h_pr2[0] = h_r.x; h_pr2[1] = h_r.y; h_pr2[2] = h_r.z;
         h_pr2[6] = h_att.x; h_pr2[7] = h_att.y; h_pr2[8] = h_att.z;
-        if state_size > 17 { h_pr2[17] = h_zwd; }
+        if state_size > 20 { h_pr2[20] = h_zwd; }
         updates.push((pr_dd_l2 - (comp_pr_dd + iono_dd_l2), h_pr2, pr_base_var * var_factor, 0, pr_base_var * ref_var_factor));
     }
 
@@ -207,7 +207,7 @@ pub fn compute_dd_carrier_phase(
             h_cp1[crate::filter::CORE_STATE_SIZE + sat_idx] = 1.0; 
             h_cp1[crate::filter::CORE_STATE_SIZE + ref_idx] = -1.0;
             
-            if state_size > 17 { h_cp1[17] = h_zwd; }
+            if state_size > 20 { h_cp1[20] = h_zwd; }
             updates.push((cp_dd_l1 - (comp_pr_dd - iono_dd_l1 + n_dd_l1), h_cp1, r_val, 1, r_ref_val));
         }
     }
@@ -226,7 +226,7 @@ pub fn compute_dd_carrier_phase(
             h_cp2[crate::filter::CORE_STATE_SIZE + sat_idx] = 1.0; 
             h_cp2[crate::filter::CORE_STATE_SIZE + ref_idx] = -1.0;
             
-            if state_size > 17 { h_cp2[17] = h_zwd; }
+            if state_size > 20 { h_cp2[20] = h_zwd; }
             updates.push((cp_dd_l2 - (comp_pr_dd - iono_dd_l2 + n_dd_l2), h_cp2, r_val, 2, r_ref_val));
         }
     }
@@ -280,8 +280,7 @@ pub fn compute_dd_doppler(
         let mut h_dop = vec![0.0; state_size]; 
         h_dop[3] = h_r.x; h_dop[4] = h_r.y; h_dop[5] = h_r.z;
         
-        let a = r_b_e * env.omega_b.cross(&env.lever_arm);
-        let h_dop_att = a.cross(&h_r);
+        let h_dop_att = doppler_attitude_jacobian(r_b_e.matrix(), &env.omega_b, &env.lever_arm, &h_r);
         h_dop[6] = h_dop_att.x; h_dop[7] = h_dop_att.y; h_dop[8] = h_dop_att.z;
         
         let h_dop_bg = r_b_e.matrix() * env.lever_arm.cross_matrix();
@@ -329,9 +328,54 @@ impl EkfGeometryContext {
     }
 
     pub fn compute_attitude_jacobian(&self, h_r: &Vector3<f64>) -> Vector3<f64> {
-        let lever_ecef = self.r_b_e * self.lever_arm;
-        lever_ecef.cross(h_r)
+        range_attitude_jacobian(&(self.r_b_e * self.lever_arm), h_r)
     }
+}
+
+/// Computes ∂(DD_range)/∂θ for a single satellite pair.
+///
+/// With left-multiplicative attitude error (`R_new = (I + [δθ]×) · R`),
+/// the antenna phase center perturbation is:
+///
+///   d(pos_apc) = δθ × l_ecef
+///
+/// The DD range Jacobian is `h_r · d(pos_apc) = h_r · (δθ × l_ecef)`.
+/// By the cyclic scalar triple product identity `a·(b×c) = b·(c×a)`:
+///
+///   h_r · (δθ × l_ecef) = δθ · (l_ecef × h_r)
+///
+/// Therefore `∂DD/∂θ = (l_ecef × h_r)ᵀ`.
+///
+/// # Arguments
+/// * `lever_ecef` — Lever arm rotated into ECEF: `R_b^e · l_body`
+/// * `h_r` — DD direction vector: `e_ref − e_sat`
+pub fn range_attitude_jacobian(lever_ecef: &Vector3<f64>, h_r: &Vector3<f64>) -> Vector3<f64> {
+    lever_ecef.cross(h_r)
+}
+
+/// Computes ∂(DD_range_rate)/∂θ for a single satellite pair.
+///
+/// The antenna velocity perturbation from attitude error is:
+///   d(v_apc) = δθ × a,  where a = R · (ω_b × l)
+///
+/// By the same cyclic identity:
+///   h_r · (δθ × a) = δθ · (a × h_r)
+///
+/// Therefore `∂DD_rate/∂θ = (a × h_r)ᵀ`.
+///
+/// # Arguments
+/// * `r_b_e` — Body-to-ECEF rotation matrix
+/// * `omega_b` — Corrected body angular rate (gyro − bias)
+/// * `lever_arm` — Lever arm in body frame
+/// * `h_r` — DD direction vector: `e_ref − e_sat`
+pub fn doppler_attitude_jacobian(
+    r_b_e: &nalgebra::Matrix3<f64>,
+    omega_b: &Vector3<f64>,
+    lever_arm: &Vector3<f64>,
+    h_r: &Vector3<f64>,
+) -> Vector3<f64> {
+    let a = r_b_e * omega_b.cross(lever_arm);
+    a.cross(h_r)
 }
 
 pub fn compute_variance_factors(
@@ -931,8 +975,9 @@ mod tests {
             tuning: &tuning,
         };
         
+        let state_size = crate::filter::CORE_STATE_SIZE + state.ambiguities.len();
         let updates = compute_dd_carrier_phase(
-            &state, &ctx, Some(1), Some(3), 0.0, 0.0, 0.0, Vector3::new(1.0, 0.0, 0.0), Vector3::zeros(), 22, 1.0, &env, 0.0, 1.0
+            &state, &ctx, Some(1), Some(3), 0.0, 0.0, 0.0, Vector3::new(1.0, 0.0, 0.0), Vector3::zeros(), state_size, 1.0, &env, 0.0, 1.0
         );
         assert_eq!(updates.len(), 2);
     }
@@ -1077,3 +1122,249 @@ mod tests {
         assert_eq!(r_vals.len(), z_vals.len());
         assert_eq!(meas_type.len(), z_vals.len());
     }
+
+    // -----------------------------------------------------------------------
+    // Numerical Jacobian verification for attitude coupling
+    // -----------------------------------------------------------------------
+    //
+    // These tests are the definitive proof of the correct sign. They
+    // perturb the attitude by a small δθ along each axis, recompute the
+    // DD range (or DD rate) via the actual range equations, and compare
+    // the central-difference derivative against the analytical Jacobian.
+    //
+    // If these tests pass, the Jacobian is correct. Period.
+    // -----------------------------------------------------------------------
+
+    /// Compute DD range given a rotation applied to base position + lever arm.
+    /// DD = |sat - pos_apc| - |ref - pos_apc|
+    fn dd_range(
+        pos: Vector3<f64>,
+        rot: nalgebra::UnitQuaternion<f64>,
+        lever_body: Vector3<f64>,
+        sat_pos: Vector3<f64>,
+        ref_pos: Vector3<f64>,
+    ) -> f64 {
+        let pos_apc = pos + rot * lever_body;
+        (sat_pos - pos_apc).norm() - (ref_pos - pos_apc).norm()
+    }
+
+    /// Compute DD range-rate (rover portion only).
+    /// DD_rate = e_sat·(v_sat - v_apc) - e_ref·(v_ref - v_apc)
+    fn dd_range_rate(
+        pos: Vector3<f64>,
+        vel: Vector3<f64>,
+        rot: nalgebra::UnitQuaternion<f64>,
+        lever_body: Vector3<f64>,
+        omega_b: Vector3<f64>,
+        sat_pos: Vector3<f64>,
+        ref_pos: Vector3<f64>,
+        sat_vel: Vector3<f64>,
+        ref_vel: Vector3<f64>,
+    ) -> f64 {
+        let pos_apc = pos + rot * lever_body;
+        let v_apc = vel + rot * omega_b.cross(&lever_body);
+        let e_sat = (sat_pos - pos_apc).normalize();
+        let e_ref = (ref_pos - pos_apc).normalize();
+        e_sat.dot(&(sat_vel - v_apc)) - e_ref.dot(&(ref_vel - v_apc))
+    }
+
+    /// Apply a small rotation perturbation (left-multiplicative, matching
+    /// the EKF convention in apply_state_correction).
+    fn perturb_attitude(
+        rot: nalgebra::UnitQuaternion<f64>,
+        d_theta: Vector3<f64>,
+    ) -> nalgebra::UnitQuaternion<f64> {
+        let angle = d_theta.norm();
+        if angle < 1e-15 { return rot; }
+        let dq = nalgebra::UnitQuaternion::from_axis_angle(
+            &nalgebra::Unit::new_normalize(d_theta), angle,
+        );
+        dq * rot  // left-multiplicative: R_new = dR · R
+    }
+
+    #[test]
+    fn test_range_attitude_jacobian_numerical() {
+        // Verify against finite differences of the full nonlinear DD range.
+        // The analytical Jacobian is a linearization, so we expect agreement
+        // to O(eps) relative error (limited by the h_r approximation).
+        let pos = Vector3::new(4_000_000.0, 1_000_000.0, 4_500_000.0);
+        let lever_body = Vector3::new(0.0, 0.0, 1.5);
+        let rot = nalgebra::UnitQuaternion::from_euler_angles(0.1, 0.2, 0.3);
+        let lever_ecef = rot * lever_body;
+
+        let sat_pos = Vector3::new(20_000_000.0, 10_000_000.0, 15_000_000.0);
+        let ref_pos = Vector3::new(15_000_000.0, 20_000_000.0, 10_000_000.0);
+
+        let pos_apc = pos + lever_ecef;
+        let e_sat = (sat_pos - pos_apc).normalize();
+        let e_ref = (ref_pos - pos_apc).normalize();
+        let h_r = e_ref - e_sat;
+
+        let j_analytical = range_attitude_jacobian(&lever_ecef, &h_r);
+
+        let eps = 1e-7;
+        let mut j_numerical = Vector3::zeros();
+        for axis in 0..3 {
+            let mut d_theta = Vector3::zeros();
+            d_theta[axis] = eps;
+            let dd_plus = dd_range(pos, perturb_attitude(rot, d_theta), lever_body, sat_pos, ref_pos);
+            let dd_minus = dd_range(pos, perturb_attitude(rot, -d_theta), lever_body, sat_pos, ref_pos);
+            j_numerical[axis] = (dd_plus - dd_minus) / (2.0 * eps);
+        }
+
+        // Nonlinear DD includes second-order effects from h_r changing
+        // as pos_apc moves (~lever/range ≈ 1e-7). Relax tolerance accordingly.
+        let err = (j_analytical - j_numerical).norm();
+        let scale = j_numerical.norm().max(1e-12);
+        assert!(
+            err / scale < 0.05,
+            "Range attitude Jacobian sign/magnitude error!\n  analytical: {:?}\n  numerical:  {:?}\n  rel_error: {:.2e}",
+            j_analytical, j_numerical, err / scale
+        );
+    }
+
+    /// Verify the range attitude Jacobian via the linearized quantity directly.
+    /// This test eliminates second-order effects and is exact to machine precision.
+    ///
+    /// The analytical Jacobian says: d(DD) ≈ J · δθ
+    /// We verify: h_r · (δθ × l_ecef) == J · δθ for arbitrary δθ.
+    #[test]
+    fn test_range_attitude_jacobian_linearized_exact() {
+        let lever_ecef = Vector3::new(0.3, -0.7, 1.2);
+        let h_r = Vector3::new(0.4, -0.1, 0.6);
+        let j = range_attitude_jacobian(&lever_ecef, &h_r);
+
+        // For arbitrary δθ, verify h_r · (δθ × l_ecef) == J · δθ
+        for d_theta in &[
+            Vector3::new(1.0, 0.0, 0.0),
+            Vector3::new(0.0, 1.0, 0.0),
+            Vector3::new(0.0, 0.0, 1.0),
+            Vector3::new(0.3, -0.5, 0.8),
+        ] {
+            let lhs = h_r.dot(&d_theta.cross(&lever_ecef)); // h_r · (δθ × l)
+            let rhs = j.dot(d_theta);                        // J · δθ
+            assert!(
+                (lhs - rhs).abs() < 1e-14,
+                "Linearized check failed: lhs={}, rhs={}, δθ={:?}",
+                lhs, rhs, d_theta
+            );
+        }
+    }
+
+    #[test]
+    fn test_range_attitude_jacobian_axis_aligned() {
+        // Simple case: lever arm along body-Z, identity rotation,
+        // h_r along ECEF-X. Analytical: l_ecef × h_r = [0,0,1.5] × [1,0,0] = [0,1.5,0]
+        let lever_ecef = Vector3::new(0.0, 0.0, 1.5);
+        let h_r = Vector3::new(1.0, 0.0, 0.0);
+
+        let j = range_attitude_jacobian(&lever_ecef, &h_r);
+        assert!((j.x - 0.0).abs() < 1e-12);
+        assert!((j.y - 1.5).abs() < 1e-12);
+        assert!((j.z - 0.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn test_range_attitude_jacobian_zero_lever_arm() {
+        let lever_ecef = Vector3::zeros();
+        let h_r = Vector3::new(0.3, -0.5, 0.8);
+        let j = range_attitude_jacobian(&lever_ecef, &h_r);
+        assert!(j.norm() < 1e-15);
+    }
+
+    #[test]
+    fn test_doppler_attitude_jacobian_numerical() {
+        let pos = Vector3::new(4_000_000.0, 1_000_000.0, 4_500_000.0);
+        let vel = Vector3::new(1.0, 2.0, 3.0);
+        let lever_body = Vector3::new(0.0, 0.0, 1.5);
+        let omega_b = Vector3::new(0.01, -0.02, 0.005);
+        let rot = nalgebra::UnitQuaternion::from_euler_angles(0.1, 0.2, 0.3);
+        let r_b_e = rot.to_rotation_matrix().into_inner();
+
+        let sat_pos = Vector3::new(20_000_000.0, 10_000_000.0, 15_000_000.0);
+        let ref_pos = Vector3::new(15_000_000.0, 20_000_000.0, 10_000_000.0);
+        let sat_vel = Vector3::new(-500.0, 200.0, 3000.0);
+        let ref_vel = Vector3::new(300.0, -800.0, 2500.0);
+
+        let pos_apc = pos + rot * lever_body;
+        let e_sat = (sat_pos - pos_apc).normalize();
+        let e_ref = (ref_pos - pos_apc).normalize();
+        let h_r = e_ref - e_sat;
+
+        let j_analytical = doppler_attitude_jacobian(&r_b_e, &omega_b, &lever_body, &h_r);
+
+        let eps = 1e-7;
+        let mut j_numerical = Vector3::zeros();
+        for axis in 0..3 {
+            let mut d_theta = Vector3::zeros();
+            d_theta[axis] = eps;
+            let rr_plus = dd_range_rate(
+                pos, vel, perturb_attitude(rot, d_theta), lever_body, omega_b,
+                sat_pos, ref_pos, sat_vel, ref_vel,
+            );
+            let rr_minus = dd_range_rate(
+                pos, vel, perturb_attitude(rot, -d_theta), lever_body, omega_b,
+                sat_pos, ref_pos, sat_vel, ref_vel,
+            );
+            j_numerical[axis] = (rr_plus - rr_minus) / (2.0 * eps);
+        }
+
+        let err = (j_analytical - j_numerical).norm();
+        let scale = j_numerical.norm().max(1e-12);
+        assert!(
+            err / scale < 0.05,
+            "Doppler attitude Jacobian sign/magnitude error!\n  analytical: {:?}\n  numerical:  {:?}\n  rel_error: {:.2e}",
+            j_analytical, j_numerical, err / scale
+        );
+    }
+
+    /// Verify the Doppler attitude Jacobian via the linearized quantity directly.
+    #[test]
+    fn test_doppler_attitude_jacobian_linearized_exact() {
+        let r_b_e = nalgebra::UnitQuaternion::from_euler_angles(0.1, 0.2, 0.3)
+            .to_rotation_matrix()
+            .into_inner();
+        let omega_b = Vector3::new(0.01, -0.02, 0.005);
+        let lever_body = Vector3::new(0.0, 0.0, 1.5);
+        let h_r = Vector3::new(0.4, -0.1, 0.6);
+
+        let j = doppler_attitude_jacobian(&r_b_e, &omega_b, &lever_body, &h_r);
+        let a = r_b_e * omega_b.cross(&lever_body);
+
+        // For arbitrary δθ, verify h_r · (δθ × a) == J · δθ
+        for d_theta in &[
+            Vector3::new(1.0, 0.0, 0.0),
+            Vector3::new(0.0, 1.0, 0.0),
+            Vector3::new(0.0, 0.0, 1.0),
+            Vector3::new(-0.7, 0.3, 0.9),
+        ] {
+            let lhs = h_r.dot(&d_theta.cross(&a)); // h_r · (δθ × a)
+            let rhs = j.dot(d_theta);               // J · δθ
+            assert!(
+                (lhs - rhs).abs() < 1e-14,
+                "Doppler linearized check failed: lhs={}, rhs={}, δθ={:?}",
+                lhs, rhs, d_theta
+            );
+        }
+    }
+
+    #[test]
+    fn test_doppler_attitude_jacobian_zero_omega() {
+        let r_b_e = nalgebra::Matrix3::identity();
+        let omega_b = Vector3::zeros();
+        let lever_body = Vector3::new(0.0, 0.0, 1.5);
+        let h_r = Vector3::new(0.3, -0.5, 0.8);
+        let j = doppler_attitude_jacobian(&r_b_e, &omega_b, &lever_body, &h_r);
+        assert!(j.norm() < 1e-15);
+    }
+
+    #[test]
+    fn test_range_jacobian_antisymmetry() {
+        // l × h_r = -(h_r × l): swapping args negates
+        let lever_ecef = Vector3::new(0.5, -1.0, 1.5);
+        let h_r = Vector3::new(0.3, 0.7, -0.2);
+        let j1 = range_attitude_jacobian(&lever_ecef, &h_r);
+        let j2 = range_attitude_jacobian(&h_r, &lever_ecef);
+        assert!((j1 + j2).norm() < 1e-15, "Should be antisymmetric");
+    }
+

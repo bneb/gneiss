@@ -14,6 +14,9 @@ pub fn process_ppp<'a>(engine: &'a mut ProcessingEngine, rover_obs: &'a EpochObs
     
     let dt = rover_obs.time - engine.current_state.as_ref().unwrap().time;
     engine.predict_state(dt);
+    let state = engine.current_state.as_mut().unwrap();
+    state.time = rover_obs.time;
+    state.position.epoch = rover_obs.time;
 
     let sats = build_sats(engine, rover_obs);
     if sats.is_empty() {
@@ -62,7 +65,32 @@ fn build_sats<'a>(engine: &ProcessingEngine, rover_obs: &'a EpochObs) -> Vec<Pro
 
         let f1 = gneiss_core::signal::satellite_frequencies(sat_obs.sat, eph.freq_num()).0;
         
-        let (sat_pos, sat_vel, sat_clk, sat_drift) = eph.position(rover_obs.time);
+        let tau_pr = pr1 / LIGHT_SPEED;
+        let t_tx_nom = gneiss_core::time::GpsTime::new(rover_obs.time.week, rover_obs.time.tow - tau_pr);
+        let (_, _, dt_s, _) = eph.position(t_tx_nom);
+        let t_tx_true = gneiss_core::time::GpsTime::new(rover_obs.time.week, rover_obs.time.tow - tau_pr - dt_s);
+        let (raw_vec, raw_vel, sat_clk, sat_drift) = eph.position(t_tx_true);
+        
+        let mut sat_pos = raw_vec;
+        let mut sat_vel = raw_vel;
+        for _ in 0..2 {
+            let geometric_range = (sat_pos - rcv_pos_ecef).norm();
+            let true_tau = geometric_range / LIGHT_SPEED;
+            let theta = gneiss_core::constants::EARTH_ROTATION_RATE_RAD_S * true_tau;
+            let cos_t = libm::cos(theta);
+            let sin_t = libm::sin(theta);
+            sat_pos = nalgebra::Vector3::new(
+                raw_vec.x * cos_t + raw_vec.y * sin_t,
+                -raw_vec.x * sin_t + raw_vec.y * cos_t,
+                raw_vec.z
+            );
+            sat_vel = nalgebra::Vector3::new(
+                raw_vel.x * cos_t + raw_vel.y * sin_t,
+                -raw_vel.x * sin_t + raw_vel.y * cos_t,
+                raw_vel.z
+            );
+        }
+        
         let dist = (sat_pos - rcv_pos_ecef).norm();
         let (az, el) = gneiss_core::coords::az_el(rcv_pos_llh, rcv_pos_ecef, sat_pos);
         if el < libm::asin(0.261799) { continue; }
@@ -110,7 +138,14 @@ fn update_phase_ambiguities(state: &mut RtkState, sats: &[ProcessedSat], time: g
 
             if slip { state.remove_ambiguity(sat.sat_obs.sat, 0); }
 
-            let expected_p = sat.dist + state.rcv_clk_bias - sat.dt_sat_m + sat.tropo_dry + state.zwd * sat.map_wet;
+            let isb = match sat.sat_obs.sat.constellation {
+                gneiss_core::sat::Constellation::Glonass => state.isb_glo,
+                gneiss_core::sat::Constellation::Galileo => state.isb_gal,
+                gneiss_core::sat::Constellation::Beidou => state.isb_bds,
+                _ => 0.0,
+            };
+
+            let expected_p = sat.dist + state.rcv_clk_bias + isb - sat.dt_sat_m + sat.tropo_dry + state.zwd * sat.map_wet;
             let expected_with_iono = expected_p - sat.iono_delay;
             if !state.ambiguity_keys.contains(&(sat.sat_obs.sat, 0)) {
                 state.add_ambiguity(sat.sat_obs.sat, 0, l1_m - expected_with_iono, 10000.0);

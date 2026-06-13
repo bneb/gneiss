@@ -59,8 +59,11 @@ impl TightFactorGraph {
         x[14] = state.gyro_bias.z;
         x[15] = state.rcv_clk_bias;
         if CORE_STATE_SIZE > 16 {
-            x[16] = state.rcv_clk_drift;
-            x[17] = state.zwd;
+            x[16] = state.isb_glo;
+            x[17] = state.isb_gal;
+            x[18] = state.isb_bds;
+            x[19] = state.rcv_clk_drift;
+            x[20] = state.zwd;
         }
 
         for (i, amb) in state.ambiguities.iter().enumerate() {
@@ -103,7 +106,7 @@ impl TightFactorGraph {
         state.velocity.y = x[4];
         state.velocity.z = x[5];
         let rot_vec = Vector3::new(x[6], x[7], x[8]);
-        state.attitude *= nalgebra::UnitQuaternion::from_scaled_axis(rot_vec);
+        state.attitude = nalgebra::UnitQuaternion::from_scaled_axis(rot_vec) * state.attitude;
         state.accel_bias.x = x[9];
         state.accel_bias.y = x[10];
         state.accel_bias.z = x[11];
@@ -111,5 +114,12 @@ impl TightFactorGraph {
         state.gyro_bias.y = x[13];
         state.gyro_bias.z = x[14];
         state.rcv_clk_bias = x[15];
+        if CORE_STATE_SIZE > 16 {
+            state.isb_glo = x[16];
+            state.isb_gal = x[17];
+            state.isb_bds = x[18];
+            state.rcv_clk_drift = x[19];
+            state.zwd = x[20];
+        }
     }
 }

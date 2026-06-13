@@ -1,4 +1,4 @@
-use nalgebra::{DMatrix, DVector, Vector3};
+use nalgebra::{DMatrix, DVector, Vector3, UnitQuaternion};
 use crate::engine::processed_sat::ProcessedSat;
 use crate::filter::{RtkState, CORE_STATE_SIZE};
 use crate::engine::EngineError;
@@ -58,7 +58,7 @@ impl PppFactorGraph {
 
         log_ppp_convergence(state, sats, &x_i, &x_pred, &p_pred, self);
         
-        apply_state_vector(state, &x_i);
+        apply_state_vector(state, &x_i, state.covariance.clone());
         Ok(())
     }
 
@@ -105,12 +105,20 @@ impl PppFactorGraph {
     fn build_measurements(&self, state: &RtkState, sats: &[ProcessedSat], x_i: &DVector<f64>, iter: usize) -> Vec<FgMeasurement> {
         let mut meas = Vec::new();
         let rcv_pos = Vector3::new(x_i[0], x_i[1], x_i[2]);
-        let ztd = if x_i.len() > 17 { x_i[17] } else { 0.0 };
+        let ztd = if x_i.len() > 20 { x_i[20] } else { 0.0 };
 
         for sat in sats {
             let dist = (sat.sat_pos_rot - rcv_pos).norm();
             let los = (sat.sat_pos_rot - rcv_pos) / dist;
-            let expected_base = dist + x_i[15] - sat.dt_sat_m + sat.tropo_dry + ztd * sat.map_wet;
+            let isb = if x_i.len() > 18 {
+                match sat.sat_obs.sat.constellation {
+                    gneiss_core::sat::Constellation::Glonass => x_i[16],
+                    gneiss_core::sat::Constellation::Galileo => x_i[17],
+                    gneiss_core::sat::Constellation::Beidou => x_i[18],
+                    _ => 0.0,
+                }
+            } else { 0.0 };
+            let expected_base = dist + x_i[15] + isb - sat.dt_sat_m + sat.tropo_dry + ztd * sat.map_wet;
             let expected_pr = expected_base + sat.iono_delay;
 
             let res_pr = sat.p_meas - expected_pr;
@@ -123,11 +131,11 @@ impl PppFactorGraph {
             }
             let var_pr = PSEUDORANGE_VARIANCE_BASE * 10.0 * snr_scale(sat.snr as i32) / libm::sin(sat.el);
             let w_pr = apply_huber(res_pr, var_pr, self.huber_k);
-            meas.push(FgMeasurement { res: res_pr, h_row: build_h_row(&los, sat.map_wet, None, x_i.len()), weight: w_pr, is_phase: false });
+            meas.push(FgMeasurement { res: res_pr, h_row: build_h_row(&los, sat.map_wet, None, x_i.len(), sat.sat_obs.sat.constellation), weight: w_pr, is_phase: false });
 
             if sat.doppler != 0.0 {
                 let rcv_vel = Vector3::new(x_i[3], x_i[4], x_i[5]);
-                let rcv_clk_drift = x_i[16];
+                let rcv_clk_drift = if x_i.len() > 19 { x_i[19] } else { 0.0 };
                 let meas_rr = -sat.doppler * sat.lam1;
                 let expected_rr = los.dot(&sat.sat_vel) - los.dot(&rcv_vel) + rcv_clk_drift - sat.sat_clock_drift * SPEED_OF_LIGHT;
                 
@@ -168,7 +176,7 @@ impl PppFactorGraph {
                     
                     let w_cp = apply_huber(res_cp, var_cp, self.huber_k);
                     
-                    meas.push(FgMeasurement { res: res_cp, h_row: build_h_row(&los, sat.map_wet, Some(CORE_STATE_SIZE + amb_idx), x_i.len()), weight: w_cp, is_phase: true });
+                    meas.push(FgMeasurement { res: res_cp, h_row: build_h_row(&los, sat.map_wet, Some(CORE_STATE_SIZE + amb_idx), x_i.len(), sat.sat_obs.sat.constellation), weight: w_cp, is_phase: true });
                 }
             }
         }
@@ -178,7 +186,7 @@ impl PppFactorGraph {
 
 fn log_ppp_convergence(state: &RtkState, sats: &[ProcessedSat], x_i: &DVector<f64>, x_pred: &DVector<f64>, p_pred: &DMatrix<f64>, solver: &PppFactorGraph) {
     tracing::info!("PPP Epoch: pos=[{:.2}, {:.2}, {:.2}], vel=[{:.2}, {:.2}, {:.2}], clk_d={:.2}, meas={}, P_v={:.2}, P_c={:.2}, dx_norm={:.4}", 
-        x_i[0], x_i[1], x_i[2], x_i[3], x_i[4], x_i[5], x_i[16],
+        x_i[0], x_i[1], x_i[2], x_i[3], x_i[4], x_i[5], if x_i.len() > 19 { x_i[19] } else { 0.0 },
         sats.len(), p_pred[(3, 3)], p_pred[(16, 16)], (x_i.clone() - x_pred.clone()).norm());
     
     let pos_err = (Vector3::new(x_i[0], x_i[1], x_i[2]) - Vector3::new(x_pred[0], x_pred[1], x_pred[2])).norm();
@@ -238,20 +246,28 @@ fn find_ambiguity_index(state: &RtkState, sat: gneiss_core::sat::SatelliteId) ->
     state.ambiguity_keys.iter().position(|&(s, f)| s == sat && f == 0)
 }
 
-fn build_h_row(los: &Vector3<f64>, map_wet: f64, amb_idx: Option<usize>, size: usize) -> DVector<f64> {
+fn build_h_row(los: &Vector3<f64>, map_wet: f64, amb_idx: Option<usize>, size: usize, constel: gneiss_core::sat::Constellation) -> DVector<f64> {
     let mut h = DVector::zeros(size);
     h[0] = -los.x; h[1] = -los.y; h[2] = -los.z;
     h[15] = 1.0;
-    if size > 17 { h[17] = map_wet; }
+    if size > 18 {
+        match constel {
+            gneiss_core::sat::Constellation::Glonass => h[16] = 1.0,
+            gneiss_core::sat::Constellation::Galileo => h[17] = 1.0,
+            gneiss_core::sat::Constellation::Beidou => h[18] = 1.0,
+            _ => {}
+        }
+    }
+    if size > 20 { h[20] = map_wet; }
     if let Some(idx) = amb_idx { h[idx] = 1.0; }
     h
 }
 
 fn build_h_row_doppler(los: &Vector3<f64>, size: usize) -> DVector<f64> {
     let mut h = DVector::zeros(size);
-    if size > 16 {
+    if size > 19 {
         h[3] = -los.x; h[4] = -los.y; h[5] = -los.z;
-        h[16] = 1.0;
+        h[19] = 1.0;
     }
     h
 }
@@ -264,20 +280,38 @@ fn extract_state_vector(state: &RtkState) -> DVector<f64> {
     x[9] = state.accel_bias.x; x[10] = state.accel_bias.y; x[11] = state.accel_bias.z;
     x[12] = state.gyro_bias.x; x[13] = state.gyro_bias.y; x[14] = state.gyro_bias.z;
     x[15] = state.rcv_clk_bias;
-    if CORE_STATE_SIZE > 16 { x[16] = state.rcv_clk_drift; x[17] = state.zwd; }
+    if CORE_STATE_SIZE > 16 {
+        x[16] = state.isb_glo;
+        x[17] = state.isb_gal;
+        x[18] = state.isb_bds;
+        x[19] = state.rcv_clk_drift;
+        x[20] = state.zwd;
+    }
     for (i, &amb) in state.ambiguities.iter().enumerate() { x[CORE_STATE_SIZE + i] = amb; }
     x
 }
 
-fn apply_state_vector(state: &mut RtkState, x: &DVector<f64>) {
-    state.position.vector = Vector3::new(x[0], x[1], x[2]);
-    state.velocity = Vector3::new(x[3], x[4], x[5]);
-    state.attitude = nalgebra::UnitQuaternion::from_scaled_axis(Vector3::new(x[6], x[7], x[8]));
-    state.accel_bias = Vector3::new(x[9], x[10], x[11]);
-    state.gyro_bias = Vector3::new(x[12], x[13], x[14]);
+fn apply_state_vector(state: &mut RtkState, x: &DVector<f64>, p: DMatrix<f64>) {
+    state.position.vector.x = x[0]; state.position.vector.y = x[1]; state.position.vector.z = x[2];
+    state.velocity.x = x[3]; state.velocity.y = x[4]; state.velocity.z = x[5];
+    let r_vec = Vector3::new(x[6], x[7], x[8]);
+    if r_vec.norm() > 1e-12 {
+        state.attitude = UnitQuaternion::from_scaled_axis(r_vec);
+    } else {
+        state.attitude = UnitQuaternion::identity();
+    }
+    state.accel_bias.x = x[9]; state.accel_bias.y = x[10]; state.accel_bias.z = x[11];
+    state.gyro_bias.x = x[12]; state.gyro_bias.y = x[13]; state.gyro_bias.z = x[14];
     state.rcv_clk_bias = x[15];
-    if CORE_STATE_SIZE > 16 { state.rcv_clk_drift = x[16]; state.zwd = x[17]; }
+    if CORE_STATE_SIZE > 16 {
+        state.isb_glo = x[16];
+        state.isb_gal = x[17];
+        state.isb_bds = x[18];
+        state.rcv_clk_drift = x[19];
+        state.zwd = x[20];
+    }
     for i in 0..state.ambiguities.len() { state.ambiguities[i] = x[CORE_STATE_SIZE + i]; }
+    state.covariance = p;
 }
 
 fn assemble_matrices(meas: &[FgMeasurement], cols: usize) -> (DMatrix<f64>, DVector<f64>, DMatrix<f64>) {
@@ -295,7 +329,7 @@ fn assemble_matrices(meas: &[FgMeasurement], cols: usize) -> (DMatrix<f64>, DVec
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nalgebra::{DMatrix, DVector, Vector3};
+    use nalgebra::{DMatrix, DVector, Vector3, UnitQuaternion};
     use gneiss_core::coords::{Coordinate, Datum, Frame};
     use gneiss_core::time::GpsTime;
 
@@ -398,33 +432,41 @@ mod tests {
     #[test]
     fn test_build_h_row() {
         let los = Vector3::new(1.0, 2.0, 3.0);
-        let h = build_h_row(&los, 4.0, Some(18), 19);
-        assert_eq!(h.len(), 19);
+        // size = CORE_STATE_SIZE + 1 so ISBs (size>18) and ZWD (size>20) are populated,
+        // plus one ambiguity slot at index CORE_STATE_SIZE.
+        let size = CORE_STATE_SIZE + 1;
+        let h = build_h_row(&los, 4.0, Some(CORE_STATE_SIZE), size, gneiss_core::sat::Constellation::Gps);
+        assert_eq!(h.len(), size);
         assert_eq!(h[0], -1.0);
         assert_eq!(h[1], -2.0);
         assert_eq!(h[2], -3.0);
-        assert_eq!(h[15], 1.0);
-        assert_eq!(h[17], 4.0);
-        assert_eq!(h[18], 1.0);
+        assert_eq!(h[15], 1.0);  // clock bias
+        assert_eq!(h[20], 4.0);  // ZWD mapping
+        assert_eq!(h[CORE_STATE_SIZE], 1.0);  // ambiguity
         
-        let h2 = build_h_row(&los, 4.0, None, 16);
-        assert_eq!(h2.len(), 16);
+        // size = CORE_STATE_SIZE: ISBs populated (size>18) but ZWD NOT (size==21, not >20... wait 21>20 is true)
+        // Actually CORE_STATE_SIZE=21 > 20, so ZWD IS set. No ambiguity.
+        let h2 = build_h_row(&los, 4.0, None, CORE_STATE_SIZE, gneiss_core::sat::Constellation::Gps);
+        assert_eq!(h2.len(), CORE_STATE_SIZE);
         assert_eq!(h2[0], -1.0);
         assert_eq!(h2[15], 1.0);
+        assert_eq!(h2[20], 4.0);  // ZWD mapping (21 > 20)
     }
 
     #[test]
     fn test_build_h_row_doppler() {
         let los = Vector3::new(1.0, 2.0, 3.0);
-        let h = build_h_row_doppler(&los, 17);
-        assert_eq!(h.len(), 17);
+        // size = CORE_STATE_SIZE (21) > 19, so velocity and clock drift are populated.
+        let h = build_h_row_doppler(&los, CORE_STATE_SIZE);
+        assert_eq!(h.len(), CORE_STATE_SIZE);
         assert_eq!(h[3], -1.0);
         assert_eq!(h[4], -2.0);
         assert_eq!(h[5], -3.0);
-        assert_eq!(h[16], 1.0);
+        assert_eq!(h[19], 1.0);  // clock drift at index 19
         
-        let h2 = build_h_row_doppler(&los, 16);
-        assert_eq!(h2.len(), 16);
+        // size = 19, NOT > 19, so nothing is set — all zeros.
+        let h2 = build_h_row_doppler(&los, 19);
+        assert_eq!(h2.len(), 19);
         assert_eq!(h2[3], 0.0);
     }
 
@@ -477,14 +519,18 @@ mod tests {
         let x = extract_state_vector(&state);
         assert_eq!(x.len(), CORE_STATE_SIZE + 2);
         assert_eq!(x[0], 1.0);
-        assert_eq!(x[15], 16.0);
-        assert_eq!(x[17], 18.0);
+        assert_eq!(x[15], 16.0);  // rcv_clk_bias
+        assert_eq!(x[16], 0.0);  // isb_glo (default)
+        assert_eq!(x[17], 0.0);  // isb_gal (default)
+        assert_eq!(x[18], 0.0);  // isb_bds (default)
+        assert_eq!(x[19], 17.0); // rcv_clk_drift
+        assert_eq!(x[20], 18.0); // zwd
         assert_eq!(x[CORE_STATE_SIZE], 19.0);
         assert_eq!(x[CORE_STATE_SIZE + 1], 20.0);
         
         let mut state2 = dummy_rtk_state();
         state2.ambiguities = vec![0.0, 0.0];
-        apply_state_vector(&mut state2, &x);
+        let cov = state2.covariance.clone(); apply_state_vector(&mut state2, &x, cov);
         
         assert_eq!(state2.position.vector, Vector3::new(1.0, 2.0, 3.0));
         assert_eq!(state2.velocity, Vector3::new(4.0, 5.0, 6.0));
@@ -500,7 +546,7 @@ mod tests {
 #[cfg(test)]
 mod nan_tests {
     use super::*;
-    use nalgebra::{DMatrix, DVector, Vector3};
+    use nalgebra::{DMatrix, DVector, Vector3, UnitQuaternion};
     use gneiss_core::coords::{Coordinate, Datum, Frame};
     use gneiss_core::time::GpsTime;
 

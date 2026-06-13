@@ -1,96 +1,43 @@
-# Gneiss Comprehensive 18-Grid Benchmarks
+# Gneiss Comprehensive Benchmarks
 
-This document systematically evaluates Gneiss across its $3 \times 3 \times 2 = 18$ architectural matrix (Base Modes $\times$ INS Coupling $\times$ Filter Direction). Each cell compares Gneiss vs RTKLIB (demo5) as the baseline. For Gneiss INS modes, the baseline is the equivalent RTKLIB GNSS-only mode.
-
-## Shinjuku (u-blox)
-
-| Base Mode | Filter | INS Mode | Hz 50th (Gneiss vs RTKLIB) | Hz 95th | Vt 50th | Winner | Notes |
-|:---|:---|:---|:---|:---|:---|:---|:---|
-| `spp` | forward | Off | 2.288 m vs 13.209 m | 26.576 m vs 55.582 m | 5.166 m vs 38.538 m | **Gneiss** (+82.7%) | Baseline GNSS-only validation. |
-| `spp` | forward | Loose | 2.288 m vs 13.209 m | 26.576 m vs 55.582 m | 5.166 m vs 38.538 m | **Gneiss** (+82.7%) | Divergence. Severe multipath causes Mahalanobis checks to reject SPP updates, leading to INS free-integration. |
-| `spp` | forward | Tight | 7.725 m vs 13.209 m | 29.822 m vs 55.582 m | 5.913 m vs 38.538 m | **Gneiss** (+41.5%) | Divergence. Severe multipath causes Mahalanobis checks to reject SPP updates, leading to INS free-integration. |
-| `spp` | smoothed | Off | 2.288 m vs 13.209 m | 26.576 m vs 55.582 m | 5.166 m vs 38.538 m | **Gneiss** (+82.7%) | Baseline GNSS-only validation. |
-| `spp` | smoothed | Loose | 3.374 m vs 13.209 m | 25.769 m vs 55.582 m | 5.119 m vs 38.538 m | **Gneiss** (+74.5%) | Divergence. Severe multipath causes Mahalanobis checks to reject SPP updates, leading to INS free-integration. |
-| `spp` | smoothed | Tight | 7.773 m vs 13.209 m | 29.934 m vs 55.582 m | 5.918 m vs 38.538 m | **Gneiss** (+41.2%) | Divergence. Severe multipath causes Mahalanobis checks to reject SPP updates, leading to INS free-integration. |
-| `rtk` | forward | Off | 1.821 m vs 1.670 m | 24.861 m vs 11.843 m | 3.100 m vs 5.394 m | RTKLIB (+8.3%) | Baseline GNSS-only validation. |
-| `rtk` | forward | Loose | 1.815 m vs 1.670 m | 23.284 m vs 11.843 m | 2.992 m vs 5.394 m | RTKLIB (+8.0%) | RTK phase updates tightly constrain the INS in urban canyons, matching RTKLIB. |
-| `rtk` | forward | Tight | 3.045 m vs 1.670 m | 23.232 m vs 11.843 m | 3.118 m vs 5.394 m | RTKLIB (+45.2%) | Stable, with slightly higher drift than loose coupling. |
-| `rtk` | smoothed | Off | 1.901 m vs 2.089 m | 23.984 m vs 20.154 m | 3.203 m vs 5.517 m | **Gneiss** (+9.0%) | Baseline GNSS-only validation. |
-| `rtk` | smoothed | Loose | 1.815 m vs 2.089 m | 23.284 m vs 20.154 m | 2.996 m vs 5.517 m | **Gneiss** (+13.1%) | RTK phase updates tightly constrain the INS in urban canyons, matching RTKLIB. |
-| `rtk` | smoothed | Tight | 2.496 m vs 2.089 m | 18.054 m vs 20.154 m | 2.774 m vs 5.517 m | RTKLIB (+16.3%) | Stable, with slightly higher drift than loose coupling. |
-| `ppp` | forward | Off | 2.284 m vs N/A | 26.485 m vs N/A | 5.313 m vs N/A | **Gneiss** | Baseline GNSS-only validation. |
-| `ppp` | forward | Loose | 2.284 m vs N/A | 26.485 m vs N/A | 5.313 m vs N/A | **Gneiss** | Stable PPP integration. |
-| `ppp` | forward | Tight | 2.384 m vs N/A | 27.019 m vs N/A | 5.430 m vs N/A | **Gneiss** | Stable PPP integration. |
-| `ppp` | smoothed | Off | 2.284 m vs N/A | 26.485 m vs N/A | 5.313 m vs N/A | **Gneiss** | Baseline GNSS-only validation. |
-| `ppp` | smoothed | Loose | 2.284 m vs N/A | 26.485 m vs N/A | 5.313 m vs N/A | **Gneiss** | Stable PPP integration. |
-| `ppp` | smoothed | Tight | 2.384 m vs N/A | 27.019 m vs N/A | 5.430 m vs N/A | **Gneiss** | Stable PPP integration. |
-
-## Odaiba (u-blox)
-
-| Base Mode | Filter | INS Mode | Hz 50th (Gneiss vs RTKLIB) | Hz 95th | Vt 50th | Winner | Notes |
-|:---|:---|:---|:---|:---|:---|:---|:---|
-| `spp` | forward | Off | 2.409 m vs 5.335 m | 9.384 m vs 35.568 m | 2.853 m vs 8.330 m | **Gneiss** (+54.8%) | Baseline GNSS-only validation. |
-| `spp` | forward | Loose | 2.409 m vs 5.335 m | 9.384 m vs 35.568 m | 2.853 m vs 8.330 m | **Gneiss** (+54.8%) | Divergence. Severe multipath causes Mahalanobis checks to reject SPP updates, leading to INS free-integration. |
-| `spp` | forward | Tight | 7.543 m vs 5.335 m | 22.192 m vs 35.568 m | 3.405 m vs 8.330 m | RTKLIB (+29.3%) | Divergence. Severe multipath causes Mahalanobis checks to reject SPP updates, leading to INS free-integration. |
-| `spp` | smoothed | Off | 2.409 m vs 5.335 m | 9.384 m vs 35.568 m | 2.853 m vs 8.330 m | **Gneiss** (+54.8%) | Baseline GNSS-only validation. |
-| `spp` | smoothed | Loose | 4.263 m vs 5.335 m | 9.678 m vs 35.568 m | 2.800 m vs 8.330 m | **Gneiss** (+20.1%) | Divergence. Severe multipath causes Mahalanobis checks to reject SPP updates, leading to INS free-integration. |
-| `spp` | smoothed | Tight | 7.781 m vs 5.335 m | 24.135 m vs 35.568 m | 3.372 m vs 8.330 m | RTKLIB (+31.4%) | Divergence. Severe multipath causes Mahalanobis checks to reject SPP updates, leading to INS free-integration. |
-| `rtk` | forward | Off | 1.017 m vs 2.239 m | 4.209 m vs 8.099 m | 1.921 m vs 6.413 m | **Gneiss** (+54.6%) | Baseline GNSS-only validation. |
-| `rtk` | forward | Loose | 0.991 m vs 2.239 m | 4.207 m vs 8.099 m | 1.923 m vs 6.413 m | **Gneiss** (+55.7%) | RTK phase updates tightly constrain the INS in urban canyons, matching RTKLIB. |
-| `rtk` | forward | Tight | 2.853 m vs 2.239 m | 14.590 m vs 8.099 m | 2.489 m vs 6.413 m | RTKLIB (+21.5%) | Stable, with slightly higher drift than loose coupling. |
-| `rtk` | smoothed | Off | 0.909 m vs 2.236 m | 4.297 m vs 13.146 m | 1.878 m vs 8.219 m | **Gneiss** (+59.3%) | Baseline GNSS-only validation. |
-| `rtk` | smoothed | Loose | 0.995 m vs 2.236 m | 4.207 m vs 13.146 m | 1.922 m vs 8.219 m | **Gneiss** (+55.5%) | RTK phase updates tightly constrain the INS in urban canyons, matching RTKLIB. |
-| `rtk` | smoothed | Tight | 2.658 m vs 2.236 m | 16.272 m vs 13.146 m | 2.892 m vs 8.219 m | RTKLIB (+15.9%) | Stable, with slightly higher drift than loose coupling. |
-| `ppp` | forward | Off | 2.478 m vs N/A | 9.437 m vs N/A | 2.972 m vs N/A | **Gneiss** | Baseline GNSS-only validation. |
-| `ppp` | forward | Loose | 2.478 m vs N/A | 9.437 m vs N/A | 2.972 m vs N/A | **Gneiss** | Stable PPP integration. |
-| `ppp` | forward | Tight | 2.583 m vs N/A | 10.575 m vs N/A | 3.072 m vs N/A | **Gneiss** | Stable PPP integration. |
-| `ppp` | smoothed | Off | 2.478 m vs N/A | 9.437 m vs N/A | 2.972 m vs N/A | **Gneiss** | Baseline GNSS-only validation. |
-| `ppp` | smoothed | Loose | 2.478 m vs N/A | 9.437 m vs N/A | 2.972 m vs N/A | **Gneiss** | Stable PPP integration. |
-| `ppp` | smoothed | Tight | 2.583 m vs N/A | 10.575 m vs N/A | 3.072 m vs N/A | **Gneiss** | Stable PPP integration. |
+This document empirically maps the performance of Gneiss across varying modes and datasets.
 
 ## GSDC (Pixel 4)
 
-| Base Mode | Filter | INS Mode | Hz 50th (Gneiss vs RTKLIB) | Hz 95th | Vt 50th | Winner | Notes |
-|:---|:---|:---|:---|:---|:---|:---|:---|
-| `spp` | forward | Off | 3.297 m vs 3.311 m | 8.784 m vs 10.191 m | 62.750 m vs 66.316 m | **Gneiss** (+0.4%) | Baseline GNSS-only validation. |
-| `spp` | forward | Loose | 3.435 m vs 3.311 m | 9.143 m vs 10.191 m | 62.693 m vs 66.316 m | RTKLIB (+3.6%) | Stable, ~50m error. Atomic EKF updates resolved previous 16km divergence. |
-| `spp` | forward | Tight | 9.957 m vs 3.311 m | 109.226 m vs 10.191 m | 63.041 m vs 66.316 m | RTKLIB (+66.7%) | Stable, ~50m error. Atomic EKF updates resolved previous 16km divergence. |
-| `spp` | smoothed | Off | 3.297 m vs 3.311 m | 8.784 m vs 10.191 m | 62.750 m vs 66.316 m | **Gneiss** (+0.4%) | Baseline GNSS-only validation. |
-| `spp` | smoothed | Loose | 3.435 m vs 3.311 m | 9.143 m vs 10.191 m | 62.693 m vs 66.316 m | RTKLIB (+3.6%) | Stable, ~50m error. Atomic EKF updates resolved previous 16km divergence. |
-| `spp` | smoothed | Tight | 9.530 m vs 3.311 m | 109.226 m vs 10.191 m | 63.065 m vs 66.316 m | RTKLIB (+65.3%) | Stable, ~50m error. Atomic EKF updates resolved previous 16km divergence. |
-| `rtk` | forward | Off | 2.357 m vs 1.773 m | 10.178 m vs 4.161 m | 62.642 m vs 64.598 m | RTKLIB (+24.8%) | Baseline GNSS-only validation. |
-| `rtk` | forward | Loose | 2.357 m vs 1.773 m | 9.860 m vs 4.161 m | 62.646 m vs 64.598 m | RTKLIB (+24.8%) | High drift. Phone hardware struggles to maintain stable RTK phase locks. |
-| `rtk` | forward | Tight | 4.148 m vs 1.773 m | 68.636 m vs 4.161 m | 62.526 m vs 64.598 m | RTKLIB (+57.3%) | High drift. Phone hardware struggles to maintain stable RTK phase locks. |
-| `rtk` | smoothed | Off | 2.351 m vs 1.831 m | 9.181 m vs 3.126 m | 62.628 m vs 64.471 m | RTKLIB (+22.1%) | Baseline GNSS-only validation. |
-| `rtk` | smoothed | Loose | 2.353 m vs 1.831 m | 7.563 m vs 3.126 m | 62.650 m vs 64.471 m | RTKLIB (+22.2%) | High drift. Phone hardware struggles to maintain stable RTK phase locks. |
-| `rtk` | smoothed | Tight | 2.711 m vs 1.831 m | 68.131 m vs 3.126 m | 62.586 m vs 64.471 m | RTKLIB (+32.5%) | High drift. Phone hardware struggles to maintain stable RTK phase locks. |
-| `ppp` | forward | Off | 11.025 m vs N/A | 11.025 m vs N/A | 43.205 m vs N/A | **Gneiss** | Baseline GNSS-only validation. |
-| `ppp` | forward | Loose | 11.025 m vs N/A | 11.025 m vs N/A | 43.205 m vs N/A | **Gneiss** | Stable PPP integration. |
-| `ppp` | forward | Tight | 11.025 m vs N/A | 11.025 m vs N/A | 43.205 m vs N/A | **Gneiss** | Stable PPP integration. |
-| `ppp` | smoothed | Off | 11.025 m vs N/A | 11.025 m vs N/A | 43.205 m vs N/A | **Gneiss** | Baseline GNSS-only validation. |
-| `ppp` | smoothed | Loose | 11.025 m vs N/A | 11.025 m vs N/A | 43.205 m vs N/A | **Gneiss** | Stable PPP integration. |
-| `ppp` | smoothed | Tight | 11.025 m vs N/A | 11.025 m vs N/A | 43.205 m vs N/A | **Gneiss** | Stable PPP integration. |
+| Mode | Median Horizontal | 95% Horizontal | Median Vertical |
+| :--- | :--- | :--- | :--- |
+| `spp` | 3.327 m | 8.648 m | 60.507 m |
+| `spp-ins` | 7.887 m | 75.339 m | 60.687 m |
+| `spp-ins-loosely-coupled` | 3.431 m | 9.157 m | 60.499 m |
+| `rtk` | 2.231 m | 9.799 m | 68.395 m |
+| `rtk-ins` | 4.477 m | 18.638 m | 64.082 m |
+| `rtk-ins-loosely-coupled` | 2.228 m | 8.528 m | 68.384 m |
+| `ppp` | 616.378 m | 2988.980 m | 930.022 m |
+| `ppp-ins` | 616.378 m | 2988.980 m | 930.022 m |
+
+## Shinjuku (UrbanNav)
+
+| Mode | Median Horizontal | 95% Horizontal | Median Vertical |
+| :--- | :--- | :--- | :--- |
+| `spp` | 2.257 m | 26.551 m | 7.037 m |
+| `spp-ins` | 7.826 m | 29.102 m | 7.773 m |
+| `spp-ins-loosely-coupled` | 3.316 m | 25.678 m | 7.084 m |
+| `rtk` | 1.453 m | 20.779 m | 2.752 m |
+| `rtk-ins` | 29.888 m | 106.262 m | 8.587 m |
+| `rtk-ins-loosely-coupled` | 1.453 m | 22.123 m | 2.791 m |
+| `ppp` | 17.582 m | 39.608 m | 30.660 m |
+| `ppp-ins` | 16.623 m | 41.207 m | 51.406 m |
 
 ## PPP (f9p_ppp)
 
-| Base Mode | Filter | INS Mode | Hz 50th (Gneiss vs RTKLIB) | Hz 95th | Vt 50th | Winner | Notes |
-|:---|:---|:---|:---|:---|:---|:---|:---|
-| `spp` | forward | Off | 3.057 m vs N/A | 3.932 m vs N/A | 3.859 m vs N/A | **Gneiss** | Baseline GNSS-only validation. |
-| `spp` | forward | Loose | 3.057 m vs N/A | 3.932 m vs N/A | 3.859 m vs N/A | **Gneiss** | Stable SPP-INS integration. |
-| `spp` | forward | Tight | 3.542 m vs N/A | 702.859 m vs N/A | 3.835 m vs N/A | **Gneiss** | Stable SPP-INS integration. |
-| `spp` | smoothed | Off | 3.057 m vs N/A | 3.932 m vs N/A | 3.859 m vs N/A | **Gneiss** | Baseline GNSS-only validation. |
-| `spp` | smoothed | Loose | 3.731 m vs N/A | 41.781 m vs N/A | 3.722 m vs N/A | **Gneiss** | Stable SPP-INS integration. |
-| `spp` | smoothed | Tight | 3.519 m vs N/A | 702.859 m vs N/A | 3.815 m vs N/A | **Gneiss** | Stable SPP-INS integration. |
-| `rtk` | forward | Off | 0.579 m vs N/A | 1.319 m vs N/A | 0.440 m vs N/A | **Gneiss** | Baseline GNSS-only validation. |
-| `rtk` | forward | Loose | 0.579 m vs N/A | 1.319 m vs N/A | 0.440 m vs N/A | **Gneiss** | RTK-INS matches baseline. |
-| `rtk` | forward | Tight | 0.486 m vs N/A | 2.525 m vs N/A | 0.353 m vs N/A | **Gneiss** | RTK-INS matches baseline. |
-| `rtk` | smoothed | Off | 0.580 m vs N/A | 1.315 m vs N/A | 0.439 m vs N/A | **Gneiss** | Baseline GNSS-only validation. |
-| `rtk` | smoothed | Loose | 0.579 m vs N/A | 1.319 m vs N/A | 0.440 m vs N/A | **Gneiss** | RTK-INS matches baseline. |
-| `rtk` | smoothed | Tight | 0.472 m vs N/A | 1.028 m vs N/A | 0.313 m vs N/A | **Gneiss** | RTK-INS matches baseline. |
-| `ppp` | forward | Off | 3.045 m vs N/A | 3.927 m vs N/A | 3.869 m vs N/A | **Gneiss** | Baseline GNSS-only validation. |
-| `ppp` | forward | Loose | 3.045 m vs N/A | 3.927 m vs N/A | 3.869 m vs N/A | **Gneiss** | Stable PPP integration. |
-| `ppp` | forward | Tight | 3.057 m vs N/A | 3.923 m vs N/A | 3.859 m vs N/A | **Gneiss** | Stable PPP integration. |
-| `ppp` | smoothed | Off | 3.045 m vs N/A | 3.927 m vs N/A | 3.869 m vs N/A | **Gneiss** | Baseline GNSS-only validation. |
-| `ppp` | smoothed | Loose | 3.045 m vs N/A | 3.927 m vs N/A | 3.869 m vs N/A | **Gneiss** | Stable PPP integration. |
-| `ppp` | smoothed | Tight | 3.057 m vs N/A | 3.923 m vs N/A | 3.859 m vs N/A | **Gneiss** | Stable PPP integration. |
+| Mode | Median Horizontal | 95% Horizontal | Median Vertical |
+| :--- | :--- | :--- | :--- |
+| `spp` | 3.010 m | 3.844 m | 1.839 m |
+| `spp-ins` | 3.533 m | 2185.700 m | 1.821 m |
+| `spp-ins-loosely-coupled` | 3.010 m | 3.844 m | 1.839 m |
+| `rtk` | Process Failed | Process Failed | Process Failed |
+| `rtk-ins` | Process Failed | Process Failed | Process Failed |
+| `rtk-ins-loosely-coupled` | 0.322 m | 0.503 m | 0.210 m |
+| `ppp` | 6.802 m | 8.367 m | 0.926 m |
+| `ppp-ins` | 6.802 m | 8.367 m | 0.926 m |
 
