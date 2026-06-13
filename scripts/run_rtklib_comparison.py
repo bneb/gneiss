@@ -71,21 +71,31 @@ def parse_eval_metrics(text):
     for line in text.splitlines():
         if line.startswith("| Horiz"):
             parts = [p.strip() for p in line.split("|")]
-            if len(parts) > 4:
-                metrics["hz_50"] = parts[2]
-                metrics["hz_95"] = parts[3]
-                metrics["hz_99"] = parts[4]
+            if len(parts) > 7:
+                metrics["hz_25"] = parts[2]
+                metrics["hz_50"] = parts[3]
+                metrics["hz_75"] = parts[4]
+                metrics["hz_90"] = parts[5]
+                metrics["hz_95"] = parts[6]
+                metrics["hz_99"] = parts[7]
         elif line.startswith("| Vert"):
             parts = [p.strip() for p in line.split("|")]
-            if len(parts) > 4:
-                metrics["vt_50"] = parts[2]
-                metrics["vt_95"] = parts[3]
-                metrics["vt_99"] = parts[4]
+            if len(parts) > 7:
+                metrics["vt_25"] = parts[2]
+                metrics["vt_50"] = parts[3]
+                metrics["vt_75"] = parts[4]
+                metrics["vt_90"] = parts[5]
+                metrics["vt_95"] = parts[6]
+                metrics["vt_99"] = parts[7]
         elif line.startswith("| 3D"):
             parts = [p.strip() for p in line.split("|")]
-            if len(parts) > 4:
-                metrics["3d_50"] = parts[2]
-                metrics["3d_95"] = parts[3]
+            if len(parts) > 7:
+                metrics["3d_25"] = parts[2]
+                metrics["3d_50"] = parts[3]
+                metrics["3d_75"] = parts[4]
+                metrics["3d_90"] = parts[5]
+                metrics["3d_95"] = parts[6]
+                metrics["3d_99"] = parts[7]
     return metrics
 
 
@@ -268,20 +278,29 @@ def generate_comparison_md(all_results):
 
     for ds_name, modes in all_results.items():
         md += f"## {ds_name}\n\n"
-        md += "| Mode | Engine | Hz 50th | Hz 95th | Vt 50th | Winner |\n"
-        md += "|:-----|:-------|:--------|:--------|:--------|:-------|\n"
+        md += "| Mode | Engine | Hz 25th | Hz 50th | Hz 75th | Hz 90th | Hz 95th | Hz 99th | Winner |\n"
+        md += "|:-----|:-------|:--------|:--------|:--------|:--------|:--------|:--------|:-------|\n"
 
         for label, data in modes.items():
             r = data["rtklib"]
             g = data["gneiss"]
 
-            r_hz50 = r.get("hz_50", "N/A") if r and "error" not in r else (r.get("error", "Failed") if r else "Failed")
-            r_hz95 = r.get("hz_95", "N/A") if r and "error" not in r else ""
-            r_vt50 = r.get("vt_50", "N/A") if r and "error" not in r else ""
+            def get_hz(data_dict, pct):
+                return data_dict.get(f"hz_{pct}", "N/A") if data_dict and "error" not in data_dict else (data_dict.get("error", "Failed") if data_dict else "Failed")
 
-            g_hz50 = g.get("hz_50", "N/A") if g and "error" not in g else (g.get("error", "Failed") if g else "Failed")
-            g_hz95 = g.get("hz_95", "N/A") if g and "error" not in g else ""
-            g_vt50 = g.get("vt_50", "N/A") if g and "error" not in g else ""
+            r_hz25 = get_hz(r, 25)
+            r_hz50 = get_hz(r, 50)
+            r_hz75 = get_hz(r, 75)
+            r_hz90 = get_hz(r, 90)
+            r_hz95 = get_hz(r, 95)
+            r_hz99 = get_hz(r, 99)
+
+            g_hz25 = get_hz(g, 25)
+            g_hz50 = get_hz(g, 50)
+            g_hz75 = get_hz(g, 75)
+            g_hz90 = get_hz(g, 90)
+            g_hz95 = get_hz(g, 95)
+            g_hz99 = get_hz(g, 99)
 
             # Determine winner
             winner = ""
@@ -295,8 +314,8 @@ def generate_comparison_md(all_results):
                 else:
                     winner = "Tie"
 
-            md += f"| {label} | RTKLIB | {r_hz50} | {r_hz95} | {r_vt50} | {winner} |\n"
-            md += f"| {label} | Gneiss | {g_hz50} | {g_hz95} | {g_vt50} | |\n"
+            md += f"| {label} | RTKLIB | {r_hz25} | {r_hz50} | {r_hz75} | {r_hz90} | {r_hz95} | {r_hz99} | {winner} |\n"
+            md += f"| {label} | Gneiss | {g_hz25} | {g_hz50} | {g_hz75} | {g_hz90} | {g_hz95} | {g_hz99} | |\n"
 
         md += "\n"
 

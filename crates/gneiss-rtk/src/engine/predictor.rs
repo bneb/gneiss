@@ -126,7 +126,7 @@ pub fn compute_process_noise(dt: f64, config: &EngineConfig, is_imu_active: bool
     }
 
     for i in crate::filter::CORE_STATE_SIZE..n {
-        q[(i, i)] = if is_fixed { config.process_noise_amb_fixed } else { config.process_noise_amb_float * dt_abs };
+        q[(i, i)] = if is_fixed { config.process_noise_amb_fixed * dt_abs } else { config.process_noise_amb_float * dt_abs };
     }
     
     q
@@ -173,6 +173,14 @@ pub fn predict(state: &mut RtkState, dt: f64, config: &EngineConfig, imu_buffer:
         x_pred[crate::filter::CORE_STATE_SIZE + i] = state.ambiguities[i];
     }
     state.full_x_predict = Some(x_pred);
+    
+    state.predicted_position = Some(state.position.clone());
+    state.predicted_velocity = Some(state.velocity);
+    if state.covariance.nrows() > 6 {
+        state.predicted_attitude = Some(state.attitude);
+        state.predicted_accel_bias = Some(state.accel_bias);
+        state.predicted_gyro_bias = Some(state.gyro_bias);
+    }
 }
 
 pub fn gravity_wgs84(pos_ecef: Vector3<f64>) -> Vector3<f64> {

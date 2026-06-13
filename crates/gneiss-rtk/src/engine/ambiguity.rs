@@ -99,110 +99,123 @@ pub fn manage_ambiguities_and_slips(
             state.gf_values.insert(r.sat, l_gf);
         }
 
-        if !state.ambiguity_keys.contains(&(r.sat, 1)) || slip_l1 || slip_l2 {
-            if slip_l1 || slip_l2 { 
-                tracing::debug!("Cycle slip detected for {:?}: slip_l1={}, slip_l2={}", r.sat, slip_l1, slip_l2);
-                state.remove_ambiguity(r.sat, 1); 
-                state.remove_ambiguity(r.sat, 2);
-                state.reject_counts.insert((r.sat, 1), 0);
-                state.reject_counts.insert((r.sat, 2), 0);
-            }
-            
-            if let (Some(r_cp1), Some(b_cp1)) = (r.cp_l1, b.cp_l1) {
-                let lam_r1 = gneiss_core::constants::SPEED_OF_LIGHT_M_S / r_f1;
-                let lam_b1 = gneiss_core::constants::SPEED_OF_LIGHT_M_S / b_f1;
-                let cp_l1_rov = r_cp1 * lam_r1;
-                let cp_l1_base = b_cp1 * lam_b1;
+        let needs_l1 = r.cp_l1.is_some() && b.cp_l1.is_some() && (!state.ambiguity_keys.contains(&(r.sat, 1)) || slip_l1 || slip_l2);
+        let needs_l2 = r.cp_l2.is_some() && b.cp_l2.is_some() && (!state.ambiguity_keys.contains(&(r.sat, 2)) || slip_l1 || slip_l2);
 
-                let mut initialized = false;
-                if state.covariance[(0,0)] < 0.1 {
-                    // Try to find an anchor satellite to cancel the clock bias
-                    for (anchor_r, anchor_b) in matched_obs.iter() {
-                        if anchor_r.sat == r.sat { continue; }
-                        if let Some(anchor_idx) = state.ambiguity_keys.iter().position(|&(s, f)| s == anchor_r.sat && f == 1) {
-                            if state.covariance[(15 + anchor_idx, 15 + anchor_idx)] < 0.05 {
-                                if let (Some(ar_cp), Some(ab_cp)) = (anchor_r.cp_l1, anchor_b.cp_l1) {
-                                    let (ar_sat_vec, _, _, _) = ephemerides.iter().find(|e| e.sat() == anchor_r.sat).unwrap().position(rover_time);
-                                    let (ab_sat_vec, _, _, _) = ephemerides.iter().find(|e| e.sat() == anchor_b.sat).unwrap().position(base_time);
-                                    let ar_dist_rov = (state.position.vector - ar_sat_vec).norm();
-                                    let ar_dist_base = (base_coord.vector - ab_sat_vec).norm();
-                                    
-                                    let a_lam_r = gneiss_core::constants::SPEED_OF_LIGHT_M_S / r_f1;
-                                    let a_lam_b = gneiss_core::constants::SPEED_OF_LIGHT_M_S / b_f1;
-                                    let a_cp_rov = ar_cp * a_lam_r;
-                                    let a_cp_base = ab_cp * a_lam_b;
-                                    
-                                    let anchor_sd = state.ambiguities[anchor_idx];
-                                    let b_clock_rov = a_cp_rov - ar_dist_rov - anchor_sd;
-                                    let b_clock_base = a_cp_base - ar_dist_base; // Base has no ambiguity in SD, assuming SD = rov - base
+        if slip_l1 || slip_l2 { 
+            tracing::debug!("Cycle slip detected for {:?}: slip_l1={}, slip_l2={}", r.sat, slip_l1, slip_l2);
+            state.remove_ambiguity(r.sat, 1); 
+            state.remove_ambiguity(r.sat, 2);
+            state.reject_counts.insert((r.sat, 1), 0);
+            state.reject_counts.insert((r.sat, 2), 0);
+        }
+        
+        if needs_l1 {
+            let r_cp1 = r.cp_l1.unwrap();
+            let b_cp1 = b.cp_l1.unwrap();
+            let lam_r1 = gneiss_core::constants::SPEED_OF_LIGHT_M_S / r_f1;
+            let lam_b1 = gneiss_core::constants::SPEED_OF_LIGHT_M_S / b_f1;
+            let cp_l1_rov = r_cp1 * lam_r1;
+            let cp_l1_base = b_cp1 * lam_b1;
 
-                                    let (r_sat_vec, _, _, _) = ephemerides.iter().find(|e| e.sat() == r.sat).unwrap().position(rover_time);
-                                    let (b_sat_vec, _, _, _) = ephemerides.iter().find(|e| e.sat() == b.sat).unwrap().position(base_time);
-                                    let dist_rov = (state.position.vector - r_sat_vec).norm();
-                                    let dist_base = (base_coord.vector - b_sat_vec).norm();
-                                    
-                                    let initial_est_l1 = (cp_l1_rov - dist_rov - b_clock_rov) - (cp_l1_base - dist_base - b_clock_base);
-                                    state.add_ambiguity(r.sat, 1, initial_est_l1, config.initial_ambiguity_variance);
-                                    initialized = true;
-                                    break;
-                                }
+            let mut initialized = false;
+            if state.covariance[(0,0)] < 0.1 {
+                for (anchor_r, anchor_b) in matched_obs.iter() {
+                    if anchor_r.sat == r.sat { continue; }
+                    if let Some(anchor_idx) = state.ambiguity_keys.iter().position(|&(s, f)| s == anchor_r.sat && f == 1) {
+                        if state.covariance[(crate::filter::CORE_STATE_SIZE + anchor_idx, crate::filter::CORE_STATE_SIZE + anchor_idx)] < 0.05 {
+                            if let (Some(ar_cp), Some(ab_cp)) = (anchor_r.cp_l1, anchor_b.cp_l1) {
+                                let anchor_eph = ephemerides.iter().find(|e| e.sat() == anchor_r.sat).unwrap();
+                                let (a_f1, _) = gneiss_core::signal::satellite_frequencies(anchor_r.sat, anchor_eph.freq_num());
+                                
+                                let (ar_sat_vec, _) = crate::engine::measurement::get_sat_state(anchor_eph, anchor_r.pr_l1, rover_time, state.position.vector);
+                                let (ab_sat_vec, _) = crate::engine::measurement::get_sat_state(anchor_eph, anchor_b.pr_l1, base_time, base_coord.vector);
+                                let ar_dist_rov = (state.position.vector - ar_sat_vec).norm();
+                                let ar_dist_base = (base_coord.vector - ab_sat_vec).norm();
+                                
+                                let a_lam = gneiss_core::constants::SPEED_OF_LIGHT_M_S / a_f1;
+                                let a_cp_rov = ar_cp * a_lam;
+                                let a_cp_base = ab_cp * a_lam;
+                                
+                                let anchor_sd = state.ambiguities[anchor_idx];
+                                let b_clock_rov = a_cp_rov - ar_dist_rov - anchor_sd;
+                                let b_clock_base = a_cp_base - ar_dist_base; // Base has no ambiguity in SD, assuming SD = rov - base
+
+                                let r_eph = ephemerides.iter().find(|e| e.sat() == r.sat).unwrap();
+                                let (r_sat_vec, _) = crate::engine::measurement::get_sat_state(r_eph, r.pr_l1, rover_time, state.position.vector);
+                                let (b_sat_vec, _) = crate::engine::measurement::get_sat_state(r_eph, b.pr_l1, base_time, base_coord.vector);
+                                let dist_rov = (state.position.vector - r_sat_vec).norm();
+                                let dist_base = (base_coord.vector - b_sat_vec).norm();
+                                
+                                let initial_est_l1 = (cp_l1_rov - dist_rov - b_clock_rov) - (cp_l1_base - dist_base - b_clock_base);
+                                state.add_ambiguity(r.sat, 1, initial_est_l1, config.initial_ambiguity_variance);
+                                initialized = true;
+                                break;
                             }
                         }
                     }
                 }
-                
-                if !initialized {
-                    let initial_est_l1 = (cp_l1_rov - r.pr_l1) - (cp_l1_base - b.pr_l1);
-                    state.add_ambiguity(r.sat, 1, initial_est_l1, config.initial_ambiguity_variance);
-                }
             }
             
-            if let (Some(r_pr2), Some(r_cp2), Some(b_pr2), Some(b_cp2)) = (r.pr_l2, r.cp_l2, b.pr_l2, b.cp_l2) {
-                let lam_r2 = gneiss_core::constants::SPEED_OF_LIGHT_M_S / r_f2;
-                let lam_b2 = gneiss_core::constants::SPEED_OF_LIGHT_M_S / b_f2;
-                let cp_l2_rov = r_cp2 * lam_r2;
-                let cp_l2_base = b_cp2 * lam_b2;
-                
-                let mut initialized = false;
-                if state.covariance[(0,0)] < 0.1 {
-                    for (anchor_r, anchor_b) in matched_obs.iter() {
-                        if anchor_r.sat == r.sat { continue; }
-                        if let Some(anchor_idx) = state.ambiguity_keys.iter().position(|&(s, f)| s == anchor_r.sat && f == 2) {
-                            if state.covariance[(15 + anchor_idx, 15 + anchor_idx)] < 0.05 {
-                                if let (Some(ar_cp), Some(ab_cp)) = (anchor_r.cp_l2, anchor_b.cp_l2) {
-                                    let (ar_sat_vec, _, _, _) = ephemerides.iter().find(|e| e.sat() == anchor_r.sat).unwrap().position(rover_time);
-                                    let (ab_sat_vec, _, _, _) = ephemerides.iter().find(|e| e.sat() == anchor_b.sat).unwrap().position(base_time);
-                                    let ar_dist_rov = (state.position.vector - ar_sat_vec).norm();
-                                    let ar_dist_base = (base_coord.vector - ab_sat_vec).norm();
-                                    
-                                    let a_lam_r = gneiss_core::constants::SPEED_OF_LIGHT_M_S / r_f2;
-                                    let a_lam_b = gneiss_core::constants::SPEED_OF_LIGHT_M_S / b_f2;
-                                    let a_cp_rov = ar_cp * a_lam_r;
-                                    let a_cp_base = ab_cp * a_lam_b;
-                                    
-                                    let anchor_sd = state.ambiguities[anchor_idx];
-                                    let b_clock_rov = a_cp_rov - ar_dist_rov - anchor_sd;
-                                    let b_clock_base = a_cp_base - ar_dist_base;
+            if !initialized {
+                let initial_est_l1 = (cp_l1_rov - r.pr_l1) - (cp_l1_base - b.pr_l1);
+                state.add_ambiguity(r.sat, 1, initial_est_l1, config.initial_ambiguity_variance);
+            }
+        }
+        
+        if needs_l2 {
+            let r_cp2 = r.cp_l2.unwrap();
+            let b_cp2 = b.cp_l2.unwrap();
+            let r_pr2 = r.pr_l2.unwrap();
+            let b_pr2 = b.pr_l2.unwrap();
+            
+            let lam_r2 = gneiss_core::constants::SPEED_OF_LIGHT_M_S / r_f2;
+            let lam_b2 = gneiss_core::constants::SPEED_OF_LIGHT_M_S / b_f2;
+            let cp_l2_rov = r_cp2 * lam_r2;
+            let cp_l2_base = b_cp2 * lam_b2;
+            
+            let mut initialized = false;
+            if state.covariance[(0,0)] < 0.1 {
+                for (anchor_r, anchor_b) in matched_obs.iter() {
+                    if anchor_r.sat == r.sat { continue; }
+                    if let Some(anchor_idx) = state.ambiguity_keys.iter().position(|&(s, f)| s == anchor_r.sat && f == 2) {
+                        if state.covariance[(crate::filter::CORE_STATE_SIZE + anchor_idx, crate::filter::CORE_STATE_SIZE + anchor_idx)] < 0.05 {
+                            if let (Some(ar_cp), Some(ab_cp)) = (anchor_r.cp_l2, anchor_b.cp_l2) {
+                                let anchor_eph = ephemerides.iter().find(|e| e.sat() == anchor_r.sat).unwrap();
+                                let (_, a_f2) = gneiss_core::signal::satellite_frequencies(anchor_r.sat, anchor_eph.freq_num());
+                                
+                                let (ar_sat_vec, _) = crate::engine::measurement::get_sat_state(anchor_eph, anchor_r.pr_l1, rover_time, state.position.vector);
+                                let (ab_sat_vec, _) = crate::engine::measurement::get_sat_state(anchor_eph, anchor_b.pr_l1, base_time, base_coord.vector);
+                                let ar_dist_rov = (state.position.vector - ar_sat_vec).norm();
+                                let ar_dist_base = (base_coord.vector - ab_sat_vec).norm();
+                                
+                                let a_lam = gneiss_core::constants::SPEED_OF_LIGHT_M_S / a_f2;
+                                let a_cp_rov = ar_cp * a_lam;
+                                let a_cp_base = ab_cp * a_lam;
+                                
+                                let anchor_sd = state.ambiguities[anchor_idx];
+                                let b_clock_rov = a_cp_rov - ar_dist_rov - anchor_sd;
+                                let b_clock_base = a_cp_base - ar_dist_base;
 
-                                    let (r_sat_vec, _, _, _) = ephemerides.iter().find(|e| e.sat() == r.sat).unwrap().position(rover_time);
-                                    let (b_sat_vec, _, _, _) = ephemerides.iter().find(|e| e.sat() == b.sat).unwrap().position(base_time);
-                                    let dist_rov = (state.position.vector - r_sat_vec).norm();
-                                    let dist_base = (base_coord.vector - b_sat_vec).norm();
-                                    
-                                    let initial_est_l2 = (cp_l2_rov - dist_rov - b_clock_rov) - (cp_l2_base - dist_base - b_clock_base);
-                                    state.add_ambiguity(r.sat, 2, initial_est_l2, config.initial_ambiguity_variance);
-                                    initialized = true;
-                                    break;
-                                }
+                                let r_eph = ephemerides.iter().find(|e| e.sat() == r.sat).unwrap();
+                                let (r_sat_vec, _) = crate::engine::measurement::get_sat_state(r_eph, r.pr_l1, rover_time, state.position.vector);
+                                let (b_sat_vec, _) = crate::engine::measurement::get_sat_state(r_eph, b.pr_l1, base_time, base_coord.vector);
+                                let dist_rov = (state.position.vector - r_sat_vec).norm();
+                                let dist_base = (base_coord.vector - b_sat_vec).norm();
+                                
+                                let initial_est_l2 = (cp_l2_rov - dist_rov - b_clock_rov) - (cp_l2_base - dist_base - b_clock_base);
+                                state.add_ambiguity(r.sat, 2, initial_est_l2, config.initial_ambiguity_variance);
+                                initialized = true;
+                                break;
                             }
                         }
                     }
                 }
-                
-                if !initialized {
-                    let initial_est_l2 = (cp_l2_rov - r_pr2) - (cp_l2_base - b_pr2);
-                    state.add_ambiguity(r.sat, 2, initial_est_l2, config.initial_ambiguity_variance);
-                }
+            }
+            
+            if !initialized {
+                let initial_est_l2 = (cp_l2_rov - r_pr2) - (cp_l2_base - b_pr2);
+                state.add_ambiguity(r.sat, 2, initial_est_l2, config.initial_ambiguity_variance);
             }
         }
         if let (Some(r_pr2), Some(r_cp2), Some(b_pr2), Some(b_cp2), Some(r_cp1), Some(b_cp1)) = (r.pr_l2, r.cp_l2, b.pr_l2, b.cp_l2, r.cp_l1, b.cp_l1) {

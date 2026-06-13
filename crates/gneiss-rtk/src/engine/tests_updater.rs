@@ -107,38 +107,58 @@ mod tests {
         let state = RtkState::new(time, pos, 2.5);
         
         let mut z = DVector::zeros(3);
-        let mut h = DMatrix::zeros(3, state.covariance.ncols());
-        let mut r = DMatrix::from_diagonal(&DVector::from_element(3, 1.0));
+        let h = DMatrix::from_fn(3, state.covariance.ncols(), |r, c| if r == c { 1.0 } else { 0.0 });
+        let r = DMatrix::from_diagonal(&DVector::from_element(3, 1.0));
         
-        // 0: PR - valid (nu=10.0, var=1.0)
+        // s_ii = P(0,0) + R(0,0) = 2.5 + 1.0 = 3.5 for all measurements
+        
+        // PR (type 0): z=10.0, threshold = max_inn^2 = 225, nu^2/s_ii = 28.5 → Valid
         z[0] = 10.0;
-        h[(0, 0)] = 1.0;
-        
-        // 1: Phase - invalid (nu=1000.0) -> threshold is max_inn * 10000, so it might pass if max_inn=15
-        z[1] = 500.0; 
-        h[(1, 0)] = 1.0;
-        
-        // 2: Doppler - valid (nu=50.0) -> threshold is max_inn * 1000
-        z[2] = 50.0;
-        h[(2, 0)] = 1.0;
+        // Phase (type 1): z=3.0, threshold = CP_CHI2 = 100, nu^2/s_ii = 2.57 → Valid
+        z[1] = 3.0;
+        // Doppler (type 3): z=3.0, threshold = DOP_CHI2 = 50, nu^2/s_ii = 2.57 → Valid
+        z[2] = 3.0;
         
         use gneiss_core::sat::{SatelliteId, Constellation};
         let sat1 = SatelliteId { constellation: Constellation::Gps, prn: 1 };
         let meas_types = [(sat1, 0), (sat1, 1), (sat1, 3)];
         
+        let _valid_idx = crate::engine::updater::filter_pre_fit_residuals(&z, &h, &r, &state.covariance, 15.0, Some(&meas_types));
+        
+        // Now make phase invalid: z=20.0, nu^2/s_ii = 400/3.5 = 114 > 100 → Invalid
+        z[1] = 20.0;
         let valid_idx = crate::engine::updater::filter_pre_fit_residuals(&z, &h, &r, &state.covariance, 15.0, Some(&meas_types));
         
-        // PR threshold: 15*15 = 225. nu*nu / s_ii = 100 / (2.5 + 1) = 28.5. Valid.
-        // Phase threshold: 15*10000 = 150000. nu*nu = 250000. 250000 / 3.5 = 71428. Valid.
-        // Let's make phase explicitly invalid by increasing z[1]
+        assert!(valid_idx.contains(&0), "PR should pass");
+        assert!(!valid_idx.contains(&1), "Phase should be rejected");
+        assert!(valid_idx.contains(&2), "Doppler should pass");
+    }
+
+    #[test]
+    fn test_update_loosely_coupled_huber() {
+        let time = GpsTime::new(2000, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos.clone(), 2.5);
+        let mut gnss_state = RtkState::new(time, pos.clone(), 2.5);
         
-        // Adjust z[1] to 1000.0 so nu^2 / s_ii = 1e6 / 3.5 = 285k > 150k.
-        z[1] = 1000.0;
-        let valid_idx = crate::engine::updater::filter_pre_fit_residuals(&z, &h, &r, &state.covariance, 15.0, Some(&meas_types));
+        // Give gnss_state a position error
+        gnss_state.position.vector.x += 15.0; // Huge error
         
-        assert!(valid_idx.contains(&0));
-        assert!(!valid_idx.contains(&1));
-        assert!(valid_idx.contains(&2));
+        // High Mahalanobis sq will be generated.
+        let tuning = crate::engine::config::EkfTuningConfig {
+            loosely_coupled_mahalanobis_sq: 10.0,
+            huber_threshold_loosely: 3.0,
+            ..Default::default()
+        };
+        
+        let lever_arm = Vector3::zeros();
+        let omega_b = Vector3::zeros();
+        
+        let res = crate::engine::updater::update_loosely_coupled(&mut state, &gnss_state, lever_arm, omega_b, &tuning);
+        assert!(res.is_ok(), "Huber scaling should prevent rejection of the huge error");
+        
+        // state position should be updated but not fully 15m due to variance inflation
+        assert!(state.position.vector.x > 0.0 && state.position.vector.x < 15.0);
     }
 
 }

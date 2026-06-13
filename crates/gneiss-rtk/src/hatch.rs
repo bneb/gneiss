@@ -83,7 +83,7 @@ impl HatchFilter {
                         let projected_pr = state.smoothed_pr + delta_phase;
 
                         // Check for cycle slip or large time gap
-                        if dt > self.max_time_gap_s || (pr_val - projected_pr).abs() > 50.0 { // Relax to 50m to avoid false trips
+                        if dt > self.max_time_gap_s || (pr_val - projected_pr).abs() > self.slip_threshold_m {
                             // Reset
                             state.smoothed_pr = pr_val;
                             state.last_phase = cp_val;
