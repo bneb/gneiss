@@ -393,7 +393,13 @@ fn process_epochs(
 async fn write_results(engine: &mut ProcessingEngine, output: &str) -> Result<(), Box<dyn std::error::Error>> {
     let results = if engine.config.enable_backward_smoothing {
         info!("Running backward smoothing pass...");
-        engine.run_combined_ppk().unwrap_or(engine.state_history.clone())
+        match engine.run_combined_ppk() {
+            Ok(s) => s,
+            Err(e) => {
+                error!("Backward smoothing failed: {:?}. Falling back to forward results.", e);
+                engine.state_history.clone()
+            }
+        }
     } else {
         info!("Cloning state history...");
         engine.state_history.clone()

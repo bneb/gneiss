@@ -10,6 +10,7 @@ pub mod ppp;
 pub mod ambiguity;
 pub mod config;
 pub mod auto_tuner;
+pub mod smoother;
 
 use nalgebra::{Vector3, DMatrix, DVector};
 use gneiss_core::obs::EpochObs;
@@ -494,14 +495,23 @@ impl ProcessingEngine {
             let z_diff = pos.vector - state.position.vector;
             let z_vec = nalgebra::DVector::from_column_slice(z_diff.as_slice());
             
-            let mut h_mat = nalgebra::DMatrix::zeros(3, state.covariance.ncols());
-            h_mat.view_mut((0, 0), (3, 3)).fill_diagonal(1.0);
-            
-            let mut r_mat = nalgebra::DMatrix::zeros(3, 3);
-            // Using a tighter variance of 9.0 (3m std dev) forces the INS to track the clean SPP positions
-            r_mat.fill_diagonal(9.0);
+            let mut rejected = false;
+            if self.config.mode.is_tightly_coupled() && z_diff.norm() > self.config.spp_consistency_threshold_m {
+                rejected = true;
+            } else {
+                let mut h_mat = nalgebra::DMatrix::zeros(3, state.covariance.ncols());
+                h_mat.view_mut((0, 0), (3, 3)).fill_diagonal(1.0);
+                
+                let mut r_mat = nalgebra::DMatrix::zeros(3, 3);
+                // Using a tighter variance of 9.0 (3m std dev) forces the INS to track the clean SPP positions
+                r_mat.fill_diagonal(9.0);
 
-            if crate::engine::updater::update(state, &z_vec, &h_mat, &r_mat, self.config.spp_consistency_threshold_m, None, self.config.mode.is_tightly_coupled(), &self.config.tuning).map_or(true, |v| v.len() < 3) {
+                if crate::engine::updater::update(state, &z_vec, &h_mat, &r_mat, self.config.spp_consistency_threshold_m, None, self.config.mode.is_tightly_coupled(), &self.config.tuning).map_or(true, |v| v.len() < 3) {
+                    rejected = true;
+                }
+            }
+
+            if rejected {
                 state.consecutive_rejections += 1;
                 if state.consecutive_rejections > 5 {
                     tracing::warn!("SPP EKF rejected for {} epochs. Hard resetting INS to SPP.", state.consecutive_rejections);
@@ -782,12 +792,15 @@ impl ProcessingEngine {
                         tracing::warn!("GNSS EKF rejected for {} epochs.", state.consecutive_rejections);
                     } else {
                         state.consecutive_rejections = 0;
-                        if let Ok((fixed_state, _da, _q_fixed, _ratio, _subset_size)) = state.resolve_ambiguities(&self.ephemerides, self.config.lambda_min_subset, self.config.ar_min_epoch_count, self.config.ar_min_lock, self.config.lambda_min_ratio) {
-                            tracing::debug!("Integer ambiguities resolved!");
-                            state.fixed_state = Some(Box::new(fixed_state));
-                        } else if let Err(e) = state.resolve_ambiguities(&self.ephemerides, self.config.lambda_min_subset, self.config.ar_min_epoch_count, self.config.ar_min_lock, self.config.lambda_min_ratio) {
-                            tracing::debug!("AR Failed: {}", e);
-                            state.fixed_state = None;
+                        match state.resolve_ambiguities(&self.ephemerides, self.config.lambda_min_subset, self.config.ar_min_epoch_count, self.config.ar_min_lock, self.config.lambda_min_ratio) {
+                            Ok((fixed_state, _da, _q_fixed, _ratio, _subset_size)) => {
+                                tracing::debug!("Integer ambiguities resolved!");
+                                state.fixed_state = Some(Box::new(fixed_state));
+                            }
+                            Err(e) => {
+                                tracing::debug!("AR Failed: {}", e);
+                                state.fixed_state = None;
+                            }
                         }
                     }
                     state.prune_stale_ambiguities(state.epoch_count as u32, 10);
@@ -874,221 +887,7 @@ impl ProcessingEngine {
         }
 
     pub fn run_combined_ppk(&mut self) -> Result<Vec<RtkState>, EngineError> {
-        let n_epochs = self.state_history.len();
-        if n_epochs == 0 { return Err(EngineError::NoObservations); }
-        
-        let mut smoothed_states = self.state_history.clone();
-
-        if matches!(self.config.mode, EngineMode::Spp | EngineMode::Ppp | EngineMode::PppIns | EngineMode::PppInsLooselyCoupled) {
-            // Pure SPP/PPP are epoch-by-epoch solutions. No kinematics or IMU bias states exist to smooth.
-            // Return forward solutions without smoothing.
-            return Ok(smoothed_states);
-        }
-        
-        // Backward pass
-        for k in (0..n_epochs - 1).rev() {
-            if smoothed_states[k+1].is_reset {
-                tracing::debug!("Epoch {} was reset. Breaking smoothing chain at k={}", k+1, k);
-                continue;
-            }
-            // Extract matrices generated during the forward prediction from k to k+1
-            // Note: These are stored in state_k1 during predict_state
-            let phi_k = match &smoothed_states[k+1].core_phi {
-                Some(p) => p.clone(),
-                None => continue,
-            };
-            let p_pred_k1 = match &smoothed_states[k+1].full_p_predict {
-                Some(p) => p.clone(),
-                None => continue,
-            };
-            let x_pred_k1 = match &smoothed_states[k+1].full_x_predict {
-                Some(x) => x.clone(),
-                None => continue,
-            };
-            
-            let state_k = &smoothed_states[k]; // x_{k|k}
-            let state_k1 = &smoothed_states[k+1]; // x_{k+1|N}
-
-            // Only smooth the first 15 states (kinematic + IMU biases) + matched ambiguities to avoid clock jump numerical instability
-            let core_size = 15;
-            
-            // Find matching ambiguities
-            let mut matched_k_indices = Vec::new();
-            let mut matched_k1_indices = Vec::new();
-            for (i, key_k) in state_k.ambiguity_keys.iter().enumerate() {
-                if let Some(j) = state_k1.ambiguity_keys.iter().position(|k| k == key_k) {
-                    if state_k.ambiguity_track_ids[i] == state_k1.ambiguity_track_ids[j] {
-                        let cov_idx = crate::filter::CORE_STATE_SIZE + j;
-                        if state_k1.covariance[(cov_idx, cov_idx)] < 10.0 {
-                            matched_k_indices.push(crate::filter::CORE_STATE_SIZE + i);
-                            matched_k1_indices.push(cov_idx);
-                        }
-                    }
-                }
-            }
-            
-            let smooth_len = core_size + matched_k_indices.len();
-            
-            // Build index mapping for state k
-            let mut idx_k = Vec::with_capacity(smooth_len);
-            for i in 0..core_size { idx_k.push(i); }
-            idx_k.extend(matched_k_indices.clone());
-            
-            // Build index mapping for state k+1
-            let mut idx_k1 = Vec::with_capacity(smooth_len);
-            for i in 0..core_size { idx_k1.push(i); }
-            idx_k1.extend(&matched_k1_indices);
-
-            let mut x_k1_n = DVector::zeros(smooth_len);
-            x_k1_n.rows_mut(0, 3).copy_from(&state_k1.position.vector);
-            x_k1_n.rows_mut(3, 3).copy_from(&state_k1.velocity);
-            x_k1_n.rows_mut(9, 3).copy_from(&state_k1.accel_bias);
-            x_k1_n.rows_mut(12, 3).copy_from(&state_k1.gyro_bias);
-            for i in 0..matched_k1_indices.len() {
-                x_k1_n[core_size + i] = state_k1.ambiguities[matched_k1_indices[i] - crate::filter::CORE_STATE_SIZE];
-            }
-            
-            let mut p_k1_n = DMatrix::zeros(smooth_len, smooth_len);
-            for i in 0..smooth_len {
-                for j in 0..smooth_len {
-                    p_k1_n[(i, j)] = state_k1.covariance[(idx_k1[i], idx_k1[j])];
-                }
-            }
-            
-            let mut p_k = DMatrix::zeros(smooth_len, smooth_len);
-            for i in 0..smooth_len {
-                for j in 0..smooth_len {
-                    p_k[(i, j)] = state_k.covariance[(idx_k[i], idx_k[j])];
-                }
-            }
-            
-            let mut p_pred_k1_sub = DMatrix::zeros(smooth_len, smooth_len);
-            for i in 0..smooth_len {
-                for j in 0..smooth_len {
-                    p_pred_k1_sub[(i, j)] = p_pred_k1[(idx_k[i], idx_k[j])];
-                }
-            }
-            
-            let mut phi_k_sub = DMatrix::zeros(smooth_len, smooth_len);
-            for i in 0..core_size {
-                for j in 0..core_size {
-                    phi_k_sub[(i, j)] = phi_k[(i, j)];
-                }
-            }
-            for i in core_size..smooth_len {
-                phi_k_sub[(i, i)] = 1.0;
-            }
-            
-            let mut active_indices = Vec::with_capacity(smooth_len);
-            if p_pred_k1_sub.iter().any(|&x| x.is_nan() || x.is_infinite() || x.abs() > 1e10) || p_k.iter().any(|&x| x.is_nan() || x.is_infinite() || x.abs() > 1e10) {
-                tracing::debug!("RTS Smoothing skipped at k={} due to non-finite covariance", k);
-                continue;
-            }
-            
-            for i in 0..smooth_len {
-                if p_pred_k1_sub[(i, i)] > 1e-12 {
-                    active_indices.push(i);
-                }
-            }
-
-            let mut x_pred_k1_sub = DVector::zeros(smooth_len);
-            for i in 0..smooth_len {
-                x_pred_k1_sub[i] = x_pred_k1[idx_k[i]];
-            }
-
-            let m = active_indices.len();
-            let p_pred_inv_opt = if m == smooth_len {
-                let reg = DMatrix::identity(smooth_len, smooth_len) * 1e-9;
-                (p_pred_k1_sub.clone() + reg).try_inverse()
-            } else if m > 0 {
-                let mut p_active = DMatrix::zeros(m, m);
-                for (i, &r) in active_indices.iter().enumerate() {
-                    for (j, &c) in active_indices.iter().enumerate() {
-                        p_active[(i, j)] = p_pred_k1_sub[(r, c)];
-                    }
-                }
-                
-                let reg = DMatrix::identity(m, m) * 1e-9;
-                let inv_active_opt = (p_active + reg).try_inverse();
-                    
-                inv_active_opt.map(|inv_active| {
-                    let mut inv_full = DMatrix::zeros(smooth_len, smooth_len);
-                    for (i, &r) in active_indices.iter().enumerate() {
-                        for (j, &c) in active_indices.iter().enumerate() {
-                            inv_full[(r, c)] = inv_active[(i, j)];
-                        }
-                    }
-                    inv_full
-                })
-            } else {
-                None
-            };
-            
-            let p_pred_inv = match p_pred_inv_opt {
-                Some(inv) => inv,
-                None => {
-                    tracing::debug!("RTS Smoothing failed to invert P_pred at k={}", k);
-                    continue;
-                }
-            };
-            
-            // Smoother gain C_k = P_{k|k} * Phi_k^T * P_{k+1|k}^{-1}
-            let c_k = &p_k * phi_k_sub.transpose() * p_pred_inv;
-            
-            // Reconstruct x_{k|k}
-            let mut x_k = DVector::zeros(smooth_len);
-            x_k.rows_mut(0, 3).copy_from(&state_k.position.vector);
-            x_k.rows_mut(3, 3).copy_from(&state_k.velocity);
-            if core_size > 6 {
-                x_k.rows_mut(9, 3).copy_from(&state_k.accel_bias);
-                x_k.rows_mut(12, 3).copy_from(&state_k.gyro_bias);
-            }
-            for i in 0..matched_k_indices.len() {
-                x_k[core_size + i] = state_k.ambiguities[matched_k_indices[i] - crate::filter::CORE_STATE_SIZE];
-            }
-            
-            let correction = &c_k * (x_k1_n.clone() - x_pred_k1_sub.clone());
-            let pos_corr_norm = correction.fixed_rows::<3>(0).norm();
-            if k % 1000 == 0 {
-                tracing::info!("Smoother at k={}. pos_corr: {:.3}m", k, pos_corr_norm);
-                tracing::info!("P_k pos var: {:.3e}, vel var: {:.3e}", p_k[(0, 0)], p_k[(3, 3)]);
-                tracing::info!("P_pred pos var: {:.3e}, vel var: {:.3e}", p_pred_k1_sub[(0, 0)], p_pred_k1_sub[(3, 3)]);
-                tracing::info!("C_k pos,pos: {:.3e}, pos,vel: {:.3e}", c_k[(0, 0)], c_k[(0, 3)]);
-            }
-            if pos_corr_norm > 10.0 {
-                tracing::warn!("Smoother huge pos correction: {:.1}m at k={}. x_k1_n pos: {:.1}, x_pred_k1 pos: {:.1}", pos_corr_norm, k, x_k1_n.fixed_rows::<3>(0).norm(), x_pred_k1_sub.fixed_rows::<3>(0).norm());
-            }
-            
-            let x_k_n = x_k + correction;
-            let p_k_n = p_k + &c_k * (p_k1_n - p_pred_k1_sub) * c_k.transpose();
-            
-            // Update smoothed_states[k]
-            let s_k_mut = &mut smoothed_states[k];
-            s_k_mut.position.vector = x_k_n.fixed_rows::<3>(0).into_owned();
-            s_k_mut.velocity = x_k_n.fixed_rows::<3>(3).into_owned();
-            s_k_mut.accel_bias = x_k_n.fixed_rows::<3>(9).into_owned();
-            s_k_mut.gyro_bias = x_k_n.fixed_rows::<3>(12).into_owned();
-            // Clock biases remain untouched from the forward filter pass
-            
-            for i in 0..matched_k_indices.len() {
-                let amb_idx = matched_k_indices[i] - crate::filter::CORE_STATE_SIZE;
-                s_k_mut.ambiguities[amb_idx] = x_k_n[core_size + i];
-            }
-            for i in 0..smooth_len {
-                for j in 0..smooth_len {
-                    s_k_mut.covariance[(idx_k[i], idx_k[j])] = p_k_n[(i, j)];
-                }
-            }
-            
-            s_k_mut.is_fixed = false;
-            s_k_mut.fixed_state = None;
-            if !matches!(self.config.mode, EngineMode::Spp | EngineMode::SppIns) {
-                if let Ok((fixed_state, _, _, _, _)) = s_k_mut.resolve_ambiguities(&self.ephemerides, self.config.lambda_min_subset, self.config.ar_min_epoch_count, self.config.ar_min_lock, self.config.lambda_min_ratio) {
-                    s_k_mut.fixed_state = Some(Box::new(fixed_state));
-                }
-            }
-        }
-        Ok(smoothed_states)
+        crate::engine::smoother::run_combined_ppk(self)
     }
 }
 

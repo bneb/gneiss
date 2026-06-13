@@ -230,25 +230,31 @@ pub fn evaluate(solution: &str, truth: &str) -> Result<(), String> {
     let count = err_3d.len() as f64;
     let h_count = heading_errors.len() as f64;
 
+    let p25 = (count * 0.25) as usize;
     let p50 = (count * 0.50) as usize;
+    let p75 = (count * 0.75) as usize;
+    let p90 = (count * 0.90) as usize;
     let p95 = (count * 0.95) as usize;
     let p99 = (count * 0.99) as usize;
 
+    let hp25 = (h_count * 0.25) as usize;
     let hp50 = (h_count * 0.50) as usize;
+    let hp75 = (h_count * 0.75) as usize;
+    let hp90 = (h_count * 0.90) as usize;
     let hp95 = (h_count * 0.95) as usize;
     let hp99 = (h_count * 0.99) as usize;
 
-    println!("==================================================");
-    println!("   AEROSPACE METRICS: ERROR CDFs (meters / deg)   ");
-    println!("==================================================");
+    println!("==========================================================================================");
+    println!("                       AEROSPACE METRICS: ERROR CDFs (meters / deg)                       ");
+    println!("==========================================================================================");
     println!("Evaluated {} epochs. Moving epochs: {}", count, h_count);
-    println!("--------------------------------------------------");
-    println!("| Metric  |   50th %%  |   95th %%  |   99th %%  |");
-    println!("|---------|------------|------------|------------|");
-    println!("| Horiz   | {:>8.3} m | {:>8.3} m | {:>8.3} m |", horiz_errors[p50], horiz_errors[p95], horiz_errors[p99]);
-    println!("| Vert    | {:>8.3} m | {:>8.3} m | {:>8.3} m |", vert_errors[p50], vert_errors[p95], vert_errors[p99]);
-    println!("| 3D      | {:>8.3} m | {:>8.3} m | {:>8.3} m |", err_3d[p50], err_3d[p95], err_3d[p99]);
-    println!("| Heading | {:>8.3}°  | {:>8.3}°  | {:>8.3}°  |", heading_errors[hp50], heading_errors[hp95], heading_errors[hp99]);
+    println!("------------------------------------------------------------------------------------------");
+    println!("| Metric  |   25th %%  |   50th %%  |   75th %%  |   90th %%  |   95th %%  |   99th %%  |");
+    println!("|---------|------------|------------|------------|------------|------------|------------|");
+    println!("| Horiz   | {:>8.3} m | {:>8.3} m | {:>8.3} m | {:>8.3} m | {:>8.3} m | {:>8.3} m |", horiz_errors[p25], horiz_errors[p50], horiz_errors[p75], horiz_errors[p90], horiz_errors[p95], horiz_errors[p99]);
+    println!("| Vert    | {:>8.3} m | {:>8.3} m | {:>8.3} m | {:>8.3} m | {:>8.3} m | {:>8.3} m |", vert_errors[p25], vert_errors[p50], vert_errors[p75], vert_errors[p90], vert_errors[p95], vert_errors[p99]);
+    println!("| 3D      | {:>8.3} m | {:>8.3} m | {:>8.3} m | {:>8.3} m | {:>8.3} m | {:>8.3} m |", err_3d[p25], err_3d[p50], err_3d[p75], err_3d[p90], err_3d[p95], err_3d[p99]);
+    println!("| Heading | {:>8.3}°  | {:>8.3}°  | {:>8.3}°  | {:>8.3}°  | {:>8.3}°  | {:>8.3}°  |", heading_errors[hp25], heading_errors[hp50], heading_errors[hp75], heading_errors[hp90], heading_errors[hp95], heading_errors[hp99]);
     println!("==================================================");
 
     Ok(())

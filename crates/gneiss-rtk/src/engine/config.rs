@@ -44,6 +44,10 @@ pub struct EkfTuningConfig {
     pub cp_abs_thresh: f64,
     pub dop_abs_thresh: f64,
 
+    // Huber Estimator Thresholds
+    pub huber_threshold_loosely: f64,
+    pub huber_threshold_tightly: f64,
+
     // Auto-tuning Constraints
     pub auto_tune: AutoTuneConfig,
 }
@@ -64,6 +68,8 @@ impl Default for EkfTuningConfig {
             pr_abs_thresh: 40.0,
             cp_abs_thresh: 1.0,
             dop_abs_thresh: 15.0,
+            huber_threshold_loosely: 10.0,
+            huber_threshold_tightly: 3.0,
             auto_tune: Default::default(),
         }
     }

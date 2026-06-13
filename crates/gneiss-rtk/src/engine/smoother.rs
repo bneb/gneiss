@@ -2,6 +2,11 @@ use crate::engine::{ProcessingEngine, EngineMode, EngineError};
 use crate::filter::RtkState;
 use nalgebra::{DMatrix, DVector};
 
+const MAX_STATE_VARIANCE: f64 = 1e10;
+const MIN_ACTIVE_STATE_VARIANCE: f64 = 1e-12;
+const MATRIX_INVERSION_REGULARIZATION: f64 = 1e-9;
+const MIN_ATTITUDE_ROTATION: f64 = 1e-10;
+
 pub fn run_combined_ppk(engine: &mut ProcessingEngine) -> Result<Vec<RtkState>, EngineError> {
     let n_epochs = engine.state_history.len();
     if n_epochs == 0 { return Err(EngineError::NoObservations); }
@@ -81,24 +86,43 @@ fn smooth_epoch(
     let p_pred_k1_sub = extract_submatrix(p_pred_k1, &idx_k, &idx_k);
     let phi_k_sub = build_phi_submatrix(phi_k, core_size, smooth_len);
 
-    if p_pred_k1_sub.iter().any(|&x| !x.is_finite() || x.abs() > 1e10) || p_k.iter().any(|&x| !x.is_finite() || x.abs() > 1e10) {
+    if p_pred_k1_sub.iter().any(|&x| !x.is_finite() || x.abs() > MAX_STATE_VARIANCE) || p_k.iter().any(|&x| !x.is_finite() || x.abs() > MAX_STATE_VARIANCE) {
         return Err("non-finite covariance");
     }
 
     let p_pred_inv = invert_p_pred(&p_pred_k1_sub, smooth_len)?;
 
     let x_pred_k1_sub = extract_subvector(x_pred_k1, &idx_k);
-    let c_k = &p_k * phi_k_sub.transpose() * p_pred_inv;
+    let c_k = &p_k * phi_k_sub.transpose() * &p_pred_inv;
+    
     let x_k = build_x_vector(state_k, core_size, smooth_len, &matched_k_indices);
+    let mut delta_x = &x_k1_n - &x_pred_k1_sub;
     
-    let correction = &c_k * (x_k1_n - x_pred_k1_sub);
-    let pos_corr_norm = correction.fixed_rows::<3>(0).norm();
-    
-    if pos_corr_norm > 10.0 {
-        tracing::warn!("Smoother large position correction: {:.1}m at k={}", pos_corr_norm, k_idx);
+    if core_size > 6 {
+        if let Some(predicted_attitude) = state_k1.predicted_attitude {
+            let dq = state_k1.attitude * predicted_attitude.inverse();
+            let mut d_theta = dq.scaled_axis();
+            if dq.w < 0.0 { d_theta = -d_theta; }
+            delta_x.rows_mut(6, 3).copy_from(&d_theta);
+        }
     }
     
+    if core_size > 15 {
+        delta_x[15] = 0.0; // rcv_clk_bias is white noise
+    }
+    
+    let mut correction = &c_k * &delta_x;
+    
+    if core_size > 15 {
+        correction[15] = 0.0; // rcv_clk_bias is white noise
+    }
+    
+
+
     let x_k_n = x_k + correction;
+
+
+
     let p_k_n = p_k + &c_k * (p_k1_n - p_pred_k1_sub) * c_k.transpose();
 
     update_smoothed_state(state_k, &x_k_n, &p_k_n, core_size, smooth_len, &matched_k_indices, &idx_k);
@@ -176,14 +200,19 @@ fn build_phi_submatrix(phi: &DMatrix<f64>, core_size: usize, len: usize) -> DMat
 }
 
 fn invert_p_pred(p_pred: &DMatrix<f64>, len: usize) -> Result<DMatrix<f64>, &'static str> {
-    let active: Vec<usize> = (0..len).filter(|&i| p_pred[(i, i)] > 1e-12).collect();
+    let active: Vec<usize> = (0..len).filter(|&i| {
+        // Exclude ambiguities (indices 21+) and white-noise clock bias (15) to prevent instability
+        let is_ambiguity = i >= 21;
+        let is_white_noise = i == 15;
+        !is_ambiguity && !is_white_noise && p_pred[(i, i)] > MIN_ACTIVE_STATE_VARIANCE
+    }).collect();
     let m = active.len();
     if m == len {
-        let reg = DMatrix::identity(len, len) * 1e-9;
+        let reg = DMatrix::identity(len, len) * MATRIX_INVERSION_REGULARIZATION;
         (p_pred + reg).try_inverse().ok_or("inversion failed")
     } else if m > 0 {
         let p_act = extract_submatrix(p_pred, &active, &active);
-        let reg = DMatrix::identity(m, m) * 1e-9;
+        let reg = DMatrix::identity(m, m) * MATRIX_INVERSION_REGULARIZATION;
         let inv_act = (p_act + reg).try_inverse().ok_or("inversion failed")?;
         let mut inv_full = DMatrix::zeros(len, len);
         for (i, &r) in active.iter().enumerate() {
@@ -210,7 +239,7 @@ fn update_smoothed_state(
     state.velocity = x_k_n.fixed_rows::<3>(3).into_owned();
     if core_size > 6 {
         let d_theta = x_k_n.fixed_rows::<3>(6).into_owned();
-        if d_theta.norm() > 1e-10 {
+        if d_theta.norm() > MIN_ATTITUDE_ROTATION {
             let dq = nalgebra::UnitQuaternion::from_axis_angle(&nalgebra::Unit::new_normalize(d_theta), d_theta.norm());
             state.attitude = dq * state.attitude;
             state.attitude.renormalize();

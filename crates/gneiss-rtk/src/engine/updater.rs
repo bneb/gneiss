@@ -1,6 +1,14 @@
 use crate::filter::RtkState;
 use nalgebra::{DMatrix, DVector, Vector3, UnitQuaternion};
 
+/// Pre-fit chi-squared threshold for carrier phase (normalized innovation squared).
+/// A CP innovation of ~0.5m with sigma ~0.01m gives chi2 ~2500. Reject only extreme outliers.
+const CP_PRE_FIT_CHI2_THRESHOLD: f64 = 100.0;
+
+/// Pre-fit chi-squared threshold for Doppler measurements.
+/// A Doppler innovation of 1 m/s with sigma ~0.3 m/s gives chi2 ~11. Reject above 50.
+const DOPPLER_PRE_FIT_CHI2_THRESHOLD: f64 = 50.0;
+
 #[derive(Debug)]
 pub enum UpdateError {
     SingularMatrix,
@@ -76,8 +84,8 @@ pub fn filter_pre_fit_residuals(
         
         let meas_type = meas_types.map_or(0, |m| m[i].1);
         let threshold = match meas_type {
-            1 | 2 => max_innovation * 10000.0,
-            3 => max_innovation * 1000.0,
+            1 | 2 => CP_PRE_FIT_CHI2_THRESHOLD,
+            3 => DOPPLER_PRE_FIT_CHI2_THRESHOLD,
             _ => max_innovation * max_innovation,
         };
         
@@ -104,8 +112,8 @@ pub fn evaluate_post_fit_outliers(
     meas_types: Option<&[(gneiss_core::sat::SatelliteId, u8)]>,
     max_innovation: f64,
     is_tightly_coupled: bool,
+    tuning: &crate::engine::config::EkfTuningConfig,
 ) -> (Option<usize>, f64) {
-    let tuning = crate::engine::config::EkfTuningConfig::default();
     let mut max_outlier_ratio = 0.0;
     let mut worst_idx = None;
     
@@ -142,6 +150,35 @@ pub fn evaluate_post_fit_outliers(
     (worst_idx, max_outlier_ratio)
 }
 
+fn huber_scale_covariance(
+    p: &DMatrix<f64>,
+    r: &DMatrix<f64>,
+    z: &DVector<f64>,
+    tuning: &crate::engine::config::EkfTuningConfig,
+) -> Result<DMatrix<f64>, UpdateError> {
+    let s_raw = p + r;
+    let s_raw_inv = match s_raw.clone().cholesky() {
+        Some(chol) => chol.inverse(),
+        None => return Err(UpdateError::SingularMatrix),
+    };
+    let mahal_sq = (&z.transpose() * &s_raw_inv * z)[(0, 0)];
+    let huber_sq = tuning.huber_threshold_loosely.powi(2);
+
+    if mahal_sq <= huber_sq {
+        if mahal_sq > tuning.loosely_coupled_mahalanobis_sq {
+            return Err(UpdateError::InvalidMeasurement);
+        }
+        return Ok(r.clone());
+    }
+    // Inflate R so effective Mahalanobis clamps to huber_sq
+    let scale = mahal_sq / huber_sq;
+    let r_scaled = r * scale;
+    if huber_sq > tuning.loosely_coupled_mahalanobis_sq {
+        return Err(UpdateError::InvalidMeasurement);
+    }
+    Ok(r_scaled)
+}
+
 pub fn update_loosely_coupled(
     state: &mut RtkState,
     gnss_state: &RtkState,
@@ -149,17 +186,8 @@ pub fn update_loosely_coupled(
     omega_b: Vector3<f64>,
     tuning: &crate::engine::config::EkfTuningConfig,
 ) -> Result<(), UpdateError> {
-    let p_6x6 = state.covariance.view((0, 0), (6, 6));
-    let r_6x6 = gnss_state.covariance.view((0, 0), (6, 6));
-    
-    let s = p_6x6 + r_6x6;
-    let s_inv = match s.clone().cholesky() {
-        Some(chol) => chol.inverse(),
-        None => match (s + DMatrix::identity(6, 6) * 1e-6).cholesky() {
-            Some(chol) => chol.inverse(),
-            None => return Err(UpdateError::SingularMatrix),
-        }
-    };
+    let p_6x6 = state.covariance.view((0, 0), (6, 6)).into_owned();
+    let r_6x6_raw = gnss_state.covariance.view((0, 0), (6, 6)).into_owned();
     
     let r_b_e = state.attitude.to_rotation_matrix();
     let l_e = r_b_e * lever_arm;
@@ -169,10 +197,18 @@ pub fn update_loosely_coupled(
     let mut z = DVector::zeros(6);
     z.rows_mut(0, 3).copy_from(&(gnss_state.position.vector - pos_apc));
     z.rows_mut(3, 3).copy_from(&(gnss_state.velocity - v_apc));
-    
-    if (&z.transpose() * &s_inv * &z)[(0, 0)] > tuning.loosely_coupled_mahalanobis_sq {
-        return Err(UpdateError::InvalidMeasurement);
-    }
+
+    // Compute raw Mahalanobis distance and apply Huber scaling if needed
+    let r_6x6 = huber_scale_covariance(&p_6x6, &r_6x6_raw, &z, tuning)?;
+
+    let s = &p_6x6 + &r_6x6;
+    let s_inv = match s.clone().cholesky() {
+        Some(chol) => chol.inverse(),
+        None => match (s + DMatrix::identity(6, 6) * 1e-6).cholesky() {
+            Some(chol) => chol.inverse(),
+            None => return Err(UpdateError::SingularMatrix),
+        }
+    };
     
     let mut h_mat = DMatrix::zeros(6, state.covariance.ncols());
     h_mat.view_mut((0, 0), (6, 6)).fill_diagonal(1.0);
@@ -200,13 +236,13 @@ pub fn update_loosely_coupled(
     }
     
     apply_state_correction(state, &dx);
-    state.covariance = apply_joseph_covariance_update(&state.covariance, &k, &h_mat, &gnss_state.covariance.view((0, 0), (6, 6)).into_owned());
+    state.covariance = apply_joseph_covariance_update(&state.covariance, &k, &h_mat, &r_6x6);
     
     Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn update(state: &mut RtkState, z: &DVector<f64>, h: &DMatrix<f64>, r: &DMatrix<f64>, max_innovation: f64, meas_types: Option<&[(gneiss_core::sat::SatelliteId, u8)]>, is_tightly_coupled: bool, _tuning: &crate::engine::config::EkfTuningConfig) -> Result<Vec<usize>, UpdateError> {
+pub fn update(state: &mut RtkState, z: &DVector<f64>, h: &DMatrix<f64>, r: &DMatrix<f64>, max_innovation: f64, meas_types: Option<&[(gneiss_core::sat::SatelliteId, u8)]>, is_tightly_coupled: bool, tuning: &crate::engine::config::EkfTuningConfig) -> Result<Vec<usize>, UpdateError> {
     if z.len() != h.nrows() || h.ncols() != state.covariance.nrows() {
         return Err(UpdateError::DimensionMismatch);
     }
@@ -235,7 +271,9 @@ pub fn update(state: &mut RtkState, z: &DVector<f64>, h: &DMatrix<f64>, r: &DMat
         for (new_idx, &old_idx) in valid_indices.iter().enumerate() {
             z_new[new_idx] = z[old_idx];
             for j in 0..h.ncols() { h_new[(new_idx, j)] = h[(old_idx, j)]; }
-            r_new[(new_idx, new_idx)] = r[(old_idx, old_idx)];
+            for (new_col, &old_col) in valid_indices.iter().enumerate() {
+                r_new[(new_idx, new_col)] = r[(old_idx, old_col)];
+            }
         }
         (z_new, h_new, r_new)
     };
@@ -253,7 +291,13 @@ pub fn update(state: &mut RtkState, z: &DVector<f64>, h: &DMatrix<f64>, r: &DMat
         
         let s_inv = match s.clone().cholesky() {
             Some(chol) => chol.inverse(),
-            None => (s.clone() + DMatrix::identity(s.nrows(), s.ncols()) * 1e-6).try_inverse().unwrap_or_else(|| DMatrix::identity(s.nrows(), s.ncols()))
+            None => {
+                let regularized = s.clone() + DMatrix::identity(s.nrows(), s.ncols()) * 1e-6;
+                match regularized.try_inverse() {
+                    Some(inv) => inv,
+                    None => return Err(UpdateError::SingularMatrix),
+                }
+            }
         };
         
         k = &state.covariance * current_h.transpose() * &s_inv;
@@ -264,7 +308,7 @@ pub fn update(state: &mut RtkState, z: &DVector<f64>, h: &DMatrix<f64>, r: &DMat
         }
 
         let v = &current_z - &current_h * &dx;
-        let (worst_idx, max_outlier_ratio) = evaluate_post_fit_outliers(&v, &s, &current_z, &current_valid, meas_types, max_innovation, is_tightly_coupled);
+        let (worst_idx, max_outlier_ratio) = evaluate_post_fit_outliers(&v, &s, &current_z, &current_valid, meas_types, max_innovation, is_tightly_coupled, tuning);
         
         if let Some(idx) = worst_idx {
             if current_valid.len() > 4 {

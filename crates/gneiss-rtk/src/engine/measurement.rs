@@ -704,6 +704,10 @@ pub fn build_measurement_model(
         }
     }
 
+/// DD measurements sharing a reference satellite have correlated noise equal to
+/// the reference satellite's measurement variance.
+const DD_CROSS_CORRELATION_SCALE: f64 = 1.0;
+
 pub fn build_dense_covariance_matrix(
     r_diagonals: &[f64],
     meas_types: &[(gneiss_core::sat::SatelliteId, u8, f64)],
@@ -712,7 +716,7 @@ pub fn build_dense_covariance_matrix(
     for i in 0..meas_types.len() {
         for j in (i + 1)..meas_types.len() {
             if meas_types[i].1 == meas_types[j].1 && meas_types[i].0.constellation == meas_types[j].0.constellation {
-                let cov = meas_types[i].2.min(meas_types[j].2) * 0.5;
+                let cov = meas_types[i].2.min(meas_types[j].2) * DD_CROSS_CORRELATION_SCALE;
                 r_mat[(i, j)] = cov;
                 r_mat[(j, i)] = cov;
             }
@@ -720,6 +724,7 @@ pub fn build_dense_covariance_matrix(
     }
     r_mat
 }
+
 
     if safe_indices.len() >= 4 {
         let mut z_vec = DVector::zeros(safe_indices.len());
@@ -1137,6 +1142,7 @@ mod tests {
 
     /// Compute DD range given a rotation applied to base position + lever arm.
     /// DD = |sat - pos_apc| - |ref - pos_apc|
+    #[cfg(test)]
     fn dd_range(
         pos: Vector3<f64>,
         rot: nalgebra::UnitQuaternion<f64>,
@@ -1150,6 +1156,7 @@ mod tests {
 
     /// Compute DD range-rate (rover portion only).
     /// DD_rate = e_sat·(v_sat - v_apc) - e_ref·(v_ref - v_apc)
+    #[cfg(test)]
     fn dd_range_rate(
         pos: Vector3<f64>,
         vel: Vector3<f64>,
@@ -1170,6 +1177,7 @@ mod tests {
 
     /// Apply a small rotation perturbation (left-multiplicative, matching
     /// the EKF convention in apply_state_correction).
+    #[cfg(test)]
     fn perturb_attitude(
         rot: nalgebra::UnitQuaternion<f64>,
         d_theta: Vector3<f64>,

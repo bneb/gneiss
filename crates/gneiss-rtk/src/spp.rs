@@ -52,6 +52,10 @@ pub enum SppError {
 
 const LIGHT_SPEED: f64 = gneiss_core::constants::SPEED_OF_LIGHT_M_S;
 const OMEGA_E: f64 = gneiss_core::constants::EARTH_ROTATION_RATE_RAD_S; // WGS 84 value of earth's rotation rate
+const MIN_WEIGHT: f64 = 1e-10;
+const HEIGHT_CONSTRAINT_VAR: f64 = 100.0;
+const MIN_EARTH_RADIUS_M: f64 = 6_000_000.0;
+const MIN_ATMOSPHERE_ELEVATION_RAD: f64 = 5.0 * core::f64::consts::PI / 180.0;
 
 use serde::{Serialize, Deserialize};
 
@@ -66,6 +70,9 @@ pub struct SppConfig {
     pub enable_iono: bool,
     pub raim_outlier_m: f64,
     pub nominal_snr_dbhz: f64,
+    pub min_measurements_init: usize,
+    pub raim_mad_multiplier: f64,
+    pub elevation_mask_rad: f64,
 }
 
 impl Default for SppConfig {
@@ -79,6 +86,9 @@ impl Default for SppConfig {
             enable_iono: true,
             raim_outlier_m: 25.0,
             nominal_snr_dbhz: 45.0,
+            min_measurements_init: 3,
+            raim_mad_multiplier: 7.413, // 1.4826 * 5.0 sigma
+            elevation_mask_rad: 0.1745, // ~10 degrees
         }
     }
 }
@@ -186,7 +196,7 @@ fn seed_initial_state(measurements: &[SppMeasurement], prev_state: Option<&SppSt
             gneiss_core::sat::Constellation::Glonass => if cdt_glo.is_none() { cdt_glo = Some(cdt); },
             _ => {},
         }
-        tracing::info!("SPP seed: SAT={}, raw_pr={:.3}, dt_sat_m={:.3}, geom_r={:.3}, cdt={:.3}", m.eph.sat(), m.raw_pr, (corrected_pr - m.raw_pr), geom_r, cdt);
+        tracing::debug!("SPP seed: SAT={}, raw_pr={:.3}, dt_sat_m={:.3}, geom_r={:.3}, cdt={:.3}", m.eph.sat(), m.raw_pr, (corrected_pr - m.raw_pr), geom_r, cdt);
     }
 
     let default_cdt = cdt_gps.or(cdt_gal).or(cdt_bds).or(cdt_glo).unwrap_or(0.0);
@@ -210,8 +220,8 @@ pub fn compute_spp(
 ) -> Result<SppState, SppError> {
     let measurements = build_measurements(epoch, ephemerides, config);
 
-    if measurements.len() < 3 {
-        tracing::error!("SPP failed: Only {} valid measurements. Need at least 3.", measurements.len());
+    if measurements.len() < config.min_measurements_init {
+        tracing::error!("SPP failed: Only {} valid measurements. Need at least {}.", measurements.len(), config.min_measurements_init);
         return Err(SppError::NotEnoughMeasurements);
     }
 
@@ -264,8 +274,7 @@ pub fn compute_spp(
             deviations.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
             let mad = deviations[deviations.len() / 2];
             
-            // 1.4826 scales MAD to match standard deviation for a normal distribution. Using 5 sigma bound.
-            let mad_threshold = (mad * 1.4826 * 5.0).max(config.raim_outlier_m);
+            let mad_threshold = (mad * config.raim_mad_multiplier).max(config.raim_outlier_m);
 
             let mut good_measurements = Vec::new();
             for (m, r) in residuals {
@@ -372,12 +381,9 @@ fn build_design_matrix(
     for (i, m) in measurements.iter().enumerate() {
         let (dx, dy, dz, r, residual, el) = compute_measurement_residuals(state, m, rec_ecef, rec_llh, iono_params, config);
         
-        #[cfg(not(test))]
-        let el_mask = 0.1745;
-        #[cfg(test)]
-        let el_mask = -core::f64::consts::PI;
+        let el_mask = config.elevation_mask_rad;
 
-        if el < el_mask && state.position.vector.x != 0.0 { w_matrix[(i, i)] = 1e-10; continue; }
+        if el < el_mask && state.position.vector.x != 0.0 { w_matrix[(i, i)] = MIN_WEIGHT; continue; }
 
         h_matrix[(i, 0)] = dx / r; h_matrix[(i, 1)] = dy / r; h_matrix[(i, 2)] = dz / r;
         if m.constellation == gneiss_core::sat::Constellation::Gps { if let Some(c) = clocks.0 { h_matrix[(i, c)] = 1.0; } }
@@ -437,8 +443,8 @@ fn compute_atmospheric_delays(
     rec_ecef: Vector3<f64>, rec_llh: Vector3<f64>, az: f64, el: f64, time: gneiss_core::time::GpsTime,
     iono_params: Option<&KlobucharParams>, config: &SppConfig
 ) -> (f64, f64) {
-    if rec_ecef.norm() <= 6_000_000.0 { return (0.0, 0.0); }
-    let safe_el = el.max(5.0 * core::f64::consts::PI / 180.0);
+    if rec_ecef.norm() <= MIN_EARTH_RADIUS_M { return (0.0, 0.0); }
+    let safe_el = el.max(MIN_ATMOSPHERE_ELEVATION_RAD);
     
     let tropo = if config.enable_tropo {
         AtmosphereModel::tropo_nmf(&TropoParams::default(), rec_llh, safe_el, time)
@@ -477,7 +483,7 @@ fn apply_height_constraint(
     
     // Give it a relatively high variance so true measurements take precedence,
     // but low enough to constrain the geometry (100 m^2 = 10m std dev)
-    w_matrix[(row_idx, row_idx)] = 1.0 / 100.0; 
+    w_matrix[(row_idx, row_idx)] = 1.0 / HEIGHT_CONSTRAINT_VAR; 
 }
 
 #[cfg(test)]
@@ -562,6 +568,7 @@ mod tests {
             enable_tropo: false,
             enable_iono: false,
             geometry_variance_threshold: 100000.0,
+            elevation_mask_rad: -core::f64::consts::PI, // Bypass elevation mask for tests
             ..Default::default()
         };
 
@@ -582,7 +589,10 @@ mod tests {
             time: t,
             satellites: vec![],
         };
-        let config = SppConfig::default();
+        let config = SppConfig {
+            elevation_mask_rad: -core::f64::consts::PI,
+            ..Default::default()
+        };
         let res = compute_spp(&epoch, &[], None, &config, None);
         assert_eq!(res.unwrap_err(), SppError::NotEnoughMeasurements);
     }
@@ -603,7 +613,10 @@ mod tests {
             }),
         };
 
-        let config = SppConfig::default();
+        let config = SppConfig {
+            elevation_mask_rad: -core::f64::consts::PI,
+            ..Default::default()
+        };
         let state = SppState::new(Coordinate::new(nalgebra::Vector3::zeros(), Datum::WGS84, Frame::ECEF, t), 0.0, 0.0, 0.0, 0.0);
         
         let res = spp_wnlls_step(&state, &[m1], None, &config);

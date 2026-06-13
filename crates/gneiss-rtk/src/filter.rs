@@ -171,7 +171,7 @@ impl RtkState {
         
         let max_subset = candidate_vars.len().min(24);
         for subset_size in (min_subset..=max_subset).rev() {
-            let (d_mat_small, a_cycles, q_cycles) = build_lambda_matrices(self, &candidate_vars, subset_size, ephemerides);
+            let (_d_mat_small, a_cycles, q_cycles) = build_lambda_matrices(self, &candidate_vars, subset_size, ephemerides);
             
             if let Ok(res) = crate::lambda::resolve_lambda(&a_cycles, &q_cycles) {
                 let dynamic_threshold = crate::ffrt::calculate_threshold(subset_size, 0.001).max(lambda_min_ratio);
@@ -215,6 +215,7 @@ impl RtkState {
         
         let dx = &k_full * &da_meters;
         let mut fixed_state = self.clone();
+        fixed_state.fixed_state = None;
         crate::engine::updater::apply_state_correction(&mut fixed_state, &dx);
         let r_zero = DMatrix::zeros(subset_size, subset_size);
         fixed_state.covariance = crate::engine::updater::apply_joseph_covariance_update(&self.covariance, &k_full, &d_full, &r_zero);
@@ -240,6 +241,10 @@ impl RtkState {
         }
     }
     pub fn add_ambiguity(&mut self, sat: SatelliteId, freq: u8, initial_estimate: f64, initial_variance: f64) {
+        if self.ambiguity_keys.contains(&(sat, freq)) {
+            tracing::warn!("Ambiguity for {:?} L{} already exists! Resetting.", sat, freq);
+            self.remove_ambiguity(sat, freq);
+        }
         tracing::debug!("Adding ambiguity for {:?} L{} val={} var={}", sat, freq, initial_estimate, initial_variance);
         self.ambiguities.push(initial_estimate);
         self.ambiguity_keys.push((sat, freq));
