@@ -1,0 +1,13 @@
+--- crates/gneiss-rtk/src/engine/mod.rs
++++ crates/gneiss-rtk/src/engine/mod.rs
+@@ -510,6 +510,10 @@ pub fn process_spp(&mut self, rover_obs: &EpochObs) -> Result<&RtkState, EngineE
+                 state.consecutive_rejections += 1;
+             } else {
+                 state.consecutive_rejections = 0;
++                
++                if rover_obs.time.tow > 427000.0 && rover_obs.time.tow < 427050.0 {
++                    println!("DEBUG_MOD_AFTER: TOW {} state_pos: {:.2?}", rover_obs.time.tow, state.position.vector);
++                }
+             }
+         }
+         

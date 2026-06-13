@@ -93,7 +93,7 @@ impl Default for SppConfig {
     }
 }
 
-fn build_measurements(epoch: &EpochObs, ephemerides: &[Ephemeris], config: &SppConfig) -> Vec<SppMeasurement> {
+pub fn build_measurements(epoch: &EpochObs, ephemerides: &[Ephemeris], config: &SppConfig) -> Vec<SppMeasurement> {
     let mut measurements = Vec::new();
 
     for sat_obs in &epoch.satellites {

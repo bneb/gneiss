@@ -1,0 +1,13 @@
+--- crates/gneiss-rtk/src/engine/updater.rs
++++ crates/gneiss-rtk/src/engine/updater.rs
+@@ -127,6 +127,9 @@ pub fn evaluate_post_fit_outliers(
+             _ => max_innovation,
+         };
+         
++        if v.len() == 3 {
++            println!("SPP-INS ratio: {} v: {} sqrt_s: {}", ratio, v[i], s_ii.sqrt());
++        }
++        
+         if ratio > ratio_thresh && ratio > max_outlier_ratio {
+             max_outlier_ratio = ratio;
+             worst_idx = Some(i);

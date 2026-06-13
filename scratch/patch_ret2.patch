@@ -1,0 +1,11 @@
+--- crates/gneiss-rtk/src/engine/mod.rs
++++ crates/gneiss-rtk/src/engine/mod.rs
+@@ -505,7 +505,7 @@ pub fn process_spp(&mut self, rover_obs: &EpochObs) -> Result<&RtkState, EngineE
+             if crate::engine::updater::update(state, &z_vec, &h_mat, &r_mat, self.config.spp_consistency_threshold_m, None, self.config.mode.is_tightly_coupled(), &self.config.tuning).is_err() {
+                 state.consecutive_rejections += 1;
+                 if state.consecutive_rejections > 5 {
+-                    tracing::warn!("SPP EKF rejected for {} epochs. Hard resetting INS to SPP.", state.consecutive_rejections);
++                    tracing::warn!("TOW {} SPP EKF rejected for {} epochs. Hard resetting INS to SPP.", rover_obs.time.tow, state.consecutive_rejections);
+                     state.position = pos;
+                     state.velocity = nalgebra::Vector3::zeros(); // Zero out diverged velocity
+                     state.accel_bias = nalgebra::Vector3::zeros(); // Biases might be corrupted, 0 is a safer prior

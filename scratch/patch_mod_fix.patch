@@ -1,0 +1,51 @@
+--- crates/gneiss-rtk/src/engine/mod.rs
++++ crates/gneiss-rtk/src/engine/mod.rs
+@@ -501,23 +501,25 @@ pub fn process_spp(&mut self, rover_obs: &EpochObs) -> Result<&RtkState, EngineE
+             // Using a tighter variance of 9.0 (3m std dev) forces the INS to track the clean SPP positions
+             r_mat.fill_diagonal(9.0);
+ 
+-            if crate::engine::updater::update(state, &z_vec, &h_mat, &r_mat, self.config.spp_consistency_threshold_m, None, self.config.mode.is_tightly_coupled(), &self.config.tuning).is_err() {
+-                state.consecutive_rejections += 1;
+-                if state.consecutive_rejections > 5 {
+-                    tracing::warn!("SPP EKF rejected for {} epochs. Hard resetting INS to SPP.", state.consecutive_rejections);
+-                    state.position = pos;
+-                    state.velocity = nalgebra::Vector3::zeros(); // Zero out diverged velocity
+-                    state.accel_bias = nalgebra::Vector3::zeros(); // Biases might be corrupted, 0 is a safer prior
+-                    state.gyro_bias = nalgebra::Vector3::zeros();
+-                    // Preserve attitude as it is far better than identity
+-                    if crate::filter::CORE_STATE_SIZE > 15 {
+-                        state.rcv_clk_bias = spp_cdt;
+-                        state.rcv_clk_drift = 0.0;
+-                    }
+-                    state.clear_ambiguities();
+-                    
+-                    state.covariance.fill(0.0);
+-                    let n = crate::filter::CORE_STATE_SIZE;
+-                    state.covariance.view_mut((0, 0), (n, n)).fill_diagonal(crate::filter::VAR_RESET_POS);
++            match crate::engine::updater::update(state, &z_vec, &h_mat, &r_mat, self.config.spp_consistency_threshold_m, None, self.config.mode.is_tightly_coupled(), &self.config.tuning) {
++                Err(_) | Ok(valid) if valid.len() < z_vec.len() => {
++                    state.consecutive_rejections += 1;
++                    if state.consecutive_rejections > 5 {
++                        tracing::warn!("SPP EKF rejected for {} epochs. Hard resetting INS to SPP.", state.consecutive_rejections);
++                        state.position = pos;
++                        state.velocity = nalgebra::Vector3::zeros(); // Zero out diverged velocity
++                        state.accel_bias = nalgebra::Vector3::zeros(); // Biases might be corrupted, 0 is a safer prior
++                        state.gyro_bias = nalgebra::Vector3::zeros();
++                        // Preserve attitude as it is far better than identity
++                        if crate::filter::CORE_STATE_SIZE > 15 {
++                            state.rcv_clk_bias = spp_cdt;
++                            state.rcv_clk_drift = 0.0;
++                        }
++                        state.clear_ambiguities();
++                        
++                        state.covariance.fill(0.0);
++                        let n = crate::filter::CORE_STATE_SIZE;
++                        state.covariance.view_mut((0, 0), (n, n)).fill_diagonal(crate::filter::VAR_RESET_POS);
++                    }
+                 }
+-            } else {
+-                state.consecutive_rejections = 0;
++                _ => {
++                    state.consecutive_rejections = 0;
++                }
+             }

@@ -1,0 +1,62 @@
+Building gneiss-cli...
+
+=============================
+Running Dataset: GSDC (Pixel 4)
+=============================
+  Mode: spp
+    -> 3.327 m Hz, 60.507 m Vt
+  Mode: spp-ins
+    -> 7.887 m Hz, 60.687 m Vt
+  Mode: spp-ins-loosely-coupled
+    -> 3.431 m Hz, 60.499 m Vt
+  Mode: rtk
+    -> 2.231 m Hz, 68.395 m Vt
+  Mode: rtk-ins
+    -> 4.477 m Hz, 64.082 m Vt
+  Mode: rtk-ins-loosely-coupled
+    -> 2.228 m Hz, 68.384 m Vt
+  Mode: ppp
+    -> 616.378 m Hz, 930.022 m Vt
+  Mode: ppp-ins
+    -> 616.378 m Hz, 930.022 m Vt
+
+=============================
+Running Dataset: Shinjuku (UrbanNav)
+=============================
+  Mode: spp
+    -> 2.257 m Hz, 7.037 m Vt
+  Mode: spp-ins
+    -> 7.826 m Hz, 7.773 m Vt
+  Mode: spp-ins-loosely-coupled
+    -> 3.316 m Hz, 7.084 m Vt
+  Mode: rtk
+    -> 1.453 m Hz, 2.752 m Vt
+  Mode: rtk-ins
+    -> 29.888 m Hz, 8.587 m Vt
+  Mode: rtk-ins-loosely-coupled
+    -> 1.453 m Hz, 2.791 m Vt
+  Mode: ppp
+    -> 17.582 m Hz, 30.660 m Vt
+  Mode: ppp-ins
+    -> 16.623 m Hz, 51.406 m Vt
+
+=============================
+Running Dataset: PPP (f9p_ppp)
+=============================
+  Mode: spp
+    -> 3.010 m Hz, 1.839 m Vt
+  Mode: spp-ins
+    -> 3.533 m Hz, 1.821 m Vt
+  Mode: spp-ins-loosely-coupled
+    -> 3.010 m Hz, 1.839 m Vt
+  Mode: rtk
+    -> Process Failed
+  Mode: rtk-ins
+    -> Process Failed
+  Mode: rtk-ins-loosely-coupled
+    -> 0.322 m Hz, 0.210 m Vt
+  Mode: ppp
+    -> 6.802 m Hz, 0.926 m Vt
+  Mode: ppp-ins
+    -> 6.802 m Hz, 0.926 m Vt
+Wrote BENCHMARKS.md

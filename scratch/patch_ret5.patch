@@ -1,0 +1,14 @@
+--- crates/gneiss-rtk/src/engine/updater.rs
++++ crates/gneiss-rtk/src/engine/updater.rs
+@@ -62,6 +62,10 @@ pub fn compute_valid_measurements_and_gain(
+                 let p_ht = p * &current_h.transpose();
+                 k = &p_ht * s_inv;
+                 dx = &k * &current_z;
++                
++                if current_z[0].abs() > 100.0 || current_z[1].abs() > 100.0 {
++                    println!("DEBUG_DX: z={:.2?} dx_pos={:.2?} k_pos={:.2?}", current_z.as_slice(), dx.rows(0,3).into_owned().as_slice(), k.view((0,0),(3,3)));
++                }
++                
+                 return Ok((dx, k, current_h, current_r, current_valid));
+             }
+         }

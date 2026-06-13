@@ -1,0 +1,16 @@
+--- crates/gneiss-rtk/src/engine/updater.rs
++++ crates/gneiss-rtk/src/engine/updater.rs
+@@ -262,7 +262,11 @@ pub fn update(state: &mut RtkState, z: &DVector<f64>, h: &DMatrix<f64>, r: &DMat
+     let (dx, k, current_h, current_r, current_valid) = compute_valid_measurements_and_gain(
+         &state.covariance, current_z, current_h, current_r, valid_indices, meas_types, max_innovation, is_tightly_coupled, tuning
+-    )?;
++    ).map_err(|e| {
++        if z.len() == 3 { println!("SPP-INS update Err: {:?}", e); }
++        e
++    })?;
+ 
+     apply_state_correction(state, &dx);
+     state.covariance = apply_joseph_covariance_update(&state.covariance, &k, &current_h, &current_r);
++    if z.len() == 3 { println!("SPP-INS update Ok"); }
+     
+     Ok(current_valid)

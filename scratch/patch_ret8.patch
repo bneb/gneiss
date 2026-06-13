@@ -1,0 +1,13 @@
+--- crates/gneiss-rtk/src/engine/updater.rs
++++ crates/gneiss-rtk/src/engine/updater.rs
+@@ -133,6 +133,10 @@ pub fn evaluate_post_fit_outliers(
+             worst_idx = Some(i);
+         }
+     }
++    
++    if v.len() == 3 {
++        println!("DEBUG_EVAL: v={:.2?} s_diag={:.2?} thresh={:.2?} max_ratio={:.2?} worst={:?}", v.as_slice(), [s[(0,0)], s[(1,1)], s[(2,2)]], max_innovation, max_outlier_ratio, worst_idx);
++    }
++
+     (worst_idx, max_outlier_ratio)
+ }

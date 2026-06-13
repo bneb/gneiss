@@ -1,0 +1,14 @@
+--- crates/gneiss-rtk/src/engine/updater.rs
++++ crates/gneiss-rtk/src/engine/updater.rs
+@@ -127,10 +127,11 @@ pub fn evaluate_post_fit_outliers(
+             _ => max_innovation,
+         };
+         
++        if v.len() == 3 && (v[i].abs() > 100.0 || ratio > 10.0) { println!("DEBUG: i={} v={} ratio={} sqrtS={} max_outlier={}", i, v[i], ratio, s_ii.sqrt(), max_outlier_ratio); }
++
+         // Require absolute error to exceed threshold, AND relative error to be worst
+         if v[i].abs() > thresh && ratio > max_outlier_ratio {
+             max_outlier_ratio = ratio;
+             worst_idx = Some(i);
+         }
+     }

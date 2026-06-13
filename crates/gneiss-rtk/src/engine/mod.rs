@@ -11,9 +11,10 @@ pub mod ambiguity;
 pub mod config;
 pub mod auto_tuner;
 pub mod smoother;
+pub mod spp_tight;
 
 use nalgebra::{Vector3, DMatrix, DVector};
-use gneiss_core::obs::EpochObs;
+use gneiss_core::obs::{EpochObs, ObsType};
 use gneiss_core::coords::{Coordinate, Datum, Frame};
 use gneiss_core::ephemeris::Ephemeris;
 use gneiss_core::sat::SatelliteId;
@@ -73,6 +74,7 @@ pub struct EngineConfig {
     pub chi_square_pr_threshold: f64,
     pub chi_square_cp_threshold: f64,
     pub nominal_snr_dbhz: f64,
+    pub min_snr_dbhz: f64,
     pub dynamics_model: DynamicsModel,
     pub doppler_slip_threshold_cycles: f64,
     pub max_reject_count: usize,
@@ -81,6 +83,7 @@ pub struct EngineConfig {
     pub initial_ambiguity_variance: f64,
     pub ar_min_epoch_count: u32,
     pub ar_min_lock: u32,
+    pub ar_ffrt_prob: f64,
     
     // Process Noise
     pub process_noise_cb: f64,
@@ -105,13 +108,14 @@ impl Default for EngineConfig {
             imu_to_nhc_lever_arm: [0.0, 0.0, 0.0],
             enable_nhc: false,
             enable_backward_smoothing: false,
-            lambda_min_ratio: 3.0,
+            lambda_min_ratio: 1.5,
             lambda_min_subset: 5,
             enabled_constellations: None,
             raim_pseudorange_outlier_m: 25.0,
             chi_square_pr_threshold: 3.0,
             chi_square_cp_threshold: 1000000.0,
             nominal_snr_dbhz: 40.0,
+            min_snr_dbhz: 0.0,
             dynamics_model: DynamicsModel::Automotive,
             doppler_slip_threshold_cycles: 5.0,
             max_reject_count: 3,
@@ -120,6 +124,7 @@ impl Default for EngineConfig {
             initial_ambiguity_variance: 10000.0,
             ar_min_epoch_count: 5,
             ar_min_lock: 3,
+            ar_ffrt_prob: 0.001,
             process_noise_cb: 1e6,
             process_noise_cd: 1e4,
             process_noise_zwd: 1e-8,
@@ -242,6 +247,12 @@ impl ProcessingEngine {
         if let Some(enabled) = &self.config.enabled_constellations {
             filtered_rover.satellites.retain(|s| enabled.contains(&s.sat.constellation));
         }
+        if self.config.min_snr_dbhz > 0.0 {
+            filtered_rover.satellites.retain(|s| {
+                let snr = s.observations.iter().find(|o| o.code.obs_type == ObsType::Snr && o.code.signal.freq_band == 1).map(|o| o.value).unwrap_or(25.0);
+                snr >= self.config.min_snr_dbhz
+            });
+        }
 
         let mut filtered_base_storage = None;
         if let Some(b) = base_obs {
@@ -249,12 +260,19 @@ impl ProcessingEngine {
             if let Some(enabled) = &self.config.enabled_constellations {
                 clone.satellites.retain(|s| enabled.contains(&s.sat.constellation));
             }
+            if self.config.min_snr_dbhz > 0.0 {
+                clone.satellites.retain(|s| {
+                    let snr = s.observations.iter().find(|o| o.code.obs_type == ObsType::Snr && o.code.signal.freq_band == 1).map(|o| o.value).unwrap_or(25.0);
+                    snr >= self.config.min_snr_dbhz
+                });
+            }
             filtered_base_storage = Some(clone);
         }
         let filtered_base = filtered_base_storage.as_ref();
 
         let err = match self.config.mode {
-            EngineMode::Spp | EngineMode::SppIns => self.process_spp(&filtered_rover).err(),
+            EngineMode::Spp => self.process_spp(&filtered_rover).err(),
+            EngineMode::SppIns => crate::engine::spp_tight::process_spp_tightly_coupled(self, &filtered_rover).err(),
             EngineMode::SppInsLooselyCoupled => self.process_spp_loosely_coupled(&filtered_rover).err(),
             EngineMode::Rtk | EngineMode::RtkIns => self.process_rtk(&filtered_rover, filtered_base).err(),
             EngineMode::RtkInsLooselyCoupled => self.process_rtk_loosely_coupled(&filtered_rover, filtered_base).err(),
@@ -792,7 +810,7 @@ impl ProcessingEngine {
                         tracing::warn!("GNSS EKF rejected for {} epochs.", state.consecutive_rejections);
                     } else {
                         state.consecutive_rejections = 0;
-                        match state.resolve_ambiguities(&self.ephemerides, self.config.lambda_min_subset, self.config.ar_min_epoch_count, self.config.ar_min_lock, self.config.lambda_min_ratio) {
+                        match state.resolve_ambiguities(&self.ephemerides, self.config.lambda_min_subset, self.config.ar_min_epoch_count, self.config.ar_min_lock, self.config.lambda_min_ratio, self.config.ar_ffrt_prob) {
                             Ok((fixed_state, _da, _q_fixed, _ratio, _subset_size)) => {
                                 tracing::debug!("Integer ambiguities resolved!");
                                 state.fixed_state = Some(Box::new(fixed_state));

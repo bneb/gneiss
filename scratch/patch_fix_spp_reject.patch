@@ -1,0 +1,32 @@
+--- crates/gneiss-rtk/src/engine/mod.rs
++++ crates/gneiss-rtk/src/engine/mod.rs
+@@ -507,15 +507,20 @@ pub fn process_spp(&mut self, rover_obs: &EpochObs) -> Result<&RtkState, EngineE
+             let mut r_mat = nalgebra::DMatrix::zeros(3, 3);
+             r_mat.fill_diagonal(9.0); // Basic variance for SPP
+ 
+-            if crate::engine::updater::update(state, &z_vec, &h_mat, &r_mat, self.config.spp_consistency_threshold_m, None, self.config.mode.is_tightly_coupled(), &self.config.tuning).is_err() {
+-                tracing::warn!("TOW {} SPP EKF rejected for {} epochs. Hard resetting INS to SPP.", rover_obs.time.tow, state.consecutive_rejections);
+-                state.consecutive_rejections += 1;
+-                if state.consecutive_rejections > 5 {
+-                    self.current_state = Some(crate::spp::compute_spp(rover_obs, &self.ephemerides, self.klobuchar_params.as_ref(), &crate::spp::SppConfig::default(), None)?);
+-                    return Ok(self.current_state.as_ref().unwrap());
++            match crate::engine::updater::update(state, &z_vec, &h_mat, &r_mat, self.config.spp_consistency_threshold_m, None, self.config.mode.is_tightly_coupled(), &self.config.tuning) {
++                Err(_) => {
++                    state.consecutive_rejections += 1;
++                }
++                Ok(valid) => {
++                    if valid.len() < 3 {
++                        state.consecutive_rejections += 1;
++                    } else {
++                        state.consecutive_rejections = 0;
++                    }
+                 }
+-            } else {
+-                state.consecutive_rejections = 0;
++            }
++            if state.consecutive_rejections > 5 {
++                self.current_state = Some(crate::spp::compute_spp(rover_obs, &self.ephemerides, self.klobuchar_params.as_ref(), &crate::spp::SppConfig::default(), None)?);
++                return Ok(self.current_state.as_ref().unwrap());
+             }
+         }
+         

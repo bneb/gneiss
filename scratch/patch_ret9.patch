@@ -1,0 +1,13 @@
+--- crates/gneiss-rtk/src/engine/updater.rs
++++ crates/gneiss-rtk/src/engine/updater.rs
+@@ -294,6 +294,10 @@ pub fn compute_valid_measurements_and_gain(
+             return Err(UpdateError::SingularMatrix);
+         }
+ 
++        if current_z.len() == 3 {
++            println!("DEBUG_DX: z={:.2?} dx={:.2?}", current_z.as_slice(), &dx.as_slice()[0..3]);
++        }
++
+         let v = &current_z - &current_h * &dx;
+         let (worst_idx, max_outlier_ratio) = evaluate_post_fit_outliers(&v, &s, &current_valid, meas_types, max_innovation);
+         
