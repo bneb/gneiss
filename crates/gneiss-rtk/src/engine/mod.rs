@@ -774,7 +774,10 @@ impl ProcessingEngine {
                         self.config.chi_square_cp_threshold,
                     ) {
                     
-                    if crate::engine::updater::update(state, &z_safe, &h_safe, &r_safe, self.config.chi_square_pr_threshold, Some(&type_safe), self.config.mode.is_tightly_coupled(), &self.config.tuning).is_err() { 
+                    if crate::engine::updater::update(state, &z_safe, &h_safe, &r_safe, self.config.chi_square_pr_threshold, {
+                            let type_stripped: Vec<_> = type_safe.iter().map(|&(s, t, _)| (s, t)).collect();
+                            Some(type_stripped)
+                        }.as_deref(), self.config.mode.is_tightly_coupled(), &self.config.tuning).is_err() { 
                         state.consecutive_rejections += 1;
                         tracing::warn!("GNSS EKF rejected for {} epochs.", state.consecutive_rejections);
                     } else {
@@ -1150,3 +1153,4 @@ mod tests {
 }
 mod tests_predictor;
 pub mod jacobian_verify;
+mod tests_updater;

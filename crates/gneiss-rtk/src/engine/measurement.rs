@@ -148,7 +148,7 @@ pub fn compute_dd_pseudorange(
     state_size: usize,
     var_factor: f64,
     env: &MeasurementEnvironment,
-) -> Vec<(f64, Vec<f64>, f64, u8)> {
+ h_zwd: f64, ref_var_factor: f64) -> Vec<(f64, Vec<f64>, f64, u8, f64)> {
     let mut updates = Vec::new();
     let pr_base_var = env.tuning.pr_base_var;
 
@@ -157,7 +157,8 @@ pub fn compute_dd_pseudorange(
         let mut h_pr1 = vec![0.0; state_size];
         h_pr1[0] = h_r.x; h_pr1[1] = h_r.y; h_pr1[2] = h_r.z;
         h_pr1[6] = h_att.x; h_pr1[7] = h_att.y; h_pr1[8] = h_att.z;
-        updates.push((pr_dd - (comp_pr_dd + iono_dd_l1), h_pr1, pr_base_var * var_factor, 0));
+        if state_size > 17 { h_pr1[17] = h_zwd; }
+        updates.push((pr_dd - (comp_pr_dd + iono_dd_l1), h_pr1, pr_base_var * var_factor, 0, pr_base_var * ref_var_factor));
     }
 
     if let [Some(rr2), Some(rs2), Some(br2), Some(bs2)] = [ctx.rov_ref.pr_l2, ctx.rov_sat.pr_l2, ctx.ref_base.pr_l2, ctx.base_sat.pr_l2] {
@@ -165,7 +166,8 @@ pub fn compute_dd_pseudorange(
         let mut h_pr2 = vec![0.0; state_size];
         h_pr2[0] = h_r.x; h_pr2[1] = h_r.y; h_pr2[2] = h_r.z;
         h_pr2[6] = h_att.x; h_pr2[7] = h_att.y; h_pr2[8] = h_att.z;
-        updates.push((pr_dd_l2 - (comp_pr_dd + iono_dd_l2), h_pr2, pr_base_var * var_factor, 0));
+        if state_size > 17 { h_pr2[17] = h_zwd; }
+        updates.push((pr_dd_l2 - (comp_pr_dd + iono_dd_l2), h_pr2, pr_base_var * var_factor, 0, pr_base_var * ref_var_factor));
     }
 
     updates
@@ -184,10 +186,11 @@ pub fn compute_dd_carrier_phase(
     state_size: usize,
     var_factor: f64,
     env: &MeasurementEnvironment,
-) -> Vec<(f64, Vec<f64>, f64, u8)> {
+ h_zwd: f64, ref_var_factor: f64) -> Vec<(f64, Vec<f64>, f64, u8, f64)> {
     let mut updates = Vec::new();
     let cp_base_var = env.tuning.cp_base_var;
     let r_val = if state.is_fixed { 1e-6 * var_factor } else { cp_base_var * var_factor };
+    let r_ref_val = if state.is_fixed { 1e-6 * ref_var_factor } else { cp_base_var * ref_var_factor };
     let c = gneiss_core::constants::SPEED_OF_LIGHT_M_S;
 
     let sat_idx_l1 = state.ambiguity_keys.iter().position(|&(s, f)| s == ctx.rov_sat.sat && f == 1);
@@ -204,7 +207,8 @@ pub fn compute_dd_carrier_phase(
             h_cp1[crate::filter::CORE_STATE_SIZE + sat_idx] = 1.0; 
             h_cp1[crate::filter::CORE_STATE_SIZE + ref_idx] = -1.0;
             
-            updates.push((cp_dd_l1 - (comp_pr_dd - iono_dd_l1 + n_dd_l1), h_cp1, r_val, 1));
+            if state_size > 17 { h_cp1[17] = h_zwd; }
+            updates.push((cp_dd_l1 - (comp_pr_dd - iono_dd_l1 + n_dd_l1), h_cp1, r_val, 1, r_ref_val));
         }
     }
 
@@ -222,7 +226,8 @@ pub fn compute_dd_carrier_phase(
             h_cp2[crate::filter::CORE_STATE_SIZE + sat_idx] = 1.0; 
             h_cp2[crate::filter::CORE_STATE_SIZE + ref_idx] = -1.0;
             
-            updates.push((cp_dd_l2 - (comp_pr_dd - iono_dd_l2 + n_dd_l2), h_cp2, r_val, 2));
+            if state_size > 17 { h_cp2[17] = h_zwd; }
+            updates.push((cp_dd_l2 - (comp_pr_dd - iono_dd_l2 + n_dd_l2), h_cp2, r_val, 2, r_ref_val));
         }
     }
 
@@ -239,7 +244,7 @@ pub fn compute_dd_doppler(
     state_size: usize,
     var_factor: f64,
     env: &MeasurementEnvironment,
-) -> Option<(f64, Vec<f64>, f64, u8)> {
+ ref_var_factor: f64) -> Option<(f64, Vec<f64>, f64, u8, f64)> {
     let dop_valid = [ctx.rov_sat.doppler, ctx.rov_ref.doppler, ctx.base_sat.doppler, ctx.ref_base.doppler].iter().all(|&x| x != 0.0);
     if dop_valid {
         let lam_sat_1 = gneiss_core::constants::SPEED_OF_LIGHT_M_S / ctx.sat_state.f1;
@@ -284,38 +289,114 @@ pub fn compute_dd_doppler(
         h_dop[12] = h_dop_bg[0]; h_dop[13] = h_dop_bg[1]; h_dop[14] = h_dop_bg[2];
         
         let dop_base_var = env.tuning.dop_base_var;
-        return Some((innov, h_dop, dop_base_var * var_factor, 3));
+        return Some((innov, h_dop, dop_base_var * var_factor, 3, dop_base_var * ref_var_factor));
     }
     None
 }
 
-#[allow(clippy::type_complexity)]
+const MIN_ELEVATION_RAD: f64 = 0.001;
+const BASE_SNR_ELEVATION_THRESH_DEG: f64 = 45.0;
+
+pub struct EkfGeometryContext {
+    pub pos_apc: Vector3<f64>,
+    pub base_coord_vec: Vector3<f64>,
+    pub r_b_e: nalgebra::Matrix3<f64>,
+    pub lever_arm: Vector3<f64>,
+    pub state_size: usize,
+}
+
+impl EkfGeometryContext {
+    pub fn new(state: &RtkState, env: &MeasurementEnvironment) -> Self {
+        let r_b_e = state.attitude.to_rotation_matrix();
+        let mut pos_apc = state.position.vector + r_b_e * env.lever_arm;
+        let mut base_coord_vec = env.base_coord.vector;
+
+        let set_rov = gneiss_core::tides::solid_earth_tides_ecef(state.time, pos_apc);
+        let set_bas = gneiss_core::tides::solid_earth_tides_ecef(state.time, base_coord_vec);
+
+        pos_apc += set_rov;
+        base_coord_vec += set_bas;
+
+        let state_size = crate::filter::CORE_STATE_SIZE + state.ambiguities.len();
+
+        Self {
+            pos_apc,
+            base_coord_vec,
+            r_b_e: r_b_e.into_inner(),
+            lever_arm: env.lever_arm,
+            state_size,
+        }
+    }
+
+    pub fn compute_attitude_jacobian(&self, h_r: &Vector3<f64>) -> Vector3<f64> {
+        let lever_ecef = self.r_b_e * self.lever_arm;
+        lever_ecef.cross(h_r)
+    }
+}
+
+pub fn compute_variance_factors(
+    ctx: &DdContext,
+    el_rov_sat: f64,
+    el_rov_ref: f64,
+    el_bas_sat: f64,
+    el_bas_ref: f64,
+) -> (f64, f64) {
+    let ref_var_factor =
+        gneiss_core::variance::observation_variance(ctx.rov_ref.snr, el_rov_ref, BASE_SNR_ELEVATION_THRESH_DEG)
+            + gneiss_core::variance::elevation_variance_scale(el_bas_ref);
+
+    let var_factor =
+        gneiss_core::variance::observation_variance(ctx.rov_sat.snr, el_rov_sat, BASE_SNR_ELEVATION_THRESH_DEG)
+            + gneiss_core::variance::elevation_variance_scale(el_bas_sat)
+            + ref_var_factor;
+            
+    (var_factor, ref_var_factor)
+}
+
+pub fn compute_zwd_mapping(el_rov_sat: f64, el_rov_ref: f64, zwd: f64) -> (f64, f64) {
+    let m_w_rov_sat = 1.0 / el_rov_sat.max(MIN_ELEVATION_RAD).sin();
+    let m_w_rov_ref = 1.0 / el_rov_ref.max(MIN_ELEVATION_RAD).sin();
+    let h_zwd = m_w_rov_sat - m_w_rov_ref;
+    let zwd_dd = h_zwd * zwd;
+    (h_zwd, zwd_dd)
+}
+
+pub fn compute_geometric_dd(
+    pos_apc: Vector3<f64>,
+    base_coord_vec: Vector3<f64>,
+    sat_vec_rov: Vector3<f64>,
+    ref_sat_vec_rov: Vector3<f64>,
+    sat_vec_bas: Vector3<f64>,
+    ref_sat_vec_bas: Vector3<f64>,
+) -> f64 {
+    ((pos_apc - sat_vec_rov).norm() - (pos_apc - ref_sat_vec_rov).norm())
+        - ((base_coord_vec - sat_vec_bas).norm() - (base_coord_vec - ref_sat_vec_bas).norm())
+}
+
+#[allow(clippy::too_many_arguments)]
 pub fn compute_innovations(
     state: &mut RtkState,
     group: &[(DdObservation, DdObservation)],
     ref_rover_orig: &DdObservation,
     ref_base_orig: &DdObservation,
     env: &MeasurementEnvironment,
-) -> Option<(Vec<f64>, Vec<Vec<f64>>, Vec<f64>, Vec<(gneiss_core::sat::SatelliteId, u8)>)> {
+) -> Option<(
+    Vec<f64>,
+    Vec<Vec<f64>>,
+    Vec<f64>,
+    Vec<(gneiss_core::sat::SatelliteId, u8, f64)>,
+)> {
     let mut z_vals = Vec::new();
     let mut h_rows = Vec::new();
     let mut r_vals = Vec::new();
     let mut meas_type = Vec::new();
 
-    let state_size = crate::filter::CORE_STATE_SIZE + state.ambiguities.len();
-    
-    let r_b_e = state.attitude.to_rotation_matrix();
-    let pos_apc = state.position.vector + r_b_e * env.lever_arm;
-
-    let set_rov = gneiss_core::tides::solid_earth_tides_ecef(state.time, pos_apc);
-    let set_bas = gneiss_core::tides::solid_earth_tides_ecef(state.time, env.base_coord.vector);
-    
-    let pos_apc = pos_apc + set_rov;
-    let base_coord_vec = env.base_coord.vector + set_bas;
+    let geom = EkfGeometryContext::new(state, env);
 
     let time_tow = state.time.tow;
     let find_eph = |sat| {
-        env.ephemerides.iter()
+        env.ephemerides
+            .iter()
             .filter(|e| e.sat() == sat)
             .min_by(|a, b| {
                 let da = (a.toe().tow - time_tow).abs();
@@ -325,9 +406,12 @@ pub fn compute_innovations(
     };
 
     let ref_eph = find_eph(ref_rover_orig.sat)?;
-    let (ref_sat_vec_rov, ref_sat_vel_rov) = get_sat_state(ref_eph, ref_rover_orig.pr_l1, state.time, pos_apc);
-    let (ref_sat_vec_bas, ref_sat_vel_bas) = get_sat_state(ref_eph, ref_base_orig.pr_l1, env.base_time, base_coord_vec);
-    let (ref_f1, ref_f2) = gneiss_core::signal::satellite_frequencies(ref_rover_orig.sat, ref_eph.freq_num());
+    let (ref_sat_vec_rov, ref_sat_vel_rov) =
+        get_sat_state(ref_eph, ref_rover_orig.pr_l1, state.time, geom.pos_apc);
+    let (ref_sat_vec_bas, ref_sat_vel_bas) =
+        get_sat_state(ref_eph, ref_base_orig.pr_l1, env.base_time, geom.base_coord_vec);
+    let (ref_f1, ref_f2) =
+        gneiss_core::signal::satellite_frequencies(ref_rover_orig.sat, ref_eph.freq_num());
 
     let ref_state = SatState {
         rov_pos: ref_sat_vec_rov,
@@ -338,20 +422,28 @@ pub fn compute_innovations(
         f2: ref_f2,
     };
 
-    let e_ref_rov = (ref_sat_vec_rov - pos_apc).normalize();
-    
+    let e_ref_rov = (ref_sat_vec_rov - geom.pos_apc).normalize();
+
     let (ref_idx_l1, ref_idx_l2) = {
-        let idx1 = state.ambiguity_keys.iter().position(|&(s, f)| s == ref_rover_orig.sat && f == 1)?;
-        let idx2 = state.ambiguity_keys.iter().position(|&(s, f)| s == ref_rover_orig.sat && f == 2);
+        let idx1 = state
+            .ambiguity_keys
+            .iter()
+            .position(|&(s, f)| s == ref_rover_orig.sat && f == 1);
+        let idx2 = state
+            .ambiguity_keys
+            .iter()
+            .position(|&(s, f)| s == ref_rover_orig.sat && f == 2);
         (idx1, idx2)
     };
 
     for (rover_sat_orig, base_sat_orig) in group {
         if let Some(sat_eph) = find_eph(rover_sat_orig.sat) {
-            
-            let (sat_vec_rov, sat_vel_rov) = get_sat_state(sat_eph, rover_sat_orig.pr_l1, state.time, pos_apc);
-            let (sat_vec_bas, sat_vel_bas) = get_sat_state(sat_eph, base_sat_orig.pr_l1, env.base_time, base_coord_vec);
-            let (sat_f1, sat_f2) = gneiss_core::signal::satellite_frequencies(rover_sat_orig.sat, sat_eph.freq_num());
+            let (sat_vec_rov, sat_vel_rov) =
+                get_sat_state(sat_eph, rover_sat_orig.pr_l1, state.time, geom.pos_apc);
+            let (sat_vec_bas, sat_vel_bas) =
+                get_sat_state(sat_eph, base_sat_orig.pr_l1, env.base_time, geom.base_coord_vec);
+            let (sat_f1, sat_f2) =
+                gneiss_core::signal::satellite_frequencies(rover_sat_orig.sat, sat_eph.freq_num());
 
             let sat_state = SatState {
                 rov_pos: sat_vec_rov,
@@ -362,15 +454,22 @@ pub fn compute_innovations(
                 f2: sat_f2,
             };
 
-            let e_sat_rov = (sat_vec_rov - pos_apc).normalize();
-            let h_r = e_ref_rov - e_sat_rov; 
-            
-            let lever_ecef = r_b_e * env.lever_arm;
-            let h_att = lever_ecef.cross(&h_r);
+            let e_sat_rov = (sat_vec_rov - geom.pos_apc).normalize();
+            let h_r = e_ref_rov - e_sat_rov;
+            let h_att = geom.compute_attitude_jacobian(&h_r);
 
             let (tropo_dd, iono_dd_l1, iono_dd_l2) = compute_atmospheric_delays(
-                state.time, pos_apc, base_coord_vec, sat_vec_rov, ref_sat_vec_rov, sat_vec_bas, ref_sat_vec_bas,
-                sat_f1, sat_f2, ref_f1, ref_f2
+                state.time,
+                geom.pos_apc,
+                geom.base_coord_vec,
+                sat_vec_rov,
+                ref_sat_vec_rov,
+                sat_vec_bas,
+                ref_sat_vec_bas,
+                sat_f1,
+                sat_f2,
+                ref_f1,
+                ref_f2,
             );
 
             let mut rov_sat = rover_sat_orig.clone();
@@ -387,38 +486,73 @@ pub fn compute_innovations(
                 ref_state: &ref_state,
             };
 
-            apply_phase_windup(
-                state, pos_apc, base_coord_vec, &mut ctx
-            );
+            apply_phase_windup(state, geom.pos_apc, geom.base_coord_vec, &mut ctx);
 
-            let base_llh = gneiss_core::coords::ecef_to_llh(base_coord_vec);
-            let rov_llh = gneiss_core::coords::ecef_to_llh(pos_apc);
-            let (_, el_rov_sat) = gneiss_core::coords::az_el(rov_llh, pos_apc, sat_vec_rov);
-            let (_, el_rov_ref) = gneiss_core::coords::az_el(rov_llh, pos_apc, ref_sat_vec_rov);
-            let (_, el_bas_sat) = gneiss_core::coords::az_el(base_llh, base_coord_vec, sat_vec_bas);
-            let (_, el_bas_ref) = gneiss_core::coords::az_el(base_llh, base_coord_vec, ref_sat_vec_bas);
+            let base_llh = gneiss_core::coords::ecef_to_llh(geom.base_coord_vec);
+            let rov_llh = gneiss_core::coords::ecef_to_llh(geom.pos_apc);
+            let (_, el_rov_sat) = gneiss_core::coords::az_el(rov_llh, geom.pos_apc, sat_vec_rov);
+            let (_, el_rov_ref) = gneiss_core::coords::az_el(rov_llh, geom.pos_apc, ref_sat_vec_rov);
+            let (_, el_bas_sat) = gneiss_core::coords::az_el(base_llh, geom.base_coord_vec, sat_vec_bas);
+            let (_, el_bas_ref) = gneiss_core::coords::az_el(base_llh, geom.base_coord_vec, ref_sat_vec_bas);
 
-            let var_factor = gneiss_core::variance::observation_variance(ctx.rov_sat.snr, el_rov_sat, 45.0)
-                           + gneiss_core::variance::observation_variance(ctx.rov_ref.snr, el_rov_ref, 45.0)
-                           + gneiss_core::variance::elevation_variance_scale(el_bas_sat)
-                           + gneiss_core::variance::elevation_variance_scale(el_bas_ref);
+            let (var_factor, ref_var_factor) = compute_variance_factors(&ctx, el_rov_sat, el_rov_ref, el_bas_sat, el_bas_ref);
+            let (h_zwd, zwd_dd) = compute_zwd_mapping(el_rov_sat, el_rov_ref, state.zwd);
 
-            let comp_pr_dd = ( (pos_apc - sat_vec_rov).norm() - (pos_apc - ref_sat_vec_rov).norm() ) - ( (base_coord_vec - sat_vec_bas).norm() - (base_coord_vec - ref_sat_vec_bas).norm() ) + tropo_dd;
-            
-            for update in compute_dd_pseudorange(&ctx, comp_pr_dd, iono_dd_l1, iono_dd_l2, h_r, h_att, state_size, var_factor, env) {
-                z_vals.push(update.0); h_rows.push(update.1); r_vals.push(update.2); meas_type.push((ctx.rov_sat.sat, update.3));
+            let comp_pr_dd = compute_geometric_dd(
+                geom.pos_apc, geom.base_coord_vec, sat_vec_rov, ref_sat_vec_rov, sat_vec_bas, ref_sat_vec_bas,
+            ) + tropo_dd + zwd_dd;
+
+            for update in compute_dd_pseudorange(
+                &ctx, comp_pr_dd, iono_dd_l1, iono_dd_l2, h_r, h_att, geom.state_size,
+                var_factor, env, h_zwd, ref_var_factor
+            ) {
+                z_vals.push(update.0);
+                h_rows.push(update.1);
+                r_vals.push(update.2);
+                meas_type.push((ctx.rov_sat.sat, update.3, update.4));
             }
 
-            for update in compute_dd_carrier_phase(state, &ctx, Some(ref_idx_l1), ref_idx_l2, comp_pr_dd, iono_dd_l1, iono_dd_l2, h_r, h_att, state_size, var_factor, env) {
-                z_vals.push(update.0); h_rows.push(update.1); r_vals.push(update.2); meas_type.push((ctx.rov_sat.sat, update.3));
+            for update in compute_dd_carrier_phase(
+                state,
+                &ctx,
+                ref_idx_l1,
+                ref_idx_l2,
+                comp_pr_dd,
+                iono_dd_l1,
+                iono_dd_l2,
+                h_r,
+                h_att,
+                geom.state_size,
+                var_factor,
+                env,
+                h_zwd,
+                ref_var_factor
+            ) {
+                z_vals.push(update.0);
+                h_rows.push(update.1);
+                r_vals.push(update.2);
+                meas_type.push((ctx.rov_sat.sat, update.3, update.4));
             }
-            
-            if let Some(update) = compute_dd_doppler(state, &ctx, pos_apc, base_coord_vec, h_r, state_size, var_factor, env) {
-                z_vals.push(update.0); h_rows.push(update.1); r_vals.push(update.2); meas_type.push((ctx.rov_sat.sat, update.3));
+
+            if let Some(update) = compute_dd_doppler(
+                state,
+                &ctx,
+                geom.pos_apc,
+                geom.base_coord_vec,
+                h_r,
+                geom.state_size,
+                var_factor,
+                env,
+                ref_var_factor
+            ) {
+                z_vals.push(update.0);
+                h_rows.push(update.1);
+                r_vals.push(update.2);
+                meas_type.push((ctx.rov_sat.sat, update.3, update.4));
             }
         }
     }
-    
+
     Some((z_vals, h_rows, r_vals, meas_type))
 }
 
@@ -429,7 +563,7 @@ pub fn build_measurement_model(
     env: &MeasurementEnvironment,
     chi_square_pr_threshold: f64,
     chi_square_cp_threshold: f64,
-) -> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>, Vec<(gneiss_core::sat::SatelliteId, u8)>)> {
+) -> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>, Vec<(gneiss_core::sat::SatelliteId, u8, f64)>)> {
     let mut z_all = Vec::new();
     let mut h_all = Vec::new();
     let mut r_all = Vec::new();
@@ -526,18 +660,36 @@ pub fn build_measurement_model(
         }
     }
 
+pub fn build_dense_covariance_matrix(
+    r_diagonals: &[f64],
+    meas_types: &[(gneiss_core::sat::SatelliteId, u8, f64)],
+) -> DMatrix<f64> {
+    let mut r_mat = DMatrix::from_diagonal(&DVector::from_row_slice(r_diagonals));
+    for i in 0..meas_types.len() {
+        for j in (i + 1)..meas_types.len() {
+            if meas_types[i].1 == meas_types[j].1 && meas_types[i].0.constellation == meas_types[j].0.constellation {
+                let cov = meas_types[i].2.min(meas_types[j].2) * 0.5;
+                r_mat[(i, j)] = cov;
+                r_mat[(j, i)] = cov;
+            }
+        }
+    }
+    r_mat
+}
+
     if safe_indices.len() >= 4 {
         let mut z_vec = DVector::zeros(safe_indices.len());
         let mut h_mat = DMatrix::zeros(safe_indices.len(), state_size);
-        let mut r_mat = DMatrix::zeros(safe_indices.len(), safe_indices.len());
+        let mut r_diagonals = Vec::new();
         let mut t_vec = Vec::new();
 
         for (new_i, &old_i) in safe_indices.iter().enumerate() {
             z_vec[new_i] = z_all[old_i];
             for c in 0..state_size { h_mat[(new_i, c)] = h_all[old_i][c]; }
-            r_mat[(new_i, new_i)] = r_all[old_i];
+            r_diagonals.push(r_all[old_i]);
             t_vec.push(type_all[old_i]);
         }
+        let r_mat = build_dense_covariance_matrix(&r_diagonals, &t_vec);
         Some((z_vec, h_mat, r_mat, t_vec))
     } else {
         None
@@ -625,13 +777,13 @@ mod tests {
         println!("Z: {:?}", z);
         
         // Lock in the golden Z vector (updated for iterative ecef_to_llh refinement)
-        assert!((z[0] - 0.70573).abs() < 1e-3, "z[0]={}", z[0]);
-        assert!((z[1] - 0.70623).abs() < 1e-3, "z[1]={}", z[1]);
-        assert!((z[2] - -4.29582).abs() < 1e-3, "z[2]={}", z[2]);
+        assert!((z[0] - 2.95577).abs() < 1e-3, "z[0]={}", z[0]);
+        assert!((z[1] - 2.95627).abs() < 1e-3, "z[1]={}", z[1]);
+        assert!((z[2] - -2.04577).abs() < 1e-3, "z[2]={}", z[2]);
         assert!((z[3] - 19.36016).abs() < 1e-3, "z[3]={}", z[3]);
-        assert!((z[4] - 7.72370).abs() < 1e-3, "z[4]={}", z[4]);
-        assert!((z[5] - 7.72444).abs() < 1e-3, "z[5]={}", z[5]);
-        assert!((z[6] - -2.27859).abs() < 1e-3, "z[6]={}", z[6]);
+        assert!((z[4] - 9.97132).abs() < 1e-3, "z[4]={}", z[4]);
+        assert!((z[5] - 9.97206).abs() < 1e-3, "z[5]={}", z[5]);
+        assert!((z[6] - -0.03096).abs() < 1e-3, "z[6]={}", z[6]);
         assert!((z[7] - 16.01613).abs() < 1e-3, "z[7]={}", z[7]);
 
         // Lock in the golden R diagonal
@@ -730,7 +882,7 @@ mod tests {
         };
         
         let updates = compute_dd_pseudorange(
-            &ctx, 0.0, 0.0, 0.0, Vector3::new(1.0, 0.0, 0.0), Vector3::zeros(), 22, 1.0, &env
+            &ctx, 0.0, 0.0, 0.0, Vector3::new(1.0, 0.0, 0.0), Vector3::zeros(), 22, 1.0, &env, 0.0, 1.0
         );
         assert_eq!(updates.len(), 2);
         assert_eq!(updates[0].0, 0.0);
@@ -780,7 +932,7 @@ mod tests {
         };
         
         let updates = compute_dd_carrier_phase(
-            &state, &ctx, Some(1), Some(3), 0.0, 0.0, 0.0, Vector3::new(1.0, 0.0, 0.0), Vector3::zeros(), 22, 1.0, &env
+            &state, &ctx, Some(1), Some(3), 0.0, 0.0, 0.0, Vector3::new(1.0, 0.0, 0.0), Vector3::zeros(), 22, 1.0, &env, 0.0, 1.0
         );
         assert_eq!(updates.len(), 2);
     }
@@ -823,7 +975,7 @@ mod tests {
         };
         
         let update = compute_dd_doppler(
-            &state, &ctx, Vector3::zeros(), Vector3::zeros(), Vector3::new(1.0, 0.0, 0.0), 22, 1.0, &env
+            &state, &ctx, Vector3::zeros(), Vector3::zeros(), Vector3::new(1.0, 0.0, 0.0), 22, 1.0, &env, 1.0
         );
         let u = update.unwrap(); assert!(!u.0.is_nan());
     }
