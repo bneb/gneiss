@@ -7,42 +7,58 @@ Side-by-side comparison on identical datasets and truth references.
 | Mode | Engine | Hz 50th | Hz 95th | Vt 50th | Winner |
 |:-----|:-------|:--------|:--------|:--------|:-------|
 | SPP | RTKLIB | Failed |  |  |  |
-| SPP | Gneiss | 3.057 m | 3.932 m | 3.859 m | |
+| SPP | Gneiss | 3.010 m | 3.844 m | 1.839 m | |
 | RTK Kinematic | RTKLIB | Failed |  |  |  |
-| RTK Kinematic | Gneiss | 0.430 m | 0.715 m | 0.285 m | |
+| RTK Kinematic | Gneiss | 0.212 m | 0.502 m | 0.181 m | |
 | RTK Kinematic (combined) | RTKLIB | Failed |  |  |  |
 | RTK Kinematic (combined) | Gneiss | Failed |  |  | |
+| PPP Kinematic | RTKLIB | Failed |  |  |  |
+| PPP Kinematic | Gneiss | 6.783 m | 8.399 m | 0.919 m | |
+| PPP Kinematic (combined) | RTKLIB | Failed |  |  |  |
+| PPP Kinematic (combined) | Gneiss | 6.783 m | 8.399 m | 0.919 m | |
 
 ## GSDC (Pixel 4)
 
 | Mode | Engine | Hz 50th | Hz 95th | Vt 50th | Winner |
 |:-----|:-------|:--------|:--------|:--------|:-------|
-| SPP | RTKLIB | 3.311 m | 10.191 m | 66.316 m | **Gneiss** ✅ |
-| SPP | Gneiss | 3.297 m | 8.784 m | 62.750 m | |
+| SPP | RTKLIB | 3.311 m | 10.191 m | 66.316 m | RTKLIB ⚠️ |
+| SPP | Gneiss | 3.327 m | 8.648 m | 60.507 m | |
 | RTK Kinematic | RTKLIB | 1.773 m | 4.161 m | 64.598 m | RTKLIB ⚠️ |
-| RTK Kinematic | Gneiss | 3.331 m | 9.437 m | 62.727 m | |
-| RTK Kinematic (combined) | RTKLIB | 1.831 m | 3.126 m | 64.471 m |  |
-| RTK Kinematic (combined) | Gneiss | Failed |  |  | |
+| RTK Kinematic | Gneiss | 2.031 m | 9.340 m | 63.252 m | |
+| RTK Kinematic (combined) | RTKLIB | 1.831 m | 3.126 m | 64.471 m | RTKLIB ⚠️ |
+| RTK Kinematic (combined) | Gneiss | 3.277 m | 349.678 m | 63.445 m | |
+| PPP Kinematic | RTKLIB | Failed |  |  |  |
+| PPP Kinematic | Gneiss | 616.378 m | 2988.980 m | 930.022 m | |
+| PPP Kinematic (combined) | RTKLIB | Failed |  |  |  |
+| PPP Kinematic (combined) | Gneiss | 616.378 m | 2988.980 m | 930.022 m | |
 
 ## Shinjuku (u-blox)
 
 | Mode | Engine | Hz 50th | Hz 95th | Vt 50th | Winner |
 |:-----|:-------|:--------|:--------|:--------|:-------|
-| SPP | RTKLIB | 13.209 m | 55.582 m | 38.538 m | **Gneiss** ✅ |
-| SPP | Gneiss | 2.288 m | 26.576 m | 5.166 m | |
-| RTK Kinematic | RTKLIB | 1.670 m | 11.843 m | 5.394 m |  |
-| RTK Kinematic | Gneiss | Failed |  |  | |
-| RTK Kinematic (combined) | RTKLIB | 2.089 m | 20.154 m | 5.517 m |  |
-| RTK Kinematic (combined) | Gneiss | Failed |  |  | |
+| SPP | RTKLIB | 14.144 m | 67.742 m | 38.519 m | **Gneiss** ✅ |
+| SPP | Gneiss | 2.257 m | 26.551 m | 7.037 m | |
+| RTK Kinematic | RTKLIB | 5.730 m | 20.200 m | 9.326 m | **Gneiss** ✅ |
+| RTK Kinematic | Gneiss | 1.525 m | 15.639 m | 1.772 m | |
+| RTK Kinematic (combined) | RTKLIB | 5.978 m | 18.029 m | 9.112 m | **Gneiss** ✅ |
+| RTK Kinematic (combined) | Gneiss | 1.521 m | 13.686 m | 1.768 m | |
+| PPP Kinematic | RTKLIB | Failed |  |  |  |
+| PPP Kinematic | Gneiss | 23.241 m | 57.248 m | 17.566 m | |
+| PPP Kinematic (combined) | RTKLIB | Failed |  |  |  |
+| PPP Kinematic (combined) | Gneiss | 23.241 m | 57.248 m | 17.566 m | |
 
 ## Odaiba (u-blox)
 
 | Mode | Engine | Hz 50th | Hz 95th | Vt 50th | Winner |
 |:-----|:-------|:--------|:--------|:--------|:-------|
-| SPP | RTKLIB | 5.335 m | 35.568 m | 8.330 m | **Gneiss** ✅ |
-| SPP | Gneiss | 2.409 m | 9.384 m | 2.853 m | |
-| RTK Kinematic | RTKLIB | 2.239 m | 8.099 m | 6.413 m | **Gneiss** ✅ |
-| RTK Kinematic | Gneiss | 1.252 m | 5.933 m | 2.807 m | |
-| RTK Kinematic (combined) | RTKLIB | 2.236 m | 13.146 m | 8.219 m |  |
-| RTK Kinematic (combined) | Gneiss | Failed |  |  | |
+| SPP | RTKLIB | 7.453 m | 48.906 m | 8.709 m | **Gneiss** ✅ |
+| SPP | Gneiss | 2.533 m | 9.465 m | 2.901 m | |
+| RTK Kinematic | RTKLIB | 4.014 m | 17.444 m | 5.744 m | **Gneiss** ✅ |
+| RTK Kinematic | Gneiss | 1.203 m | 6.244 m | 1.784 m | |
+| RTK Kinematic (combined) | RTKLIB | 3.886 m | 16.086 m | 6.134 m | **Gneiss** ✅ |
+| RTK Kinematic (combined) | Gneiss | 1.201 m | 6.053 m | 1.739 m | |
+| PPP Kinematic | RTKLIB | Failed |  |  |  |
+| PPP Kinematic | Gneiss | 12.518 m | 21.905 m | 23.796 m | |
+| PPP Kinematic (combined) | RTKLIB | Failed |  |  |  |
+| PPP Kinematic (combined) | Gneiss | 12.518 m | 21.905 m | 23.796 m | |
 

@@ -1125,9 +1125,10 @@ mod tests {
         state1.is_fixed = true;
         
         // Mock prediction values from 0 to 1
-        state1.core_phi = Some(DMatrix::identity(18, 18));
-        state1.full_p_predict = Some(DMatrix::identity(18, 18) * 1.5);
-        let mut x_pred = DVector::zeros(18);
+        let core_size = crate::filter::CORE_STATE_SIZE;
+        state1.core_phi = Some(DMatrix::identity(core_size, core_size));
+        state1.full_p_predict = Some(DMatrix::identity(core_size, core_size) * 1.5);
+        let mut x_pred = DVector::zeros(core_size);
         x_pred[0] = 10.0; // Assume velocity was 0, so predicted pos is 10
         state1.full_x_predict = Some(x_pred);
         

@@ -74,7 +74,7 @@ pub fn compute_transition_matrix(state: &RtkState, dt: f64, imu_buffer: &[gneiss
     }
     
     if crate::filter::CORE_STATE_SIZE > 15 {
-        phi[(15, 16)] = dt;
+        phi[(15, 19)] = dt;
     }
     
     phi
@@ -118,8 +118,11 @@ pub fn compute_process_noise(dt: f64, config: &EngineConfig, is_imu_active: bool
     
     if crate::filter::CORE_STATE_SIZE > 15 {
         q[(15, 15)] = config.process_noise_cb * dt_abs;
-        q[(16, 16)] = config.process_noise_cd * dt_abs;
-        q[(17, 17)] = config.process_noise_zwd * dt_abs;
+        q[(16, 16)] = 0.001 * dt_abs; // isb_glo noise
+        q[(17, 17)] = 0.001 * dt_abs; // isb_gal noise
+        q[(18, 18)] = 0.001 * dt_abs; // isb_bds noise
+        q[(19, 19)] = config.process_noise_cd * dt_abs;
+        q[(20, 20)] = config.process_noise_zwd * dt_abs;
     }
 
     for i in crate::filter::CORE_STATE_SIZE..n {
@@ -160,8 +163,11 @@ pub fn predict(state: &mut RtkState, dt: f64, config: &EngineConfig, imu_buffer:
     }
     if crate::filter::CORE_STATE_SIZE > 15 {
         x_pred[15] = state.rcv_clk_bias;
-        x_pred[16] = state.rcv_clk_drift;
-        x_pred[17] = state.zwd;
+        x_pred[16] = state.isb_glo;
+        x_pred[17] = state.isb_gal;
+        x_pred[18] = state.isb_bds;
+        x_pred[19] = state.rcv_clk_drift;
+        x_pred[20] = state.zwd;
     }
     for i in 0..state.ambiguities.len() {
         x_pred[crate::filter::CORE_STATE_SIZE + i] = state.ambiguities[i];
@@ -201,4 +207,83 @@ fn skew_symmetric(v: &Vector3<f64>) -> Matrix3<f64> {
         v.z,  0.0, -v.x,
        -v.y,  v.x,  0.0
     )
+}
+#[cfg(test)]
+mod tests {
+    use crate::filter::RtkState;
+    use crate::engine::{EngineConfig, DynamicsModel, EngineMode};
+    use nalgebra::{Vector3, DMatrix, DVector};
+
+    #[test]
+    fn test_predictor_indices() {
+        // Test that process noise and state transition matrix use the correct indices for ISBs and clock drift
+        let mut state = RtkState::new(gneiss_core::time::GpsTime::new(2000, 0.0), gneiss_core::coords::Coordinate::new(nalgebra::Vector3::zeros(), gneiss_core::coords::Datum::WGS84, gneiss_core::coords::Frame::ECEF, gneiss_core::time::GpsTime::new(2000, 0.0)), 10.0);
+        state.covariance = DMatrix::zeros(21, 21);
+        state.isb_glo = 10.0;
+        state.isb_gal = 20.0;
+        state.isb_bds = 30.0;
+        state.rcv_clk_bias = 100.0;
+        state.rcv_clk_drift = 2.0;
+        state.zwd = 0.5;
+
+        let config = EngineConfig {
+            mode: crate::engine::EngineMode::Ppp,
+            initial_position: None,
+            base_position: None,
+            base_datum_transform: None,
+            imu_to_antenna_lever_arm: [0.0, 0.0, 0.0],
+            imu_mounting_angles: None,
+            imu_to_nhc_lever_arm: [0.0, 0.0, 0.0],
+            enable_nhc: false,
+            enable_backward_smoothing: false,
+            lambda_min_ratio: 3.0,
+            lambda_min_subset: 4,
+            enabled_constellations: None,
+            raim_pseudorange_outlier_m: 10.0,
+            chi_square_pr_threshold: 15.0,
+            chi_square_cp_threshold: 15.0,
+            nominal_snr_dbhz: 30.0,
+            dynamics_model: DynamicsModel::Static,
+            doppler_slip_threshold_cycles: 5.0,
+            max_reject_count: 3,
+            max_base_age_s: 30.0,
+            spp_consistency_threshold_m: 10.0,
+            initial_ambiguity_variance: 100.0,
+            ar_min_epoch_count: 10,
+            ar_min_lock: 10,
+            process_noise_cb: 100.0,
+            process_noise_cd: 10.0,
+            process_noise_zwd: 0.1,
+            process_noise_amb_float: 1e-4,
+            process_noise_amb_fixed: 1e-7,
+            tuning: crate::engine::config::EkfTuningConfig::default(),
+        };
+
+        crate::engine::predictor::predict(&mut state, 1.0, &config, &[]);
+
+        // Check that clock bias is updated by drift
+        assert_eq!(state.rcv_clk_bias, 102.0); // 100.0 + 2.0 * 1.0
+
+        let x_pred = state.full_x_predict.as_ref().unwrap();
+        
+        // Ensure ISBs and zwd are unchanged by predict
+        assert_eq!(x_pred[16], 10.0);
+        assert_eq!(x_pred[17], 20.0);
+        assert_eq!(x_pred[18], 30.0);
+        assert_eq!(x_pred[19], 2.0);
+        assert_eq!(x_pred[20], 0.5);
+
+        // Ensure covariance is updated correctly
+        let p_pred = state.full_p_predict.as_ref().unwrap();
+        // Clock drift noise goes to 19
+        assert_eq!(p_pred[(19, 19)], 10.0);
+        // ZWD noise goes to 20
+        assert_eq!(p_pred[(20, 20)], 0.1);
+        // Clock bias noise goes to 15
+        assert!(p_pred[(15, 15)] >= 100.0);
+        // ISB noises go to 16, 17, 18
+        assert_eq!(p_pred[(16, 16)], 0.001);
+        assert_eq!(p_pred[(17, 17)], 0.001);
+        assert_eq!(p_pred[(18, 18)], 0.001);
+    }
 }

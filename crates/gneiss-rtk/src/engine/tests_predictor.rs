@@ -86,7 +86,7 @@ mod tests {
         let lever_ecef = state.attitude * lever_arm;
         let h_att = lever_ecef.cross(&e_sat);
         
-        let mut h = DMatrix::zeros(1, 18);
+        let mut h = DMatrix::zeros(1, crate::filter::CORE_STATE_SIZE);
         h[(0, 0)] = h_pos[0]; h[(0, 1)] = h_pos[1]; h[(0, 2)] = h_pos[2];
         h[(0, 6)] = h_att.x; h[(0, 7)] = h_att.y; h[(0, 8)] = h_att.z;
         

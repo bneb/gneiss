@@ -59,7 +59,9 @@ DATASETS = {
 COMPARISONS = [
     ("SPP", ["-p", "0"], "spp", []),
     ("RTK Kinematic", ["-p", "2", "-h"], "rtk", []),
-    ("RTK Kinematic (combined)", ["-p", "2", "-c", "-h"], "rtk", ["----disabled-backward-smoothing-hack"]),
+    ("RTK Kinematic (combined)", ["-p", "2", "-c", "-h"], "rtk", ["--enable-backward-smoothing"]),
+    ("PPP Kinematic", ["-p", "6"], "ppp", []),
+    ("PPP Kinematic (combined)", ["-p", "6", "-c"], "ppp", ["--enable-backward-smoothing"]),
 ]
 
 
