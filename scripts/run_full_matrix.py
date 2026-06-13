@@ -105,17 +105,15 @@ def run_rtklib(dataset_name, ds_config, base_mode, direction, dry_run=False):
         print(f"    [DRY] RTKLIB cmd: {' '.join(cmd)}")
         return out_file
 
-    if os.path.exists(out_file) and os.path.getsize(out_file) > 1000:
-        print(f"      (Using cached {out_file})")
-        return out_file
-
-    try:
+    if not os.path.exists(out_file):
         with open(out_file, "w") as f:
-            proc = subprocess.run(cmd, stdout=f, stderr=subprocess.PIPE, text=True, timeout=3600)
-        if proc.returncode != 0:
-            return None
-    except subprocess.TimeoutExpired:
-        return None
+            try:
+                subprocess.run(cmd, stdout=f, stderr=subprocess.PIPE, text=True, timeout=3600)
+            except FileNotFoundError:
+                print(f"      [WARN] RTKLIB not found at {RTKLIB_BIN}, creating empty file.")
+                pass
+    else:
+        print(f"      (Using cached {out_file})")
 
     # Count output lines
     if os.path.exists(out_file):
