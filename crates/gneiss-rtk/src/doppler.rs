@@ -39,6 +39,7 @@ pub fn compute_doppler_update(
     state: &RtkState,
     measurements: &[DopplerMeasurement],
     ephemerides: &[Ephemeris],
+    dop_base_var: f64,
 ) -> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)> {
 
     let state_size = state.covariance.ncols();
@@ -53,7 +54,8 @@ pub fn compute_doppler_update(
         };
 
         // Get satellite position and velocity
-        let (sat_pos, sat_vel, _dt_s, _) = eph.position(state.time);
+        let (sat_pos, sat_vel, _dt_s, sat_drift_sec_per_sec) = eph.position(state.time);
+        let sat_drift_ms = sat_drift_sec_per_sec * LIGHT_SPEED;
 
         // Line-of-sight unit vector from receiver to satellite
         let los = sat_pos - state.position.vector;
@@ -67,24 +69,27 @@ pub fn compute_doppler_update(
         let lambda = LIGHT_SPEED / meas.frequency;
         let observed_range_rate = -meas.doppler_hz * lambda;
 
-        // Predicted range-rate: ė · (v_sat - v_rcv)
+        // Predicted range-rate: ė · (v_sat - v_rcv) + c_drift - sat_drift_ms
         // Note: This ignores Earth rotation correction for simplicity
         let rel_vel = sat_vel - state.velocity;
-        let predicted_range_rate = e_los.dot(&rel_vel);
+        let predicted_range_rate = e_los.dot(&rel_vel) + state.rcv_clk_drift - sat_drift_ms;
 
         // Innovation
         let z_i = observed_range_rate - predicted_range_rate;
 
         // H matrix row: ∂(range_rate)/∂(state)
-        // Range-rate = ė · (v_sat - v_rcv), so ∂(range_rate)/∂v_rcv = -ė
+        // Range-rate = ė · (v_sat - v_rcv) + c_drift, so ∂(range_rate)/∂v_rcv = -ė
         let mut h_row = vec![0.0; state_size];
         // Velocity is at state indices 3, 4, 5
         h_row[3] = -e_los.x;
         h_row[4] = -e_los.y;
         h_row[5] = -e_los.z;
+        if state_size > 19 {
+            h_row[19] = 1.0; // Receiver clock drift
+        }
 
         // Variance: scaled by elevation and SNR
-        let var = 0.04 * gneiss_core::variance::observation_variance(meas.snr, meas.elevation, 45.0);
+        let var = dop_base_var * gneiss_core::variance::observation_variance(meas.snr, meas.elevation, 45.0);
 
         z_vals.push(z_i);
         h_rows.push(h_row);
@@ -176,7 +181,7 @@ mod tests {
             });
         }
 
-        let result = compute_doppler_update(&state, &measurements, &ephemerides);
+        let result = compute_doppler_update(&state, &measurements, &ephemerides, 1.0);
         assert!(result.is_some(), "Should compute Doppler update with 5 sats");
         let (z, h, r) = result.unwrap();
         assert_eq!(z.len(), measurements.len(), "Innovation vector size should match measurements");
@@ -239,7 +244,7 @@ mod tests {
             });
         }
 
-        let result = compute_doppler_update(&state, &measurements, &ephemerides);
+        let result = compute_doppler_update(&state, &measurements, &ephemerides, 1.0);
         assert!(result.is_some());
 
         let (z, h, r) = result.unwrap();
@@ -299,7 +304,7 @@ mod tests {
             make_test_ephemeris(2, 1.0, 0.5),
         ];
 
-        let result = compute_doppler_update(&state, &measurements, &ephemerides);
+        let result = compute_doppler_update(&state, &measurements, &ephemerides, 1.0);
         assert!(result.is_none(), "Should return None with < 4 sats");
     }
 
@@ -333,7 +338,7 @@ mod tests {
             });
         }
 
-        let (_, h, _) = compute_doppler_update(&state, &measurements, &ephemerides).unwrap();
+        let (_, h, _) = compute_doppler_update(&state, &measurements, &ephemerides, 1.0).unwrap();
 
         for i in 0..h.nrows() {
             let eph = &ephemerides[i];
@@ -389,7 +394,7 @@ mod tests {
             });
         }
 
-        let result = compute_doppler_update(&state, &measurements, &ephemerides);
+        let result = compute_doppler_update(&state, &measurements, &ephemerides, 1.0);
         // Since range is exactly 1.0, it is NOT < 1.0, so it should NOT be skipped!
         // Therefore, we have 4 valid measurements, so it should succeed.
         assert!(result.is_some(), "Should NOT skip if range == 1.0");
@@ -429,7 +434,7 @@ mod tests {
             });
         }
 
-        let result = compute_doppler_update(&state, &measurements, &ephemerides);
+        let result = compute_doppler_update(&state, &measurements, &ephemerides, 1.0);
         // It should SKIP the 1st one (continue), but process the remaining 4.
         // So it should return Some with 4 measurements!
         assert!(result.is_some(), "Should not break; should process remaining 4 sats");
@@ -465,7 +470,7 @@ mod tests {
             });
         }
 
-        let result = compute_doppler_update(&state, &measurements, &ephemerides);
+        let result = compute_doppler_update(&state, &measurements, &ephemerides, 1.0);
         // PRN 1 is missing, but 2,3,4,5 are present. It should continue on 1.
         assert!(result.is_some(), "Should not break on first missing ephemeris");
         assert_eq!(result.unwrap().0.len(), 4, "Should process the 4 valid ones");
@@ -523,7 +528,7 @@ mod missing_eph_tests {
             });
         }
 
-        let result = compute_doppler_update(&state, &measurements, &ephemerides);
+        let result = compute_doppler_update(&state, &measurements, &ephemerides, 1.0);
         assert!(result.is_some(), "Should succeed with 4 valid ephemerides out of 5 measurements");
         assert_eq!(result.unwrap().0.len(), 4, "Should process exactly 4 valid measurements");
     }
@@ -560,7 +565,7 @@ mod missing_eph_tests {
             });
         }
 
-        let result = compute_doppler_update(&state, &measurements, &ephemerides);
+        let result = compute_doppler_update(&state, &measurements, &ephemerides, 1.0);
         assert!(result.is_none(), "Should fail because short range satellite is skipped");
     }
 
@@ -596,7 +601,7 @@ mod missing_eph_tests {
             });
         }
 
-        let result = compute_doppler_update(&state, &measurements, &ephemerides);
+        let result = compute_doppler_update(&state, &measurements, &ephemerides, 1.0);
         // Since range is exactly 1.0, it is NOT < 1.0, so it should NOT be skipped!
         // Therefore, we have 4 valid measurements, so it should succeed.
         assert!(result.is_some(), "Should NOT skip if range == 1.0");
@@ -636,7 +641,7 @@ mod missing_eph_tests {
             });
         }
 
-        let result = compute_doppler_update(&state, &measurements, &ephemerides);
+        let result = compute_doppler_update(&state, &measurements, &ephemerides, 1.0);
         // It should SKIP the 1st one (continue), but process the remaining 4.
         // So it should return Some with 4 measurements!
         assert!(result.is_some(), "Should not break; should process remaining 4 sats");
@@ -672,7 +677,7 @@ mod missing_eph_tests {
             });
         }
 
-        let result = compute_doppler_update(&state, &measurements, &ephemerides);
+        let result = compute_doppler_update(&state, &measurements, &ephemerides, 1.0);
         // PRN 1 is missing, but 2,3,4,5 are present. It should continue on 1.
         assert!(result.is_some(), "Should not break on first missing ephemeris");
         assert_eq!(result.unwrap().0.len(), 4, "Should process the 4 valid ones");

@@ -68,6 +68,9 @@ Carrier-phase measurements provide millimeter-level precision but contain an unk
 
 Gneiss implements the Least-squares AMBiguity Decorrelation Adjustment (LAMBDA) method. The search space for these integers is highly correlated (an elongated hyper-ellipsoid). LAMBDA applies a $Z$-transformation (based on $UDU^T$ decomposition) to orthogonalize the search space, allowing an efficient depth-first tree search for the optimal integer candidates.
 
+### Fixed Failure-Rate Ratio Test (FFRT)
+Once integer candidates are generated, the engine validates them using the Fixed Failure-Rate Ratio Test (FFRT). Unlike legacy ratio tests that use an arbitrary scalar threshold (e.g., a static `3.0`), FFRT computes the threshold dynamically based on the requested failure rate $P_f$, the number of ambiguities $n$, and the stochastic properties of the float covariance matrix. This statistically bounds the false-fix probability, ensuring that when the engine locks into an RTK "Fixed" mode, it has mathematically rigorous confidence in the solution.
+
 ## Adaptive Estimation
 
 To handle dynamic noise environments (e.g., urban canyons), Gneiss scales sensor variances dynamically rather than relying on fixed configurations:

@@ -20,9 +20,10 @@ The engine is designed for robust operation in multi-path environments, utilizin
 
 The engine's architecture provides a mathematical scaffold for multiple GNSS processing modes. Currently, the project is heavily focused on optimizing **RTK + INS** workflows for urban canyon and challenging multipath environments.
 
-
-
-
+**Supported Modes:**
+  - Single Point Positioning (SPP)
+  - Real-Time Kinematic (RTK)
+  - RTK + INS (Tightly-Coupled)
   - Precise Point Positioning (PPP)
   - PPP + INS
 
@@ -42,6 +43,10 @@ graph LR
     A[Raw Satellite Data] --> B(Gneiss Engine)
     C[Raw Inertial Data] --> B
     B --> D{Extended Kalman Filter}
+    D -->|Float State| H[LAMBDA Ambiguity Resolution]
+    H -->|Fixed Ambiguities| I{FFRT Validation}
+    I -->|Pass| J[Apply Fix & Hold]
+    I -->|Fail| D
     D --> E[Position Trajectory]
     D --> F[Calibrated Sensor Biases]
     D --> G[Attitude & Heading]

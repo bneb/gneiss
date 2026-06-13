@@ -137,11 +137,13 @@ pub fn evaluate_post_fit_outliers(
             _ => 40.0,
         };
         
-        if (v[i].abs() > thresh && ratio > max_outlier_ratio) || (is_tightly_coupled && current_z[i].abs() > abs_thresh) {
+        let is_abs_outlier = is_tightly_coupled && current_z[i].abs() > abs_thresh && meas_type != 3;
+        
+        if (v[i].abs() > thresh && ratio > max_outlier_ratio) || is_abs_outlier {
             if v[i].abs() > thresh && ratio > max_outlier_ratio {
                 max_outlier_ratio = ratio;
                 worst_idx = Some(i);
-            } else if is_tightly_coupled && current_z[i].abs() > abs_thresh {
+            } else if is_abs_outlier {
                 worst_idx = Some(i);
                 max_outlier_ratio = f64::INFINITY;
             }
@@ -242,6 +244,48 @@ pub fn update_loosely_coupled(
 }
 
 #[allow(clippy::too_many_arguments)]
+fn compute_update_iteration(
+    state_cov: &DMatrix<f64>,
+    current_z: &DVector<f64>,
+    current_h: &DMatrix<f64>,
+    current_r: &DMatrix<f64>,
+    current_valid: &[usize],
+    meas_types: Option<&[(gneiss_core::sat::SatelliteId, u8)]>,
+    max_innovation: f64,
+    is_tightly_coupled: bool,
+    tuning: &crate::engine::config::EkfTuningConfig,
+) -> Result<(DVector<f64>, DMatrix<f64>, Option<usize>, f64), UpdateError> {
+    let hp = current_h * state_cov;
+    let s = &hp * current_h.transpose() + current_r;
+    if s.iter().any(|x| x.is_nan() || x.is_infinite() || x.abs() > 1e15) {
+        return Err(UpdateError::SingularMatrix);
+    }
+    
+    let s_inv = match s.clone().cholesky() {
+        Some(chol) => chol.inverse(),
+        None => {
+            let regularized = s.clone() + DMatrix::identity(s.nrows(), s.ncols()) * 1e-6;
+            match regularized.try_inverse() {
+                Some(inv) => inv,
+                None => return Err(UpdateError::SingularMatrix),
+            }
+        }
+    };
+    
+    let k = state_cov * current_h.transpose() * &s_inv;
+    let dx = &k * current_z;
+    
+    if dx.iter().any(|x| x.is_nan()) {
+        return Err(UpdateError::SingularMatrix);
+    }
+
+    let v = current_z - current_h * &dx;
+    let (worst_idx, max_outlier_ratio) = evaluate_post_fit_outliers(&v, &s, current_z, current_valid, meas_types, max_innovation, is_tightly_coupled, tuning);
+    
+    Ok((dx, k, worst_idx, max_outlier_ratio))
+}
+
+#[allow(clippy::too_many_arguments)]
 pub fn update(state: &mut RtkState, z: &DVector<f64>, h: &DMatrix<f64>, r: &DMatrix<f64>, max_innovation: f64, meas_types: Option<&[(gneiss_core::sat::SatelliteId, u8)]>, is_tightly_coupled: bool, tuning: &crate::engine::config::EkfTuningConfig) -> Result<Vec<usize>, UpdateError> {
     if z.len() != h.nrows() || h.ncols() != state.covariance.nrows() {
         return Err(UpdateError::DimensionMismatch);
@@ -282,37 +326,18 @@ pub fn update(state: &mut RtkState, z: &DVector<f64>, h: &DMatrix<f64>, r: &DMat
     let mut dx = DVector::zeros(state.covariance.nrows());
     let mut k = DMatrix::zeros(state.covariance.nrows(), current_z.len());
     
-    for _iter in 0..21 {
-        let hp = &current_h * &state.covariance;
-        let s = &hp * current_h.transpose() + &current_r;
-        if s.iter().any(|x| x.is_nan() || x.is_infinite() || x.abs() > 1e15) {
-            return Err(UpdateError::SingularMatrix);
-        }
+    for _iter in 0..tuning.ekf_max_iterations {
+        let (dx_iter, k_iter, worst_idx, max_outlier_ratio) = compute_update_iteration(
+            &state.covariance, &current_z, &current_h, &current_r, &current_valid, 
+            meas_types, max_innovation, is_tightly_coupled, tuning
+        )?;
         
-        let s_inv = match s.clone().cholesky() {
-            Some(chol) => chol.inverse(),
-            None => {
-                let regularized = s.clone() + DMatrix::identity(s.nrows(), s.ncols()) * 1e-6;
-                match regularized.try_inverse() {
-                    Some(inv) => inv,
-                    None => return Err(UpdateError::SingularMatrix),
-                }
-            }
-        };
-        
-        k = &state.covariance * current_h.transpose() * &s_inv;
-        dx = &k * &current_z;
-        
-        if dx.iter().any(|x| x.is_nan()) {
-            return Err(UpdateError::SingularMatrix);
-        }
-
-        let v = &current_z - &current_h * &dx;
-        let (worst_idx, max_outlier_ratio) = evaluate_post_fit_outliers(&v, &s, &current_z, &current_valid, meas_types, max_innovation, is_tightly_coupled, tuning);
+        dx = dx_iter;
+        k = k_iter;
         
         if let Some(idx) = worst_idx {
             if current_valid.len() > 4 {
-                if _iter >= 20 { break; }
+                if _iter >= tuning.ekf_max_iterations - 1 { break; }
                 current_z = current_z.remove_row(idx);
                 current_h = current_h.remove_row(idx);
                 current_r = current_r.remove_row(idx).remove_column(idx);

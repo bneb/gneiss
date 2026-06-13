@@ -48,6 +48,8 @@ pub struct EkfTuningConfig {
     pub huber_threshold_loosely: f64,
     pub huber_threshold_tightly: f64,
 
+    pub ekf_max_iterations: usize,
+
     // Auto-tuning Constraints
     pub auto_tune: AutoTuneConfig,
 }
@@ -55,9 +57,9 @@ pub struct EkfTuningConfig {
 impl Default for EkfTuningConfig {
     fn default() -> Self {
         Self {
-            pr_base_var: 0.09,
+            pr_base_var: 1.0,
             cp_base_var: 9e-6,
-            dop_base_var: 0.1,
+            dop_base_var: 1.0,
             sigma_v: 0.01,
             sigma_phi: 0.001,
             sigma_ab: 1e-4,
@@ -70,6 +72,7 @@ impl Default for EkfTuningConfig {
             dop_abs_thresh: 15.0,
             huber_threshold_loosely: 10.0,
             huber_threshold_tightly: 3.0,
+            ekf_max_iterations: 20,
             auto_tune: Default::default(),
         }
     }
