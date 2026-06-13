@@ -501,7 +501,7 @@ impl ProcessingEngine {
             // Using a tighter variance of 9.0 (3m std dev) forces the INS to track the clean SPP positions
             r_mat.fill_diagonal(9.0);
 
-            if crate::engine::updater::update(state, &z_vec, &h_mat, &r_mat, self.config.spp_consistency_threshold_m, None, self.config.mode.is_tightly_coupled(), &self.config.tuning).is_err() {
+            if crate::engine::updater::update(state, &z_vec, &h_mat, &r_mat, self.config.spp_consistency_threshold_m, None, self.config.mode.is_tightly_coupled(), &self.config.tuning).map_or(true, |v| v.len() < 3) {
                 state.consecutive_rejections += 1;
                 if state.consecutive_rejections > 5 {
                     tracing::warn!("SPP EKF rejected for {} epochs. Hard resetting INS to SPP.", state.consecutive_rejections);
