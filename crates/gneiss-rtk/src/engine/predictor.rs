@@ -250,7 +250,7 @@ mod tests {
             raim_pseudorange_outlier_m: 10.0,
             chi_square_pr_threshold: 15.0,
             chi_square_cp_threshold: 15.0,
-            nominal_snr_dbhz: 30.0,
+            phase_windup_enabled: true,
             min_snr_dbhz: 0.0,
             dynamics_model: DynamicsModel::Static,
             doppler_slip_threshold_cycles: 5.0,

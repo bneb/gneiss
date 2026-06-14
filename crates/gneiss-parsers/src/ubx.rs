@@ -183,7 +183,7 @@ impl UbxRxmRawx {
                 });
             }
 
-            if meas.cp_valid {
+            if meas.cp_valid && meas.half_cycle_valid {
                 // Emit Carrier Phase in pure cycles. The engine will scale to meters using the correct satellite frequency.
                 observations.push(Observation {
                     code: ObsCode {

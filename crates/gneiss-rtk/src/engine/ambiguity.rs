@@ -57,6 +57,9 @@ pub fn manage_ambiguities_and_slips(
                     if check_doppler_phase_slip(r_cp1, prev_cp, r.doppler, prev_doppler, dt, config.doppler_slip_threshold_cycles) {
                         tracing::debug!("Doppler-Phase cycle slip detected on {:?} L1", r.sat);
                         slip_l1 = true;
+                    } else if slip_l1 && dt < 5.0 && !check_doppler_phase_slip(r_cp1, prev_cp, r.doppler, prev_doppler, dt, 0.5) {
+                        tracing::debug!("Bridging short interruption on {:?} L1 using Doppler", r.sat);
+                        slip_l1 = false;
                     }
                 } else if dt > config.max_base_age_s {
                     tracing::debug!("Data gap > {:.1}s on {:?} L1, resetting ambiguity", config.max_base_age_s, r.sat);
@@ -74,6 +77,9 @@ pub fn manage_ambiguities_and_slips(
                     if check_doppler_phase_slip(r_cp2, prev_cp, doppler_l2, prev_doppler, dt, config.doppler_slip_threshold_cycles) {
                         tracing::debug!("Doppler-Phase cycle slip detected on {:?} L2", r.sat);
                         slip_l2 = true;
+                    } else if slip_l2 && dt < 5.0 && !check_doppler_phase_slip(r_cp2, prev_cp, doppler_l2, prev_doppler, dt, 0.5) {
+                        tracing::debug!("Bridging short interruption on {:?} L2 using Doppler", r.sat);
+                        slip_l2 = false;
                     }
                 } else if dt > config.max_base_age_s {
                     tracing::debug!("Data gap > {:.1}s on {:?} L2, resetting ambiguity", config.max_base_age_s, r.sat);
@@ -128,8 +134,8 @@ pub fn manage_ambiguities_and_slips(
                                 let anchor_eph = ephemerides.iter().find(|e| e.sat() == anchor_r.sat).unwrap();
                                 let (a_f1, _) = gneiss_core::signal::satellite_frequencies(anchor_r.sat, anchor_eph.freq_num());
                                 
-                                let (ar_sat_vec, _) = crate::engine::measurement::get_sat_state(anchor_eph, anchor_r.pr_l1, rover_time, state.position.vector);
-                                let (ab_sat_vec, _) = crate::engine::measurement::get_sat_state(anchor_eph, anchor_b.pr_l1, base_time, base_coord.vector);
+                                let (ar_sat_vec, _) = crate::engine::measurement_math::get_sat_state(anchor_eph, anchor_r.pr_l1, rover_time, state.position.vector);
+                                let (ab_sat_vec, _) = crate::engine::measurement_math::get_sat_state(anchor_eph, anchor_b.pr_l1, base_time, base_coord.vector);
                                 let ar_dist_rov = (state.position.vector - ar_sat_vec).norm();
                                 let ar_dist_base = (base_coord.vector - ab_sat_vec).norm();
                                 
@@ -142,8 +148,8 @@ pub fn manage_ambiguities_and_slips(
                                 let b_clock_base = a_cp_base - ar_dist_base; // Base has no ambiguity in SD, assuming SD = rov - base
 
                                 let r_eph = ephemerides.iter().find(|e| e.sat() == r.sat).unwrap();
-                                let (r_sat_vec, _) = crate::engine::measurement::get_sat_state(r_eph, r.pr_l1, rover_time, state.position.vector);
-                                let (b_sat_vec, _) = crate::engine::measurement::get_sat_state(r_eph, b.pr_l1, base_time, base_coord.vector);
+                                let (r_sat_vec, _) = crate::engine::measurement_math::get_sat_state(r_eph, r.pr_l1, rover_time, state.position.vector);
+                                let (b_sat_vec, _) = crate::engine::measurement_math::get_sat_state(r_eph, b.pr_l1, base_time, base_coord.vector);
                                 let dist_rov = (state.position.vector - r_sat_vec).norm();
                                 let dist_base = (base_coord.vector - b_sat_vec).norm();
                                 
@@ -184,8 +190,8 @@ pub fn manage_ambiguities_and_slips(
                                 let anchor_eph = ephemerides.iter().find(|e| e.sat() == anchor_r.sat).unwrap();
                                 let (_, a_f2) = gneiss_core::signal::satellite_frequencies(anchor_r.sat, anchor_eph.freq_num());
                                 
-                                let (ar_sat_vec, _) = crate::engine::measurement::get_sat_state(anchor_eph, anchor_r.pr_l1, rover_time, state.position.vector);
-                                let (ab_sat_vec, _) = crate::engine::measurement::get_sat_state(anchor_eph, anchor_b.pr_l1, base_time, base_coord.vector);
+                                let (ar_sat_vec, _) = crate::engine::measurement_math::get_sat_state(anchor_eph, anchor_r.pr_l1, rover_time, state.position.vector);
+                                let (ab_sat_vec, _) = crate::engine::measurement_math::get_sat_state(anchor_eph, anchor_b.pr_l1, base_time, base_coord.vector);
                                 let ar_dist_rov = (state.position.vector - ar_sat_vec).norm();
                                 let ar_dist_base = (base_coord.vector - ab_sat_vec).norm();
                                 
@@ -198,8 +204,8 @@ pub fn manage_ambiguities_and_slips(
                                 let b_clock_base = a_cp_base - ar_dist_base;
 
                                 let r_eph = ephemerides.iter().find(|e| e.sat() == r.sat).unwrap();
-                                let (r_sat_vec, _) = crate::engine::measurement::get_sat_state(r_eph, r.pr_l1, rover_time, state.position.vector);
-                                let (b_sat_vec, _) = crate::engine::measurement::get_sat_state(r_eph, b.pr_l1, base_time, base_coord.vector);
+                                let (r_sat_vec, _) = crate::engine::measurement_math::get_sat_state(r_eph, r.pr_l1, rover_time, state.position.vector);
+                                let (b_sat_vec, _) = crate::engine::measurement_math::get_sat_state(r_eph, b.pr_l1, base_time, base_coord.vector);
                                 let dist_rov = (state.position.vector - r_sat_vec).norm();
                                 let dist_base = (base_coord.vector - b_sat_vec).norm();
                                 

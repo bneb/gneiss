@@ -92,12 +92,24 @@ mod tests {
         let h = DMatrix::from_element(1, 3, 1.0);
         let r = DMatrix::from_element(1, 1, 1.0);
         
-        let p_new = crate::engine::updater::apply_joseph_covariance_update(&state_cov, &k, &h, &r);
+        let p_new = crate::engine::updater_math::apply_joseph_covariance_update(&state_cov, &k, &h, &r);
         
         // Ensure symmetric
         assert_eq!(p_new[(0, 1)], p_new[(1, 0)]);
         assert_eq!(p_new[(1, 2)], p_new[(2, 1)]);
         assert_eq!(p_new[(0, 2)], p_new[(2, 0)]);
+        
+        // Ensure correct values to kill mutants.
+        // P = 10 * I. KH is all 0.5. I - KH has 0.5 on diag, -0.5 elsewhere.
+        // (I - KH) * P * (I - KH)^T:
+        // row 0: [0.5, -0.5, -0.5] * 10 = [5, -5, -5]
+        // dot product with itself: 25 + 25 + 25 = 75
+        // off-diagonals: [5, -5, -5] dot [-5, 0.5*10, -5] = -25 - 25 + 25 = -25.
+        // K R K^T = 0.25 everywhere.
+        // So diag = 7.75, off-diag = -2.25.
+        assert!((p_new[(0, 0)] - 7.75).abs() < 1e-6);
+        assert!((p_new[(0, 1)] - (-2.25)).abs() < 1e-6);
+
     }
 
     #[test]
@@ -123,15 +135,120 @@ mod tests {
         let sat1 = SatelliteId { constellation: Constellation::Gps, prn: 1 };
         let meas_types = [(sat1, 0), (sat1, 1), (sat1, 3)];
         
-        let _valid_idx = crate::engine::updater::filter_pre_fit_residuals(&z, &h, &r, &state.covariance, 15.0, Some(&meas_types));
+        let _valid_idx = crate::engine::updater_math::filter_pre_fit_residuals(&z, &h, &r, &state.covariance, 15.0, Some(&meas_types));
         
         // Now make phase invalid: z=20.0, nu^2/s_ii = 400/3.5 = 114 > 100 → Invalid
         z[1] = 20.0;
-        let valid_idx = crate::engine::updater::filter_pre_fit_residuals(&z, &h, &r, &state.covariance, 15.0, Some(&meas_types));
+        let valid_idx = crate::engine::updater_math::filter_pre_fit_residuals(&mut z, &h, &r, &state.covariance, 15.0, Some(&meas_types));
         
         assert!(valid_idx.contains(&0), "PR should pass");
         assert!(!valid_idx.contains(&1), "Phase should be rejected");
         assert!(valid_idx.contains(&2), "Doppler should pass");
+    }
+
+    #[test]
+    fn test_fix_and_hold_updates_imu_states() {
+        let time = GpsTime::new(2000, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 1.0);
+        
+        // Add two ambiguities with known float values
+        state.add_ambiguity(
+            gneiss_core::sat::SatelliteId { constellation: gneiss_core::sat::Constellation::Gps, prn: 1 },
+            1, 5.3, 1.0,
+        );
+        state.add_ambiguity(
+            gneiss_core::sat::SatelliteId { constellation: gneiss_core::sat::Constellation::Gps, prn: 2 },
+            1, 3.8, 1.0,
+        );
+        
+        // Set non-trivial cross-covariance between position and ambiguity states
+        let amb_start = crate::filter::CORE_STATE_SIZE;
+        state.covariance[(0, amb_start)] = 0.5;
+        state.covariance[(amb_start, 0)] = 0.5;
+        // Cross-covariance between attitude and ambiguity
+        state.covariance[(6, amb_start)] = 0.2;
+        state.covariance[(amb_start, 6)] = 0.2;
+        // Cross-covariance between gyro bias and ambiguity
+        state.covariance[(12, amb_start)] = 0.1;
+        state.covariance[(amb_start, 12)] = 0.1;
+        
+        let initial_att = state.attitude;
+        let initial_gyro_bias = state.gyro_bias;
+        
+        // Integer ambiguities: 5.0 and 4.0
+        let z_dd = DVector::from_vec(vec![5.0 - 4.0]); // DD = amb[0] - amb[1] = 1.0
+        // D matrix maps DD to SD: row selects amb[0] - amb[1]
+        let n_cols = state.covariance.ncols();
+        let mut d_full = DMatrix::zeros(1, n_cols);
+        d_full[(0, amb_start)] = 1.0;
+        d_full[(0, amb_start + 1)] = -1.0;
+        
+        let var = 0.001; // Tight fix variance
+        
+        let res = crate::engine::updater::apply_fix_and_hold(&mut state, &z_dd, &d_full, var);
+        assert!(res.is_ok());
+        
+        // The key assertion: attitude and gyro bias SHOULD be updated
+        // because the covariance has cross-correlation between these states
+        // and the ambiguity states. Before the fix, these were zeroed.
+        let att_changed = (state.attitude.quaternion() - initial_att.quaternion()).norm() > 1e-15
+            || state.gyro_bias != initial_gyro_bias;
+        
+        // With cross-covariance, the fix should propagate to IMU states
+        assert!(att_changed, "Fix-and-hold must update IMU states via cross-covariance");
+    }
+
+    #[test]
+    fn test_fix_and_hold_covariance_reduces() {
+        let time = GpsTime::new(2000, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 1.0);
+        
+        state.add_ambiguity(
+            gneiss_core::sat::SatelliteId { constellation: gneiss_core::sat::Constellation::Gps, prn: 1 },
+            1, 5.3, 2.0,
+        );
+        state.add_ambiguity(
+            gneiss_core::sat::SatelliteId { constellation: gneiss_core::sat::Constellation::Gps, prn: 2 },
+            1, 3.8, 2.0,
+        );
+        
+        let amb_start = crate::filter::CORE_STATE_SIZE;
+        let pre_var_0 = state.covariance[(amb_start, amb_start)];
+        let pre_var_1 = state.covariance[(amb_start + 1, amb_start + 1)];
+        
+        let z_dd = DVector::from_vec(vec![5.0 - 4.0]);
+        let n_cols = state.covariance.ncols();
+        let mut d_full = DMatrix::zeros(1, n_cols);
+        d_full[(0, amb_start)] = 1.0;
+        d_full[(0, amb_start + 1)] = -1.0;
+        
+        crate::engine::updater::apply_fix_and_hold(&mut state, &z_dd, &d_full, 0.001).unwrap();
+        
+        // Ambiguity variance should decrease after fix
+        let post_var_0 = state.covariance[(amb_start, amb_start)];
+        let post_var_1 = state.covariance[(amb_start + 1, amb_start + 1)];
+        
+        assert!(post_var_0 < pre_var_0, "Ambiguity variance should decrease after fix: {} >= {}", post_var_0, pre_var_0);
+        assert!(post_var_1 < pre_var_1, "Ambiguity variance should decrease after fix: {} >= {}", post_var_1, pre_var_1);
+    }
+
+    #[test]
+    fn test_loosely_coupled_jacobian() {
+        let time = GpsTime::new(2000, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos.clone(), 1.0);
+        let gnss_state = RtkState::new(time, pos, 1.0);
+        
+        let lever_arm = Vector3::new(0.5, 0.3, 0.1);
+        let omega_b = Vector3::new(0.01, 0.02, 0.03);
+        let tuning = crate::engine::config::EkfTuningConfig::default();
+        
+        let res = crate::engine::updater::update_loosely_coupled(
+            &mut state, &gnss_state, lever_arm, omega_b, &tuning
+        );
+        assert!(res.is_ok());
     }
 
     #[test]
@@ -159,6 +276,49 @@ mod tests {
         
         // state position should be updated but not fully 15m due to variance inflation
         assert!(state.position.vector.x > 0.0 && state.position.vector.x < 15.0);
+    }
+
+    #[test]
+    fn test_enforce_symmetry_operator() {
+        let mut p = DMatrix::from_diagonal(&DVector::from_element(2, 10.0));
+        p[(0, 1)] = 2.0;
+        p[(1, 0)] = 4.0;
+        // apply_joseph_covariance_update creates p_new = i_kh * p * i_kh.T + k * r * k.T
+        // With K=0, H=0, p_new = p.
+        let k = DMatrix::zeros(2, 1);
+        let h = DMatrix::zeros(1, 2);
+        let r = DMatrix::zeros(1, 1);
+        let p_new = crate::engine::updater_math::apply_joseph_covariance_update(&p, &k, &h, &r);
+        
+        // (2.0 + 4.0) * 0.5 = 3.0
+        assert_eq!(p_new[(0, 1)], 3.0, "Symmetry operator + or *0.5 mutated");
+        assert_eq!(p_new[(1, 0)], 3.0, "Symmetry operator + or *0.5 mutated");
+    }
+
+    #[test]
+    fn test_evaluate_post_fit_outliers_math_operators() {
+        let v = DVector::from_element(1, 10.0);
+        let s = DMatrix::from_element(1, 1, 4.0); // sqrt is 2.0
+        let current_z = DVector::from_element(1, 20.0);
+        let current_valid = vec![0];
+        use gneiss_core::sat::{SatelliteId, Constellation};
+        let sat = SatelliteId { constellation: Constellation::Gps, prn: 1 };
+        let meas_types = vec![(sat, 3)]; // Doppler (type 3)
+        let mut tuning = crate::engine::config::EkfTuningConfig::default();
+        tuning.doppler_outlier_ratio_mult = 2.0;
+        tuning.dop_abs_thresh = 50.0;
+        let max_innovation = 6.0; 
+        
+        // thresh = max_innovation * mult = 6.0 * 2.0 = 12.0
+        // ratio = v.abs() / s.sqrt() = 10.0 / 2.0 = 5.0
+        // Since 5.0 <= 12.0, it should NOT be an outlier.
+        let (worst_idx, _) = crate::engine::updater_math::evaluate_post_fit_outliers(&v, &s, &current_z, &current_valid, Some(&meas_types), max_innovation, false, &tuning);
+        assert_eq!(worst_idx, None, "Doppler mult operator * mutated to / (would yield thresh 3.0, causing outlier)");
+        
+        // If we increase ratio to 15.0 by setting v=30.0, it should be an outlier.
+        let v2 = DVector::from_element(1, 30.0);
+        let (worst_idx2, _) = crate::engine::updater_math::evaluate_post_fit_outliers(&v2, &s, &current_z, &current_valid, Some(&meas_types), max_innovation, false, &tuning);
+        assert_eq!(worst_idx2, Some(0));
     }
 
 }

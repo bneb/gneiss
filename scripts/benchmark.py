@@ -123,13 +123,13 @@ def evaluate(sol_file, truth_file, dry_run=False):
 
 # Suite 1: Gneiss Only
 def run_gneiss_suite(dry_run=False, eval_only=False):
-    modes = ["spp", "ppp", "ppp-fg", "ppp-ins-fg"]
+    EVAL_MODES = ["spp", "spp-ins", "rtk", "rtk-ins", "ppp", "ppp-fg", "ppp-ins-fg"]
     results = {ds: {} for ds in DATASETS}
     os.makedirs(OUT_DIR_GNEISS, exist_ok=True)
     
     for ds_name, config in DATASETS.items():
         print(f"\n=== Gneiss Suite: {ds_name} ===")
-        for mode in modes:
+        for mode in EVAL_MODES:
             out_file = f"{OUT_DIR_GNEISS}/{ds_name.replace(' ', '_').replace('(', '').replace(')', '')}_{mode}.pos"
             
             if not eval_only:
@@ -161,7 +161,7 @@ def run_gneiss_suite(dry_run=False, eval_only=False):
     md = "# Gneiss Comprehensive Benchmarks\n\n"
     for ds_name, modes_data in results.items():
         md += f"## {ds_name}\n\n| Mode | Median Horizontal | 95% Horizontal | Median Vertical |\n| :--- | :--- | :--- | :--- |\n"
-        for mode in modes:
+        for mode in EVAL_MODES:
             res = modes_data.get(mode, "N/A")
             if isinstance(res, dict):
                 md += f"| `{mode}` | {res.get('hz_50','N/A')} | {res.get('hz_95','N/A')} | {res.get('vt_50','N/A')} |\n"

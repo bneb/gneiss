@@ -1,3 +1,4 @@
+use crate::engine::types::{EngineMode, DynamicsModel};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -29,6 +30,10 @@ pub struct EkfTuningConfig {
     pub pr_base_var: f64,
     pub cp_base_var: f64,
     pub dop_base_var: f64,
+    
+    // SNR Variance Model: a^2 + b^2 / 10^(CN0/10)
+    pub snr_a: f64,
+    pub snr_b: f64,
 
     // IMU Process Noise
     pub sigma_v: f64,    // Velocity Random Walk
@@ -60,6 +65,8 @@ impl Default for EkfTuningConfig {
             pr_base_var: 1.0,
             cp_base_var: 9e-6,
             dop_base_var: 1.0,
+            snr_a: 1.0,
+            snr_b: 150.0,
             sigma_v: 0.01,
             sigma_phi: 0.001,
             sigma_ab: 1e-4,
@@ -74,6 +81,89 @@ impl Default for EkfTuningConfig {
             huber_threshold_tightly: 3.0,
             ekf_max_iterations: 20,
             auto_tune: Default::default(),
+        }
+    }
+}
+
+/// Configuration for the RTK processing engine.
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+#[serde(default)]
+pub struct EngineConfig {
+    pub mode: EngineMode,
+    pub initial_position: Option<[f64; 3]>,
+    pub base_position: Option<[f64; 3]>,
+    pub base_datum_transform: Option<gneiss_geodesy::helmert::HelmertParams>,
+    pub imu_to_antenna_lever_arm: [f64; 3],
+    pub imu_mounting_angles: Option<[f64; 3]>, // [Roll, Pitch, Yaw] in radians
+    pub imu_to_nhc_lever_arm: [f64; 3], // [x, y, z] from IMU to NHC point in body frame
+    pub enable_nhc: bool,
+    pub enable_backward_smoothing: bool,
+    pub lambda_min_ratio: f64,
+    pub lambda_min_subset: usize,
+    pub enabled_constellations: Option<Vec<gneiss_core::sat::Constellation>>,
+    
+    // Tuning Parameters
+    pub raim_pseudorange_outlier_m: f64,
+    pub chi_square_pr_threshold: f64,
+    pub chi_square_cp_threshold: f64,
+    pub phase_windup_enabled: bool,
+    pub min_snr_dbhz: f64,
+    pub dynamics_model: DynamicsModel,
+    pub doppler_slip_threshold_cycles: f64,
+    pub max_reject_count: usize,
+    pub max_base_age_s: f64,
+    pub spp_consistency_threshold_m: f64,
+    pub initial_ambiguity_variance: f64,
+    pub ar_min_epoch_count: u32,
+    pub ar_min_lock: u32,
+    pub ar_ffrt_prob: f64,
+    
+    // Process Noise
+    pub process_noise_cb: f64,
+    pub process_noise_cd: f64,
+    pub process_noise_zwd: f64,
+    pub process_noise_amb_float: f64,
+    pub process_noise_amb_fixed: f64,
+    
+    // External Tuning configuration
+    pub tuning: crate::engine::config::EkfTuningConfig,
+}
+
+impl Default for EngineConfig {
+    fn default() -> Self {
+        Self {
+            mode: EngineMode::Rtk,
+            initial_position: None,
+            base_position: None,
+            base_datum_transform: None,
+            imu_to_antenna_lever_arm: [0.0, 0.0, 0.0],
+            imu_mounting_angles: None,
+            imu_to_nhc_lever_arm: [0.0, 0.0, 0.0],
+            enable_nhc: false,
+            enable_backward_smoothing: false,
+            lambda_min_ratio: 1.5,
+            lambda_min_subset: 5,
+            enabled_constellations: None,
+            raim_pseudorange_outlier_m: 25.0,
+            chi_square_pr_threshold: 3.0,
+            chi_square_cp_threshold: 1000000.0,
+            phase_windup_enabled: true,
+            min_snr_dbhz: 0.0,
+            dynamics_model: DynamicsModel::Automotive,
+            doppler_slip_threshold_cycles: 5.0,
+            max_reject_count: 3,
+            max_base_age_s: 5.0,
+            spp_consistency_threshold_m: 15.0,
+            initial_ambiguity_variance: 10000.0,
+            ar_min_epoch_count: 5,
+            ar_min_lock: 3,
+            ar_ffrt_prob: 0.001,
+            process_noise_cb: 1e6,
+            process_noise_cd: 1e4,
+            process_noise_zwd: 1e-8,
+            process_noise_amb_float: 1e-8,
+            process_noise_amb_fixed: 1e-12,
+            tuning: Default::default(),
         }
     }
 }

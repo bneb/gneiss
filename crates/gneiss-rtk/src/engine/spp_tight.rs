@@ -49,6 +49,8 @@ pub fn process_spp_tightly_coupled<'a>(engine: &'a mut ProcessingEngine, rover_o
     // to explode and reject all measurements if we rely purely on INS propagation.
     if let Ok(spp_res) = crate::spp::compute_spp(rover_obs, &engine.ephemerides, engine.klobuchar_params.as_ref(), &spp_config, None) {
         state.rcv_clk_bias = spp_res.cdt;
+        // Reset clock variance to SPP-level uncertainty rather than inflating additively
+        state.covariance[(15, 15)] = 1e6; // White-noise clock: reset each epoch
     }
     
     // Pre-calculate lever arm compensation
@@ -154,7 +156,7 @@ pub fn process_spp_tightly_coupled<'a>(engine: &'a mut ProcessingEngine, rover_o
             }
         }
         
-        let var_scale = gneiss_core::variance::observation_variance(m.snr, el, engine.config.nominal_snr_dbhz);
+        let var_scale = gneiss_core::variance::observation_variance(m.snr, el, engine.config.tuning.snr_a, engine.config.tuning.snr_b);
         r_mat[(row_idx, row_idx)] = engine.config.tuning.pr_base_var * var_scale;
         meas_types.push((m.eph.sat(), 0)); // 0 = pseudorange
         
@@ -216,7 +218,7 @@ pub fn process_spp_tightly_coupled<'a>(engine: &'a mut ProcessingEngine, rover_o
 
     if rejected {
         state.consecutive_rejections += 1;
-        if state.consecutive_rejections > 5 {
+        if state.consecutive_rejections > 10 {
             tracing::warn!("Tightly-coupled SPP EKF rejected for {} epochs. Hard resetting INS.", state.consecutive_rejections);
             // We should use process_spp to reset the clock bias and position, but carefully preserve covariance
             if let Ok(spp_res) = crate::spp::compute_spp(rover_obs, &engine.ephemerides, engine.klobuchar_params.as_ref(), &spp_config, None) {

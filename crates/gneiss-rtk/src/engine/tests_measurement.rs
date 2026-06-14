@@ -1,4 +1,4 @@
-use crate::engine::measurement::build_dense_covariance_matrix;
+use crate::engine::measurement_math::build_dense_covariance_matrix;
 use gneiss_core::sat::{Constellation, SatelliteId};
 
 #[test]

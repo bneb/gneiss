@@ -1,13 +1,12 @@
 use crate::filter::RtkState;
 use nalgebra::{DMatrix, DVector, Vector3, UnitQuaternion};
+pub use crate::engine::updater_math::*;
 
 /// Pre-fit chi-squared threshold for carrier phase (normalized innovation squared).
 /// A CP innovation of ~0.5m with sigma ~0.01m gives chi2 ~2500. Reject only extreme outliers.
-const CP_PRE_FIT_CHI2_THRESHOLD: f64 = 100.0;
 
 /// Pre-fit chi-squared threshold for Doppler measurements.
 /// A Doppler innovation of 1 m/s with sigma ~0.3 m/s gives chi2 ~11. Reject above 50.
-const DOPPLER_PRE_FIT_CHI2_THRESHOLD: f64 = 50.0;
 
 #[derive(Debug)]
 pub enum UpdateError {
@@ -48,138 +47,14 @@ fn apply_imu_and_clock_correction(state: &mut RtkState, dx: &DVector<f64>) {
     }
 }
 
-pub fn apply_joseph_covariance_update(
-    p: &DMatrix<f64>,
-    k: &DMatrix<f64>,
-    h: &DMatrix<f64>,
-    r: &DMatrix<f64>,
-) -> DMatrix<f64> {
-    let identity = DMatrix::identity(p.nrows(), p.ncols());
-    let i_kh = identity - k * h;
-    let mut p_new = &i_kh * p * i_kh.transpose() + k * r * k.transpose();
-    
-    for r_idx in 0..p_new.nrows() {
-        for c_idx in 0..r_idx {
-            let avg = (p_new[(r_idx, c_idx)] + p_new[(c_idx, r_idx)]) * 0.5;
-            p_new[(r_idx, c_idx)] = avg;
-            p_new[(c_idx, r_idx)] = avg;
-        }
-    }
-    p_new
-}
 
-pub fn filter_pre_fit_residuals(
-    z: &DVector<f64>,
-    h: &DMatrix<f64>,
-    r: &DMatrix<f64>,
-    p: &DMatrix<f64>,
-    max_innovation: f64,
-    meas_types: Option<&[(gneiss_core::sat::SatelliteId, u8)]>,
-) -> Vec<usize> {
-    let mut valid_indices = Vec::new();
-    for i in 0..z.len() {
-        let nu = z[i];
-        let h_row = h.row(i);
-        let s_ii = (h_row * p * h_row.transpose())[(0, 0)] + r[(i, i)];
-        
-        let meas_type = meas_types.map_or(0, |m| m[i].1);
-        let threshold = match meas_type {
-            1 | 2 => CP_PRE_FIT_CHI2_THRESHOLD,
-            3 => DOPPLER_PRE_FIT_CHI2_THRESHOLD,
-            _ => max_innovation * max_innovation,
-        };
-        
-        if nu * nu / s_ii < threshold {
-            valid_indices.push(i);
-        } else {
-            let r_ii = r[(i, i)];
-            if meas_type != 1 && meas_type != 2 && nu.abs() < 1000.0 && r_ii < 1.0 {
-                tracing::debug!("EKF rejected Doppler/PR measurement! type={}, nu={:.2}, s_ii={:.2}, r_ii={:.4}", meas_type, nu, s_ii, r_ii);
-            } else {
-                tracing::debug!("EKF rejected meas: type={}, nu={:.2}, s_ii={:.2}, r_ii={:.4}", meas_type, nu, s_ii, r_ii);
-            }
-        }
-    }
-    valid_indices
-}
+
+
 
 #[allow(clippy::too_many_arguments)]
-pub fn evaluate_post_fit_outliers(
-    v: &DVector<f64>,
-    s: &DMatrix<f64>,
-    current_z: &DVector<f64>,
-    current_valid: &[usize],
-    meas_types: Option<&[(gneiss_core::sat::SatelliteId, u8)]>,
-    max_innovation: f64,
-    is_tightly_coupled: bool,
-    tuning: &crate::engine::config::EkfTuningConfig,
-) -> (Option<usize>, f64) {
-    let mut max_outlier_ratio = 0.0;
-    let mut worst_idx = None;
-    
-    for i in 0..v.len() {
-        let orig_idx = current_valid[i];
-        let meas_type = meas_types.map_or(0, |m| m[orig_idx].1);
-        let s_ii = s[(i, i)];
-        let ratio = v[i].abs() / s_ii.sqrt();
-        
-        let thresh = match meas_type {
-            0 => max_innovation, 
-            1 | 2 => tuning.phase_outlier_ratio_thresh,
-            3 => max_innovation * tuning.doppler_outlier_ratio_mult,
-            _ => max_innovation,
-        };
-        
-        let abs_thresh = match meas_type {
-            0 => tuning.pr_abs_thresh,
-            1 | 2 => tuning.cp_abs_thresh,
-            3 => tuning.dop_abs_thresh,
-            _ => 40.0,
-        };
-        
-        let is_abs_outlier = is_tightly_coupled && current_z[i].abs() > abs_thresh && meas_type != 3;
-        
-        if (v[i].abs() > thresh && ratio > max_outlier_ratio) || is_abs_outlier {
-            if v[i].abs() > thresh && ratio > max_outlier_ratio {
-                max_outlier_ratio = ratio;
-                worst_idx = Some(i);
-            } else if is_abs_outlier {
-                worst_idx = Some(i);
-                max_outlier_ratio = f64::INFINITY;
-            }
-        }
-    }
-    (worst_idx, max_outlier_ratio)
-}
 
-fn huber_scale_covariance(
-    p: &DMatrix<f64>,
-    r: &DMatrix<f64>,
-    z: &DVector<f64>,
-    tuning: &crate::engine::config::EkfTuningConfig,
-) -> Result<DMatrix<f64>, UpdateError> {
-    let s_raw = p + r;
-    let s_raw_inv = match s_raw.clone().cholesky() {
-        Some(chol) => chol.inverse(),
-        None => return Err(UpdateError::SingularMatrix),
-    };
-    let mahal_sq = (&z.transpose() * &s_raw_inv * z)[(0, 0)];
-    let huber_sq = tuning.huber_threshold_loosely.powi(2);
 
-    if mahal_sq <= huber_sq {
-        if mahal_sq > tuning.loosely_coupled_mahalanobis_sq {
-            return Err(UpdateError::InvalidMeasurement);
-        }
-        return Ok(r.clone());
-    }
-    // Inflate R so effective Mahalanobis clamps to huber_sq
-    let scale = mahal_sq / huber_sq;
-    let r_scaled = r * scale;
-    if huber_sq > tuning.loosely_coupled_mahalanobis_sq {
-        return Err(UpdateError::InvalidMeasurement);
-    }
-    Ok(r_scaled)
-}
+
 
 pub fn update_loosely_coupled(
     state: &mut RtkState,
@@ -192,13 +67,7 @@ pub fn update_loosely_coupled(
     let r_6x6_raw = gnss_state.covariance.view((0, 0), (6, 6)).into_owned();
     
     let r_b_e = state.attitude.to_rotation_matrix();
-    let l_e = r_b_e * lever_arm;
-    let pos_apc = state.position.vector + l_e;
-    let v_apc = state.velocity + r_b_e * omega_b.cross(&lever_arm);
-
-    let mut z = DVector::zeros(6);
-    z.rows_mut(0, 3).copy_from(&(gnss_state.position.vector - pos_apc));
-    z.rows_mut(3, 3).copy_from(&(gnss_state.velocity - v_apc));
+    let z = compute_loose_coupling_innovations(r_b_e.matrix(), &state.position.vector, &state.velocity, &gnss_state.position.vector, &gnss_state.velocity, &lever_arm, &omega_b);
 
     // Compute raw Mahalanobis distance and apply Huber scaling if needed
     let r_6x6 = huber_scale_covariance(&p_6x6, &r_6x6_raw, &z, tuning)?;
@@ -216,18 +85,7 @@ pub fn update_loosely_coupled(
     h_mat.view_mut((0, 0), (6, 6)).fill_diagonal(1.0);
 
     if state.covariance.nrows() >= crate::filter::CORE_STATE_SIZE {
-        let h_pos_att = -l_e.cross_matrix();
-        let a_e = r_b_e * omega_b.cross(&lever_arm);
-        let h_vel_att = -a_e.cross_matrix();
-        let h_vel_bg = r_b_e.matrix() * lever_arm.cross_matrix();
-        
-        for i in 0..3 {
-            for j in 0..3 {
-                h_mat[(i, 6 + j)] = h_pos_att[(i, j)];
-                h_mat[(3 + i, 6 + j)] = h_vel_att[(i, j)];
-                h_mat[(3 + i, 12 + j)] = h_vel_bg[(i, j)];
-            }
-        }
+        populate_loosely_coupled_jacobian(&mut h_mat, &state.attitude, &lever_arm, &omega_b);
     }
     
     let k = &state.covariance * h_mat.transpose() * s_inv;
@@ -378,12 +236,14 @@ pub fn apply_fix_and_hold(state: &mut RtkState, z_dd: &DVector<f64>, d_full: &DM
     };
     
     let mut k = &state.covariance * d_full.transpose() * s_inv;
+    // Dampen (don't zero) attitude and IMU bias gain rows to prevent
+    // aggressive feedback while still allowing gradual coupling
+    const FIX_HOLD_IMU_GAIN_DAMPING: f64 = 0.1;
     if state.covariance.nrows() > 15 {
         for i in 6..15 {
-            for j in 0..k.ncols() { k[(i, j)] = 0.0; }
+            for j in 0..k.ncols() { k[(i, j)] *= FIX_HOLD_IMU_GAIN_DAMPING; }
         }
     }
-    
     let dx = &k * &v;
     apply_state_correction(state, &dx);
     state.covariance = apply_joseph_covariance_update(&state.covariance, &k, d_full, &r);

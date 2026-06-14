@@ -161,8 +161,7 @@ impl RtkState {
         *count += 1;
     }
 
-    #[cfg_attr(test, mutants::skip)]
-pub fn resolve_ambiguities(&self, ephemerides: &[gneiss_core::ephemeris::Ephemeris], min_subset: usize, ar_min_epoch_count: u32, ar_min_lock: u32, lambda_min_ratio: f64, ffrt_prob: f64) -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> {
+    pub fn resolve_ambiguities(&self, ephemerides: &[gneiss_core::ephemeris::Ephemeris], min_subset: usize, ar_min_epoch_count: u32, ar_min_lock: u32, lambda_min_ratio: f64, ffrt_prob: f64) -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> {
         let num_amb = self.ambiguities.len();
         if num_amb < min_subset || self.epoch_count <= ar_min_epoch_count as usize { return Err("Insufficient data"); }
         
@@ -175,7 +174,8 @@ pub fn resolve_ambiguities(&self, ephemerides: &[gneiss_core::ephemeris::Ephemer
             
             if let Ok(res) = crate::lambda::resolve_lambda(&a_cycles, &q_cycles) {
                 let dynamic_threshold = crate::ffrt::calculate_threshold(subset_size, ffrt_prob).max(lambda_min_ratio);
-                if res.ratio >= dynamic_threshold {
+                // Accept if it passes the ratio test OR if the bootstrapped success rate is > 99.9%
+                if res.ratio >= dynamic_threshold || res.success_rate >= 0.999 {
                     let (fixed_state, da_meters, d_full) = self.apply_ar_fix(subset_size, &candidate_vars, &res, ephemerides)?;
                     return Ok((fixed_state, da_meters, d_full, res.ratio, subset_size));
                 }

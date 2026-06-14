@@ -72,8 +72,8 @@ enum Commands {
         chi_square_pr: Option<f64>,
         #[arg(long, help = "Carrier Phase Chi-Square Reject Threshold")]
         chi_square_cp: Option<f64>,
-        #[arg(long, help = "Nominal SNR reference (dB-Hz)")]
-        nominal_snr: Option<f64>,
+        #[arg(long, help = "Minimum SNR in dBHz")]
+        min_snr: Option<f64>,
         #[arg(long, help = "Surveyed base station ECEF coordinate override (x,y,z in meters)")]
         base_position: Option<String>,
         #[arg(long, help = "Enabled constellations (e.g. G,R,E,C). Default: all")]
@@ -136,7 +136,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             enable_backward_smoothing, enable_auto_tune, mode, 
             lambda_ratio, lambda_subset, max_epochs, 
             lever_arm, calibrate_imu,
-            raim_outlier_m, chi_square_pr, chi_square_cp, nominal_snr,
+            raim_outlier_m, chi_square_pr, chi_square_cp, min_snr,
             base_position,
             systems
         } => {
@@ -263,7 +263,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             if let Some(raim) = raim_outlier_m { engine_config.raim_pseudorange_outlier_m = raim; }
             if let Some(chi_pr) = chi_square_pr { engine_config.chi_square_pr_threshold = chi_pr; }
             if let Some(chi_cp) = chi_square_cp { engine_config.chi_square_cp_threshold = chi_cp; }
-            if let Some(snr) = nominal_snr { engine_config.nominal_snr_dbhz = snr; }
+            if let Some(snr) = min_snr { engine_config.min_snr_dbhz = snr; }
 
             let arm_parts: Vec<f64> = lever_arm.split(',').map(|s| s.trim().parse().unwrap_or(0.0)).collect();
             if arm_parts.len() == 3 {
@@ -370,8 +370,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             
                             // The IMU and Gyro data in this specific dataset are already pre-aligned to the vehicle FRD frame.
                             // Convert acceleration from g to m/s^2 and gyro from deg/s to rad/s
-                            let accel_frd = nalgebra::Vector3::new(ax, ay, az);
-                            let gyro_frd = nalgebra::Vector3::new(gx, gy, gz);
+                            let accel_frd = nalgebra::Vector3::new(ax, ay, az) * 9.80665;
+                            let gyro_frd = nalgebra::Vector3::new(gx, gy, gz) * (std::f64::consts::PI / 180.0);
                             imu_measurements.push(gneiss_core::imu::ImuMeasurement::new((tow * 1000.0) as u32, accel_frd, gyro_frd));
                         }
                     }

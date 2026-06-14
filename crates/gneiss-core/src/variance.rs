@@ -1,13 +1,12 @@
 // This module is #![no_std] compatible - use libm
 
-/// Computes SNR-based variance scaling factor.
-/// Returns a multiplicative factor: higher SNR = lower variance.
+/// Computes SNR-based variance scaling factor using the a^2 + b^2 / 10^(SNR/10) model.
+/// Returns a multiplicative variance factor.
 /// snr_dbhz: Signal-to-noise ratio in dB-Hz
-/// nominal_snr: Reference SNR (typically 45.0 dBHz)
-pub fn snr_variance_scale(snr_dbhz: f64, nominal_snr: f64) -> f64 {
-    let snr_clamped = snr_dbhz.clamp(25.0, 50.0);
-    let scale = libm::pow(10.0, (nominal_snr - snr_clamped) / 10.0);
-    scale.min(100.0)
+pub fn snr_variance_scale(snr_dbhz: f64, snr_a: f64, snr_b: f64) -> f64 {
+    let snr_safe = if snr_dbhz < 10.0 { 10.0 } else { snr_dbhz };
+    // var = a^2 + b^2 / 10^(SNR/10)
+    snr_a * snr_a + (snr_b * snr_b) / libm::pow(10.0, snr_safe / 10.0)
 }
 
 /// Computes elevation-based variance scaling factor.
@@ -19,8 +18,8 @@ pub fn elevation_variance_scale(el_rad: f64) -> f64 {
 }
 
 /// Computes combined observation variance factor.
-pub fn observation_variance(snr_dbhz: f64, el_rad: f64, nominal_snr: f64) -> f64 {
-    snr_variance_scale(snr_dbhz, nominal_snr) * elevation_variance_scale(el_rad)
+pub fn observation_variance(snr_dbhz: f64, el_rad: f64, snr_a: f64, snr_b: f64) -> f64 {
+    snr_variance_scale(snr_dbhz, snr_a, snr_b) * elevation_variance_scale(el_rad)
 }
 
 #[cfg(test)]
@@ -30,13 +29,13 @@ mod tests {
     #[test]
     fn test_variance_monotonic_with_snr() {
         // Higher SNR should give lower variance
-        let v1 = snr_variance_scale(30.0, 45.0);
-        let v2 = snr_variance_scale(40.0, 45.0);
-        let v3 = snr_variance_scale(45.0, 45.0);
+        let a = 1.0;
+        let b = 150.0;
+        let v1 = snr_variance_scale(30.0, a, b);
+        let v2 = snr_variance_scale(40.0, a, b);
+        let v3 = snr_variance_scale(45.0, a, b);
         assert!(v1 > v2, "30 dBHz should have higher variance than 40 dBHz");
         assert!(v2 > v3, "40 dBHz should have higher variance than 45 dBHz");
-        // At nominal, scale should be 1.0
-        assert!((v3 - 1.0).abs() < 1e-6, "At nominal SNR, scale should be 1.0");
     }
 
     #[test]
@@ -54,15 +53,11 @@ mod tests {
 
     #[test]
     fn test_variance_boundary_values() {
-        // SNR below 25 clamps to 25
-        let v_low = snr_variance_scale(10.0, 45.0);
-        let v_25 = snr_variance_scale(25.0, 45.0);
-        assert!((v_low - v_25).abs() < 1e-6, "SNR below 25 should clamp");
-        // SNR above 50 clamps to 50
-        let v_high = snr_variance_scale(60.0, 45.0);
-        let v_50 = snr_variance_scale(50.0, 45.0);
-        assert!((v_high - v_50).abs() < 1e-6, "SNR above 50 should clamp");
-        // Scale should never exceed 100
-        assert!(snr_variance_scale(25.0, 45.0) <= 100.0);
+        let a = 1.0;
+        let b = 150.0;
+        // SNR below 10 clamps to 10
+        let v_low = snr_variance_scale(5.0, a, b);
+        let v_10 = snr_variance_scale(10.0, a, b);
+        assert!((v_low - v_10).abs() < 1e-6, "SNR below 10 should clamp");
     }
 }

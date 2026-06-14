@@ -12,7 +12,7 @@ for dataset in f9p_ppp GSDC_Pixel_4 Shinjuku Odaiba; do
     elif [[ "$dataset" == "Odaiba" ]]; then
         truth="datasets/urbannav/tokyo/Tokyo_Data/Odaiba/reference.csv"
     fi
-    for mode in spp rtk RTK_Kinematic RTK_Kinematic_combined SPP; do
+    for mode in spp rtk rtk_ins_forward rtk_ins_smoothed RTK_Kinematic RTK_Kinematic_combined SPP; do
         for f in benchmarks/rtklib_comparison/*${dataset}*${mode}.pos benchmarks/rtklib_comparison/*${mode}*${dataset}*.pos; do
             if [[ -f "$f" ]]; then
                 echo "--> $f"
