@@ -42,54 +42,31 @@ impl ImuPreintegration {
         }
     }
 
-    /// Preintegrate a sequence of IMU measurements using the given prior biases.
     pub fn integrate(&mut self, imu_data: &[ImuMeasurement], ba_i: &Vector3<f64>, bg_i: &Vector3<f64>) {
         if imu_data.is_empty() { return; }
-        
         let mut prev_time = imu_data[0].time_tag;
         
         for m in imu_data.iter().skip(1) {
-            // Assume time_tag is in milliseconds and handles simple wrap-arounds or is absolute.
-            let dt = if m.time_tag >= prev_time {
-                (m.time_tag - prev_time) as f64 / 1000.0
-            } else {
-                // Handle potential u32 wrap-around
-                ((u32::MAX as u64 - prev_time as u64) + m.time_tag as u64) as f64 / 1000.0
-            };
+            let dt = if m.time_tag >= prev_time { (m.time_tag - prev_time) as f64 / 1000.0 } 
+                     else { ((u32::MAX as u64 - prev_time as u64) + m.time_tag as u64) as f64 / 1000.0 };
             
             prev_time = m.time_tag;
-            
-            // Limit dt to a reasonable value (e.g., 0.1s max) in case of gaps
             let dt = dt.clamp(0.001, 0.1);
-            
             self.dt += dt;
             
-            // Correct measurements with prior biases
-            let a = m.accel - ba_i;
-            let w = m.gyro - bg_i;
-            
-            // Mid-point or Euler integration. Here we use Euler for simplicity, 
-            // though mid-point is better.
-            let dq_step = UnitQuaternion::from_scaled_axis(w * dt);
-            
-            // Position and velocity updates
-            let a_world = self.dq * a;
+            let a_world = self.dq * (m.accel - ba_i);
             self.dp += self.dv * dt + 0.5 * a_world * dt * dt;
             self.dv += a_world * dt;
+            self.dq *= UnitQuaternion::from_scaled_axis((m.gyro - bg_i) * dt);
             
-            // Attitude update
-            self.dq *= dq_step;
-            
-            // Bias Jacobians update (Simplified Euler propagation)
-            let r_mat = self.dq.to_rotation_matrix().into_inner();
-            self.dp_dba += self.dv_dba * dt - 0.5 * r_mat * dt * dt;
-            self.dp_dbg += self.dv_dbg * dt; // Should include cross product term of a_world, omitted for brevity in first-order
-            
-            self.dv_dba += -r_mat * dt;
-            // self.dv_dbg omitted complex cross product terms
-            
-            // self.dq_dbg omitted complex right-Jacobian terms
+            self.update_bias_jacobians(dt, self.dq.to_rotation_matrix().into_inner());
         }
+    }
+
+    fn update_bias_jacobians(&mut self, dt: f64, r_mat: Matrix3<f64>) {
+        self.dp_dba += self.dv_dba * dt - 0.5 * r_mat * dt * dt;
+        self.dp_dbg += self.dv_dbg * dt;
+        self.dv_dba -= r_mat * dt;
     }
 }
 
@@ -123,25 +100,32 @@ pub struct ImuPreintegrationFactor {
     pub idx_bg_j: usize,
 }
 
+impl ImuPreintegrationFactor {
+    fn extract_vec(state: &DVector<f64>, idx: usize, nominal: Vector3<f64>) -> Vector3<f64> {
+        nominal + Vector3::new(state[idx], state[idx+1], state[idx+2])
+    }
+    
+    fn extract_quat(state: &DVector<f64>, idx: usize, nominal: UnitQuaternion<f64>) -> UnitQuaternion<f64> {
+        nominal * UnitQuaternion::from_scaled_axis(Vector3::new(state[idx], state[idx+1], state[idx+2]))
+    }
+}
+
 impl Factor for ImuPreintegrationFactor {
     fn residual(&self, state: &DVector<f64>) -> DVector<f64> {
-        // Evaluate absolute states from nominal + delta
-        let p_i = self.nominal_p_i + Vector3::new(state[self.idx_p_i], state[self.idx_p_i+1], state[self.idx_p_i+2]);
-        let v_i = self.nominal_v_i + Vector3::new(state[self.idx_v_i], state[self.idx_v_i+1], state[self.idx_v_i+2]);
-        let q_i = self.nominal_q_i * UnitQuaternion::from_scaled_axis(Vector3::new(state[self.idx_q_i], state[self.idx_q_i+1], state[self.idx_q_i+2]));
-        let ba_i = self.nominal_ba_i + Vector3::new(state[self.idx_ba_i], state[self.idx_ba_i+1], state[self.idx_ba_i+2]);
-        let bg_i = self.nominal_bg_i + Vector3::new(state[self.idx_bg_i], state[self.idx_bg_i+1], state[self.idx_bg_i+2]);
+        let p_i = Self::extract_vec(state, self.idx_p_i, self.nominal_p_i);
+        let v_i = Self::extract_vec(state, self.idx_v_i, self.nominal_v_i);
+        let q_i = Self::extract_quat(state, self.idx_q_i, self.nominal_q_i);
+        let ba_i = Self::extract_vec(state, self.idx_ba_i, self.nominal_ba_i);
+        let bg_i = Self::extract_vec(state, self.idx_bg_i, self.nominal_bg_i);
         
-        let p_j = self.nominal_p_j + Vector3::new(state[self.idx_p_j], state[self.idx_p_j+1], state[self.idx_p_j+2]);
-        let v_j = self.nominal_v_j + Vector3::new(state[self.idx_v_j], state[self.idx_v_j+1], state[self.idx_v_j+2]);
-        let q_j = self.nominal_q_j * UnitQuaternion::from_scaled_axis(Vector3::new(state[self.idx_q_j], state[self.idx_q_j+1], state[self.idx_q_j+2]));
-        let ba_j = self.nominal_ba_j + Vector3::new(state[self.idx_ba_j], state[self.idx_ba_j+1], state[self.idx_ba_j+2]);
-        let bg_j = self.nominal_bg_j + Vector3::new(state[self.idx_bg_j], state[self.idx_bg_j+1], state[self.idx_bg_j+2]);
+        let p_j = Self::extract_vec(state, self.idx_p_j, self.nominal_p_j);
+        let v_j = Self::extract_vec(state, self.idx_v_j, self.nominal_v_j);
+        let q_j = Self::extract_quat(state, self.idx_q_j, self.nominal_q_j);
+        let ba_j = Self::extract_vec(state, self.idx_ba_j, self.nominal_ba_j);
+        let bg_j = Self::extract_vec(state, self.idx_bg_j, self.nominal_bg_j);
         
-        let dt = self.preint.dt;
         let r_i_t = q_i.inverse();
-        
-        // Compute bias-corrected preintegrated measurements
+        let dt = self.preint.dt;
         let dba = ba_i - self.nominal_ba_i;
         let dbg = bg_i - self.nominal_bg_i;
         
@@ -149,18 +133,12 @@ impl Factor for ImuPreintegrationFactor {
         let dv = self.preint.dv + self.preint.dv_dba * dba + self.preint.dv_dbg * dbg;
         let dq = self.preint.dq * UnitQuaternion::from_scaled_axis(self.preint.dq_dbg * dbg);
         
-        let r_p = r_i_t * (p_j - p_i - v_i * dt - 0.5 * self.gravity * dt * dt) - dp;
-        let r_v = r_i_t * (v_j - v_i - self.gravity * dt) - dv;
-        let r_q = (dq.inverse() * r_i_t * q_j).scaled_axis();
-        let r_ba = ba_j - ba_i;
-        let r_bg = bg_j - bg_i;
-        
         let mut res = DVector::zeros(15);
-        res.fixed_rows_mut::<3>(0).copy_from(&r_p);
-        res.fixed_rows_mut::<3>(3).copy_from(&r_v);
-        res.fixed_rows_mut::<3>(6).copy_from(&r_q);
-        res.fixed_rows_mut::<3>(9).copy_from(&r_ba);
-        res.fixed_rows_mut::<3>(12).copy_from(&r_bg);
+        res.fixed_rows_mut::<3>(0).copy_from(&(r_i_t * (p_j - p_i - v_i * dt - 0.5 * self.gravity * dt * dt) - dp));
+        res.fixed_rows_mut::<3>(3).copy_from(&(r_i_t * (v_j - v_i - self.gravity * dt) - dv));
+        res.fixed_rows_mut::<3>(6).copy_from(&(dq.inverse() * r_i_t * q_j).scaled_axis());
+        res.fixed_rows_mut::<3>(9).copy_from(&(ba_j - ba_i));
+        res.fixed_rows_mut::<3>(12).copy_from(&(bg_j - bg_i));
         res
     }
     

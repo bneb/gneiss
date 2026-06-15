@@ -98,6 +98,25 @@ struct EkfContext<'a> {
     state: &'a RtkState, engine: &'a ProcessingEngine, n_cols: usize,
 }
 
+struct MatrixTarget<'a> {
+    z: &'a mut DVector<f64>,
+    h: &'a mut DMatrix<f64>,
+    r: &'a mut DMatrix<f64>,
+    types: &'a mut Vec<(gneiss_core::sat::SatelliteId, u8)>,
+    row: &'a mut usize,
+}
+
+struct SatGeometry {
+    geom_r: f64,
+    los: Vector3<f64>,
+    el: f64,
+    az: f64,
+    cdt_rx: f64,
+    sat_clk: f64,
+    sat_vel: Vector3<f64>,
+    sat_drift: f64,
+}
+
 fn build_ekf_matrices(engine: &ProcessingEngine, measurements: &[SppMeasurement]) -> (DVector<f64>, DMatrix<f64>, DMatrix<f64>, Vec<(gneiss_core::sat::SatelliteId, u8)>) {
     let (pos_apc, v_apc, r_b_e, lever_arm, omega_eb_b) = get_apc_kinematics(engine);
     let ctx = EkfContext {
@@ -116,7 +135,8 @@ fn build_ekf_matrices(engine: &ProcessingEngine, measurements: &[SppMeasurement]
     
     let mut row_idx = 0;
     for m in measurements {
-        process_measurement(&ctx, m, &mut row_idx, &mut z_vec, &mut h_mat, &mut r_mat, &mut m_types);
+        let mut target = MatrixTarget { z: &mut z_vec, h: &mut h_mat, r: &mut r_mat, types: &mut m_types, row: &mut row_idx };
+        process_measurement(&ctx, m, &mut target);
     }
     (z_vec, h_mat, r_mat, m_types)
 }
@@ -131,7 +151,7 @@ fn get_cdt_rx(state: &RtkState, constellation: Constellation) -> f64 {
     }
 }
 
-fn process_measurement(ctx: &EkfContext, m: &SppMeasurement, row: &mut usize, z: &mut DVector<f64>, h: &mut DMatrix<f64>, r: &mut DMatrix<f64>, types: &mut Vec<(gneiss_core::sat::SatelliteId, u8)>) {
+fn process_measurement(ctx: &EkfContext, m: &SppMeasurement, target: &mut MatrixTarget) {
     let cdt_rx = get_cdt_rx(ctx.state, m.constellation);
     let t_rcv_true = m.time.tow - cdt_rx / SPEED_OF_LIGHT_M_S;
     let t_tx_nom = gneiss_core::time::GpsTime::new(m.time.week, t_rcv_true - m.raw_pr / SPEED_OF_LIGHT_M_S);
@@ -149,65 +169,68 @@ fn process_measurement(ctx: &EkfContext, m: &SppMeasurement, row: &mut usize, z:
     let los = Vector3::new(dx / geom_r, dy / geom_r, dz / geom_r);
     let (az, el) = az_el(ctx.rec_llh, ctx.pos_apc, sat_ecef);
     
-    process_pseudorange(ctx, m, row, z, h, r, types, geom_r, los, el, az, cdt_rx, sat_clk);
+    let geom = SatGeometry { geom_r, los, el, az, cdt_rx, sat_clk, sat_vel, sat_drift };
+    process_pseudorange(ctx, m, target, &geom);
     if m.doppler != 0.0 {
-        process_doppler(ctx, m, row, z, h, r, types, los, el, sat_vel, sat_drift);
+        process_doppler(ctx, m, target, &geom);
     }
 }
 
-fn process_pseudorange(ctx: &EkfContext, m: &SppMeasurement, row: &mut usize, z: &mut DVector<f64>, h: &mut DMatrix<f64>, r: &mut DMatrix<f64>, types: &mut Vec<(gneiss_core::sat::SatelliteId, u8)>, geom_r: f64, los: Vector3<f64>, el: f64, az: f64, cdt_rx: f64, sat_clk: f64) {
-    let safe_el = el.max(MIN_ELEVATION_RAD);
+fn process_pseudorange(ctx: &EkfContext, m: &SppMeasurement, target: &mut MatrixTarget, geom: &SatGeometry) {
+    let safe_el = geom.el.max(MIN_ELEVATION_RAD);
     let tropo = AtmosphereModel::tropo_nmf(&TropoParams::default(), ctx.rec_llh, safe_el, m.time);
-    let iono = ctx.engine.klobuchar_params.as_ref().map_or(0.0, |p| AtmosphereModel::iono_klobuchar(p, ctx.rec_llh, az, safe_el, m.time));
+    let iono = ctx.engine.klobuchar_params.as_ref().map_or(0.0, |p| AtmosphereModel::iono_klobuchar(p, ctx.rec_llh, geom.az, safe_el, m.time));
     
-    let expected_pr = geom_r + cdt_rx - sat_clk * SPEED_OF_LIGHT_M_S + tropo + iono;
-    z[*row] = m.raw_pr - expected_pr;
-    for i in 0..3 { h[(*row, i)] = los[i]; }
+    let expected_pr = geom.geom_r + geom.cdt_rx - geom.sat_clk * SPEED_OF_LIGHT_M_S + tropo + iono;
+    let r_idx = *target.row;
+    target.z[r_idx] = m.raw_pr - expected_pr;
+    for i in 0..3 { target.h[(r_idx, i)] = geom.los[i]; }
     
     if ctx.n_cols > 15 {
         let h_pos_att = -(ctx.r_b_e * ctx.lever_arm).cross_matrix();
-        let pr_h_att = los.transpose() * h_pos_att;
-        h[(*row, 6)] = pr_h_att[0]; h[(*row, 7)] = pr_h_att[1]; h[(*row, 8)] = pr_h_att[2];
-        h[(*row, 15)] = 1.0;
+        let pr_h_att = geom.los.transpose() * h_pos_att;
+        target.h[(r_idx, 6)] = pr_h_att[0]; target.h[(r_idx, 7)] = pr_h_att[1]; target.h[(r_idx, 8)] = pr_h_att[2];
+        target.h[(r_idx, 15)] = 1.0;
         match m.constellation {
-            Constellation::Glonass => h[(*row, 16)] = 1.0,
-            Constellation::Galileo => h[(*row, 17)] = 1.0,
-            Constellation::Beidou => h[(*row, 18)] = 1.0,
+            Constellation::Glonass => target.h[(r_idx, 16)] = 1.0,
+            Constellation::Galileo => target.h[(r_idx, 17)] = 1.0,
+            Constellation::Beidou => target.h[(r_idx, 18)] = 1.0,
             _ => {}
         }
     }
     
-    let v_scale = gneiss_core::variance::observation_variance(m.snr, el, ctx.engine.config.tuning.snr_a, ctx.engine.config.tuning.snr_b);
-    r[(*row, *row)] = ctx.engine.config.tuning.pr_base_var * v_scale;
-    types.push((m.eph.sat(), 0));
-    *row += 1;
+    let v_scale = gneiss_core::variance::observation_variance(m.snr, geom.el, ctx.engine.config.tuning.snr_a, ctx.engine.config.tuning.snr_b);
+    target.r[(r_idx, r_idx)] = ctx.engine.config.tuning.pr_base_var * v_scale;
+    target.types.push((m.eph.sat(), 0));
+    *target.row += 1;
 }
 
-fn process_doppler(ctx: &EkfContext, m: &SppMeasurement, row: &mut usize, z: &mut DVector<f64>, h: &mut DMatrix<f64>, r: &mut DMatrix<f64>, types: &mut Vec<(gneiss_core::sat::SatelliteId, u8)>, los: Vector3<f64>, el: f64, sat_vel: Vector3<f64>, sat_drift: f64) {
-    let rel_vel = ctx.v_apc - sat_vel;
-    let expected_dop = los.dot(&rel_vel) + ctx.state.rcv_clk_drift - sat_drift * SPEED_OF_LIGHT_M_S;
+fn process_doppler(ctx: &EkfContext, m: &SppMeasurement, target: &mut MatrixTarget, geom: &SatGeometry) {
+    let rel_vel = ctx.v_apc - geom.sat_vel;
+    let expected_dop = geom.los.dot(&rel_vel) + ctx.state.rcv_clk_drift - geom.sat_drift * SPEED_OF_LIGHT_M_S;
     
     let f1 = gneiss_core::signal::satellite_frequencies(m.eph.sat(), m.eph.freq_num()).0;
     let measured_dop_ms = -m.doppler * (SPEED_OF_LIGHT_M_S / f1);
-    z[*row] = measured_dop_ms - expected_dop;
+    let r_idx = *target.row;
+    target.z[r_idx] = measured_dop_ms - expected_dop;
     
-    h[(*row, 3)] = los.x; h[(*row, 4)] = los.y; h[(*row, 5)] = los.z;
+    target.h[(r_idx, 3)] = geom.los.x; target.h[(r_idx, 4)] = geom.los.y; target.h[(r_idx, 5)] = geom.los.z;
     if ctx.n_cols > 19 {
         let a_0 = ctx.r_b_e * ctx.omega_eb_b.cross(&ctx.lever_arm);
         let h_vel_att = -a_0.cross_matrix();
         let h_vel_bg = ctx.r_b_e.matrix() * ctx.lever_arm.cross_matrix();
         
-        let dop_h_att = los.transpose() * h_vel_att;
-        let dop_h_bg = los.transpose() * h_vel_bg;
-        h[(*row, 6)] = dop_h_att[0]; h[(*row, 7)] = dop_h_att[1]; h[(*row, 8)] = dop_h_att[2];
-        h[(*row, 12)] = dop_h_bg[0]; h[(*row, 13)] = dop_h_bg[1]; h[(*row, 14)] = dop_h_bg[2];
-        h[(*row, 19)] = 1.0;
+        let dop_h_att = geom.los.transpose() * h_vel_att;
+        let dop_h_bg = geom.los.transpose() * h_vel_bg;
+        target.h[(r_idx, 6)] = dop_h_att[0]; target.h[(r_idx, 7)] = dop_h_att[1]; target.h[(r_idx, 8)] = dop_h_att[2];
+        target.h[(r_idx, 12)] = dop_h_bg[0]; target.h[(r_idx, 13)] = dop_h_bg[1]; target.h[(r_idx, 14)] = dop_h_bg[2];
+        target.h[(r_idx, 19)] = 1.0;
     }
     
-    let v_scale = gneiss_core::variance::observation_variance(m.snr, el, ctx.engine.config.tuning.snr_a, ctx.engine.config.tuning.snr_b);
-    r[(*row, *row)] = ctx.engine.config.tuning.dop_base_var * v_scale;
-    types.push((m.eph.sat(), 3));
-    *row += 1;
+    let v_scale = gneiss_core::variance::observation_variance(m.snr, geom.el, ctx.engine.config.tuning.snr_a, ctx.engine.config.tuning.snr_b);
+    target.r[(r_idx, r_idx)] = ctx.engine.config.tuning.dop_base_var * v_scale;
+    target.types.push((m.eph.sat(), 3));
+    *target.row += 1;
 }
 
 fn update_ekf(engine: &mut ProcessingEngine, z: &DVector<f64>, h: &DMatrix<f64>, r: &DMatrix<f64>, types: &[(gneiss_core::sat::SatelliteId, u8)]) -> bool {

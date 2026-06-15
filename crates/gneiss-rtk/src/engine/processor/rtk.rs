@@ -165,7 +165,12 @@ impl ProcessingEngine {
             if epoch_num % 100 == 0 { tracing::info!("Epoch {}: Matched {} satellites, {} ambiguities tracked", epoch_num, matched_obs.len(), state.ambiguity_keys.len()); }
 
             if matched_obs.len() >= 5 {
-                process_rtk_update(&self.config, &self.ephemerides, &self.imu_history, state, &rover_smoothed, base, &matched_obs, &base_coord, &mut self.innovation_tracker, spp_pos, spp_state_ref);
+                let ctx = RtkUpdateContext {
+                    config: &self.config, ephemerides: &self.ephemerides, imu_history: &self.imu_history,
+                    rover_obs: &rover_smoothed, base_obs: base, matched_obs: &matched_obs,
+                    base_coord: &base_coord, spp_pos, spp_state_ref,
+                };
+                process_rtk_update(state, &mut self.innovation_tracker, &ctx);
             } else {
                 tracing::warn!("Not enough valid measurements for EKF update. Riding through outage.");
                 state.consecutive_rejections += 1;
@@ -185,126 +190,92 @@ impl ProcessingEngine {
 }
 
 /// RTK measurement update — extracted as a free function to avoid borrow conflicts.
+fn build_measurement_environment<'a>(
+    config: &'a EngineConfig, imu_history: &[Vec<gneiss_core::imu::ImuMeasurement>], 
+    state: &RtkState, ephemerides: &'a [gneiss_core::ephemeris::Ephemeris], 
+    base_coord: &'a Coordinate, base_time: gneiss_core::time::GpsTime
+) -> crate::engine::measurement::MeasurementEnvironment<'a> {
+    let omega_ib_b = if let Some(imu_buf) = imu_history.last() {
+        if let Some(last_imu) = imu_buf.last() { last_imu.gyro - state.gyro_bias } else { nalgebra::Vector3::zeros() }
+    } else { nalgebra::Vector3::zeros() };
+    let omega_ie_e = nalgebra::Vector3::new(0.0, 0.0, gneiss_core::constants::EARTH_ROTATION_RATE_RAD_S);
+    let r_e_b = state.attitude.to_rotation_matrix().transpose();
+    let lever_arm = if state.ins_aligned { Vector3::from_column_slice(&config.imu_to_antenna_lever_arm) } else { Vector3::zeros() };
+
+    crate::engine::measurement::MeasurementEnvironment {
+        ephemerides, base_coord, base_time, lever_arm, omega_b: omega_ib_b - r_e_b * omega_ie_e, tuning: &config.tuning,
+    }
+}
+
+fn handle_ekf_rejection(state: &mut RtkState, config: &EngineConfig, spp_pos: Option<Coordinate>, spp_state_ref: Option<&crate::spp::SppState>, reason: &str) {
+    state.consecutive_rejections += 1;
+    tracing::warn!("GNSS EKF rejected for {} epochs ({}).", state.consecutive_rejections, reason);
+    if state.ins_aligned {
+        let inflate_factor = 1.0 + (state.consecutive_rejections as f64 * 0.02).min(0.5);
+        for i in 0..6 { state.covariance[(i, i)] *= inflate_factor; }
+        for i in 0..3 { state.covariance[(i, i)] += 1.0; }
+        for i in 3..6 { state.covariance[(i, i)] += 0.1; }
+    }
+    let pos_var = state.covariance[(0, 0)] + state.covariance[(1, 1)] + state.covariance[(2, 2)];
+    if state.ins_aligned && pos_var > 900.0 {
+        tracing::warn!("Divergence detected (pos_var {:.2}): resetting EKF to SPP fallback.", pos_var);
+        if let Some(pos) = spp_pos { state.reset_to_spp(pos, spp_state_ref, !config.mode.is_ppp()); state.consecutive_rejections = 0; }
+    } else if !state.ins_aligned && state.consecutive_rejections >= 3 {
+        tracing::warn!("Loosely coupled GNSS EKF rejected for 3 epochs: resetting to SPP fallback.");
+        if let Some(pos) = spp_pos { state.reset_to_spp(pos, spp_state_ref, !config.mode.is_ppp()); state.consecutive_rejections = 0; }
+    }
+}
+
+fn handle_ekf_acceptance(state: &mut RtkState, config: &EngineConfig, ephemerides: &[gneiss_core::ephemeris::Ephemeris], spp_pos: Option<Coordinate>, spp_state_ref: Option<&crate::spp::SppState>) {
+    let pos_var = state.covariance[(0, 0)] + state.covariance[(1, 1)] + state.covariance[(2, 2)];
+    if pos_var > 900.0 {
+        tracing::warn!("Position variance too large ({:.2}): resetting EKF to SPP fallback.", pos_var);
+        if let Some(pos) = spp_pos { state.reset_to_spp(pos, spp_state_ref, !config.mode.is_ppp()); }
+    }
+    state.consecutive_rejections = 0;
+    if let Ok((fixed_state, _, _, _, _)) = state.resolve_ambiguities(ephemerides, config) {
+        tracing::debug!("Integer ambiguities resolved!");
+        state.fixed_state = Some(Box::new(fixed_state));
+    } else {
+        state.fixed_state = None;
+    }
+}
+
+pub struct RtkUpdateContext<'a> {
+    pub config: &'a EngineConfig,
+    pub ephemerides: &'a [gneiss_core::ephemeris::Ephemeris],
+    pub imu_history: &'a [Vec<gneiss_core::imu::ImuMeasurement>],
+    pub rover_obs: &'a EpochObs,
+    pub base_obs: &'a EpochObs,
+    pub matched_obs: &'a [(crate::filter::DdObservation, crate::filter::DdObservation)],
+    pub base_coord: &'a Coordinate,
+    pub spp_pos: Option<Coordinate>,
+    pub spp_state_ref: Option<&'a crate::spp::SppState>,
+}
+
 fn process_rtk_update(
-    config: &EngineConfig, ephemerides: &[gneiss_core::ephemeris::Ephemeris], imu_history: &[Vec<gneiss_core::imu::ImuMeasurement>], 
-    state: &mut RtkState, rover_obs: &EpochObs, base_obs: &EpochObs, matched_obs: &[(crate::filter::DdObservation, crate::filter::DdObservation)],
-    base_coord: &Coordinate, tracker: &mut crate::engine::adaptive::InnovationTracker, spp_pos: Option<Coordinate>, spp_state_ref: Option<&crate::spp::SppState>,
+    state: &mut RtkState, tracker: &mut crate::engine::adaptive::InnovationTracker, ctx: &RtkUpdateContext
 ) {
-    crate::engine::ambiguity::manage_ambiguities_and_slips(state, config, matched_obs, ephemerides, base_coord, rover_obs.time, base_obs.time);
-    
+    crate::engine::ambiguity::manage_ambiguities_and_slips(state, ctx.config, ctx.matched_obs, ctx.ephemerides, ctx.base_coord, ctx.rover_obs.time, ctx.base_obs.time);
     let current_epoch = state.epoch_count as u32;
-    for (r_obs, _) in matched_obs {
+    for (r_obs, _) in ctx.matched_obs {
         if r_obs.cp_l1.is_some() { state.last_observed.insert((r_obs.sat, 1), current_epoch); }
         if r_obs.cp_l2.is_some() { state.last_observed.insert((r_obs.sat, 2), current_epoch); }
     }
 
-    let omega_ib_b = if let Some(imu_buf) = imu_history.last() {
-        if let Some(last_imu) = imu_buf.last() { last_imu.gyro - state.gyro_bias } else { nalgebra::Vector3::zeros() }
-    } else { nalgebra::Vector3::zeros() };
-    
-    let omega_ie_e = nalgebra::Vector3::new(0.0, 0.0, gneiss_core::constants::EARTH_ROTATION_RATE_RAD_S);
-    let r_e_b = state.attitude.to_rotation_matrix().transpose();
-    let omega_b = omega_ib_b - r_e_b * omega_ie_e;
+    let env = build_measurement_environment(ctx.config, ctx.imu_history, state, ctx.ephemerides, ctx.base_coord, ctx.base_obs.time);
+    let pr_thresh = ctx.config.chi_square_pr_threshold;
 
-    let lever_arm = if state.ins_aligned {
-        Vector3::from_column_slice(&config.imu_to_antenna_lever_arm)
-    } else {
-        Vector3::zeros()
-    };
-
-    let env = crate::engine::measurement::MeasurementEnvironment {
-        ephemerides,
-        base_coord,
-        base_time: base_obs.time,
-        lever_arm,
-        omega_b,
-        tuning: &config.tuning,
-    };
-
-    let pr_thresh = config.chi_square_pr_threshold;
-    let cp_thresh = config.chi_square_cp_threshold;
-
-    if let Some(m) = crate::engine::measurement::build_measurement_model(
-        state, matched_obs, &env, pr_thresh, cp_thresh
-    ) {
-        let crate::engine::measurement::EkfMeasurementMatrices { z: z_safe, h: h_safe, r: mut r_safe, mt: type_safe } = m;
-
-        apply_adaptive_r_scaling(tracker, state, &z_safe, &h_safe, &mut r_safe, &type_safe);
-
-        let type_stripped: Vec<_> = type_safe.iter().map(|&(s, t, _)| (s, t)).collect();
-        
-        if crate::engine::updater::update(state, &z_safe, &h_safe, &r_safe, pr_thresh, Some(&type_stripped), config.mode.is_tightly_coupled() && state.ins_aligned, &config.tuning).is_err() { 
-            state.consecutive_rejections += 1;
-            tracing::warn!("GNSS EKF rejected for {} epochs.", state.consecutive_rejections);
-            
-            // Inflate position and velocity covariance exponentially to force EKF to eventually accept GNSS
-            if state.ins_aligned {
-                let inflate_factor = 1.0 + (state.consecutive_rejections as f64 * 0.02).min(0.5); // Grows up to 1.5x per epoch
-                for i in 0..6 { state.covariance[(i, i)] *= inflate_factor; }
-                for i in 0..3 { state.covariance[(i, i)] += 1.0; } // Base additive inflation
-                for i in 3..6 { state.covariance[(i, i)] += 0.1; }
-            }
-            
-            let pos_var = state.covariance[(0, 0)] + state.covariance[(1, 1)] + state.covariance[(2, 2)];
-            if state.ins_aligned && pos_var > 900.0 {
-                tracing::warn!("Divergence detected (pos_var {:.2}): resetting EKF to SPP fallback.", pos_var);
-                if let Some(pos) = spp_pos {
-                    state.reset_to_spp(pos, spp_state_ref, !config.mode.is_ppp());
-                    state.consecutive_rejections = 0;
-                }
-            } else if !state.ins_aligned && state.consecutive_rejections >= 3 {
-                tracing::warn!("Loosely coupled GNSS EKF rejected for 3 epochs: resetting to SPP fallback.");
-                if let Some(pos) = spp_pos {
-                    state.reset_to_spp(pos, spp_state_ref, !config.mode.is_ppp());
-                    state.consecutive_rejections = 0;
-                }
-            }
+    if let Some(mut m) = crate::engine::measurement::build_measurement_model(state, ctx.matched_obs, &env, pr_thresh, ctx.config.chi_square_cp_threshold) {
+        apply_adaptive_r_scaling(tracker, state, &m.z, &m.h, &mut m.r, &m.mt);
+        let type_stripped: Vec<_> = m.mt.iter().map(|&(s, t, _)| (s, t)).collect();
+        if crate::engine::updater::update(state, &m.z, &m.h, &m.r, pr_thresh, Some(&type_stripped), ctx.config.mode.is_tightly_coupled() && state.ins_aligned, &ctx.config.tuning).is_err() { 
+            handle_ekf_rejection(state, ctx.config, ctx.spp_pos, ctx.spp_state_ref, "failed chi-square");
         } else {
-            let pos_var = state.covariance[(0, 0)] + state.covariance[(1, 1)] + state.covariance[(2, 2)];
-            if pos_var > 900.0 {
-                tracing::warn!("Position variance too large ({:.2}): resetting EKF to SPP fallback.", pos_var);
-                if let Some(pos) = spp_pos {
-                    state.reset_to_spp(pos, spp_state_ref, !config.mode.is_ppp());
-                }
-            }
-            
-            state.consecutive_rejections = 0;
-            match state.resolve_ambiguities(ephemerides, config.lambda_min_subset, config.ar_min_epoch_count, config.ar_min_lock, config.lambda_min_ratio, config.ar_ffrt_prob, config.tuning.min_ar_success_rate) {
-                Ok((fixed_state, _da, _q_fixed, _ratio, _subset_size)) => {
-                    tracing::debug!("Integer ambiguities resolved!");
-                    state.fixed_state = Some(Box::new(fixed_state));
-                }
-                Err(e) => {
-                    tracing::debug!("AR Failed: {}", e);
-                    state.fixed_state = None;
-                }
-            }
+            handle_ekf_acceptance(state, ctx.config, ctx.ephemerides, ctx.spp_pos, ctx.spp_state_ref);
         }
     } else {
-        state.consecutive_rejections += 1;
-        tracing::warn!("GNSS EKF rejected for {} epochs (measurement model empty).", state.consecutive_rejections);
-        
-        if state.ins_aligned {
-            let inflate_factor = 1.0 + (state.consecutive_rejections as f64 * 0.02).min(0.5);
-            for i in 0..6 { state.covariance[(i, i)] *= inflate_factor; }
-            for i in 0..3 { state.covariance[(i, i)] += 1.0; }
-            for i in 3..6 { state.covariance[(i, i)] += 0.1; }
-        }
-        
-        let pos_var = state.covariance[(0, 0)] + state.covariance[(1, 1)] + state.covariance[(2, 2)];
-        if state.ins_aligned && pos_var > 900.0 {
-            tracing::warn!("Divergence detected (pos_var {:.2}): resetting EKF to SPP fallback.", pos_var);
-            if let Some(pos) = spp_pos {
-                state.reset_to_spp(pos, spp_state_ref, !config.mode.is_ppp());
-                state.consecutive_rejections = 0;
-            }
-        } else if !state.ins_aligned && state.consecutive_rejections >= 3 {
-            tracing::warn!("Loosely coupled GNSS EKF rejected for 3 epochs: resetting to SPP fallback.");
-            if let Some(pos) = spp_pos {
-                state.reset_to_spp(pos, spp_state_ref, !config.mode.is_ppp());
-                state.consecutive_rejections = 0;
-            }
-        }
+        handle_ekf_rejection(state, ctx.config, ctx.spp_pos, ctx.spp_state_ref, "not enough measurements");
     }
     tracing::debug!("End of RTK loop, epoch_count = {}", state.epoch_count);
     state.prune_stale_ambiguities(state.epoch_count as u32, 10);

@@ -49,12 +49,8 @@ pub fn run_combined_ppk(engine: &mut ProcessingEngine) -> Result<Vec<RtkState>, 
         smoothed_states[k].fixed_state = None;
         if !matches!(engine.config.mode, EngineMode::Spp | EngineMode::SppIns) {
             let ephemerides = &engine.ephemerides;
-            let subset = engine.config.lambda_min_subset;
-            let epoch_count = engine.config.ar_min_epoch_count;
-            let min_lock = engine.config.ar_min_lock;
-            let min_ratio = engine.config.lambda_min_ratio;
-            let ffrt_prob = engine.config.ar_ffrt_prob;
-            if let Ok((fixed_state, _, _, _, _)) = smoothed_states[k].resolve_ambiguities(ephemerides, subset, epoch_count, min_lock, min_ratio, ffrt_prob, engine.config.tuning.min_ar_success_rate) {
+            if let Ok((fixed_state, _, _, _, _)) = smoothed_states[k].resolve_ambiguities(ephemerides, &engine.config) {
+                tracing::debug!("Integer ambiguities resolved during smoothing at epoch {}", k);
                 smoothed_states[k].fixed_state = Some(Box::new(fixed_state));
             }
         }

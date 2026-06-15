@@ -1,6 +1,31 @@
 use nalgebra::{DMatrix, DVector, Vector3};
 use super::Factor;
 
+macro_rules! compute_clock_delta {
+    ($self:ident, $delta:ident) => {{
+        let mut dt = $self.nominal_dt + $delta[$self.index_dt];
+        match $self.sat_id.constellation {
+            gneiss_core::sat::Constellation::Galileo => { if let Some(idx) = $self.index_dt_gal { dt += $self.nominal_dt_gal + $delta[idx]; } },
+            gneiss_core::sat::Constellation::Beidou => { if let Some(idx) = $self.index_dt_bds { dt += $self.nominal_dt_bds + $delta[idx]; } },
+            gneiss_core::sat::Constellation::Glonass => { if let Some(idx) = $self.index_dt_glo { dt += $self.nominal_dt_glo + $delta[idx]; } },
+            _ => {},
+        }
+        dt
+    }}
+}
+
+macro_rules! apply_clock_jacobian {
+    ($self:ident, $jac:ident) => {
+        $jac[(0, $self.index_dt)] = -1.0;
+        match $self.sat_id.constellation {
+            gneiss_core::sat::Constellation::Galileo => { if let Some(idx) = $self.index_dt_gal { $jac[(0, idx)] = -1.0; } },
+            gneiss_core::sat::Constellation::Beidou => { if let Some(idx) = $self.index_dt_bds { $jac[(0, idx)] = -1.0; } },
+            gneiss_core::sat::Constellation::Glonass => { if let Some(idx) = $self.index_dt_glo { $jac[(0, idx)] = -1.0; } },
+            _ => {},
+        }
+    }
+}
+
 /// Factor for a Pseudorange measurement.
 pub struct PseudorangeFactor {
     pub sat_pos: Vector3<f64>,
@@ -183,77 +208,26 @@ pub struct ErrorStatePseudorangeFactor {
 
 impl Factor for ErrorStatePseudorangeFactor {
     fn residual(&self, delta: &DVector<f64>) -> DVector<f64> {
-        let rx = self.nominal_rx + delta[self.index_x];
-        let ry = self.nominal_ry + delta[self.index_y];
-        let rz = self.nominal_rz + delta[self.index_z];
-        
-        let mut dt = self.nominal_dt + delta[self.index_dt];
-        match self.sat_id.constellation {
-            gneiss_core::sat::Constellation::Galileo => {
-                if let Some(idx) = self.index_dt_gal { dt += self.nominal_dt_gal + delta[idx]; }
-            },
-            gneiss_core::sat::Constellation::Beidou => {
-                if let Some(idx) = self.index_dt_bds { dt += self.nominal_dt_bds + delta[idx]; }
-            },
-            gneiss_core::sat::Constellation::Glonass => {
-                if let Some(idx) = self.index_dt_glo { dt += self.nominal_dt_glo + delta[idx]; }
-            },
-            _ => {},
-        }
-        
+        let (rx, ry, rz) = (self.nominal_rx + delta[self.index_x], self.nominal_ry + delta[self.index_y], self.nominal_rz + delta[self.index_z]);
+        let dt = compute_clock_delta!(self, delta);
         let zwd = self.nominal_zwd + self.index_zwd.map(|i| delta[i]).unwrap_or(0.0);
-        
-        let dx = self.sat_pos.x - rx;
-        let dy = self.sat_pos.y - ry;
-        let dz = self.sat_pos.z - rz;
-        let dist = (dx * dx + dy * dy + dz * dz).sqrt();
-        
+        let dist = ((self.sat_pos.x - rx).powi(2) + (self.sat_pos.y - ry).powi(2) + (self.sat_pos.z - rz).powi(2)).sqrt();
         let expected_pr = dist + dt - self.sat_clock_bias + self.tropo_dry_delay + zwd * self.map_wet;
-        
         DVector::from_vec(vec![self.measured_pr - expected_pr])
     }
     
-    fn robust_threshold(&self) -> Option<f64> {
-        Some(3.0) // 3-sigma threshold
-    }
-    
-    fn is_cauchy_rejectable(&self) -> bool {
-        true
-    }
+    fn robust_threshold(&self) -> Option<f64> { Some(3.0) }
+    fn is_cauchy_rejectable(&self) -> bool { true }
     
     fn jacobian(&self, delta: &DVector<f64>) -> DMatrix<f64> {
-        let rx = self.nominal_rx + delta[self.index_x];
-        let ry = self.nominal_ry + delta[self.index_y];
-        let rz = self.nominal_rz + delta[self.index_z];
-        
-        let dx = self.sat_pos.x - rx;
-        let dy = self.sat_pos.y - ry;
-        let dz = self.sat_pos.z - rz;
+        let (rx, ry, rz) = (self.nominal_rx + delta[self.index_x], self.nominal_ry + delta[self.index_y], self.nominal_rz + delta[self.index_z]);
+        let (dx, dy, dz) = (self.sat_pos.x - rx, self.sat_pos.y - ry, self.sat_pos.z - rz);
         let dist = (dx * dx + dy * dy + dz * dz).sqrt();
-        
         let mut jac = DMatrix::zeros(1, delta.len());
         if dist > 1e-6 {
-            jac[(0, self.index_x)] = dx / dist;
-            jac[(0, self.index_y)] = dy / dist;
-            jac[(0, self.index_z)] = dz / dist;
-            jac[(0, self.index_dt)] = -1.0;
-            
-            match self.sat_id.constellation {
-                gneiss_core::sat::Constellation::Galileo => {
-                    if let Some(idx) = self.index_dt_gal { jac[(0, idx)] = -1.0; }
-                },
-                gneiss_core::sat::Constellation::Beidou => {
-                    if let Some(idx) = self.index_dt_bds { jac[(0, idx)] = -1.0; }
-                },
-                gneiss_core::sat::Constellation::Glonass => {
-                    if let Some(idx) = self.index_dt_glo { jac[(0, idx)] = -1.0; }
-                },
-                _ => {},
-            }
-            
-            if let Some(idx) = self.index_zwd {
-                jac[(0, idx)] = -self.map_wet;
-            }
+            jac[(0, self.index_x)] = dx / dist; jac[(0, self.index_y)] = dy / dist; jac[(0, self.index_z)] = dz / dist;
+            apply_clock_jacobian!(self, jac);
+            if let Some(idx) = self.index_zwd { jac[(0, idx)] = -self.map_wet; }
         }
         jac
     }
@@ -297,70 +271,24 @@ pub struct ErrorStateCarrierPhaseFactor {
 
 impl Factor for ErrorStateCarrierPhaseFactor {
     fn residual(&self, delta: &DVector<f64>) -> DVector<f64> {
-        let rx = self.nominal_rx + delta[self.index_x];
-        let ry = self.nominal_ry + delta[self.index_y];
-        let rz = self.nominal_rz + delta[self.index_z];
-        
-        let mut dt = self.nominal_dt + delta[self.index_dt];
-        match self.sat_id.constellation {
-            gneiss_core::sat::Constellation::Galileo => {
-                if let Some(idx) = self.index_dt_gal { dt += self.nominal_dt_gal + delta[idx]; }
-            },
-            gneiss_core::sat::Constellation::Beidou => {
-                if let Some(idx) = self.index_dt_bds { dt += self.nominal_dt_bds + delta[idx]; }
-            },
-            gneiss_core::sat::Constellation::Glonass => {
-                if let Some(idx) = self.index_dt_glo { dt += self.nominal_dt_glo + delta[idx]; }
-            },
-            _ => {},
-        }
-        
+        let (rx, ry, rz) = (self.nominal_rx + delta[self.index_x], self.nominal_ry + delta[self.index_y], self.nominal_rz + delta[self.index_z]);
+        let dt = compute_clock_delta!(self, delta);
         let amb = self.nominal_amb + delta[self.index_amb];
         let zwd = self.nominal_zwd + self.index_zwd.map(|idx| delta[idx]).unwrap_or(0.0);
-        
-        let dx = self.sat_pos.x - rx;
-        let dy = self.sat_pos.y - ry;
-        let dz = self.sat_pos.z - rz;
-        let dist = (dx * dx + dy * dy + dz * dz).sqrt();
-        
+        let dist = ((self.sat_pos.x - rx).powi(2) + (self.sat_pos.y - ry).powi(2) + (self.sat_pos.z - rz).powi(2)).sqrt();
         let expected_cp = dist + dt - self.sat_clock_bias + self.tropo_dry_delay + zwd * self.map_wet + amb * self.wavelength;
         DVector::from_vec(vec![self.measured_cp - expected_cp])
     }
     
-
     fn jacobian(&self, delta: &DVector<f64>) -> DMatrix<f64> {
-        let rx = self.nominal_rx + delta[self.index_x];
-        let ry = self.nominal_ry + delta[self.index_y];
-        let rz = self.nominal_rz + delta[self.index_z];
-        
-        let dx = self.sat_pos.x - rx;
-        let dy = self.sat_pos.y - ry;
-        let dz = self.sat_pos.z - rz;
+        let (rx, ry, rz) = (self.nominal_rx + delta[self.index_x], self.nominal_ry + delta[self.index_y], self.nominal_rz + delta[self.index_z]);
+        let (dx, dy, dz) = (self.sat_pos.x - rx, self.sat_pos.y - ry, self.sat_pos.z - rz);
         let dist = (dx * dx + dy * dy + dz * dz).sqrt();
-        
         let mut jac = DMatrix::zeros(1, delta.len());
         if dist > 1e-6 {
-            jac[(0, self.index_x)] = dx / dist;
-            jac[(0, self.index_y)] = dy / dist;
-            jac[(0, self.index_z)] = dz / dist;
-            jac[(0, self.index_dt)] = -1.0;
-            
-            match self.sat_id.constellation {
-                gneiss_core::sat::Constellation::Galileo => {
-                    if let Some(idx) = self.index_dt_gal { jac[(0, idx)] = -1.0; }
-                },
-                gneiss_core::sat::Constellation::Beidou => {
-                    if let Some(idx) = self.index_dt_bds { jac[(0, idx)] = -1.0; }
-                },
-                gneiss_core::sat::Constellation::Glonass => {
-                    if let Some(idx) = self.index_dt_glo { jac[(0, idx)] = -1.0; }
-                },
-                _ => {},
-            }
-            
-            if let Some(idx) = self.index_zwd {
-                jac[(0, idx)] = -self.map_wet;
-            }
+            jac[(0, self.index_x)] = dx / dist; jac[(0, self.index_y)] = dy / dist; jac[(0, self.index_z)] = dz / dist;
+            apply_clock_jacobian!(self, jac);
+            if let Some(idx) = self.index_zwd { jac[(0, idx)] = -self.map_wet; }
             jac[(0, self.index_amb)] = -self.wavelength;
         }
         jac

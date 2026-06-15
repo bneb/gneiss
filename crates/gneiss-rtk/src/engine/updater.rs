@@ -2,12 +2,6 @@ use crate::filter::RtkState;
 use nalgebra::{DMatrix, DVector, Vector3, UnitQuaternion};
 pub use crate::engine::updater_math::*;
 
-/// Pre-fit chi-squared threshold for carrier phase (normalized innovation squared).
-/// A CP innovation of ~0.5m with sigma ~0.01m gives chi2 ~2500. Reject only extreme outliers.
-
-/// Pre-fit chi-squared threshold for Doppler measurements.
-/// A Doppler innovation of 1 m/s with sigma ~0.3 m/s gives chi2 ~11. Reject above 50.
-
 #[derive(Debug)]
 pub enum UpdateError {
     SingularMatrix,
@@ -46,15 +40,6 @@ fn apply_imu_and_clock_correction(state: &mut RtkState, dx: &DVector<f64>) {
         state.zwd = (state.zwd + dx[20]).max(0.0);
     }
 }
-
-
-
-
-
-#[allow(clippy::too_many_arguments)]
-
-
-
 
 pub fn update_loosely_coupled(
     state: &mut RtkState,

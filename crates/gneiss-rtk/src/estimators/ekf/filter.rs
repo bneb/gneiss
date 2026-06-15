@@ -235,21 +235,21 @@ impl RtkState {
         *count += 1;
     }
 
-    pub fn resolve_ambiguities(&self, ephemerides: &[gneiss_core::ephemeris::Ephemeris], min_subset: usize, ar_min_epoch_count: u32, ar_min_lock: u32, lambda_min_ratio: f64, ffrt_prob: f64, min_ar_success_rate: f64) -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> {
+    pub fn resolve_ambiguities(&self, ephemerides: &[gneiss_core::ephemeris::Ephemeris], config: &crate::engine::EngineConfig) -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> {
         let num_amb = self.ambiguities.len();
-        if num_amb < min_subset || self.epoch_count <= ar_min_epoch_count as usize { return Err("Insufficient data"); }
+        if num_amb < config.lambda_min_subset || self.epoch_count <= config.ar_min_epoch_count as usize { return Err("Insufficient data"); }
         
-        let candidate_vars = select_ar_candidates(self, ephemerides, ar_min_lock);
-        if candidate_vars.len() < min_subset { return Err("Insufficient candidates"); }
+        let candidate_vars = select_ar_candidates(self, ephemerides, config.ar_min_lock);
+        if candidate_vars.len() < config.lambda_min_subset { return Err("Insufficient candidates"); }
         
         let max_subset = candidate_vars.len().min(24);
-        for subset_size in (min_subset..=max_subset).rev() {
+        for subset_size in (config.lambda_min_subset..=max_subset).rev() {
             let (_d_mat_small, a_cycles, q_cycles) = build_lambda_matrices(self, &candidate_vars, subset_size, ephemerides);
             
             if let Ok(res) = crate::lambda::resolve_lambda(&a_cycles, &q_cycles) {
-                let dynamic_threshold = crate::ffrt::calculate_threshold(subset_size, ffrt_prob).max(lambda_min_ratio);
+                let dynamic_threshold = crate::ffrt::calculate_threshold(subset_size, config.ar_ffrt_prob).max(config.lambda_min_ratio);
                 // Accept if it passes the ratio test OR if the bootstrapped success rate is > min_ar_success_rate
-                if res.ratio >= dynamic_threshold || res.success_rate >= min_ar_success_rate {
+                if res.ratio >= dynamic_threshold || res.success_rate >= config.tuning.min_ar_success_rate {
                     let (fixed_state, da_meters, d_full) = self.apply_ar_fix(subset_size, &candidate_vars, &res, ephemerides)?;
                     return Ok((fixed_state, da_meters, d_full, res.ratio, subset_size));
                 }
@@ -463,7 +463,14 @@ mod tests {
             }),
         ];
 
-        let (fixed_state, _, _, _, _) = state.resolve_ambiguities(&ephemerides, 4, 5, 3, 3.0, 0.001, 0.999).expect("AR should run");
+        let mut config = crate::engine::EngineConfig::default();
+        config.lambda_min_subset = 4;
+        config.ar_min_epoch_count = 5;
+        config.ar_min_lock = 3;
+        config.lambda_min_ratio = 3.0;
+        config.ar_ffrt_prob = 0.001;
+        config.tuning.min_ar_success_rate = 0.999;
+        let (fixed_state, _, _, _, _) = state.resolve_ambiguities(&ephemerides, &config).expect("AR should run");
         assert!(fixed_state.is_fixed, "Should achieve fix with multi-constellation support");
         
         let idx_ref = fixed_state.ambiguity_keys.iter().position(|&(s, f)| s == gps_ref && f == 1).unwrap();

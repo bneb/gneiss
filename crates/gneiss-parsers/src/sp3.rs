@@ -24,9 +24,9 @@ pub fn parse_sp3<R: BufRead>(reader: R) -> Result<Vec<Sp3Epoch>, String> {
             continue;
         }
 
-        if line.starts_with('*') {
+        if let Some(stripped) = line.strip_prefix('*') {
             // Epoch header line: *  YYYY MM DD HH MM SS.sssssss
-            let parts: Vec<&str> = line[1..].split_whitespace().collect();
+            let parts: Vec<&str> = stripped.split_whitespace().collect();
             if parts.len() < 6 {
                 continue;
             }
@@ -64,9 +64,9 @@ pub fn parse_sp3<R: BufRead>(reader: R) -> Result<Vec<Sp3Epoch>, String> {
                         z_str.parse::<f64>(),
                     ) {
                         let clock_offset = if !clk_str.is_empty() && clk_str != "999999.999999" {
-                            clk_str.parse::<f64>().unwrap_or(core::f64::NAN) * 1e-6 // microseconds to seconds
+                            clk_str.parse::<f64>().unwrap_or(f64::NAN) * 1e-6 // microseconds to seconds
                         } else {
-                            core::f64::NAN
+                            f64::NAN
                         };
 
                         epoch.records.insert(sat_id, Sp3Record {

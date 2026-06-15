@@ -98,93 +98,106 @@ pub struct SingleUpdate {
     pub r_ref: f64,
 }
 
-fn compute_pseudorange_update(
-    rs: f64, rr: f64, bs: f64, br: f64, comp_pr_dd: f64, iono_dd: f64,
-    h_r: Vector3<f64>, h_att: Vector3<f64>, h_zwd: f64,
-    state_size: usize, r_val: f64, r_ref_val: f64
-) -> SingleUpdate {
-    let pr_dd = (rs - rr) - (bs - br);
-    let mut h_pr = vec![0.0; state_size];
-    h_pr[0] = h_r.x; h_pr[1] = h_r.y; h_pr[2] = h_r.z;
-    h_pr[6] = h_att.x; h_pr[7] = h_att.y; h_pr[8] = h_att.z;
-    if state_size > 20 { h_pr[20] = h_zwd; }
-    SingleUpdate { z: pr_dd - (comp_pr_dd + iono_dd), h: h_pr, r: r_val, type_code: 0, r_ref: r_ref_val }
+pub struct UpdateGeometry {
+    pub comp_dd: f64,
+    pub h_r: Vector3<f64>,
+    pub h_att: Vector3<f64>,
+    pub h_zwd: f64,
+    pub state_size: usize,
 }
 
-#[allow(clippy::too_many_arguments)]
-pub fn compute_dd_pseudorange(
-    ctx: &DdContext, comp_pr_dd: f64, iono_dd_l1: f64, iono_dd_l2: f64,
-    h_r: Vector3<f64>, h_att: Vector3<f64>, state_size: usize,
-    var_factor: f64, env: &MeasurementEnvironment,
-    h_zwd: f64, ref_var_factor: f64
-) -> Vec<SingleUpdate> {
-    let mut updates = Vec::new();
-    let r_val = env.tuning.pr_base_var * var_factor;
-    let r_ref = env.tuning.pr_base_var * ref_var_factor;
+pub struct VarianceWeights {
+    pub val: f64,
+    pub ref_val: f64,
+}
 
-    if [ctx.rov_sat.pr_l1, ctx.base_sat.pr_l1, ctx.rov_ref.pr_l1, ctx.ref_base.pr_l1].iter().all(|&x| x > 0.0) {
+pub struct DdMeasurementContext<'a> {
+    pub ctx: &'a DdContext<'a>,
+    pub geom: &'a UpdateGeometry,
+    pub comps: &'a DdComponents,
+    pub env: &'a MeasurementEnvironment<'a>,
+}
+
+pub struct DdCarrierPhaseParams<'a> {
+    pub is_fixed: bool,
+    pub ambiguities: &'a [f64],
+    pub sat_idx_l1: Option<usize>,
+    pub ref_idx_l1: Option<usize>,
+    pub sat_idx_l2: Option<usize>,
+    pub ref_idx_l2: Option<usize>,
+    pub cp_base_var: f64,
+}
+
+fn compute_pseudorange_update(
+    pr: [f64; 4], iono_dd: f64, geom: &UpdateGeometry, var: &VarianceWeights
+) -> SingleUpdate {
+    let pr_dd = (pr[0] - pr[1]) - (pr[2] - pr[3]);
+    let mut h_pr = vec![0.0; geom.state_size];
+    h_pr[0] = geom.h_r.x; h_pr[1] = geom.h_r.y; h_pr[2] = geom.h_r.z;
+    h_pr[6] = geom.h_att.x; h_pr[7] = geom.h_att.y; h_pr[8] = geom.h_att.z;
+    if geom.state_size > 20 { h_pr[20] = geom.h_zwd; }
+    SingleUpdate { z: pr_dd - (geom.comp_dd + iono_dd), h: h_pr, r: var.val, type_code: 0, r_ref: var.ref_val }
+}
+
+pub fn compute_dd_pseudorange(mctx: &DdMeasurementContext) -> Vec<SingleUpdate> {
+    let mut updates = Vec::new();
+    let var = VarianceWeights { 
+        val: mctx.env.tuning.pr_base_var * mctx.comps.var_factor, 
+        ref_val: mctx.env.tuning.pr_base_var * mctx.comps.ref_var_factor 
+    };
+
+    if [mctx.ctx.rov_sat.pr_l1, mctx.ctx.base_sat.pr_l1, mctx.ctx.rov_ref.pr_l1, mctx.ctx.ref_base.pr_l1].iter().all(|&x| x > 0.0) {
         updates.push(compute_pseudorange_update(
-            ctx.rov_sat.pr_l1, ctx.rov_ref.pr_l1, ctx.base_sat.pr_l1, ctx.ref_base.pr_l1,
-            comp_pr_dd, iono_dd_l1, h_r, h_att, h_zwd, state_size, r_val, r_ref
+            [mctx.ctx.rov_sat.pr_l1, mctx.ctx.rov_ref.pr_l1, mctx.ctx.base_sat.pr_l1, mctx.ctx.ref_base.pr_l1], mctx.comps.iono_dd_l1, mctx.geom, &var
         ));
     }
 
-    if let [Some(rr2), Some(rs2), Some(br2), Some(bs2)] = [ctx.rov_ref.pr_l2, ctx.rov_sat.pr_l2, ctx.ref_base.pr_l2, ctx.base_sat.pr_l2] {
-        updates.push(compute_pseudorange_update(
-            rs2, rr2, bs2, br2, comp_pr_dd, iono_dd_l2, h_r, h_att, h_zwd, state_size, r_val, r_ref
-        ));
+    if let [Some(rr2), Some(rs2), Some(br2), Some(bs2)] = [mctx.ctx.rov_ref.pr_l2, mctx.ctx.rov_sat.pr_l2, mctx.ctx.ref_base.pr_l2, mctx.ctx.base_sat.pr_l2] {
+        updates.push(compute_pseudorange_update([rs2, rr2, bs2, br2], mctx.comps.iono_dd_l2, mctx.geom, &var));
     }
     updates
 }
 
-#[allow(clippy::too_many_arguments)]
 fn compute_carrier_phase_update(
-    rs: f64, rr: f64, bs: f64, br: f64, f_sat: f64, f_ref: f64,
-    sat_idx: usize, ref_idx: usize, ambiguities: &[f64],
-    comp_pr_dd: f64, iono_dd: f64, h_r: Vector3<f64>, h_att: Vector3<f64>,
-    h_zwd: f64, state_size: usize, r_val: f64, r_ref_val: f64, freq_idx: u8
+    cp: [f64; 4], f: [f64; 2], idx: [usize; 2], ambiguities: &[f64],
+    iono_dd: f64, geom: &UpdateGeometry, var: &VarianceWeights, freq_idx: u8
 ) -> SingleUpdate {
     let c = gneiss_core::constants::SPEED_OF_LIGHT_M_S;
-    let lam_ref = c / f_ref;
-    let lam_sat = c / f_sat;
-    let cp_dd = (rs * lam_sat - rr * lam_ref) - (bs * lam_sat - br * lam_ref);
-    let n_dd = ambiguities[sat_idx] - ambiguities[ref_idx];
+    let lam_sat = c / f[0]; let lam_ref = c / f[1];
+    let cp_dd = (cp[0] * lam_sat - cp[1] * lam_ref) - (cp[2] * lam_sat - cp[3] * lam_ref);
+    let n_dd = ambiguities[idx[0]] - ambiguities[idx[1]];
     
-    let mut h_cp = vec![0.0; state_size];
-    h_cp[0] = h_r.x; h_cp[1] = h_r.y; h_cp[2] = h_r.z;
-    h_cp[6] = h_att.x; h_cp[7] = h_att.y; h_cp[8] = h_att.z;
-    h_cp[crate::filter::CORE_STATE_SIZE + sat_idx] = 1.0; 
-    h_cp[crate::filter::CORE_STATE_SIZE + ref_idx] = -1.0;
-    if state_size > 20 { h_cp[20] = h_zwd; }
+    let mut h_cp = vec![0.0; geom.state_size];
+    h_cp[0] = geom.h_r.x; h_cp[1] = geom.h_r.y; h_cp[2] = geom.h_r.z;
+    h_cp[6] = geom.h_att.x; h_cp[7] = geom.h_att.y; h_cp[8] = geom.h_att.z;
+    h_cp[crate::filter::CORE_STATE_SIZE + idx[0]] = 1.0; 
+    h_cp[crate::filter::CORE_STATE_SIZE + idx[1]] = -1.0;
+    if geom.state_size > 20 { h_cp[20] = geom.h_zwd; }
     
-    SingleUpdate { z: cp_dd - (comp_pr_dd - iono_dd + n_dd), h: h_cp, r: r_val, type_code: freq_idx, r_ref: r_ref_val }
+    SingleUpdate { z: cp_dd - (geom.comp_dd - iono_dd + n_dd), h: h_cp, r: var.val, type_code: freq_idx, r_ref: var.ref_val }
 }
 
-#[allow(clippy::too_many_arguments)]
-pub fn compute_dd_carrier_phase(
-    ctx: &DdContext, is_fixed: bool, ambiguities: &[f64],
-    sat_idx_l1: Option<usize>, ref_idx_l1: Option<usize>, sat_idx_l2: Option<usize>, ref_idx_l2: Option<usize>,
-    comp_pr_dd: f64, iono_dd_l1: f64, iono_dd_l2: f64, h_r: Vector3<f64>, h_att: Vector3<f64>,
-    state_size: usize, var_factor: f64, ref_var_factor: f64, cp_base_var: f64, h_zwd: f64
-) -> Vec<SingleUpdate> {
+pub fn compute_dd_carrier_phase(mctx: &DdMeasurementContext, p: &DdCarrierPhaseParams) -> Vec<SingleUpdate> {
     let mut updates = Vec::new();
-    let r_val = if is_fixed { 1e-6 * var_factor } else { cp_base_var * var_factor };
-    let r_ref_val = if is_fixed { 1e-6 * ref_var_factor } else { cp_base_var * ref_var_factor };
+    let var = VarianceWeights {
+        val: if p.is_fixed { 1e-6 * mctx.comps.var_factor } else { p.cp_base_var * mctx.comps.var_factor },
+        ref_val: if p.is_fixed { 1e-6 * mctx.comps.ref_var_factor } else { p.cp_base_var * mctx.comps.ref_var_factor }
+    };
 
-    if let (Some(sat_idx), Some(ref_idx)) = (sat_idx_l1, ref_idx_l1) {
-        if let [Some(rr1), Some(rs1), Some(br1), Some(bs1)] = [ctx.rov_ref.cp_l1, ctx.rov_sat.cp_l1, ctx.ref_base.cp_l1, ctx.base_sat.cp_l1] {
+    if let (Some(sat_idx), Some(ref_idx)) = (p.sat_idx_l1, p.ref_idx_l1) {
+        if let [Some(rr1), Some(rs1), Some(br1), Some(bs1)] = [mctx.ctx.rov_ref.cp_l1, mctx.ctx.rov_sat.cp_l1, mctx.ctx.ref_base.cp_l1, mctx.ctx.base_sat.cp_l1] {
             updates.push(compute_carrier_phase_update(
-                rs1, rr1, bs1, br1, ctx.sat_state.f1, ctx.ref_state.f1, sat_idx, ref_idx, ambiguities,
-                comp_pr_dd, iono_dd_l1, h_r, h_att, h_zwd, state_size, r_val, r_ref_val, 1
+                [rs1, rr1, bs1, br1], [mctx.ctx.sat_state.f1, mctx.ctx.ref_state.f1], [sat_idx, ref_idx], p.ambiguities,
+                mctx.comps.iono_dd_l1, mctx.geom, &var, 1
             ));
         }
     }
 
-    if let (Some(sat_idx), Some(ref_idx)) = (sat_idx_l2, ref_idx_l2) {
-        if let [Some(rr2), Some(rs2), Some(br2), Some(bs2)] = [ctx.rov_ref.cp_l2, ctx.rov_sat.cp_l2, ctx.ref_base.cp_l2, ctx.base_sat.cp_l2] {
+    if let (Some(sat_idx), Some(ref_idx)) = (p.sat_idx_l2, p.ref_idx_l2) {
+        if let [Some(rr2), Some(rs2), Some(br2), Some(bs2)] = [mctx.ctx.rov_ref.cp_l2, mctx.ctx.rov_sat.cp_l2, mctx.ctx.ref_base.cp_l2, mctx.ctx.base_sat.cp_l2] {
             updates.push(compute_carrier_phase_update(
-                rs2, rr2, bs2, br2, ctx.sat_state.f2, ctx.ref_state.f2, sat_idx, ref_idx, ambiguities,
-                comp_pr_dd, iono_dd_l2, h_r, h_att, h_zwd, state_size, r_val, r_ref_val, 2
+                [rs2, rr2, bs2, br2], [mctx.ctx.sat_state.f2, mctx.ctx.ref_state.f2], [sat_idx, ref_idx], p.ambiguities,
+                mctx.comps.iono_dd_l2, mctx.geom, &var, 2
             ));
         }
     }
@@ -303,7 +316,7 @@ impl EkfGeometryContext {
 /// # Arguments
 /// * `lever_ecef` — Lever arm rotated into ECEF: `R_b^e · l_body`
 /// * `h_r` — DD direction vector: `e_ref − e_sat`
-
+///
 /// Computes ∂(DD_range_rate)/∂θ for a single satellite pair.
 ///
 /// The antenna velocity perturbation from attitude error is:
@@ -319,11 +332,6 @@ impl EkfGeometryContext {
 /// * `omega_b` — Corrected body angular rate (gyro − bias)
 /// * `lever_arm` — Lever arm in body frame
 /// * `h_r` — DD direction vector: `e_ref − e_sat`
-
-
-
-
-#[allow(clippy::too_many_arguments)]
 #[allow(clippy::too_many_arguments)]
 fn find_ephemeris(
     ephemerides: &[gneiss_core::ephemeris::Ephemeris],
@@ -401,10 +409,11 @@ fn process_single_satellite_pair(
     update_windup_state_and_obs(state, &mut ctx, geom);
 
 
-    let DdComponents { comp_pr_dd, iono_dd_l1, iono_dd_l2, var_factor, ref_var_factor, h_zwd } = 
-        compute_dd_components(state, geom, env, &ctx);
+    let comps = compute_dd_components(state, geom, env, &ctx);
+    let ugeom = UpdateGeometry { comp_dd: comps.comp_pr_dd, h_r, h_att, h_zwd: comps.h_zwd, state_size: geom.state_size };
+    let mctx = DdMeasurementContext { ctx: &ctx, geom: &ugeom, comps: &comps, env };
 
-    generate_measurement_updates(state, &ctx, comp_pr_dd, iono_dd_l1, iono_dd_l2, h_r, h_att, geom, var_factor, env, h_zwd, ref_var_factor, ref_idx_l1, ref_idx_l2, updates);
+    generate_measurement_updates(state, &mctx, geom, ref_idx_l1, ref_idx_l2, updates);
 }
 
 pub struct DdComponents {
@@ -436,7 +445,16 @@ fn compute_dd_components(
     let (_, el_bas_sat) = gneiss_core::coords::az_el(base_llh, geom.base_coord_vec, ctx.sat_state.bas_pos);
     let (_, el_bas_ref) = gneiss_core::coords::az_el(base_llh, geom.base_coord_vec, ctx.ref_state.bas_pos);
 
-    let (var_factor, ref_var_factor) = compute_variance_factors(ctx.rov_sat.snr, ctx.rov_ref.snr, el_rov_sat, el_rov_ref, el_bas_sat, el_bas_ref, env.tuning.snr_a, env.tuning.snr_b);
+    let (var_factor, ref_var_factor) = crate::engine::measurement_math::compute_variance_factors(&crate::engine::measurement_math::VarianceFactors {
+        snr_rov_sat: ctx.rov_sat.snr,
+        snr_rov_ref: ctx.rov_ref.snr,
+        el_rov_sat,
+        el_rov_ref,
+        el_bas_sat,
+        el_bas_ref,
+        snr_a: env.tuning.snr_a,
+        snr_b: env.tuning.snr_b,
+    });
     let (h_zwd, zwd_dd) = compute_zwd_mapping(el_rov_sat, el_rov_ref, state.zwd);
 
     let comp_pr_dd = compute_geometric_dd(
@@ -448,26 +466,31 @@ fn compute_dd_components(
 
 
 
-#[allow(clippy::too_many_arguments)]
 fn generate_measurement_updates(
-    state: &mut RtkState, ctx: &DdContext, comp_pr_dd: f64, iono_dd_l1: f64, iono_dd_l2: f64,
-    h_r: Vector3<f64>, h_att: Vector3<f64>, geom: &EkfGeometryContext, var_factor: f64,
-    env: &MeasurementEnvironment, h_zwd: f64, ref_var_factor: f64,
+    state: &RtkState, mctx: &DdMeasurementContext, geom: &EkfGeometryContext,
     ref_idx_l1: Option<usize>, ref_idx_l2: Option<usize>, updates: &mut EkfUpdates
 ) {
-    let sat = ctx.rov_sat.sat;
-    for u in compute_dd_pseudorange(ctx, comp_pr_dd, iono_dd_l1, iono_dd_l2, h_r, h_att, geom.state_size, var_factor, env, h_zwd, ref_var_factor) {
+    let sat = mctx.ctx.rov_sat.sat;
+    for u in compute_dd_pseudorange(mctx) {
         updates.push(u, sat);
     }
 
-    let sat_idx_l1 = state.ambiguity_keys.iter().position(|&(s, f)| s == sat && f == 1);
-    let sat_idx_l2 = state.ambiguity_keys.iter().position(|&(s, f)| s == sat && f == 2);
-    for u in compute_dd_carrier_phase(ctx, state.is_fixed, &state.ambiguities, sat_idx_l1, ref_idx_l1, sat_idx_l2, ref_idx_l2, comp_pr_dd, iono_dd_l1, iono_dd_l2, h_r, h_att, geom.state_size, var_factor, ref_var_factor, env.tuning.cp_base_var, h_zwd) {
+    let p = DdCarrierPhaseParams {
+        is_fixed: state.is_fixed,
+        ambiguities: &state.ambiguities,
+        sat_idx_l1: state.ambiguity_keys.iter().position(|&(s, f)| s == sat && f == 1),
+        ref_idx_l1,
+        sat_idx_l2: state.ambiguity_keys.iter().position(|&(s, f)| s == sat && f == 2),
+        ref_idx_l2,
+        cp_base_var: mctx.env.tuning.cp_base_var,
+    };
+    
+    for u in compute_dd_carrier_phase(mctx, &p) {
         updates.push(u, sat);
     }
 
     let r_b_e_rot = state.attitude.to_rotation_matrix();
-    if let Some(u) = compute_dd_doppler(ctx, geom.pos_apc, geom.base_coord_vec, h_r, &r_b_e_rot, &state.velocity, &env.omega_b, &env.lever_arm, env.tuning.dop_base_var, geom.state_size, var_factor, ref_var_factor) {
+    if let Some(u) = compute_dd_doppler(mctx.ctx, geom.pos_apc, geom.base_coord_vec, mctx.geom.h_r, &r_b_e_rot, &state.velocity, &mctx.env.omega_b, &mctx.env.lever_arm, mctx.env.tuning.dop_base_var, geom.state_size, mctx.comps.var_factor, mctx.comps.ref_var_factor) {
         updates.push(u, sat);
     }
 }
@@ -790,9 +813,10 @@ mod tests {
             tuning: &tuning,
         };
         
-        let updates = compute_dd_pseudorange(
-            &ctx, 0.0, 0.0, 0.0, Vector3::new(1.0, 0.0, 0.0), Vector3::zeros(), 22, 1.0, &env, 0.0, 1.0
-        );
+        let ugeom = crate::engine::measurement::UpdateGeometry { comp_dd: 0.0, h_r: Vector3::new(1.0, 0.0, 0.0), h_att: Vector3::zeros(), h_zwd: 0.0, state_size: 22 };
+        let comps = crate::engine::measurement::DdComponents { comp_pr_dd: 0.0, iono_dd_l1: 0.0, iono_dd_l2: 0.0, var_factor: 1.0, ref_var_factor: 1.0, h_zwd: 0.0 };
+        let mctx = crate::engine::measurement::DdMeasurementContext { ctx: &ctx, geom: &ugeom, comps: &comps, env: &env };
+        let updates = compute_dd_pseudorange(&mctx);
         assert_eq!(updates.len(), 2);
         assert_eq!(updates[0].z, 0.0);
         assert_eq!(updates[1].z, 0.0);

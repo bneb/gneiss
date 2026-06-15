@@ -116,23 +116,25 @@ pub fn doppler_attitude_jacobian(
     a.cross(h_r)
 }
 
-pub fn compute_variance_factors(
-    snr_rov_sat: f64,
-    snr_rov_ref: f64,
-    el_rov_sat: f64,
-    el_rov_ref: f64,
-    el_bas_sat: f64,
-    el_bas_ref: f64,
-    snr_a: f64,
-    snr_b: f64,
-) -> (f64, f64) {
+pub struct VarianceFactors {
+    pub snr_rov_sat: f64,
+    pub snr_rov_ref: f64,
+    pub el_rov_sat: f64,
+    pub el_rov_ref: f64,
+    pub el_bas_sat: f64,
+    pub el_bas_ref: f64,
+    pub snr_a: f64,
+    pub snr_b: f64,
+}
+
+pub fn compute_variance_factors(v: &VarianceFactors) -> (f64, f64) {
     let ref_var_factor =
-        gneiss_core::variance::observation_variance(snr_rov_ref, el_rov_ref, snr_a, snr_b)
-            + gneiss_core::variance::elevation_variance_scale(el_bas_ref);
+        gneiss_core::variance::observation_variance(v.snr_rov_ref, v.el_rov_ref, v.snr_a, v.snr_b)
+            + gneiss_core::variance::elevation_variance_scale(v.el_bas_ref);
 
     let var_factor =
-        gneiss_core::variance::observation_variance(snr_rov_sat, el_rov_sat, snr_a, snr_b)
-            + gneiss_core::variance::elevation_variance_scale(el_bas_sat)
+        gneiss_core::variance::observation_variance(v.snr_rov_sat, v.el_rov_sat, v.snr_a, v.snr_b)
+            + gneiss_core::variance::elevation_variance_scale(v.el_bas_sat)
             + ref_var_factor;
             
     (var_factor, ref_var_factor)
@@ -216,11 +218,16 @@ mod tests {
     
     #[test]
     fn test_compute_variance_factors() {
-        let (var, ref_var) = compute_variance_factors(
-            40.0, 45.0, 45.0_f64.to_radians(), 60.0_f64.to_radians(), 
-            45.0_f64.to_radians(), 60.0_f64.to_radians(),
-            100.0, 100.0
-        );
+        let (var, ref_var) = compute_variance_factors(&VarianceFactors {
+            snr_rov_sat: 40.0,
+            snr_rov_ref: 45.0,
+            el_rov_sat: 45.0_f64.to_radians(),
+            el_rov_ref: 60.0_f64.to_radians(),
+            el_bas_sat: 45.0_f64.to_radians(),
+            el_bas_ref: 60.0_f64.to_radians(),
+            snr_a: 100.0,
+            snr_b: 100.0,
+        });
         
         let expected_ref_var = gneiss_core::variance::observation_variance(45.0, 60.0_f64.to_radians(), 100.0, 100.0) +
             gneiss_core::variance::elevation_variance_scale(60.0_f64.to_radians());

@@ -24,6 +24,15 @@ impl SppState {
     pub fn new(position: Coordinate, cdt: f64, cdt_gal: f64, cdt_bds: f64, cdt_glo: f64) -> Self {
         Self { position, cdt, cdt_gal, cdt_bds, cdt_glo }
     }
+
+    pub fn get_cdt(&self, constellation: gneiss_core::sat::Constellation) -> f64 {
+        match constellation {
+            gneiss_core::sat::Constellation::Galileo => self.cdt_gal,
+            gneiss_core::sat::Constellation::Beidou => self.cdt_bds,
+            gneiss_core::sat::Constellation::Glonass => self.cdt_glo,
+            _ => self.cdt,
+        }
+    }
 }
 
 /// A single satellite measurement for use in the SPP estimator.
@@ -96,60 +105,44 @@ impl Default for SppConfig {
     }
 }
 
+fn build_single_measurement(sat_obs: &gneiss_core::obs::SatObs, ephemerides: &[Ephemeris], epoch_time: GpsTime) -> Option<SppMeasurement> {
+    let eph = ephemerides.iter()
+        .filter(|e| e.sat() == sat_obs.sat)
+        .min_by(|a, b| (a.toe().tow - epoch_time.tow).abs().partial_cmp(&(b.toe().tow - epoch_time.tow).abs()).unwrap())?;
+
+    let (f1, mut f2) = gneiss_core::signal::satellite_frequencies(sat_obs.sat, eph.freq_num());
+    if f2 == 0.0 { f2 = f1; }
+
+    let p1_opt = match sat_obs.sat.constellation {
+        gneiss_core::sat::Constellation::Beidou => sat_obs.get_observable(2),
+        _ => sat_obs.get_observable(1),
+    };
+    let p2_opt = match sat_obs.sat.constellation {
+        gneiss_core::sat::Constellation::Galileo => sat_obs.get_observable(7).or(sat_obs.get_observable(5)),
+        gneiss_core::sat::Constellation::Beidou => sat_obs.get_observable(7).or(sat_obs.get_observable(6)),
+        _ => sat_obs.get_observable(2),
+    };
+
+    let (raw_pr, is_iono_free) = if let (Some(p1), Some(p2)) = (p1_opt, p2_opt) {
+        let f1_sq = f1 * f1; let f2_sq = f2 * f2;
+        ((f1_sq * p1 - f2_sq * p2) / (f1_sq - f2_sq), true)
+    } else {
+        (p1_opt?, false)
+    };
+
+    Some(SppMeasurement {
+        constellation: sat_obs.sat.constellation,
+        raw_pr,
+        snr: sat_obs.get_snr(1).unwrap_or(45) as f64,
+        doppler: sat_obs.get_doppler(1).unwrap_or(0.0),
+        time: epoch_time,
+        eph: eph.clone(),
+        is_iono_free,
+    })
+}
+
 pub fn build_measurements(epoch: &EpochObs, ephemerides: &[Ephemeris], _config: &SppConfig) -> Vec<SppMeasurement> {
-    let mut measurements = Vec::new();
-
-    for sat_obs in &epoch.satellites {
-        // Find matching ephemeris closest to epoch time
-        let eph = ephemerides.iter()
-            .filter(|e| e.sat() == sat_obs.sat)
-            .min_by(|a, b| {
-                let da = (a.toe().tow - epoch.time.tow).abs();
-                let db = (b.toe().tow - epoch.time.tow).abs();
-                da.partial_cmp(&db).unwrap()
-            });
-
-        if let Some(eph) = eph {
-            let freqs = gneiss_core::signal::satellite_frequencies(sat_obs.sat, eph.freq_num());
-            let f1 = freqs.0;
-            let mut f2 = freqs.1;
-            if f2 == 0.0 { f2 = f1; }
-
-            let p1_opt = match sat_obs.sat.constellation {
-                gneiss_core::sat::Constellation::Beidou => sat_obs.get_observable(2),
-                _ => sat_obs.get_observable(1),
-            };
-            let p2_opt = match sat_obs.sat.constellation {
-                gneiss_core::sat::Constellation::Galileo => sat_obs.get_observable(7).or(sat_obs.get_observable(5)),
-                gneiss_core::sat::Constellation::Beidou => sat_obs.get_observable(7).or(sat_obs.get_observable(6)),
-                _ => sat_obs.get_observable(2),
-            };
-
-            let (raw_pr, is_iono_free) = if let (Some(p1), Some(p2)) = (p1_opt, p2_opt) {
-                let f1_sq = f1 * f1;
-                let f2_sq = f2 * f2;
-                ((f1_sq * p1 - f2_sq * p2) / (f1_sq - f2_sq), true)
-            } else if let Some(p1) = p1_opt {
-                (p1, false)
-            } else {
-                continue;
-            };
-            
-            let snr = sat_obs.get_snr(1).unwrap_or(45) as f64;
-            let doppler = sat_obs.get_doppler(1).unwrap_or(0.0);
-
-            measurements.push(SppMeasurement {
-                constellation: sat_obs.sat.constellation,
-                raw_pr,
-                snr,
-                doppler,
-                time: epoch.time,
-                eph: eph.clone(),
-                is_iono_free,
-            });
-        }
-    }
-    measurements
+    epoch.satellites.iter().filter_map(|s| build_single_measurement(s, ephemerides, epoch.time)).collect()
 }
 
 fn compute_sat_state(m: &SppMeasurement, receiver_cdt: f64) -> (Coordinate, f64) {
@@ -169,47 +162,25 @@ fn compute_sat_state(m: &SppMeasurement, receiver_cdt: f64) -> (Coordinate, f64)
     (Coordinate::new(sat_pos, Datum::WGS84, Frame::ECEF, m.time), corrected_pr)
 }
 
-fn seed_initial_state(measurements: &[SppMeasurement], prev_state: Option<&SppState>) -> SppState {
-    let (seed_x, seed_y, seed_z) = if let Some(coord) = prev_state.map(|s| &s.position) {
-        (coord.vector.x, coord.vector.y, coord.vector.z)
-    } else {
-        // Intelligently seed the position on the Earth's surface roughly below the visible satellite constellation
-        let mut avg_x = 0.0;
-        let mut avg_y = 0.0;
-        let mut avg_z = 0.0;
-        for m in measurements {
-            let (sat_coord, _) = compute_sat_state(m, 0.0);
-            avg_x += sat_coord.vector.x;
-            avg_y += sat_coord.vector.y;
-            avg_z += sat_coord.vector.z;
-        }
-        let n_f = measurements.len() as f64;
-        avg_x /= n_f;
-        avg_y /= n_f;
-        avg_z /= n_f;
+fn compute_seed_position(measurements: &[SppMeasurement]) -> (f64, f64, f64) {
+    let mut avg = Vector3::zeros();
+    for m in measurements {
+        let (sat_coord, _) = compute_sat_state(m, 0.0);
+        avg += sat_coord.vector;
+    }
+    avg /= measurements.len() as f64;
+    let mut llh = ecef_to_llh(avg);
+    llh.z = 0.0;
+    let proj = gneiss_core::coords::llh_to_ecef(llh);
+    (proj.x, proj.y, proj.z)
+}
 
-        // Project to Earth's surface (WGS84) exactly
-        let avg_ecef = Vector3::new(avg_x, avg_y, avg_z);
-        let mut llh = ecef_to_llh(avg_ecef);
-        llh.z = 0.0; // Force to ellipsoid surface
-        let projected_ecef = gneiss_core::coords::llh_to_ecef(llh);
-        
-        (projected_ecef.x, projected_ecef.y, projected_ecef.z)
-    };
-
-    let mut cdt_gps = None;
-    let mut cdt_gal = None;
-    let mut cdt_bds = None;
-    let mut cdt_glo = None;
-
+fn compute_seed_clocks(measurements: &[SppMeasurement], sx: f64, sy: f64, sz: f64) -> (f64, f64, f64, f64) {
+    let mut cdt_gps = None; let mut cdt_gal = None; let mut cdt_bds = None; let mut cdt_glo = None;
     for m in measurements {
         let (sat_coord, corrected_pr) = compute_sat_state(m, 0.0);
-        let dx = seed_x - sat_coord.vector.x;
-        let dy = seed_y - sat_coord.vector.y;
-        let dz = seed_z - sat_coord.vector.z;
-        let geom_r = f64::sqrt(dx * dx + dy * dy + dz * dz);
-        let cdt = corrected_pr - geom_r;
-        
+        let dx = sx - sat_coord.vector.x; let dy = sy - sat_coord.vector.y; let dz = sz - sat_coord.vector.z;
+        let cdt = corrected_pr - f64::sqrt(dx * dx + dy * dy + dz * dz);
         match m.constellation {
             gneiss_core::sat::Constellation::Gps => if cdt_gps.is_none() { cdt_gps = Some(cdt); },
             gneiss_core::sat::Constellation::Galileo => if cdt_gal.is_none() { cdt_gal = Some(cdt); },
@@ -217,126 +188,83 @@ fn seed_initial_state(measurements: &[SppMeasurement], prev_state: Option<&SppSt
             gneiss_core::sat::Constellation::Glonass => if cdt_glo.is_none() { cdt_glo = Some(cdt); },
             _ => {},
         }
-        tracing::debug!("SPP seed: SAT={}, raw_pr={:.3}, dt_sat_m={:.3}, geom_r={:.3}, cdt={:.3}", m.eph.sat(), m.raw_pr, (corrected_pr - m.raw_pr), geom_r, cdt);
+        tracing::debug!("SPP seed: SAT={}, raw_pr={:.3}, cdt={:.3}", m.eph.sat(), m.raw_pr, cdt);
     }
-
     let default_cdt = cdt_gps.or(cdt_gal).or(cdt_bds).or(cdt_glo).unwrap_or(0.0);
+    (cdt_gps.unwrap_or(default_cdt), cdt_gal.unwrap_or(default_cdt), cdt_bds.unwrap_or(default_cdt), cdt_glo.unwrap_or(default_cdt))
+}
 
+fn seed_initial_state(measurements: &[SppMeasurement], prev_state: Option<&SppState>) -> SppState {
+    let (seed_x, seed_y, seed_z) = if let Some(coord) = prev_state.map(|s| &s.position) {
+        (coord.vector.x, coord.vector.y, coord.vector.z)
+    } else {
+        compute_seed_position(measurements)
+    };
+    let (cdt, cdt_gal, cdt_bds, cdt_glo) = compute_seed_clocks(measurements, seed_x, seed_y, seed_z);
     SppState::new(
         Coordinate::new(Vector3::new(seed_x, seed_y, seed_z), Datum::WGS84, Frame::ECEF, measurements[0].time),
-        cdt_gps.unwrap_or(default_cdt),
-        cdt_gal.unwrap_or(default_cdt),
-        cdt_bds.unwrap_or(default_cdt),
-        cdt_glo.unwrap_or(default_cdt)
+        cdt, cdt_gal, cdt_bds, cdt_glo
     )
 }
 
-/// Computes the Single Point Position (SPP) using the provided epoch observations and ephemerides.
 pub fn compute_spp(
-    epoch: &EpochObs,
-    ephemerides: &[Ephemeris],
-    iono_params: Option<&KlobucharParams>,
-    config: &SppConfig,
-    prev_state: Option<&SppState>,
+    epoch: &EpochObs, ephemerides: &[Ephemeris], iono_params: Option<&KlobucharParams>, config: &SppConfig, prev_state: Option<&SppState>,
 ) -> Result<SppState, SppError> {
     let measurements = build_measurements(epoch, ephemerides, config);
-
     if measurements.len() < config.min_measurements_init {
         tracing::error!("SPP failed: Only {} valid measurements. Need at least {}.", measurements.len(), config.min_measurements_init);
         return Err(SppError::NotEnoughMeasurements);
     }
+    let seed_state = seed_initial_state(&measurements, prev_state);
+    let state = solve_spp_iteratively(seed_state.clone(), &measurements, iono_params, config)?;
+    apply_raim(state, seed_state, &measurements, iono_params, config)
+}
 
-    let mut state = seed_initial_state(&measurements, prev_state);
-
-    let seed_x = state.position.vector.x;
-    let seed_y = state.position.vector.y;
-    let seed_z = state.position.vector.z;
-    let seed_cdt = state.cdt;
-    let seed_cdt_gal = state.cdt_gal;
-    let seed_cdt_bds = state.cdt_bds;
-    let seed_cdt_glo = state.cdt_glo;
-
+fn solve_spp_iteratively(
+    mut state: SppState, measurements: &[SppMeasurement], iono_params: Option<&KlobucharParams>, config: &SppConfig,
+) -> Result<SppState, SppError> {
     for _ in 0..config.max_iterations {
         let prev_state = state.clone();
-
-        state = spp_wnlls_step(&state, &measurements, iono_params, config)?;
-
+        state = spp_wnlls_step(&state, measurements, iono_params, config)?;
         let dx = state.position.vector.x - prev_state.position.vector.x;
         let dy = state.position.vector.y - prev_state.position.vector.y;
         let dz = state.position.vector.z - prev_state.position.vector.z;
         let dcdt = state.cdt - prev_state.cdt;
-
-        let delta_norm = f64::sqrt(dx * dx + dy * dy + dz * dz + dcdt * dcdt);
-
-        if delta_norm < config.convergence_threshold {
-            // Adaptive RAIM: Median Absolute Deviation (MAD)
-            let mut residuals = Vec::with_capacity(measurements.len());
-            for m in &measurements {
-                let cdt = match m.constellation {
-                    gneiss_core::sat::Constellation::Gps => state.cdt,
-                    gneiss_core::sat::Constellation::Qzss => state.cdt,
-                    gneiss_core::sat::Constellation::Galileo => state.cdt_gal,
-                    gneiss_core::sat::Constellation::Beidou => state.cdt_bds,
-                    gneiss_core::sat::Constellation::Glonass => state.cdt_glo,
-                    _ => state.cdt,
-                };
-                let (sat_coord, corrected_pr) = compute_sat_state(m, cdt);
-                let r_dx = state.position.vector.x - sat_coord.vector.x;
-                let r_dy = state.position.vector.y - sat_coord.vector.y;
-                let r_dz = state.position.vector.z - sat_coord.vector.z;
-                let r_dist = f64::sqrt(r_dx * r_dx + r_dy * r_dy + r_dz * r_dz);
-                let expected_pr = r_dist + cdt;
-                let residual = (corrected_pr - expected_pr).abs();
-                residuals.push((m, residual));
-            }
-
-            residuals.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
-            let median_residual = residuals[residuals.len() / 2].1;
-            
-            let mut deviations: Vec<f64> = residuals.iter().map(|(_, r)| (*r - median_residual).abs()).collect();
-            deviations.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-            let mad = deviations[deviations.len() / 2];
-            
-            let mad_threshold = (mad * config.raim_mad_multiplier).max(config.raim_outlier_m);
-
-            let mut good_measurements = Vec::new();
-            for (m, r) in residuals {
-                if r <= mad_threshold {
-                    good_measurements.push(m.clone());
-                }
-            }
-
-            if good_measurements.len() < measurements.len() && good_measurements.len() >= 4 {
-                // Re-run with clean measurements
-                let mut clean_state = SppState::new(
-                    Coordinate::new(Vector3::new(seed_x, seed_y, seed_z), Datum::WGS84, Frame::ECEF, measurements[0].time),
-                    seed_cdt,
-                    seed_cdt_gal,
-                    seed_cdt_bds,
-                    seed_cdt_glo
-                );
-                for _ in 0..config.max_iterations {
-                    let prev_clean = clean_state.clone();
-                    if let Ok(new_state) = spp_wnlls_step(&clean_state, &good_measurements, iono_params, config) {
-                        clean_state = new_state;
-                        let c_dx = clean_state.position.vector.x - prev_clean.position.vector.x;
-                        let c_dy = clean_state.position.vector.y - prev_clean.position.vector.y;
-                        let c_dz = clean_state.position.vector.z - prev_clean.position.vector.z;
-                        let c_dcdt = clean_state.cdt - prev_clean.cdt;
-                        if f64::sqrt(c_dx * c_dx + c_dy * c_dy + c_dz * c_dz + c_dcdt * c_dcdt) < config.convergence_threshold {
-                            return Ok(clean_state);
-                        }
-                    } else {
-                        break;
-                    }
-                }
-                return Err(SppError::ConvergenceFailed);
-            }
+        if f64::sqrt(dx * dx + dy * dy + dz * dz + dcdt * dcdt) < config.convergence_threshold {
             return Ok(state);
         }
     }
-
     Err(SppError::ConvergenceFailed)
+}
+
+fn apply_raim(
+    state: SppState, seed_state: SppState, measurements: &[SppMeasurement], iono_params: Option<&KlobucharParams>, config: &SppConfig,
+) -> Result<SppState, SppError> {
+    let good_measurements = filter_raim_outliers(&state, measurements, config);
+    if good_measurements.len() < measurements.len() && good_measurements.len() >= 4 {
+        return solve_spp_iteratively(seed_state, &good_measurements, iono_params, config);
+    }
+    Ok(state)
+}
+
+fn filter_raim_outliers(state: &SppState, measurements: &[SppMeasurement], config: &SppConfig) -> Vec<SppMeasurement> {
+    let mut residuals: Vec<(&SppMeasurement, f64)> = measurements.iter().map(|m| {
+        let cdt = state.get_cdt(m.constellation);
+        let (sat_coord, corrected_pr) = compute_sat_state(m, cdt);
+        let r_dx = state.position.vector.x - sat_coord.vector.x;
+        let r_dy = state.position.vector.y - sat_coord.vector.y;
+        let r_dz = state.position.vector.z - sat_coord.vector.z;
+        let expected_pr = f64::sqrt(r_dx * r_dx + r_dy * r_dy + r_dz * r_dz) + cdt;
+        (m, (corrected_pr - expected_pr).abs())
+    }).collect();
+
+    residuals.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+    let median_residual = residuals[residuals.len() / 2].1;
+    let mut deviations: Vec<f64> = residuals.iter().map(|(_, r)| (*r - median_residual).abs()).collect();
+    deviations.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let mad_threshold = (deviations[deviations.len() / 2] * config.raim_mad_multiplier).max(config.raim_outlier_m);
+
+    residuals.into_iter().filter(|(_, r)| *r <= mad_threshold).map(|(m, _)| m.clone()).collect()
 }
 
 
@@ -397,22 +325,21 @@ fn build_design_matrix(
     let mut h_matrix = DMatrix::<f64>::zeros(matrix_n, cols);
     let mut w_matrix = DMatrix::<f64>::zeros(matrix_n, matrix_n);
     let mut dz_vector = DVector::<f64>::zeros(matrix_n);
-
-    let rec_ecef = Vector3::new(state.position.vector.x, state.position.vector.y, state.position.vector.z);
+    let rec_ecef = state.position.vector;
     let rec_llh = ecef_to_llh(rec_ecef);
 
     for (i, m) in measurements.iter().enumerate() {
         let (dx, dy, dz, r, residual, el) = compute_measurement_residuals(state, m, rec_ecef, rec_llh, iono_params, config);
-        
-        let el_mask = config.elevation_mask_rad;
-
-        if el < el_mask && state.position.vector.x != 0.0 { w_matrix[(i, i)] = MIN_WEIGHT; continue; }
+        if el < config.elevation_mask_rad && rec_ecef.x != 0.0 { w_matrix[(i, i)] = MIN_WEIGHT; continue; }
 
         h_matrix[(i, 0)] = dx / r; h_matrix[(i, 1)] = dy / r; h_matrix[(i, 2)] = dz / r;
-        if m.constellation == gneiss_core::sat::Constellation::Gps || m.constellation == gneiss_core::sat::Constellation::Qzss { if let Some(c) = clocks.0 { h_matrix[(i, c)] = 1.0; } }
-        else if m.constellation == gneiss_core::sat::Constellation::Galileo { if let Some(c) = clocks.1 { h_matrix[(i, c)] = 1.0; } }
-        else if m.constellation == gneiss_core::sat::Constellation::Beidou { if let Some(c) = clocks.2 { h_matrix[(i, c)] = 1.0; } }
-        else if m.constellation == gneiss_core::sat::Constellation::Glonass { if let Some(c) = clocks.3 { h_matrix[(i, c)] = 1.0; } }
+        if let Some(c) = match m.constellation {
+            gneiss_core::sat::Constellation::Gps | gneiss_core::sat::Constellation::Qzss => clocks.0,
+            gneiss_core::sat::Constellation::Galileo => clocks.1,
+            gneiss_core::sat::Constellation::Beidou => clocks.2,
+            gneiss_core::sat::Constellation::Glonass => clocks.3,
+            _ => None,
+        } { h_matrix[(i, c)] = 1.0; }
         
         w_matrix[(i, i)] = 1.0 / gneiss_core::variance::observation_variance(m.snr, el, config.snr_a, config.snr_b);
         dz_vector[i] = residual;
@@ -422,43 +349,26 @@ fn build_design_matrix(
 }
 
 fn compute_measurement_residuals(
-    current_state: &SppState,
-    m: &SppMeasurement,
-    rec_ecef: Vector3<f64>,
-    rec_llh: Vector3<f64>,
-    iono_params: Option<&KlobucharParams>,
-    config: &SppConfig,
+    current_state: &SppState, m: &SppMeasurement, rec_ecef: Vector3<f64>, rec_llh: Vector3<f64>,
+    iono_params: Option<&KlobucharParams>, config: &SppConfig,
 ) -> (f64, f64, f64, f64, f64, f64) {
-    let cdt = match m.constellation {
-        gneiss_core::sat::Constellation::Gps => current_state.cdt,
-        gneiss_core::sat::Constellation::Qzss => current_state.cdt,
-        gneiss_core::sat::Constellation::Galileo => current_state.cdt_gal,
-        gneiss_core::sat::Constellation::Beidou => current_state.cdt_bds,
-        gneiss_core::sat::Constellation::Glonass => current_state.cdt_glo,
-        _ => current_state.cdt,
-    };
-    
+    let cdt = current_state.get_cdt(m.constellation);
     let (sat_coord, corrected_pr) = compute_sat_state(m, cdt);
-    let sat_ecef = Vector3::new(sat_coord.vector.x, sat_coord.vector.y, sat_coord.vector.z);
     
-    let sat_ecef_rot = if config.enable_sagnac {
-        compute_sagnac_correction(sat_ecef, corrected_pr - cdt)
-    } else { sat_ecef };
+    let sat_ecef = if config.enable_sagnac {
+        compute_sagnac_correction(sat_coord.vector, corrected_pr - cdt)
+    } else { sat_coord.vector };
 
-    let dx = current_state.position.vector.x - sat_ecef_rot.x;
-    let dy = current_state.position.vector.y - sat_ecef_rot.y;
-    let dz = current_state.position.vector.z - sat_ecef_rot.z;
+    let dx = rec_ecef.x - sat_ecef.x;
+    let dy = rec_ecef.y - sat_ecef.y;
+    let dz = rec_ecef.z - sat_ecef.z;
     let r = f64::sqrt(dx * dx + dy * dy + dz * dz).max(1e-6);
 
-    let (az, el) = az_el(rec_llh, rec_ecef, sat_ecef_rot);
-    let (tropo_delay, mut iono_delay) = compute_atmospheric_delays(rec_ecef, rec_llh, az, el, m.time, iono_params, config);
+    let (az, el) = az_el(rec_llh, rec_ecef, sat_ecef);
+    let (tropo, mut iono) = compute_atmospheric_delays(rec_ecef, rec_llh, az, el, m.time, iono_params, config);
+    if m.is_iono_free { iono = 0.0; }
 
-    if m.is_iono_free {
-        iono_delay = 0.0;
-    }
-
-    let expected_pr = r + cdt + tropo_delay + iono_delay;
-    (dx, dy, dz, r, corrected_pr - expected_pr, el)
+    (dx, dy, dz, r, corrected_pr - (r + cdt + tropo + iono), el)
 }
 
 fn compute_sagnac_correction(sat_ecef: Vector3<f64>, geometric_pr: f64) -> Vector3<f64> {

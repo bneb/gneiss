@@ -232,81 +232,40 @@ impl UbxRxmRawx {
 
 /// Parses the payload of a UBX-RXM-RAWX message.
 pub fn parse_rxm_rawx(payload: &[u8]) -> Result<UbxRxmRawx, UbxParseError> {
-    if payload.len() < 16 {
-        return Err(UbxParseError::InvalidLength);
-    }
+    if payload.len() < 16 { return Err(UbxParseError::InvalidLength); }
 
-    let rcv_tow = f64::from_le_bytes(payload[0..8].try_into().map_err(|_| UbxParseError::InvalidLength)?);
-    let week = u16::from_le_bytes(payload[8..10].try_into().map_err(|_| UbxParseError::InvalidLength)?);
-    let leap_s = payload[10] as i8;
     let num_meas = payload[11];
-    let rec_stat = payload[12];
-    let version = payload[13];
-
     let expected_len = 16 + (num_meas as usize) * 32;
-    if payload.len() != expected_len {
-        return Err(UbxParseError::InvalidLength);
-    }
+    if payload.len() != expected_len { return Err(UbxParseError::InvalidLength); }
 
     let mut measurements = Vec::with_capacity(num_meas as usize);
-
     for i in 0..num_meas as usize {
-        let offset = 16 + i * 32;
-        let block = &payload[offset..offset + 32];
-
-        let pr_mes = f64::from_le_bytes(block[0..8].try_into().map_err(|_| UbxParseError::InvalidLength)?);
-        let cp_mes = f64::from_le_bytes(block[8..16].try_into().map_err(|_| UbxParseError::InvalidLength)?);
-        let do_mes = f32::from_le_bytes(block[16..20].try_into().map_err(|_| UbxParseError::InvalidLength)?);
-        let gnss_id = block[20];
-        let sv_id = block[21];
-        let sig_id = block[22];
-        let freq_id = block[23];
-        let locktime = u16::from_le_bytes(block[24..26].try_into().map_err(|_| UbxParseError::InvalidLength)?);
-        let cno = block[26];
-        
-        let pr_stdev_n = block[27];
-        let cp_stdev_n = block[28];
-        let do_stdev_n = block[29];
-        
-        let trk_stat = block[30];
-
-        let pr_valid = (trk_stat & 0x01) != 0;
-        let cp_valid = (trk_stat & 0x02) != 0;
-        let half_cycle_valid = (trk_stat & 0x04) != 0;
-        let sub_half_cycle = (trk_stat & 0x08) != 0;
-
-        let pr_stdev = 0.01 * f64::powi(2.0, pr_stdev_n as i32);
-        let cp_stdev = 0.004 * f64::powi(2.0, cp_stdev_n as i32);
-        let do_stdev = 0.002 * f64::powi(2.0, do_stdev_n as i32);
-
-        measurements.push(RxmRawxMeas {
-            pr_mes,
-            cp_mes,
-            do_mes,
-            gnss_id,
-            sv_id,
-            sig_id,
-            freq_id,
-            locktime,
-            cno,
-            pr_stdev,
-            cp_stdev,
-            do_stdev,
-            pr_valid,
-            cp_valid,
-            half_cycle_valid,
-            sub_half_cycle,
-        });
+        measurements.push(parse_rxm_rawx_block(&payload[16 + i * 32..16 + i * 32 + 32])?);
     }
 
     Ok(UbxRxmRawx {
-        rcv_tow,
-        week,
-        leap_s,
-        num_meas,
-        rec_stat,
-        version,
-        measurements,
+        rcv_tow: f64::from_le_bytes(payload[0..8].try_into().map_err(|_| UbxParseError::InvalidLength)?),
+        week: u16::from_le_bytes(payload[8..10].try_into().map_err(|_| UbxParseError::InvalidLength)?),
+        leap_s: payload[10] as i8, num_meas, rec_stat: payload[12], version: payload[13], measurements,
+    })
+}
+
+fn parse_rxm_rawx_block(block: &[u8]) -> Result<RxmRawxMeas, UbxParseError> {
+    let trk_stat = block[30];
+    Ok(RxmRawxMeas {
+        pr_mes: f64::from_le_bytes(block[0..8].try_into().map_err(|_| UbxParseError::InvalidLength)?),
+        cp_mes: f64::from_le_bytes(block[8..16].try_into().map_err(|_| UbxParseError::InvalidLength)?),
+        do_mes: f32::from_le_bytes(block[16..20].try_into().map_err(|_| UbxParseError::InvalidLength)?),
+        gnss_id: block[20], sv_id: block[21], sig_id: block[22], freq_id: block[23],
+        locktime: u16::from_le_bytes(block[24..26].try_into().map_err(|_| UbxParseError::InvalidLength)?),
+        cno: block[26],
+        pr_stdev: 0.01 * f64::powi(2.0, block[27] as i32),
+        cp_stdev: 0.004 * f64::powi(2.0, block[28] as i32),
+        do_stdev: 0.002 * f64::powi(2.0, block[29] as i32),
+        pr_valid: (trk_stat & 0x01) != 0,
+        cp_valid: (trk_stat & 0x02) != 0,
+        half_cycle_valid: (trk_stat & 0x04) != 0,
+        sub_half_cycle: (trk_stat & 0x08) != 0,
     })
 }
 
