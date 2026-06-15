@@ -171,7 +171,7 @@ impl Factor for ImuPreintegrationFactor {
     }
     
     fn information(&self) -> DMatrix<f64> {
-        self.preint.covariance.clone().cholesky().unwrap().inverse()
+        crate::math::inversion::invert_matrix_robust(&self.preint.covariance)
     }
 }
 

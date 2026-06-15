@@ -204,12 +204,10 @@ fn invert_p_pred(p_pred: &DMatrix<f64>, len: usize) -> Result<DMatrix<f64>, &'st
     }).collect();
     let m = active.len();
     if m == len {
-        let reg = DMatrix::identity(len, len) * MATRIX_INVERSION_REGULARIZATION;
-        Ok((p_pred + reg).cholesky().ok_or("cholesky failed")?.inverse())
+        Ok(crate::math::inversion::invert_matrix_robust(p_pred))
     } else if m > 0 {
         let p_act = extract_submatrix(p_pred, &active, &active);
-        let reg = DMatrix::identity(m, m) * MATRIX_INVERSION_REGULARIZATION;
-        let inv_act = (p_act + reg).cholesky().ok_or("cholesky failed")?.inverse();
+        let inv_act = crate::math::inversion::invert_matrix_robust(&p_act);
         let mut inv_full = DMatrix::zeros(len, len);
         for (i, &r) in active.iter().enumerate() {
             for (j, &c) in active.iter().enumerate() {

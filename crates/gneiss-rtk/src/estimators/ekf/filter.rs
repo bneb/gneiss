@@ -292,7 +292,7 @@ impl RtkState {
         fixed_state.fixed_state = None;
         crate::engine::updater::apply_state_correction(&mut fixed_state, &dx);
         let r_zero = DMatrix::zeros(subset_size, subset_size);
-        fixed_state.covariance = crate::engine::updater::apply_joseph_covariance_update(&self.covariance, &k_full, &d_full, &r_zero);
+        fixed_state.covariance = crate::math::covariance::apply_joseph_covariance_update(&self.covariance, &k_full, &d_full, &r_zero);
         fixed_state.is_fixed = true;
 
         Ok((fixed_state, da_meters, d_full))

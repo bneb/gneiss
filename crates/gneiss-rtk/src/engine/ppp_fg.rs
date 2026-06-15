@@ -1,4 +1,5 @@
 use nalgebra::{DMatrix, DVector, Vector3, UnitQuaternion};
+use crate::math::{thresholding::apply_huber, inversion::{invert_matrix_robust, solve_cholesky_svd}};
 use crate::engine::processed_sat::ProcessedSat;
 use crate::filter::{RtkState, CORE_STATE_SIZE};
 use crate::engine::EngineError;
@@ -116,9 +117,9 @@ impl PppFactorGraph {
         let htwh_damped = &htwh + p_inv;
         let innov = &htwr + p_inv * (x_pred - x_i);
         
-        match htwh_damped.cholesky() {
-            Some(chol) => Ok(Some(chol.solve(&innov))),
-            None => {
+        match solve_cholesky_svd(&htwh_damped, &innov, 1e-9) {
+            Ok(sol) => Ok(Some(sol)),
+            Err(_) => {
                 tracing::warn!("Failed to solve normal equations in PPP FG!");
                 Ok(None)
             }
@@ -280,10 +281,6 @@ fn build_weight_matrix(meas: &[FgMeasurement], r_mat: &DMatrix<f64>) -> DMatrix<
     w_mat
 }
 
-fn apply_huber(res: f64, var: f64, k: f64) -> f64 {
-    let norm_r = res.abs() / var.sqrt();
-    if norm_r > k { var * (norm_r / k) } else { var }
-}
 
 fn snr_scale(snr: i32) -> f64 {
     (10.0f64).powf((NOMINAL_SNR_DBHZ - snr as f64) / SNR_SCALE_DIVISOR)
@@ -291,8 +288,7 @@ fn snr_scale(snr: i32) -> f64 {
 
 fn invert_matrix(mat: &DMatrix<f64>) -> Option<DMatrix<f64>> {
     if mat.iter().any(|x| x.is_nan()) { return None; }
-    mat.clone().cholesky().map(|c| c.inverse())
-        .or_else(|| (mat.clone() + DMatrix::identity(mat.nrows(), mat.ncols()) * MATRIX_REGULARIZATION).try_inverse())
+    Some(invert_matrix_robust(mat))
 }
 
 fn find_ambiguity_index(state: &RtkState, sat: gneiss_core::sat::SatelliteId) -> Option<usize> {
@@ -446,19 +442,6 @@ mod tests {
     }
 
     #[test]
-    fn test_apply_huber() {
-        let res = apply_huber(1.0, 1.0, 3.0);
-        assert_eq!(res, 1.0);
-        
-        let res = apply_huber(-1.0, 1.0, 3.0);
-        assert_eq!(res, 1.0);
-        
-        let res = apply_huber(4.0, 1.0, 3.0);
-        assert!((res - 1.3333333333333333).abs() < 1e-10);
-        
-        let res = apply_huber(-6.0, 4.0, 2.0);
-        assert!((res - 6.0).abs() < 1e-10);
-    }
 
     #[test]
     fn test_snr_scale() {

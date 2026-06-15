@@ -125,7 +125,7 @@ impl FactorGraphOptimizer {
 
     fn solve_normal_equations(mut h: DMatrix<f64>, b: &DVector<f64>, lambda: f64) -> Option<DVector<f64>> {
         for i in 0..h.nrows() { h[(i, i)] += lambda * h[(i, i)].max(1e-9) + 1e-6; }
-        h.clone().cholesky().map(|d| d.solve(b)).or_else(|| h.svd(true, true).solve(b, 1e-14).ok())
+        crate::math::inversion::solve_cholesky_svd(&h, b, 1e-14).ok()
     }
 
     fn compute_error(&self, state: &DVector<f64>) -> f64 {
@@ -147,7 +147,7 @@ impl FactorGraphOptimizer {
             let weight = factor.robust_threshold().map_or(1.0, |k| 1.0 / (1.0 + maha_sq / (k * k)));
             h += jac.transpose() * &(info * weight) * jac;
         }
-        h.clone().cholesky().map(|c| c.inverse()).unwrap_or_else(|| h.pseudo_inverse(1e-9).unwrap_or_else(|_| DMatrix::identity(state.len(), state.len()) * 1e-6))
+        crate::math::inversion::invert_matrix_robust(&h)
     }
 }
 

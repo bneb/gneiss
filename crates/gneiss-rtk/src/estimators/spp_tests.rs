@@ -1,11 +1,12 @@
 use super::*;
+use gneiss_core::ephemeris::{Ephemeris, GpsEphemeris};
 use gneiss_core::time::GpsTime;
 use gneiss_core::sat::{Constellation, SatelliteId};
 use gneiss_core::obs::{EpochObs, SatObs, Observation, ObsCode, SignalCode, ObsType};
 use nalgebra::Vector3;
 
 fn make_ephemeris(constellation: Constellation, prn: u16, t: GpsTime, pos: (f64, f64, f64)) -> Ephemeris {
-    let sat_id = SatelliteId { constellation, prn };
+    let sat_id = SatelliteId { constellation, prn: prn as u8 };
     if constellation == Constellation::Gps {
         Ephemeris::Gps(gneiss_core::ephemeris::GpsEphemeris {
             sat: sat_id, toe: t, toc: t, af0: 0.0, af1: 0.0, af2: 0.0,

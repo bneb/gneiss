@@ -92,7 +92,7 @@ mod tests {
         let h = DMatrix::from_element(1, 3, 1.0);
         let r = DMatrix::from_element(1, 1, 1.0);
         
-        let p_new = crate::engine::updater_math::apply_joseph_covariance_update(&state_cov, &k, &h, &r);
+        let p_new = crate::math::covariance::apply_joseph_covariance_update(&state_cov, &k, &h, &r);
         
         // Ensure symmetric
         assert_eq!(p_new[(0, 1)], p_new[(1, 0)]);
@@ -289,7 +289,7 @@ mod tests {
         let k = DMatrix::zeros(2, 1);
         let h = DMatrix::zeros(1, 2);
         let r = DMatrix::zeros(1, 1);
-        let p_new = crate::engine::updater_math::apply_joseph_covariance_update(&p, &k, &h, &r);
+        let p_new = crate::math::covariance::apply_joseph_covariance_update(&p, &k, &h, &r);
         
         // (2.0 + 4.0) * 0.5 = 3.0
         assert_eq!(p_new[(0, 1)], 3.0, "Symmetry operator + or *0.5 mutated");

@@ -1,6 +1,9 @@
 use crate::filter::RtkState;
 use nalgebra::{DMatrix, DVector, Vector3, UnitQuaternion};
 pub use crate::engine::updater_math::*;
+use crate::math::inversion::invert_matrix_robust;
+use crate::math::covariance::apply_joseph_covariance_update;
+use crate::math::thresholding::huber_scale_covariance;
 
 #[derive(Debug)]
 pub enum UpdateError {
@@ -55,16 +58,10 @@ pub fn update_loosely_coupled(
     let z = compute_loose_coupling_innovations(r_b_e.matrix(), &state.position.vector, &state.velocity, &gnss_state.position.vector, &gnss_state.velocity, &lever_arm, &omega_b);
 
     // Compute raw Mahalanobis distance and apply Huber scaling if needed
-    let r_6x6 = huber_scale_covariance(&p_6x6, &r_6x6_raw, &z, tuning)?;
+    let r_6x6 = huber_scale_covariance(&p_6x6, &r_6x6_raw, &z, tuning.loosely_coupled_mahalanobis_sq).map_err(|_| UpdateError::SingularMatrix)?;
 
     let s = &p_6x6 + &r_6x6;
-    let s_inv = match s.clone().cholesky() {
-        Some(chol) => chol.inverse(),
-        None => match (s + DMatrix::identity(6, 6) * 1e-6).cholesky() {
-            Some(chol) => chol.inverse(),
-            None => return Err(UpdateError::SingularMatrix),
-        }
-    };
+    let s_inv = invert_matrix_robust(&s);
     
     let mut h_mat = DMatrix::zeros(6, state.covariance.ncols());
     h_mat.view_mut((0, 0), (6, 6)).fill_diagonal(1.0);
@@ -105,19 +102,7 @@ fn compute_update_iteration(
         return Err(UpdateError::SingularMatrix);
     }
     
-    let s_inv = match s.clone().cholesky() {
-        Some(chol) => chol.inverse(),
-        None => {
-            let regularized = s.clone() + DMatrix::identity(s.nrows(), s.ncols()) * 1e-6;
-            match regularized.try_inverse() {
-                Some(inv) => inv,
-                None => {
-                    tracing::warn!("EKF update failed: SingularMatrix (Cholesky and regularized inverse both failed)");
-                    return Err(UpdateError::SingularMatrix);
-                }
-            }
-        }
-    };
+    let s_inv = invert_matrix_robust(&s);
     
     let k = state_cov * current_h.transpose() * &s_inv;
     let dx = &k * current_z;
