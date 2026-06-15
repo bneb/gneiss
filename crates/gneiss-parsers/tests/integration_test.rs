@@ -63,6 +63,9 @@ fn test_real_world_rtcm3_parsing() {
         }
     }
     
+    assert!(eph_frames > 0, "Expected to decode at least one ephemeris frame");
+    assert!(msm_frames > 0, "Expected to decode at least one MSM frame");
+    
     println!("Total Frames Parsed: {}", total_frames);
     println!("MSM Frames Decoded: {}", msm_frames);
     println!("GPS Ephemeris Frames Decoded: {}", eph_frames);

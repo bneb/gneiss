@@ -1,0 +1,19 @@
+@@ -367,7 +375,7 @@
+         }
+     }
+     
+-    Ok((h_mat, w_mat, z_vec, valid_count, clocks))
++    Ok(SppDesignMatrices { h_mat, w_mat, z_vec, valid_count, clocks })
+ }
+ 
+ pub fn compute_spp_internal(measurements: &[SppMeasurement], ephemerides: &[Ephemeris], iono_params: Option<&KlobucharParams>, config: &SppConfig,
+@@ -381,7 +389,8 @@
+     for i in 0..config.max_iterations {
+         if last_update < 1e-4 { break; }
+         
+-        let (h_mat, w_mat, z_vec, valid_count, clocks) = build_design_matrix(&state, measurements, iono_params, config)?;
++        let matrices = build_design_matrix(&state, measurements, iono_params, config)?;
++        let (h_mat, w_mat, z_vec, valid_count, clocks) = (matrices.h_mat, matrices.w_mat, matrices.z_vec, matrices.valid_count, matrices.clocks);
+         if valid_count < 4 { return Err(SppError::NotEnoughMeasurements); }
+         
+         let (dx, cov) = solve_wls(&h_mat, &w_mat, &z_vec)?;

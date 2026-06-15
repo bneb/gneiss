@@ -57,9 +57,7 @@ fn test_ppp_skeleton() {
         satellites: vec![sat_obs],
     };
 
-    // Note: Ephemerides are missing, so the engine should gracefully return an error or skip.
+    // Note: Ephemerides are missing, so the engine should gracefully return an error.
     let result = engine.process_epoch(&epoch_obs, None);
-    
-    // As long as it doesn't crash, the skeleton is valid.
-    assert!(result.is_err() || result.is_ok());
+    assert!(result.is_err(), "Expected error due to missing ephemerides and insufficient satellites");
 }

@@ -23,16 +23,16 @@ pub fn run_combined_ppk(engine: &mut ProcessingEngine) -> Result<Vec<RtkState>, 
             continue;
         }
         
-        let phi_k = match &smoothed_states[k+1].core_phi {
-            Some(p) => p.clone(),
+        let phi_k: DMatrix<f64> = match &smoothed_states[k+1].core_phi {
+            Some(p) => DMatrix::<f64>::clone(p),
             None => continue,
         };
-        let p_pred_k1 = match &smoothed_states[k+1].full_p_predict {
-            Some(p) => p.clone(),
+        let p_pred_k1: DMatrix<f64> = match &smoothed_states[k+1].full_p_predict {
+            Some(p) => DMatrix::<f64>::clone(p),
             None => continue,
         };
-        let x_pred_k1 = match &smoothed_states[k+1].full_x_predict {
-            Some(x) => x.clone(),
+        let x_pred_k1: DVector<f64> = match &smoothed_states[k+1].full_x_predict {
+            Some(x) => DVector::<f64>::clone(x),
             None => continue,
         };
 
@@ -49,7 +49,8 @@ pub fn run_combined_ppk(engine: &mut ProcessingEngine) -> Result<Vec<RtkState>, 
         smoothed_states[k].fixed_state = None;
         if !matches!(engine.config.mode, EngineMode::Spp | EngineMode::SppIns) {
             let ephemerides = &engine.ephemerides;
-            if let Ok((fixed_state, _, _, _, _)) = smoothed_states[k].resolve_ambiguities(ephemerides, &engine.config) {
+            if let Ok(res) = smoothed_states[k].resolve_ambiguities(ephemerides, &engine.config) {
+                let fixed_state = res.fixed_state;
                 tracing::debug!("Integer ambiguities resolved during smoothing at epoch {}", k);
                 smoothed_states[k].fixed_state = Some(Box::new(fixed_state));
             }
@@ -97,7 +98,7 @@ fn smooth_epoch(
     
     if core_size > 6 {
         if let Some(predicted_attitude) = state_k1.predicted_attitude {
-            let dq = state_k1.attitude * predicted_attitude.inverse();
+            let predicted_attitude: nalgebra::UnitQuaternion<f64> = predicted_attitude; let dq = state_k1.attitude * predicted_attitude.inverse();
             let mut d_theta = dq.scaled_axis();
             if dq.w < 0.0 { d_theta = -d_theta; }
             delta_x.rows_mut(6, 3).copy_from(&d_theta);

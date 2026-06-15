@@ -133,9 +133,9 @@ mod tests {
         let expected_y = 307041.0 - 0.0022;
         let expected_z = 4919475.0 + 0.0032;
 
-        assert!((transformed.x - expected_x).abs() < 1e-4);
-        assert!((transformed.y - expected_y).abs() < 1e-4);
-        assert!((transformed.z - expected_z).abs() < 1e-4);
+        assert!((transformed.x - expected_x).abs() < 1e-9);
+        assert!((transformed.y - expected_y).abs() < 1e-9);
+        assert!((transformed.z - expected_z).abs() < 1e-9);
     }
 
     #[test]

@@ -49,7 +49,7 @@ mod integration {
         let _ = engine.process_epoch(&rover_obs, None);
 
         // Verify the engine properly absorbed the configuration
-        assert!(matches!(engine.config.mode, gneiss_rtk::engine::EngineMode::RtkIns | gneiss_rtk::engine::EngineMode::SppIns | gneiss_rtk::engine::EngineMode::PppIns));
+        assert!(matches!(engine.config.mode, gneiss_rtk::engine::EngineMode::RtkIns));
         assert_eq!(engine.config.imu_to_antenna_lever_arm[0], 0.1);
         
         // At this point, the cross-crate dependency graph is fully exercised.
@@ -58,4 +58,7 @@ mod integration {
 
 #[cfg(test)]
 mod urbannav_integration;
+
+#[cfg(test)]
+mod ppp_integration;
 

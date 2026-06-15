@@ -27,7 +27,7 @@ impl ProcessingEngine {
             self.current_state = Some(ins_state);
         }
 
-        let dt = rover_obs.time - self.current_state.as_ref().unwrap().time;
+        let dt = rover_obs.time.tow - self.current_state.as_ref().unwrap().time.tow ;
         self.predict_state(dt);
         let state = self.current_state.as_mut().unwrap();
         state.time = rover_obs.time;
@@ -107,7 +107,7 @@ impl ProcessingEngine {
             self.current_state = Some(ins_state);
         }
         
-        let dt = rover_obs.time - self.current_state.as_ref().unwrap().time;
+        let dt = rover_obs.time.tow - self.current_state.as_ref().unwrap().time.tow ;
         self.predict_state(dt);
         let state = self.current_state.as_mut().unwrap();
         state.time = rover_obs.time;

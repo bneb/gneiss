@@ -72,7 +72,7 @@ mod tests {
         assert_eq!(f2, FREQ_GLO_L2_NOMINAL - 4.0 * FREQ_GLO_L2_DELTA);
         
         let w1 = get_wavelength(sat, 1, -4);
-        assert!((w1 - 0.1873).abs() < 0.01);
+        assert!((w1 - 0.18740019).abs() < 1e-5);
     }
 
     #[test]

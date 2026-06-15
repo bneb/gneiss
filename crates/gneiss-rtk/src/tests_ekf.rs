@@ -17,12 +17,20 @@ mod tests {
         h[(1, 1)] = 1.0;
         let _r = DMatrix::from_diagonal(&DVector::from_vec(vec![0.1, 0.1]));
         
-        // Small subset of states to test update logic
-        // P initial = diag(10, 10)
         // K = P * H^T * (H P H^T + R)^-1
-        // K = 10 * 1 * (10 + 0.1)^-1 = 10 / 10.1 = 0.990099
-        // dx = K * Z = 0.99 * 1.0 = 0.990099
+        let p = &_state.covariance.view((0, 0), (2, 2));
+        let h_small = h.view((0, 0), (2, 2));
+        let s = &h_small * p * h_small.transpose() + &_r;
+        let s_inv = s.try_inverse().unwrap();
+        let k = p * h_small.transpose() * s_inv;
+        let dx = &k * &_z;
         
-
+        assert!((dx[0] - 0.990099).abs() < 1e-4, "EKF update X failed");
+        assert!((dx[1] - 1.980198).abs() < 1e-4, "EKF update Y failed");
+        
+        // P_new = (I - K*H) * P
+        let i_kh = DMatrix::identity(2, 2) - &k * h_small;
+        let p_new = i_kh * p;
+        assert!((p_new[(0, 0)] - 0.0990099).abs() < 1e-4, "EKF covariance update failed");
     }
 }

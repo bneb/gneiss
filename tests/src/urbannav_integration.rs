@@ -11,8 +11,8 @@ fn test_urbannav_tst_replay_skeleton() {
     
     let dataset_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../datasets/urbannav/TST1/rover.ubx");
     
-    // Skip if dataset is not present (it's large and not committed)
-    if !dataset_path.exists() {
+    // Skip if dataset is not present or empty (it's large and not committed)
+    if !dataset_path.exists() || std::fs::metadata(&dataset_path).map(|m| m.len()).unwrap_or(0) == 0 {
         return;
     }
 
@@ -27,13 +27,17 @@ fn test_urbannav_tst_replay_skeleton() {
     file.read_to_end(&mut buffer).unwrap();
 
     // Replay logic
-    let mut remaining = &buffer[..];
+    let mut pos = 0;
     let mut parsed_count = 0;
-    while let Ok((rem, _frame)) = parse_ubx_frame(remaining) {
-        // Feed frame into the engine (in a real test we'd parse the frame into an observation)
-        parsed_count += 1;
-        remaining = rem;
+    while pos < buffer.len() {
+        if let Ok((rem, _frame)) = parse_ubx_frame(&buffer[pos..]) {
+            parsed_count += 1;
+            pos = buffer.len() - rem.len();
+        } else {
+            pos += 1;
+        }
     }
     
     println!("Parsed {} UBX frames from the dataset.", parsed_count);
+    assert!(parsed_count > 0, "Expected to parse at least one UBX frame from the dataset");
 }

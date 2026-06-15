@@ -22,7 +22,7 @@ impl ProcessingEngine {
                 // Using a tighter variance of 9.0 (3m std dev) forces the INS to track the clean SPP positions
                 r_mat.fill_diagonal(9.0);
 
-                if crate::engine::updater::update(state, &z_vec, &h_mat, &r_mat, config.spp_consistency_threshold_m, None, config.mode.is_tightly_coupled() && state.ins_aligned, &config.tuning).map_or(true, |v| v.len() < 3) {
+                if crate::engine::updater::update::<crate::engine::updater_math::LooseCoupling>(state, &z_vec, &h_mat, &r_mat, config.spp_consistency_threshold_m, None, &config.tuning).map_or(true, |v| v.len() < 3) {
                     rejected = true;
                 }
             }
@@ -97,7 +97,7 @@ impl ProcessingEngine {
             }
         }
 
-        let dt = rover_obs.time - self.current_state.as_ref().ok_or(EngineError::StateDisappeared)?.time;
+        let dt = rover_obs.time.tow - self.current_state.as_ref().ok_or(EngineError::StateDisappeared)?.time.tow ;
         self.predict_state(dt);
         
         if let Some(pos) = spp_pos {

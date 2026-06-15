@@ -6,6 +6,7 @@ use gneiss_core::sat::SatelliteId;
 use nalgebra::{Vector3, DVector, DMatrix};
 use super::ProcessingEngine;
 use crate::engine::matcher::match_observations;
+use crate::engine::updater_math::{CouplingStrategy, TightCoupling, LooseCoupling};
 
 /// Apply adaptive R scaling based on innovation history.
 /// Updates the tracker with current innovations and inflates R diagonals
@@ -93,7 +94,7 @@ impl ProcessingEngine {
         let mut r_mat = nalgebra::DMatrix::zeros(3, 3);
         r_mat.fill_diagonal(900.0);
 
-        if let Err(e) = crate::engine::updater::update(state, &z_vec, &h_mat, &r_mat, config.spp_consistency_threshold_m, None, config.mode.is_tightly_coupled() && state.ins_aligned, &config.tuning) {
+        if let Err(e) = crate::engine::updater::update::<LooseCoupling>(state, &z_vec, &h_mat, &r_mat, config.spp_consistency_threshold_m, None, &config.tuning) {
             tracing::debug!("SPP Fallback update failed: {:?}", e);
         }
     }
@@ -109,7 +110,7 @@ impl ProcessingEngine {
         let mut rover_smoothed = rover_obs.clone();
         self.hatch_filter.smooth_epoch(&mut rover_smoothed);
 
-        let dt = rover_obs.time - self.current_state.as_ref().ok_or(EngineError::StateDisappeared)?.time;
+        let dt = rover_obs.time.tow - self.current_state.as_ref().ok_or(EngineError::StateDisappeared)?.time.tow ;
         
         if let Some(state) = &self.current_state {
             if !state.ins_aligned {
@@ -170,7 +171,7 @@ impl ProcessingEngine {
                     rover_obs: &rover_smoothed, base_obs: base, matched_obs: &matched_obs,
                     base_coord: &base_coord, spp_pos, spp_state_ref,
                 };
-                process_rtk_update(state, &mut self.innovation_tracker, &ctx);
+                process_rtk_update::<TightCoupling>(state, &mut self.innovation_tracker, &ctx);
             } else {
                 tracing::warn!("Not enough valid measurements for EKF update. Riding through outage.");
                 state.consecutive_rejections += 1;
@@ -183,7 +184,7 @@ impl ProcessingEngine {
         
         self.attempt_kinematic_alignment();
 
-        if let Some(state) = &self.current_state { self.state_history.push(state.clone()); }
+        if let Some(state) = &self.current_state { self.state_history.push(RtkState::clone(state)); }
         self.obs_history.push((rover_obs.clone(), base_obs.cloned()));
         self.current_state.as_ref().ok_or(EngineError::StateDisappeared)
     }
@@ -233,7 +234,8 @@ fn handle_ekf_acceptance(state: &mut RtkState, config: &EngineConfig, ephemeride
         if let Some(pos) = spp_pos { state.reset_to_spp(pos, spp_state_ref, !config.mode.is_ppp()); }
     }
     state.consecutive_rejections = 0;
-    if let Ok((fixed_state, _, _, _, _)) = state.resolve_ambiguities(ephemerides, config) {
+    if let Ok(res) = state.resolve_ambiguities(ephemerides, config) {
+        let fixed_state = res.fixed_state;
         tracing::debug!("Integer ambiguities resolved!");
         state.fixed_state = Some(Box::new(fixed_state));
     } else {
@@ -253,7 +255,7 @@ pub struct RtkUpdateContext<'a> {
     pub spp_state_ref: Option<&'a crate::spp::SppState>,
 }
 
-fn process_rtk_update(
+fn process_rtk_update<C: CouplingStrategy>(
     state: &mut RtkState, tracker: &mut crate::engine::adaptive::InnovationTracker, ctx: &RtkUpdateContext
 ) {
     crate::engine::ambiguity::manage_ambiguities_and_slips(state, ctx.config, ctx.matched_obs, ctx.ephemerides, ctx.base_coord, ctx.rover_obs.time, ctx.base_obs.time);
@@ -269,7 +271,7 @@ fn process_rtk_update(
     if let Some(mut m) = crate::engine::measurement::build_measurement_model(state, ctx.matched_obs, &env, pr_thresh, ctx.config.chi_square_cp_threshold) {
         apply_adaptive_r_scaling(tracker, state, &m.z, &m.h, &mut m.r, &m.mt);
         let type_stripped: Vec<_> = m.mt.iter().map(|&(s, t, _)| (s, t)).collect();
-        if crate::engine::updater::update(state, &m.z, &m.h, &m.r, pr_thresh, Some(&type_stripped), ctx.config.mode.is_tightly_coupled() && state.ins_aligned, &ctx.config.tuning).is_err() { 
+        if crate::engine::updater::update::<C>(state, &m.z, &m.h, &m.r, pr_thresh, Some(&type_stripped), &ctx.config.tuning).is_err() { 
             handle_ekf_rejection(state, ctx.config, ctx.spp_pos, ctx.spp_state_ref, "failed chi-square");
         } else {
             handle_ekf_acceptance(state, ctx.config, ctx.ephemerides, ctx.spp_pos, ctx.spp_state_ref);

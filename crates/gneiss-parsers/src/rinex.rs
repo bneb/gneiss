@@ -632,5 +632,7 @@ R 6 2020 12 24 21 15  0  .189751386642E-03  .000000000000E+00  .422910000000E+06
         
         // Year 2020, Month 12, Day 24, Hour 21, Min 15
         assert_eq!(eph.toe().week, 2137);
+        // Thursday 21:15 UTC + 18s leap seconds
+        assert!((eph.toe().tow - 422118.0).abs() < 1e-4, "Expected TOW near 422118.0, got {}", eph.toe().tow);
     }
 }

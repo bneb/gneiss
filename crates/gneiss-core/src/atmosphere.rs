@@ -202,6 +202,6 @@ mod tests {
     fn test_tropo_delay() {
         let params = TropoParams::default();
         let delay = AtmosphereModel::tropo_saastamoinen(&params, 0.5, 100.0);
-        assert!(delay > 2.0 && delay < 10.0);
+        assert!((delay - 4.94).abs() < 0.05, "Delay should be approximately 4.94m, got {}", delay);
     }
 }

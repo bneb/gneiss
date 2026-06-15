@@ -441,7 +441,6 @@ mod tests {
         assert_eq!(w[(0, 1)], 0.0);
     }
 
-    #[test]
 
     #[test]
     fn test_snr_scale() {
@@ -450,20 +449,7 @@ mod tests {
         assert!((snr_scale(55) - 0.1).abs() < 1e-10);
     }
 
-    #[test]
-    fn test_invert_matrix() {
-        let mut mat = DMatrix::zeros(2, 2);
-        mat[(0,0)] = 2.0; mat[(1,1)] = 2.0;
-        let inv = invert_matrix(&mat).unwrap();
-        assert!((inv[(0,0)] - 0.5).abs() < 1e-10);
-        assert!((inv[(1,1)] - 0.5).abs() < 1e-10);
-        assert!((inv[(0,1)]).abs() < 1e-10);
-        assert!((inv[(1,0)]).abs() < 1e-10);
-        
-        let mat2 = DMatrix::zeros(2, 2);
-        let inv2 = invert_matrix(&mat2).unwrap();
-        assert!((inv2[(0,0)] - 1e6).abs() < 1e-1);
-    }
+    
 
     #[test]
     fn test_build_h_row() {

@@ -9,7 +9,8 @@ pub fn apply_joseph_covariance_update(
 ) -> CovMatrix {
     let n = p.nrows();
     let i_kh = CovMatrix::identity(n, n) - k * h;
-    &i_kh * p * i_kh.transpose() + k * r * k.transpose()
+    let mut p_new = &i_kh * p * i_kh.transpose() + k * r * k.transpose();
+    p_new.symmetric_part()
 }
 
 pub fn apply_joseph_scalar(
@@ -29,6 +30,7 @@ pub fn apply_joseph_scalar(
     let i_kh = CovMatrix::identity(n, n) - k_h;
 
     *p = &i_kh * &*p * i_kh.transpose() + &k_i * r_i * k_i.transpose();
+    *p = p.symmetric_part();
     *dx += &k_i * v_i;
 }
 

@@ -1,5 +1,4 @@
 use crate::math::CovMatrix;
-use nalgebra::DMatrix;
 
 const DEFAULT_SVD_EPSILON: f64 = 1e-9;
 const DEFAULT_REGULARIZATION: f64 = 1e-6;
@@ -35,7 +34,8 @@ mod tests {
         let mut m_singular = CovMatrix::zeros(3, 3);
         m_singular[(0, 0)] = 1.0;
         let inv_singular = invert_matrix_robust(&m_singular);
-        assert!(inv_singular.nrows() == 3);
+        assert!((inv_singular[(0, 0)] - 1.0).abs() < 1e-6);
+        assert!((inv_singular[(1, 1)] - 0.0).abs() < 1e-6);
     }
     
     #[test]

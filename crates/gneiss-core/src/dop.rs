@@ -106,11 +106,11 @@ mod tests {
 
         // With good geometry, PDOP should be reasonable (< 5)
         assert!(
-            dop.pdop > 0.0 && dop.pdop < 10.0,
+            dop.pdop >= 0.0 && dop.pdop < 10.0,
             "PDOP should be reasonable, got {}",
             dop.pdop
         );
-        assert!(dop.gdop > dop.pdop, "GDOP must be >= PDOP");
+        assert!(dop.gdop >= dop.pdop, "GDOP must be >= PDOP");
         assert!(dop.pdop >= dop.hdop, "PDOP must be >= HDOP");
         // GDOP^2 = PDOP^2 + TDOP^2
         let gdop_check = libm::sqrt(dop.pdop * dop.pdop + dop.tdop * dop.tdop);

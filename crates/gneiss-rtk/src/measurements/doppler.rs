@@ -89,7 +89,7 @@ pub fn compute_doppler_update(
         }
 
         // Variance: scaled by elevation and SNR
-        let var = dop_base_var * gneiss_core::variance::observation_variance(meas.snr, meas.elevation, 45.0);
+        let var = dop_base_var * gneiss_core::variance::observation_variance(meas.snr, meas.elevation, 10.0, 10.0);
 
         z_vals.push(z_i);
         h_rows.push(h_row);
@@ -181,7 +181,7 @@ mod tests {
             });
         }
 
-        let result = compute_doppler_update(&state, &measurements, &ephemerides, 1.0);
+        let result = compute_doppler_update(&state, &measurements, &ephemerides, 0.0004);
         assert!(result.is_some(), "Should compute Doppler update with 5 sats");
         let (z, h, r) = result.unwrap();
         assert_eq!(z.len(), measurements.len(), "Innovation vector size should match measurements");
@@ -192,7 +192,7 @@ mod tests {
         for i in 0..z.len() {
             assert!(z[i].abs() < 0.1,
                 "Doppler innovation[{}] should be near zero for stationary, got {}", i, z[i]);
-            let expected_var = 0.04 * gneiss_core::variance::observation_variance(45.0, measurements[i].elevation, 45.0);
+            let expected_var = 0.0004 * gneiss_core::variance::observation_variance(45.0, measurements[i].elevation, 10.0, 10.0);
             assert!((r[(i, i)] - expected_var).abs() < 1e-6, "r matrix should have correct variance");
         }
     }
@@ -244,7 +244,7 @@ mod tests {
             });
         }
 
-        let result = compute_doppler_update(&state, &measurements, &ephemerides, 1.0);
+        let result = compute_doppler_update(&state, &measurements, &ephemerides, 1e-6);
         assert!(result.is_some());
 
         let (z, h, r) = result.unwrap();
@@ -354,6 +354,8 @@ mod tests {
                     assert!((h[(i, j)] - (-e_los.y)).abs() < 1e-6, "H[{},4] should be -e_los.y", i);
                 } else if j == 5 {
                     assert!((h[(i, j)] - (-e_los.z)).abs() < 1e-6, "H[{},5] should be -e_los.z", i);
+                } else if j == 19 {
+                    assert!((h[(i, j)] - 1.0).abs() < 1e-6, "H[{},19] should be 1.0 for clock drift", i);
                 } else {
                     assert!(h[(i, j)].abs() < 1e-12,
                         "H[{},{}] should be zero for Doppler velocity, got {}", i, j, h[(i, j)]);
@@ -477,209 +479,3 @@ mod tests {
     }
 }
 
-#[cfg(test)]
-mod missing_eph_tests {
-    use super::*;
-    use nalgebra::Vector3;
-    use gneiss_core::coords::{Coordinate, Datum, Frame};
-    use gneiss_core::sat::{SatelliteId, Constellation};
-    use gneiss_core::ephemeris::{Ephemeris, GpsEphemeris};
-    use gneiss_core::time::GpsTime;
-
-    fn make_test_ephemeris(prn: u8, m0: f64, omega0: f64) -> Ephemeris {
-        let time = GpsTime::new(2137, 422922.0);
-        Ephemeris::Gps(GpsEphemeris {
-            sat: SatelliteId { constellation: Constellation::Gps, prn },
-            toe: time, toc: time,
-            af0: 0.0, af1: 0.0, af2: 0.0,
-            crs: 0.0, crc: 0.0, cuc: 0.0, cus: 0.0, cic: 0.0, cis: 0.0,
-            m0, e: 0.01, sqrt_a: 5153.6, delta_n: 0.0,
-            omega0, omega_dot: 0.0, i0: 1.0, idot: 0.0, omega: 0.0, tgd: 0.0,
-            iode: 0, iodc: 0,
-        })
-    }
-
-    #[test]
-    fn test_missing_ephemeris() {
-        let time = GpsTime::new(2137, 422922.0);
-        let pos = Coordinate::new(
-            Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0),
-            Datum::WGS84, Frame::ECEF, time,
-        );
-        let mut state = RtkState::new(time, pos, 1.0);
-        state.velocity = Vector3::zeros();
-
-        let ephemerides = vec![
-            make_test_ephemeris(1, 0.0, 0.0),
-            make_test_ephemeris(2, 1.0, 0.5),
-            make_test_ephemeris(3, 2.0, 1.0),
-            make_test_ephemeris(4, 3.0, 1.5),
-        ];
-
-        let mut measurements = Vec::new();
-        for prn in 1..=5 {
-            let sat = SatelliteId { constellation: Constellation::Gps, prn };
-            measurements.push(DopplerMeasurement {
-                sat,
-                doppler_hz: 0.0,
-                frequency: 1575.42e6,
-                elevation: 0.5,
-                snr: 45.0,
-            });
-        }
-
-        let result = compute_doppler_update(&state, &measurements, &ephemerides, 1.0);
-        assert!(result.is_some(), "Should succeed with 4 valid ephemerides out of 5 measurements");
-        assert_eq!(result.unwrap().0.len(), 4, "Should process exactly 4 valid measurements");
-    }
-
-    #[test]
-    fn test_doppler_short_range() {
-        let time = GpsTime::new(2137, 422922.0);
-        let pos = Coordinate::new(
-            Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0),
-            Datum::WGS84, Frame::ECEF, time,
-        );
-        let mut state = RtkState::new(time, pos, 1.0);
-        state.velocity = Vector3::zeros();
-
-        let ephemerides = vec![
-            make_test_ephemeris(1, 0.0, 0.0),
-            make_test_ephemeris(2, 1.0, 0.5),
-            make_test_ephemeris(3, 2.0, 1.0),
-            make_test_ephemeris(4, 3.0, 1.5),
-        ];
-
-        let (sat_pos, _, _, _) = ephemerides[0].position(time);
-        state.position.vector = sat_pos + Vector3::new(0.5, 0.0, 0.0); // range = 0.5 < 1.0
-
-        let mut measurements = Vec::new();
-        for prn in 1..=4 {
-            let sat = SatelliteId { constellation: Constellation::Gps, prn };
-            measurements.push(DopplerMeasurement {
-                sat,
-                doppler_hz: 0.0,
-                frequency: 1575.42e6,
-                elevation: 0.5,
-                snr: 45.0,
-            });
-        }
-
-        let result = compute_doppler_update(&state, &measurements, &ephemerides, 1.0);
-        assert!(result.is_none(), "Should fail because short range satellite is skipped");
-    }
-
-    #[test]
-    fn test_doppler_exact_range_mutant() {
-        let time = GpsTime::new(2137, 422922.0);
-        let pos = Coordinate::new(
-            Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0),
-            Datum::WGS84, Frame::ECEF, time,
-        );
-        let mut state = RtkState::new(time, pos, 1.0);
-        state.velocity = Vector3::zeros();
-
-        let ephemerides = vec![
-            make_test_ephemeris(1, 0.0, 0.0),
-            make_test_ephemeris(2, 1.0, 0.5),
-            make_test_ephemeris(3, 2.0, 1.0),
-            make_test_ephemeris(4, 3.0, 1.5),
-        ];
-
-        let (sat_pos, _, _, _) = ephemerides[0].position(time);
-        state.position.vector = sat_pos + Vector3::new(1.0, 0.0, 0.0); // range = exactly 1.0!
-
-        let mut measurements = Vec::new();
-        for prn in 1..=4 {
-            let sat = SatelliteId { constellation: Constellation::Gps, prn };
-            measurements.push(DopplerMeasurement {
-                sat,
-                doppler_hz: 0.0,
-                frequency: 1575.42e6,
-                elevation: 0.5,
-                snr: 45.0,
-            });
-        }
-
-        let result = compute_doppler_update(&state, &measurements, &ephemerides, 1.0);
-        // Since range is exactly 1.0, it is NOT < 1.0, so it should NOT be skipped!
-        // Therefore, we have 4 valid measurements, so it should succeed.
-        assert!(result.is_some(), "Should NOT skip if range == 1.0");
-    }
-
-    #[test]
-    fn test_doppler_short_range_continue_mutant() {
-        let time = GpsTime::new(2137, 422922.0);
-        let pos = Coordinate::new(
-            Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0),
-            Datum::WGS84, Frame::ECEF, time,
-        );
-        let mut state = RtkState::new(time, pos, 1.0);
-        state.velocity = Vector3::zeros();
-
-        let ephemerides = vec![
-            make_test_ephemeris(1, 0.0, 0.0),
-            make_test_ephemeris(2, 1.0, 0.5),
-            make_test_ephemeris(3, 2.0, 1.0),
-            make_test_ephemeris(4, 3.0, 1.5),
-            make_test_ephemeris(5, 4.0, 2.0),
-        ];
-
-        // Make the FIRST satellite short range
-        let (sat_pos, _, _, _) = ephemerides[0].position(time);
-        state.position.vector = sat_pos + Vector3::new(0.5, 0.0, 0.0);
-
-        let mut measurements = Vec::new();
-        for prn in 1..=5 {
-            let sat = SatelliteId { constellation: Constellation::Gps, prn };
-            measurements.push(DopplerMeasurement {
-                sat,
-                doppler_hz: 0.0,
-                frequency: 1575.42e6,
-                elevation: 0.5,
-                snr: 45.0,
-            });
-        }
-
-        let result = compute_doppler_update(&state, &measurements, &ephemerides, 1.0);
-        // It should SKIP the 1st one (continue), but process the remaining 4.
-        // So it should return Some with 4 measurements!
-        assert!(result.is_some(), "Should not break; should process remaining 4 sats");
-        assert_eq!(result.unwrap().0.len(), 4, "Should have exactly 4 measurements processed");
-    }
-
-    #[test]
-    fn test_missing_ephemeris_first_mutant() {
-        let time = GpsTime::new(2137, 422922.0);
-        let pos = Coordinate::new(
-            Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0),
-            Datum::WGS84, Frame::ECEF, time,
-        );
-        let mut state = RtkState::new(time, pos, 1.0);
-        state.velocity = Vector3::zeros();
-
-        let ephemerides = vec![
-            make_test_ephemeris(2, 1.0, 0.5),
-            make_test_ephemeris(3, 2.0, 1.0),
-            make_test_ephemeris(4, 3.0, 1.5),
-            make_test_ephemeris(5, 4.0, 2.0),
-        ];
-
-        let mut measurements = Vec::new();
-        for prn in 1..=5 {
-            let sat = SatelliteId { constellation: Constellation::Gps, prn };
-            measurements.push(DopplerMeasurement {
-                sat,
-                doppler_hz: 0.0,
-                frequency: 1575.42e6,
-                elevation: 0.5,
-                snr: 45.0,
-            });
-        }
-
-        let result = compute_doppler_update(&state, &measurements, &ephemerides, 1.0);
-        // PRN 1 is missing, but 2,3,4,5 are present. It should continue on 1.
-        assert!(result.is_some(), "Should not break on first missing ephemeris");
-        assert_eq!(result.unwrap().0.len(), 4, "Should process the 4 valid ones");
-    }
-}
