@@ -61,30 +61,9 @@ fn parse_rinex_3_header<I: Iterator<Item = String>>(first_line: String, lines: &
             };
 
             let count = current_line[3..6].trim().parse::<usize>().unwrap_or(0);
-            let mut types = Vec::new();
-            
             let mut types_str = if current_line.len() >= 60 { current_line[7..60].to_string() } else { "".to_string() };
             
-            while types.len() < count {
-                for chunk in types_str.as_bytes().chunks(4) {
-                    let t = core::str::from_utf8(chunk).unwrap_or("").trim();
-                    if !t.is_empty() && types.len() < count {
-                        types.push(t.into());
-                    }
-                }
-                
-                if types.len() < count {
-                    if let Some(next_line) = lines.next() {
-                        current_line = next_line;
-                        if !current_line.contains("SYS / # / OBS TYPES") {
-                            return Err("Expected continuation of SYS / # / OBS TYPES".into());
-                        }
-                        types_str = if current_line.len() >= 60 { current_line[7..60].to_string() } else { "".to_string() };
-                    } else {
-                        break;
-                    }
-                }
-            }
+            let types = parse_rinex_3_obs_types_list(count, &mut types_str, lines, &mut current_line)?;
             const_obs_types.insert(constellation, types);
         }
         if current_line.contains("END OF HEADER") {
@@ -101,6 +80,24 @@ fn parse_rinex_3_header<I: Iterator<Item = String>>(first_line: String, lines: &
         return Err("No observation types found in RINEX 3 header".into());
     }
     Ok(const_obs_types)
+}
+
+fn parse_rinex_3_obs_types_list<I: Iterator<Item = String>>(count: usize, types_str: &mut String, lines: &mut I, current_line: &mut String) -> Result<Vec<String>, String> {
+    let mut types = Vec::new();
+    while types.len() < count {
+        for chunk in types_str.as_bytes().chunks(4) {
+            let t = core::str::from_utf8(chunk).unwrap_or("").trim();
+            if !t.is_empty() && types.len() < count { types.push(t.into()); }
+        }
+        if types.len() < count {
+            if let Some(next_line) = lines.next() {
+                *current_line = next_line;
+                if !current_line.contains("SYS / # / OBS TYPES") { return Err("Expected continuation of SYS / # / OBS TYPES".into()); }
+                *types_str = if current_line.len() >= 60 { current_line[7..60].to_string() } else { "".to_string() };
+            } else { break; }
+        }
+    }
+    Ok(types)
 }
 
 /// Parses a RINEX 2.xx or 3.xx Observation file and returns a list of EpochObs.
@@ -347,65 +344,68 @@ fn build_ephemeris(
     af2: f64,
     vals: &[f64; 32]
 ) -> Option<gneiss_core::ephemeris::Ephemeris> {
-    use gneiss_core::ephemeris::{Ephemeris, GpsEphemeris, GalileoEphemeris, BeidouEphemeris, QzssEphemeris, GlonassEphemeris};
     match constellation {
-        Constellation::Glonass => {
-            Some(Ephemeris::Glonass(GlonassEphemeris {
-                sat,
-                toe: toc, 
-                freq_num: vals[7] as i8, 
-                tau_n: af0, gamma_n: af1, delta_tau_n: af2,
-                x: vals[0] * 1000.0, y: vals[4] * 1000.0, z: vals[8] * 1000.0, 
-                vx: vals[1] * 1000.0, vy: vals[5] * 1000.0, vz: vals[9] * 1000.0,
-                ax: vals[2] * 1000.0, ay: vals[6] * 1000.0, az: vals[10] * 1000.0,
-            }))
-        },
-        Constellation::Gps => {
-            Some(Ephemeris::Gps(GpsEphemeris {
-                sat, toc, toe: GpsTime::new(toc.week, vals[8]),
-                af0, af1, af2,
-                iode: vals[0] as u32, crs: vals[1], delta_n: vals[2], m0: vals[3],
-                cuc: vals[4], e: vals[5], cus: vals[6], sqrt_a: vals[7],
-                cic: vals[9], omega0: vals[10], cis: vals[11],
-                i0: vals[12], crc: vals[13], omega: vals[14], omega_dot: vals[15],
-                idot: vals[16], tgd: vals[22], iodc: vals[23] as u32,
-            }))
-        },
-        Constellation::Galileo => {
-            Some(Ephemeris::Galileo(GalileoEphemeris {
-                sat, toc, toe: GpsTime::new(toc.week, vals[8]),
-                af0, af1, af2,
-                iod_nav: vals[0] as u32, crs: vals[1], delta_n: vals[2], m0: vals[3],
-                cuc: vals[4], e: vals[5], cus: vals[6], sqrt_a: vals[7],
-                cic: vals[9], omega0: vals[10], cis: vals[11],
-                i0: vals[12], crc: vals[13], omega: vals[14], omega_dot: vals[15],
-                idot: vals[16], bgd_e1_e5a: vals[22],
-            }))
-        },
-        Constellation::Beidou => {
-            Some(Ephemeris::Beidou(BeidouEphemeris {
-                sat, toc, toe: GpsTime::new(toc.week, vals[8]),
-                af0, af1, af2,
-                aode: vals[0] as u32, crs: vals[1], delta_n: vals[2], m0: vals[3],
-                cuc: vals[4], e: vals[5], cus: vals[6], sqrt_a: vals[7],
-                cic: vals[9], omega0: vals[10], cis: vals[11],
-                i0: vals[12], crc: vals[13], omega: vals[14], omega_dot: vals[15],
-                idot: vals[16], tgd1: vals[22], aodc: vals[23] as u32,
-            }))
-        },
-        Constellation::Qzss => {
-            Some(Ephemeris::Qzss(QzssEphemeris {
-                sat, toc, toe: GpsTime::new(toc.week, vals[8]),
-                af0, af1, af2,
-                iode: vals[0] as u32, crs: vals[1], delta_n: vals[2], m0: vals[3],
-                cuc: vals[4], e: vals[5], cus: vals[6], sqrt_a: vals[7],
-                cic: vals[9], omega0: vals[10], cis: vals[11],
-                i0: vals[12], crc: vals[13], omega: vals[14], omega_dot: vals[15],
-                idot: vals[16], tgd: vals[22], iodc: vals[23] as u32,
-            }))
-        },
+        Constellation::Glonass => build_glonass_ephemeris(sat, toc, af0, af1, af2, vals),
+        Constellation::Gps => build_gps_ephemeris(sat, toc, af0, af1, af2, vals),
+        Constellation::Galileo => build_galileo_ephemeris(sat, toc, af0, af1, af2, vals),
+        Constellation::Beidou => build_beidou_ephemeris(sat, toc, af0, af1, af2, vals),
+        Constellation::Qzss => build_qzss_ephemeris(sat, toc, af0, af1, af2, vals),
         _ => None
     }
+}
+
+fn build_glonass_ephemeris(sat: SatelliteId, toc: GpsTime, af0: f64, af1: f64, af2: f64, vals: &[f64; 32]) -> Option<gneiss_core::ephemeris::Ephemeris> {
+    Some(gneiss_core::ephemeris::Ephemeris::Glonass(gneiss_core::ephemeris::GlonassEphemeris {
+        sat, toe: toc, freq_num: vals[7] as i8, 
+        tau_n: af0, gamma_n: af1, delta_tau_n: af2,
+        x: vals[0] * 1000.0, y: vals[4] * 1000.0, z: vals[8] * 1000.0, 
+        vx: vals[1] * 1000.0, vy: vals[5] * 1000.0, vz: vals[9] * 1000.0,
+        ax: vals[2] * 1000.0, ay: vals[6] * 1000.0, az: vals[10] * 1000.0,
+    }))
+}
+
+fn build_gps_ephemeris(sat: SatelliteId, toc: GpsTime, af0: f64, af1: f64, af2: f64, vals: &[f64; 32]) -> Option<gneiss_core::ephemeris::Ephemeris> {
+    Some(gneiss_core::ephemeris::Ephemeris::Gps(gneiss_core::ephemeris::GpsEphemeris {
+        sat, toc, toe: GpsTime::new(toc.week, vals[8]), af0, af1, af2,
+        iode: vals[0] as u32, crs: vals[1], delta_n: vals[2], m0: vals[3],
+        cuc: vals[4], e: vals[5], cus: vals[6], sqrt_a: vals[7],
+        cic: vals[9], omega0: vals[10], cis: vals[11],
+        i0: vals[12], crc: vals[13], omega: vals[14], omega_dot: vals[15],
+        idot: vals[16], tgd: vals[22], iodc: vals[23] as u32,
+    }))
+}
+
+fn build_galileo_ephemeris(sat: SatelliteId, toc: GpsTime, af0: f64, af1: f64, af2: f64, vals: &[f64; 32]) -> Option<gneiss_core::ephemeris::Ephemeris> {
+    Some(gneiss_core::ephemeris::Ephemeris::Galileo(gneiss_core::ephemeris::GalileoEphemeris {
+        sat, toc, toe: GpsTime::new(toc.week, vals[8]), af0, af1, af2,
+        iod_nav: vals[0] as u32, crs: vals[1], delta_n: vals[2], m0: vals[3],
+        cuc: vals[4], e: vals[5], cus: vals[6], sqrt_a: vals[7],
+        cic: vals[9], omega0: vals[10], cis: vals[11],
+        i0: vals[12], crc: vals[13], omega: vals[14], omega_dot: vals[15],
+        idot: vals[16], bgd_e1_e5a: vals[22],
+    }))
+}
+
+fn build_beidou_ephemeris(sat: SatelliteId, toc: GpsTime, af0: f64, af1: f64, af2: f64, vals: &[f64; 32]) -> Option<gneiss_core::ephemeris::Ephemeris> {
+    Some(gneiss_core::ephemeris::Ephemeris::Beidou(gneiss_core::ephemeris::BeidouEphemeris {
+        sat, toc, toe: GpsTime::new(toc.week, vals[8]), af0, af1, af2,
+        aode: vals[0] as u32, crs: vals[1], delta_n: vals[2], m0: vals[3],
+        cuc: vals[4], e: vals[5], cus: vals[6], sqrt_a: vals[7],
+        cic: vals[9], omega0: vals[10], cis: vals[11],
+        i0: vals[12], crc: vals[13], omega: vals[14], omega_dot: vals[15],
+        idot: vals[16], tgd1: vals[22], aodc: vals[23] as u32,
+    }))
+}
+
+fn build_qzss_ephemeris(sat: SatelliteId, toc: GpsTime, af0: f64, af1: f64, af2: f64, vals: &[f64; 32]) -> Option<gneiss_core::ephemeris::Ephemeris> {
+    Some(gneiss_core::ephemeris::Ephemeris::Qzss(gneiss_core::ephemeris::QzssEphemeris {
+        sat, toc, toe: GpsTime::new(toc.week, vals[8]), af0, af1, af2,
+        iode: vals[0] as u32, crs: vals[1], delta_n: vals[2], m0: vals[3],
+        cuc: vals[4], e: vals[5], cus: vals[6], sqrt_a: vals[7],
+        cic: vals[9], omega0: vals[10], cis: vals[11],
+        i0: vals[12], crc: vals[13], omega: vals[14], omega_dot: vals[15],
+        idot: vals[16], tgd: vals[22], iodc: vals[23] as u32,
+    }))
 }
 
 pub fn parse_rinex_nav<R: BufRead>(reader: R) -> Result<(Vec<gneiss_core::ephemeris::Ephemeris>, Option<gneiss_core::atmosphere::KlobucharParams>), String> {
@@ -413,40 +413,8 @@ pub fn parse_rinex_nav<R: BufRead>(reader: R) -> Result<(Vec<gneiss_core::epheme
     let mut lines = reader.lines().map(|l| l.unwrap_or_default());
 
     let mut is_rinex_3 = false;
-    let mut alpha = [0.0; 4];
-    let mut beta = [0.0; 4];
-    let mut has_alpha = false;
-    let mut has_beta = false;
+    let klobuchar = parse_rinex_nav_header(&mut lines, &mut is_rinex_3);
 
-    for line in lines.by_ref() {
-        if line.contains("RINEX VERSION / TYPE")
-            && line.trim().starts_with('3') { is_rinex_3 = true; }
-        
-        if line.contains("ION ALPHA") || line.contains("IONOSPHERIC CORR") && line.contains("GPSA") {
-            let offset = if line.contains("GPSA") { 5 } else { 2 };
-            alpha[0] = parse_rinex_f64(if line.len() >= offset + 12 { &line[offset..offset+12] } else { "" }).unwrap_or(0.0);
-            alpha[1] = parse_rinex_f64(if line.len() >= offset + 24 { &line[offset+12..offset+24] } else { "" }).unwrap_or(0.0);
-            alpha[2] = parse_rinex_f64(if line.len() >= offset + 36 { &line[offset+24..offset+36] } else { "" }).unwrap_or(0.0);
-            alpha[3] = parse_rinex_f64(if line.len() >= offset + 48 { &line[offset+36..offset+48] } else { "" }).unwrap_or(0.0);
-            has_alpha = true;
-        }
-        if line.contains("ION BETA") || line.contains("IONOSPHERIC CORR") && line.contains("GPSB") {
-            let offset = if line.contains("GPSB") { 5 } else { 2 };
-            beta[0] = parse_rinex_f64(if line.len() >= offset + 12 { &line[offset..offset+12] } else { "" }).unwrap_or(0.0);
-            beta[1] = parse_rinex_f64(if line.len() >= offset + 24 { &line[offset+12..offset+24] } else { "" }).unwrap_or(0.0);
-            beta[2] = parse_rinex_f64(if line.len() >= offset + 36 { &line[offset+24..offset+36] } else { "" }).unwrap_or(0.0);
-            beta[3] = parse_rinex_f64(if line.len() >= offset + 48 { &line[offset+36..offset+48] } else { "" }).unwrap_or(0.0);
-            has_beta = true;
-        }
-
-        if line.contains("END OF HEADER") { break; }
-    }
-
-    let klobuchar = if has_alpha && has_beta {
-        Some(gneiss_core::atmosphere::KlobucharParams { alpha, beta })
-    } else {
-        None
-    };
 
     let mut current_constellation = Constellation::Gps;
     let mut current_prn = 0;
@@ -487,47 +455,7 @@ pub fn parse_rinex_nav<R: BufRead>(reader: R) -> Result<(Vec<gneiss_core::epheme
                 0
             };
 
-            let year_str = if is_rinex_3 { 
-                if line.len() >= 8 { &line[4..8] } else { "" }
-            } else if line.len() >= 5 {
-                &line[3..5]
-            } else {
-                ""
-            };
-            let mut year = year_str.trim().parse::<i32>().unwrap_or(0);
-            if year < 100 { year += if year > 80 { 1900 } else { 2000 }; }
-            
-            let month = if is_rinex_3 {
-                if line.len() >= 11 { line[9..11].trim().parse::<i32>().unwrap_or(0) } else { 0 }
-            } else if line.len() >= 8 {
-                line[5..8].trim().parse::<i32>().unwrap_or(0)
-            } else { 0 };
-            
-            let day = if is_rinex_3 {
-                if line.len() >= 14 { line[12..14].trim().parse::<i32>().unwrap_or(0) } else { 0 }
-            } else if line.len() >= 11 {
-                line[8..11].trim().parse::<i32>().unwrap_or(0)
-            } else { 0 };
-            
-            let hour = if is_rinex_3 {
-                if line.len() >= 17 { line[15..17].trim().parse::<i32>().unwrap_or(0) } else { 0 }
-            } else if line.len() >= 14 {
-                line[11..14].trim().parse::<i32>().unwrap_or(0)
-            } else { 0 };
-            
-            let min = if is_rinex_3 {
-                if line.len() >= 20 { line[18..20].trim().parse::<i32>().unwrap_or(0) } else { 0 }
-            } else if line.len() >= 17 {
-                line[14..17].trim().parse::<i32>().unwrap_or(0)
-            } else { 0 };
-            
-            let sec = if is_rinex_3 {
-                if line.len() >= 23 { line[21..23].trim().parse::<f64>().unwrap_or(0.0) } else { 0.0 }
-            } else if line.len() >= 22 {
-                line[17..22].trim().parse::<f64>().unwrap_or(0.0)
-            } else { 0.0 };
-
-            let mut toc_gpst = GpsTime::from_calendar(year, month, day, hour, min, sec);
+            let mut toc_gpst = parse_rinex_nav_epoch_time(&line, is_rinex_3);
             match current_constellation {
                 Constellation::Glonass => toc_gpst.tow += 18.0,
                 Constellation::Beidou => toc_gpst.tow += 14.0,
@@ -571,6 +499,73 @@ pub fn parse_rinex_nav<R: BufRead>(reader: R) -> Result<(Vec<gneiss_core::epheme
     }
     Ok((ephemerides, klobuchar))
 }
+
+fn parse_rinex_nav_header(lines: &mut impl Iterator<Item = String>, is_rinex_3: &mut bool) -> Option<gneiss_core::atmosphere::KlobucharParams> {
+    let mut alpha = [0.0; 4];
+    let mut beta = [0.0; 4];
+    let mut has_alpha = false;
+    let mut has_beta = false;
+
+    for line in lines {
+        if line.contains("RINEX VERSION / TYPE") && line.trim().starts_with('3') { 
+            *is_rinex_3 = true; 
+        }
+        
+        if line.contains("ION ALPHA") || line.contains("IONOSPHERIC CORR") && line.contains("GPSA") {
+            let offset = if line.contains("GPSA") { 5 } else { 2 };
+            alpha[0] = parse_rinex_f64(if line.len() >= offset + 12 { &line[offset..offset+12] } else { "" }).unwrap_or(0.0);
+            alpha[1] = parse_rinex_f64(if line.len() >= offset + 24 { &line[offset+12..offset+24] } else { "" }).unwrap_or(0.0);
+            alpha[2] = parse_rinex_f64(if line.len() >= offset + 36 { &line[offset+24..offset+36] } else { "" }).unwrap_or(0.0);
+            alpha[3] = parse_rinex_f64(if line.len() >= offset + 48 { &line[offset+36..offset+48] } else { "" }).unwrap_or(0.0);
+            has_alpha = true;
+        }
+        if line.contains("ION BETA") || line.contains("IONOSPHERIC CORR") && line.contains("GPSB") {
+            let offset = if line.contains("GPSB") { 5 } else { 2 };
+            beta[0] = parse_rinex_f64(if line.len() >= offset + 12 { &line[offset..offset+12] } else { "" }).unwrap_or(0.0);
+            beta[1] = parse_rinex_f64(if line.len() >= offset + 24 { &line[offset+12..offset+24] } else { "" }).unwrap_or(0.0);
+            beta[2] = parse_rinex_f64(if line.len() >= offset + 36 { &line[offset+24..offset+36] } else { "" }).unwrap_or(0.0);
+            beta[3] = parse_rinex_f64(if line.len() >= offset + 48 { &line[offset+36..offset+48] } else { "" }).unwrap_or(0.0);
+            has_beta = true;
+        }
+
+        if line.contains("END OF HEADER") { break; }
+    }
+
+    if has_alpha && has_beta {
+        Some(gneiss_core::atmosphere::KlobucharParams { alpha, beta })
+    } else {
+        None
+    }
+}
+
+fn parse_rinex_nav_epoch_time(line: &str, is_rinex_3: bool) -> GpsTime {
+    let (i_y, i_m, i_d, i_h, i_min, i_s) = if is_rinex_3 {
+        ((4,8), (9,11), (12,14), (15,17), (18,20), (21,23))
+    } else {
+        ((3,5), (5,8), (8,11), (11,14), (14,17), (17,22))
+    };
+
+    let parse_i32 = |start: usize, end: usize| -> i32 {
+        if line.len() >= end { line[start..end].trim().parse().unwrap_or(0) } else { 0 }
+    };
+    let parse_f64 = |start: usize, end: usize| -> f64 {
+        if line.len() >= end { line[start..end].trim().parse().unwrap_or(0.0) } else { 0.0 }
+    };
+
+    let mut year = parse_i32(i_y.0, i_y.1);
+    if year < 100 { year += if year > 80 { 1900 } else { 2000 }; }
+
+    GpsTime::from_calendar(
+        year,
+        parse_i32(i_m.0, i_m.1),
+        parse_i32(i_d.0, i_d.1),
+        parse_i32(i_h.0, i_h.1),
+        parse_i32(i_min.0, i_min.1),
+        parse_f64(i_s.0, i_s.1)
+    )
+}
+
+
 
 #[cfg(test)]
 mod test_nav_parser {
