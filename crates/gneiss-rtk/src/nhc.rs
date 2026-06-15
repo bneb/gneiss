@@ -17,7 +17,7 @@ pub fn apply_nhc(
     // The EKF state (attitude, velocity) is already tracking the vehicle frame 
     // because IMU measurements are rotated into the vehicle frame at ingestion.
     // Therefore, the body frame (b) IS the vehicle frame (v).
-    let r_b_v = nalgebra::Rotation3::<f64>::identity();
+    let _r_b_v = nalgebra::Rotation3::<f64>::identity();
     
     // Convert IMU velocity to vehicle frame
     let v_b_imu = r_e_b * state.velocity;

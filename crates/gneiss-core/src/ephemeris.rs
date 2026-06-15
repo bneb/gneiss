@@ -444,13 +444,13 @@ mod tests {
         assert_eq!(e_glo.freq_num(), 7);
 
         // Calculate positions
-        let p_gps = gps_eph.position(t);
-        let p_gal = gal_eph.position(t);
-        let p_bds_geo = bds_geo_eph.position(t);
-        let p_bds_igso = bds_igso_eph.position(t);
-        let p_qzss = qzss_eph.position(t);
-        let p_glo_fwd = glo_eph_fwd.position(t);
-        let p_glo_bwd = glo_eph_bwd.position(GpsTime::new(2000, 99940.0));
+        let _p_gps = gps_eph.position(t);
+        let _p_gal = gal_eph.position(t);
+        let _p_bds_geo = bds_geo_eph.position(t);
+        let _p_bds_igso = bds_igso_eph.position(t);
+        let _p_qzss = qzss_eph.position(t);
+        let _p_glo_fwd = glo_eph_fwd.position(t);
+        let _p_glo_bwd = glo_eph_bwd.position(GpsTime::new(2000, 99940.0));
         
         // Assert exact values to kill arithmetic mutants
         use nalgebra::Vector3;

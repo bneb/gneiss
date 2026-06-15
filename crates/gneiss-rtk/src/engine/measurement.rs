@@ -59,6 +59,12 @@ pub struct EkfUpdates {
     pub mt: Vec<(gneiss_core::sat::SatelliteId, u8, f64)>,
 }
 
+impl Default for EkfUpdates {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl EkfUpdates {
     pub fn new() -> Self {
         Self { z: Vec::new(), h: Vec::new(), r: Vec::new(), mt: Vec::new() }
@@ -319,11 +325,11 @@ impl EkfGeometryContext {
 
 #[allow(clippy::too_many_arguments)]
 #[allow(clippy::too_many_arguments)]
-fn find_ephemeris<'a>(
-    ephemerides: &'a [gneiss_core::ephemeris::Ephemeris],
+fn find_ephemeris(
+    ephemerides: &[gneiss_core::ephemeris::Ephemeris],
     sat: gneiss_core::sat::SatelliteId,
     time_tow: f64,
-) -> Option<&'a gneiss_core::ephemeris::Ephemeris> {
+) -> Option<&gneiss_core::ephemeris::Ephemeris> {
     ephemerides.iter().filter(|e| e.sat() == sat).min_by(|a, b| {
         let da = (a.toe().tow - time_tow).abs();
         let db = (b.toe().tow - time_tow).abs();

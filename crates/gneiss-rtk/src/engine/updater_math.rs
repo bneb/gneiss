@@ -159,7 +159,7 @@ pub fn evaluate_post_fit_outliers(
     for i in 0..v.len() {
         let meas_type = meas_types.map_or(0, |m| m[current_valid[i]].1);
         let ratio = v[i].abs() / s[(i, i)].sqrt();
-        let (thresh, abs_thresh) = compute_scalar_thresholds(meas_type, max_innovation, tuning, is_tightly_coupled);
+        let (_thresh, abs_thresh) = compute_scalar_thresholds(meas_type, max_innovation, tuning, is_tightly_coupled);
         
         // Scale absolute threshold by the filter's uncertainty for pseudoranges to prevent getting stuck
         // when the filter has intentionally inflated its covariance. Carrier phases should strictly use

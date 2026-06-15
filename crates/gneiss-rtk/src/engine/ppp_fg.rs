@@ -161,7 +161,7 @@ impl PppFactorGraph {
                 }
             } else { 0.0 };
             let pr_meas = sat.p_meas;
-            let amb_idx = find_ambiguity_index(state, sat.sat_obs.sat).unwrap_or(0);
+            let _amb_idx = find_ambiguity_index(state, sat.sat_obs.sat).unwrap_or(0);
             let expected_base = dist + x_i[15] + isb - sat.dt_sat_m + sat.tropo_dry + ztd * sat.map_wet;
             let expected_pr = if sat.is_iono_free {
                 expected_base
@@ -267,7 +267,7 @@ fn log_ppp_convergence(state: &RtkState, sats: &[ProcessedSat], x_i: &DVector<f6
             }
         }
     }
-    if state.epoch_count % 100 == 0 {
+    if state.epoch_count.is_multiple_of(100) {
         tracing::trace!("Epoch {}: Mean PR Res = {:.3} m, Mean RR Res = {:.3} m/s", state.epoch_count, sum_pr / count_pr.max(1) as f64, sum_rr / count_rr.max(1) as f64);
     }
 }

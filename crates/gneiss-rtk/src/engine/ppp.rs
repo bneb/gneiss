@@ -3,7 +3,6 @@ use crate::filter::RtkState;
 use crate::engine::{EngineError, ProcessingEngine};
 use crate::engine::processed_sat::ProcessedSat;
 use crate::engine::ppp_fg::PppFactorGraph;
-use gneiss_core::sat::SatelliteId;
 use nalgebra::Vector3;
 use chrono::TimeZone;
 
@@ -91,11 +90,11 @@ fn build_sats<'a>(engine: &ProcessingEngine, rover_obs: &'a EpochObs) -> Vec<Pro
             Some(p) => p,
             None => continue,
         };
-        let mut cp1 = match sat_obs.sat.constellation {
+        let cp1 = match sat_obs.sat.constellation {
             gneiss_core::sat::Constellation::Beidou => sat_obs.get_observable_phase(2),
             _ => sat_obs.get_observable_phase(1),
         };
-        let mut cp2 = match sat_obs.sat.constellation {
+        let cp2 = match sat_obs.sat.constellation {
             gneiss_core::sat::Constellation::Galileo => sat_obs.get_observable_phase(7).or(sat_obs.get_observable_phase(5)),
             gneiss_core::sat::Constellation::Beidou => sat_obs.get_observable_phase(7).or(sat_obs.get_observable_phase(6)),
             _ => sat_obs.get_observable_phase(2),

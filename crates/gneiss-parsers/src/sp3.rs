@@ -38,7 +38,7 @@ pub fn parse_sp3<R: BufRead>(reader: R) -> Result<Vec<Sp3Epoch>, String> {
                 parts[4].parse::<u32>(),
                 parts[5].parse::<f64>(),
             ) {
-                if let Some(mut epoch) = current_epoch.take() {
+                if let Some(epoch) = current_epoch.take() {
                     epochs.push(epoch);
                 }
 

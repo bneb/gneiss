@@ -143,7 +143,7 @@ impl ProcessingEngine {
             state.is_reset = false;
         }
 
-        if state.is_reset || self.state_history.len() % 100 == 0 {
+        if state.is_reset || self.state_history.len().is_multiple_of(100) {
             tracing::info!("INS State: AccelBias={:.5?} GyroBias={:.5?}", state.accel_bias.as_slice(), state.gyro_bias.as_slice());
         }
         self.state_history.push(state.clone());

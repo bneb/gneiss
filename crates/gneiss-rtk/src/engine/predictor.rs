@@ -151,7 +151,7 @@ pub fn predict(state: &mut RtkState, dt: f64, config: &EngineConfig, imu_buffer:
     state.core_phi = Some(phi.view((0, 0), (crate::filter::CORE_STATE_SIZE, crate::filter::CORE_STATE_SIZE)).into_owned());
     
     let mut phi_full = DMatrix::identity(state.covariance.nrows(), state.covariance.ncols());
-    phi_full.view_mut((0, 0), (crate::filter::CORE_STATE_SIZE, crate::filter::CORE_STATE_SIZE)).copy_from(&state.core_phi.as_ref().unwrap());
+    phi_full.view_mut((0, 0), (crate::filter::CORE_STATE_SIZE, crate::filter::CORE_STATE_SIZE)).copy_from(state.core_phi.as_ref().unwrap());
     
     state.covariance = &phi_full * &state.covariance * phi_full.transpose() + q;
     state.full_p_predict = Some(state.covariance.clone());
@@ -176,7 +176,7 @@ pub fn predict(state: &mut RtkState, dt: f64, config: &EngineConfig, imu_buffer:
     }
     state.full_x_predict = Some(x_pred);
     
-    state.predicted_position = Some(state.position.clone());
+    state.predicted_position = Some(state.position);
     state.predicted_velocity = Some(state.velocity);
     if state.covariance.nrows() > 6 {
         state.predicted_attitude = Some(state.attitude);

@@ -386,7 +386,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     if let Ok(content) = std::fs::read_to_string(&dcb_file) {
                         let mut count = 0;
                         for line in content.lines() {
-                            if line.len() > 30 && line.starts_with(|c: char| c == 'G' || c == 'R' || c == 'E' || c == 'C') {
+                            if line.len() > 30 && line.starts_with(['G', 'R', 'E', 'C']) {
                                 if let Ok(sat) = std::str::FromStr::from_str(&line[0..3]) {
                                     let parts: Vec<&str> = line[3..].split_whitespace().collect();
                                     if parts.len() >= 2 {

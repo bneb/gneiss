@@ -166,9 +166,9 @@ impl AtmosphereModel {
         }
 
         let hgt = pos_llh.z;
-        let mut lat = pos_llh.x * 180.0 / core::f64::consts::PI;
+        let _lat = pos_llh.x * 180.0 / core::f64::consts::PI;
 
-        let coef = [
+        let _coef = [
             [ 1.2769934E-3, 1.2683230E-3, 1.2465397E-3, 1.2196049E-3, 1.2045996E-3 ],
             [ 2.9153695E-3, 2.9152299E-3, 2.9288445E-3, 2.9022565E-3, 2.9024912E-3 ],
             [ 62.610505E-3, 62.837393E-3, 63.721774E-3, 63.824265E-3, 64.258455E-3 ],

@@ -102,7 +102,7 @@ impl ProcessingEngine {
     pub fn process_rtk(&mut self, rover_obs: &EpochObs, base_obs: Option<&EpochObs>) -> Result<&RtkState, EngineError> {
         let spp_res = self.init_spp_state(rover_obs)?;
         let spp_pos = spp_res.as_ref().map(|s| s.position);
-        let spp_cdt = spp_res.as_ref().map(|s| s.cdt).unwrap_or(0.0);
+        let _spp_cdt = spp_res.as_ref().map(|s| s.cdt).unwrap_or(0.0);
         let spp_state_ref = spp_res.as_ref();
 
         // Carrier-smooth rover pseudoranges before any state access
@@ -185,9 +185,9 @@ impl ProcessingEngine {
 }
 
 /// RTK measurement update — extracted as a free function to avoid borrow conflicts.
-fn process_rtk_update<'a>(
+fn process_rtk_update(
     config: &EngineConfig, ephemerides: &[gneiss_core::ephemeris::Ephemeris], imu_history: &[Vec<gneiss_core::imu::ImuMeasurement>], 
-    state: &mut RtkState, rover_obs: &EpochObs, base_obs: &'a EpochObs, matched_obs: &[(crate::filter::DdObservation, crate::filter::DdObservation)],
+    state: &mut RtkState, rover_obs: &EpochObs, base_obs: &EpochObs, matched_obs: &[(crate::filter::DdObservation, crate::filter::DdObservation)],
     base_coord: &Coordinate, tracker: &mut crate::engine::adaptive::InnovationTracker, spp_pos: Option<Coordinate>, spp_state_ref: Option<&crate::spp::SppState>,
 ) {
     crate::engine::ambiguity::manage_ambiguities_and_slips(state, config, matched_obs, ephemerides, base_coord, rover_obs.time, base_obs.time);

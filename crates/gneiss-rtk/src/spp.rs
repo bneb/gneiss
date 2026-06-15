@@ -1,5 +1,5 @@
 use nalgebra::{DMatrix, DVector, Vector3};
-use gneiss_core::obs::{EpochObs, ObsType};
+use gneiss_core::obs::EpochObs;
 use gneiss_core::ephemeris::Ephemeris;
 use gneiss_core::coords::{ecef_to_llh, az_el, Coordinate, Datum, Frame};
 use gneiss_core::atmosphere::{AtmosphereModel, KlobucharParams, TropoParams};
@@ -115,11 +115,11 @@ pub fn build_measurements(epoch: &EpochObs, ephemerides: &[Ephemeris], _config: 
             let mut f2 = freqs.1;
             if f2 == 0.0 { f2 = f1; }
 
-            let mut p1_opt = match sat_obs.sat.constellation {
+            let p1_opt = match sat_obs.sat.constellation {
                 gneiss_core::sat::Constellation::Beidou => sat_obs.get_observable(2),
                 _ => sat_obs.get_observable(1),
             };
-            let mut p2_opt = match sat_obs.sat.constellation {
+            let p2_opt = match sat_obs.sat.constellation {
                 gneiss_core::sat::Constellation::Galileo => sat_obs.get_observable(7).or(sat_obs.get_observable(5)),
                 gneiss_core::sat::Constellation::Beidou => sat_obs.get_observable(7).or(sat_obs.get_observable(6)),
                 _ => sat_obs.get_observable(2),
@@ -519,6 +519,7 @@ fn apply_height_constraint(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use gneiss_core::obs::ObsType;
 
     #[test]
     fn test_compute_spp() {
@@ -659,7 +660,7 @@ mod tests {
     fn test_build_measurements() {
         use gneiss_core::time::GpsTime;
         use gneiss_core::sat::{Constellation, SatelliteId};
-        use gneiss_core::obs::{EpochObs, SatObs, Observation, ObsCode, SignalCode};
+        use gneiss_core::obs::{EpochObs, SatObs, Observation, ObsCode, SignalCode, ObsType};
         
         let t = GpsTime::new(2000, 100000.0);
         let t_eph1 = GpsTime::new(2000, 100010.0); // da = 10
