@@ -235,7 +235,7 @@ impl RtkState {
         *count += 1;
     }
 
-    pub fn resolve_ambiguities(&self, ephemerides: &[gneiss_core::ephemeris::Ephemeris], config: &crate::engine::EngineConfig) -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> {
+    pub fn resolve_ambiguities(&self, ephemerides: &[gneiss_core::ephemeris::Ephemeris], config: &crate::engine::EngineConfig) -> Result<crate::ambiguity::AmbiguityResolutionResult, &'static str> {
         let num_amb = self.ambiguities.len();
         if num_amb < config.lambda_min_subset || self.epoch_count <= config.ar_min_epoch_count as usize { return Err("Insufficient data"); }
         
@@ -250,15 +250,17 @@ impl RtkState {
                 let dynamic_threshold = crate::ffrt::calculate_threshold(subset_size, config.ar_ffrt_prob).max(config.lambda_min_ratio);
                 // Accept if it passes the ratio test OR if the bootstrapped success rate is > min_ar_success_rate
                 if res.ratio >= dynamic_threshold || res.success_rate >= config.tuning.min_ar_success_rate {
-                    let (fixed_state, da_meters, d_full) = self.apply_ar_fix(subset_size, &candidate_vars, &res, ephemerides)?;
-                    return Ok((fixed_state, da_meters, d_full, res.ratio, subset_size));
+                    
+                    let fix_res = self.apply_ar_fix(subset_size, &candidate_vars, &res, ephemerides)?;
+                    let (fixed_state, da_meters, d_full) = (fix_res.fixed_state, fix_res.z_dd, fix_res.d_full);
+                    return Ok(crate::ambiguity::AmbiguityResolutionResult { fixed_state, z_dd: da_meters, d_full, ratio_test: res.ratio, subset_size });
                 }
             }
         }
         Err("AR failed to resolve")
     }
 
-    fn apply_ar_fix(&self, subset_size: usize, candidate_vars: &[(usize, usize, u16, f64)], res: &crate::lambda::LambdaResult, ephemerides: &[gneiss_core::ephemeris::Ephemeris]) -> Result<(RtkState, DVector<f64>, DMatrix<f64>), &'static str> {
+    fn apply_ar_fix(&self, subset_size: usize, candidate_vars: &[(usize, usize, u16, f64)], res: &crate::lambda::LambdaResult, ephemerides: &[gneiss_core::ephemeris::Ephemeris]) -> Result<crate::ambiguity::AmbiguityFixResult, &'static str> {
         let mut da_meters = DVector::zeros(subset_size);
         let a_sd = nalgebra::DVector::from_vec(self.ambiguities.clone());
         for row in 0..subset_size {
@@ -295,7 +297,7 @@ impl RtkState {
         fixed_state.covariance = crate::engine::updater::apply_joseph_covariance_update(&self.covariance, &k_full, &d_full, &r_zero);
         fixed_state.is_fixed = true;
 
-        Ok((fixed_state, da_meters, d_full))
+        Ok(crate::ambiguity::AmbiguityFixResult { fixed_state, z_dd: da_meters, d_full })
     }
 
     pub fn prune_stale_ambiguities(&mut self, current_epoch: u32, threshold: u32) {
@@ -470,7 +472,8 @@ mod tests {
         config.lambda_min_ratio = 3.0;
         config.ar_ffrt_prob = 0.001;
         config.tuning.min_ar_success_rate = 0.999;
-        let (fixed_state, _, _, _, _) = state.resolve_ambiguities(&ephemerides, &config).expect("AR should run");
+        let res = state.resolve_ambiguities(&ephemerides, &config).expect("AR should run");
+        let fixed_state = res.fixed_state;
         assert!(fixed_state.is_fixed, "Should achieve fix with multi-constellation support");
         
         let idx_ref = fixed_state.ambiguity_keys.iter().position(|&(s, f)| s == gps_ref && f == 1).unwrap();

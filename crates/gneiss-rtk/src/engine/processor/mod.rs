@@ -123,7 +123,7 @@ impl ProcessingEngine {
 
     pub fn reset_for_multipass(&mut self) {
         if let Some(first) = self.state_history.first() {
-            let mut reset_state = first.clone();
+            let mut reset_state: RtkState = RtkState::clone(first);
             reset_state.predicted_position = None;
             reset_state.predicted_velocity = None;
             reset_state.predicted_attitude = None;
@@ -269,7 +269,7 @@ impl ProcessingEngine {
             let llh = gneiss_core::coords::ecef_to_llh(state.position.vector);
             let ecef_to_ned = gneiss_core::coords::ecef_to_ned_matrix(llh);
             let v_ned = ecef_to_ned * state.velocity;
-            let yaw = f64::atan2(v_ned.y, v_ned.x);
+            let yaw = f64::atan2(v_ned[1], v_ned[0]);
             let rot_veh_to_ned = nalgebra::Rotation3::from_euler_angles(0.0, 0.0, yaw);
             
             let ned_to_ecef = ecef_to_ned.transpose();

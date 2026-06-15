@@ -13,7 +13,7 @@ pub fn process_ppp<'a>(engine: &'a mut ProcessingEngine, rover_obs: &'a EpochObs
         return engine.process_spp(rover_obs);
     }
     
-    let dt = rover_obs.time - engine.current_state.as_ref().unwrap().time;
+    let dt = rover_obs.time.tow - engine.current_state.as_ref().unwrap().time.tow;
     engine.predict_state(dt);
     let state = engine.current_state.as_mut().unwrap();
     state.time = rover_obs.time;

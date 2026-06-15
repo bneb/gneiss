@@ -56,7 +56,7 @@ pub fn process_spp_tightly_coupled<'a>(engine: &'a mut ProcessingEngine, rover_o
 }
 
 fn predict_and_align_state(engine: &mut ProcessingEngine, rover_obs: &EpochObs) {
-    let dt = rover_obs.time - engine.current_state.as_ref().unwrap().time;
+    let dt = rover_obs.time.tow - engine.current_state.as_ref().unwrap().time.tow;
     engine.predict_state(dt);
     let state = engine.current_state.as_mut().unwrap();
     state.time = rover_obs.time;
@@ -235,7 +235,7 @@ fn process_doppler(ctx: &EkfContext, m: &SppMeasurement, target: &mut MatrixTarg
 
 fn update_ekf(engine: &mut ProcessingEngine, z: &DVector<f64>, h: &DMatrix<f64>, r: &DMatrix<f64>, types: &[(gneiss_core::sat::SatelliteId, u8)]) -> bool {
     let state = engine.current_state.as_mut().unwrap();
-    let res = crate::engine::updater::update(state, z, h, r, engine.config.spp_consistency_threshold_m, Some(types), true, &engine.config.tuning);
+    let res = crate::engine::updater::update::<crate::engine::updater_math::TightCoupling>(state, z, h, r, engine.config.spp_consistency_threshold_m, Some(types), &engine.config.tuning);
     if let Ok(valid_indices) = res {
         valid_indices.len() < MIN_VALID_MEASUREMENTS
     } else {

@@ -74,7 +74,7 @@ pub fn apply_nhc(
         sigma_vertical * sigma_vertical
     ]));
 
-    updater::update(state, &z, &h, &r, 1e9, None, true, tuning).map_err(|_| "NHC update failed")?;
+    updater::update::<crate::engine::updater_math::TightCoupling>(state, &z, &h, &r, 1e9, None, tuning).map_err(|_| "NHC update failed")?;
     Ok(())
 }
 
@@ -85,7 +85,7 @@ pub fn apply_zupt(state: &mut RtkState, sigma: f64, tuning: &crate::engine::conf
     for i in 0..3 { h[(i, 3 + i)] = 1.0; }
     
     let r = DMatrix::from_diagonal(&DVector::from_element(3, sigma * sigma));
-    updater::update(state, &z, &h, &r, 1e9, None, true, tuning).map_err(|_| "ZUPT update failed")?;
+    updater::update::<crate::engine::updater_math::TightCoupling>(state, &z, &h, &r, 1e9, None, tuning).map_err(|_| "ZUPT update failed")?;
     Ok(())}
 
 #[cfg(test)]

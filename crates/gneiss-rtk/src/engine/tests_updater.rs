@@ -135,12 +135,12 @@ mod tests {
         let sat1 = SatelliteId { constellation: Constellation::Gps, prn: 1 };
         let meas_types = [(sat1, 0), (sat1, 1), (sat1, 3)];
         
-        let _valid_idx = crate::engine::updater_math::filter_pre_fit_residuals(&z, &h, &r, &state.covariance, 15.0, Some(&meas_types), false);
+        let _valid_idx = crate::engine::updater_math::filter_pre_fit_residuals::<crate::engine::updater_math::LooseCoupling>(&z, &h, &r, &state.covariance, 15.0, Some(&meas_types));
         
         // Now make phase invalid: z=20.0, nu^2/s_ii = 400/3.5 = 114 > 100 → Invalid
         let mut z = z.clone();
         z[1] = 20.0;
-        let valid_idx = crate::engine::updater_math::filter_pre_fit_residuals(&mut z, &h, &r, &state.covariance, 15.0, Some(&meas_types), false);
+        let valid_idx = crate::engine::updater_math::filter_pre_fit_residuals::<crate::engine::updater_math::LooseCoupling>(&mut z, &h, &r, &state.covariance, 15.0, Some(&meas_types));
         
         assert!(valid_idx.contains(&0), "PR should pass");
         assert!(!valid_idx.contains(&1), "Phase should be rejected");
@@ -313,12 +313,12 @@ mod tests {
         // thresh = max_innovation * mult = 6.0 * 2.0 = 12.0
         // ratio = v.abs() / s.sqrt() = 10.0 / 2.0 = 5.0
         // Since 5.0 <= 12.0, it should NOT be an outlier.
-        let (worst_idx, _) = crate::engine::updater_math::evaluate_post_fit_outliers(&v, &s, &current_z, &current_valid, Some(&meas_types), max_innovation, false, &tuning);
+        let (worst_idx, _) = crate::engine::updater_math::evaluate_post_fit_outliers::<crate::engine::updater_math::LooseCoupling>(&v, &s, &current_z, &current_valid, Some(&meas_types), max_innovation, &tuning);
         assert_eq!(worst_idx, None, "Doppler mult operator * mutated to / (would yield thresh 3.0, causing outlier)");
         
         // If we increase ratio to 15.0 by setting v=30.0, it should be an outlier.
         let v2 = DVector::from_element(1, 30.0);
-        let (worst_idx2, _) = crate::engine::updater_math::evaluate_post_fit_outliers(&v2, &s, &current_z, &current_valid, Some(&meas_types), max_innovation, false, &tuning);
+        let (worst_idx2, _) = crate::engine::updater_math::evaluate_post_fit_outliers::<crate::engine::updater_math::LooseCoupling>(&v2, &s, &current_z, &current_valid, Some(&meas_types), max_innovation, &tuning);
         assert_eq!(worst_idx2, Some(0));
     }
 

@@ -54,7 +54,7 @@ pub fn extract_imu_statistics(
         let is_stationary = state.velocity.norm() < 0.05 && state.covariance[(0,0)] < 5.0;
 
         if is_stationary && k < imu_history.len() {
-            let imu_buf = &imu_history[k];
+            let imu_buf: &Vec<gneiss_core::imu::ImuMeasurement> = &imu_history[k];
             if imu_buf.len() > 10 {
                 let mut sum_a = Vector3::zeros();
                 let mut sum_g = Vector3::zeros();
@@ -88,8 +88,8 @@ pub fn extract_imu_statistics(
     stationary_accel_variances.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
     stationary_gyro_variances.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
-    let median_var_a = stationary_accel_variances[stationary_accel_variances.len() / 2];
-    let median_var_g = stationary_gyro_variances[stationary_gyro_variances.len() / 2];
+    let median_var_a: f64 = stationary_accel_variances[stationary_accel_variances.len() / 2];
+    let median_var_g: f64 = stationary_gyro_variances[stationary_gyro_variances.len() / 2];
 
     // Convert observed variance to random walk sigma
     let sigma_ab = median_var_a.sqrt() * 0.01; // heuristic scaling
