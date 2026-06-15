@@ -108,7 +108,9 @@ pub fn compute_process_noise(dt: f64, config: &EngineConfig, is_imu_active: bool
         let q_att = config.tuning.sigma_phi * config.tuning.sigma_phi * dt_abs;
         let q_ab = config.tuning.sigma_ab * config.tuning.sigma_ab * dt_abs;
         let q_gb = config.tuning.sigma_gb * config.tuning.sigma_gb * dt_abs;
+        let q_pos = q_vel * dt_abs * dt_abs / 3.0; // position uncertainty from velocity noise integration
         for i in 0..3 {
+            q[(i, i)] = q_pos;
             q[(3+i, 3+i)] = q_vel;
             q[(6+i, 6+i)] = q_att;
             q[(9+i, 9+i)] = q_ab;

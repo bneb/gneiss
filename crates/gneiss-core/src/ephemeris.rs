@@ -164,7 +164,7 @@ impl GlonassEphemeris {
             t_rem -= h;
         }
 
-        // Relativistic effect is already absorbed into GLONASS tau_n usually, but we compute clock error:
+        // GLONASS clock: tau_n stores RINEX af0 (= -TauN_ICD), used directly
         let clk_err = self.tau_n + self.gamma_n * dt;
         let clk_drift = self.gamma_n;
 
@@ -499,12 +499,12 @@ mod tests {
 
         assert_vec_eq!(p_glo_fwd.0, Vector3::new(9880305.169245299, 15090476.713825395, 20059805.549791936));
         assert_vec_eq!(p_glo_fwd.1, Vector3::new(-1989.7750855530473, 1515.879262912734, 993.5292177774875));
-        assert!((p_glo_fwd.2 - -9.940000000000001e-6).abs() < 1e-12);
+        assert!((p_glo_fwd.2 - 1.006e-5).abs() < 1e-12);
         assert!((p_glo_fwd.3 - 1e-9).abs() < 1e-12);
 
         assert_vec_eq!(p_glo_bwd.0, Vector3::new(10120298.841760032, 14910478.053419847, 19939804.282132257));
         assert_vec_eq!(p_glo_bwd.1, Vector3::new(-2009.9085434547917, 1484.0537579365496, 1006.5341630852408));
-        assert!((p_glo_bwd.2 - -1.006e-5).abs() < 1e-12);
+        assert!((p_glo_bwd.2 - 9.94e-6).abs() < 1e-12);
         assert!((p_glo_bwd.3 - 1e-9).abs() < 1e-12);
     }
 

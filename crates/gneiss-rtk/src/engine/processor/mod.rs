@@ -81,7 +81,7 @@ impl ProcessingEngine {
 
     pub(crate) fn apply_nhc_updates(config: &EngineConfig, imu_history: &[Vec<gneiss_core::imu::ImuMeasurement>], state: &mut RtkState) {
         let is_ins = matches!(config.mode, EngineMode::SppIns | EngineMode::RtkIns | EngineMode::PppIns | EngineMode::RtkInsLooselyCoupled | EngineMode::SppInsLooselyCoupled | EngineMode::PppInsLooselyCoupled);
-        tracing::warn!("apply_nhc_updates called! config.enable_nhc={}, is_ins={}, state.ins_aligned={}", config.enable_nhc, is_ins, state.ins_aligned);
+        tracing::trace!("apply_nhc_updates: enable_nhc={}, is_ins={}, ins_aligned={}", config.enable_nhc, is_ins, state.ins_aligned);
         if config.enable_nhc && is_ins && state.ins_aligned {
             let mut is_stationary = false;
             let mut accel_var = 1.0;

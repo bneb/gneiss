@@ -185,7 +185,10 @@ impl RtkState {
         self.clear_ambiguities();
         
         let cols = self.covariance.ncols();
-        let reset_indices: Vec<usize> = vec![0, 1, 2, 3, 4, 5, 15];
+        let mut reset_indices: Vec<usize> = vec![0, 1, 2, 3, 4, 5, 15];
+        if self.covariance.nrows() > 15 {
+            reset_indices = (0..16).collect();
+        }
         for &i in &reset_indices {
             for j in 0..cols {
                 if i != j && !reset_indices.contains(&j) {
@@ -205,7 +208,18 @@ impl RtkState {
         for i in 0..3 { self.covariance[(i, i)] = 100.0; }
         for i in 3..6 { self.covariance[(i, i)] = 100.0; }
         if self.covariance.nrows() > 15 {
+            let att_var = (1.0f64.to_radians()).powi(2);
+            for i in 6..9 { self.covariance[(i, i)] = att_var; }
+            for i in 9..12 { self.covariance[(i, i)] = 0.01; }
+            for i in 12..15 { self.covariance[(i, i)] = 1e-6; }
             self.covariance[(15, 15)] = 100000.0;
+            
+            self.accel_bias = Vector3::zeros();
+            self.gyro_bias = Vector3::zeros();
+            let llh = gneiss_core::coords::ecef_to_llh(self.position.vector);
+            let ecef_to_ned = gneiss_core::coords::ecef_to_ned_matrix(llh);
+            let ned_to_ecef = ecef_to_ned.transpose();
+            self.attitude = UnitQuaternion::from_rotation_matrix(&nalgebra::Rotation3::from_matrix(&ned_to_ecef));
         }
 
         self.is_reset = true;
@@ -221,7 +235,7 @@ impl RtkState {
         *count += 1;
     }
 
-    pub fn resolve_ambiguities(&self, ephemerides: &[gneiss_core::ephemeris::Ephemeris], min_subset: usize, ar_min_epoch_count: u32, ar_min_lock: u32, lambda_min_ratio: f64, ffrt_prob: f64) -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> {
+    pub fn resolve_ambiguities(&self, ephemerides: &[gneiss_core::ephemeris::Ephemeris], min_subset: usize, ar_min_epoch_count: u32, ar_min_lock: u32, lambda_min_ratio: f64, ffrt_prob: f64, min_ar_success_rate: f64) -> Result<(RtkState, DVector<f64>, DMatrix<f64>, f64, usize), &'static str> {
         let num_amb = self.ambiguities.len();
         if num_amb < min_subset || self.epoch_count <= ar_min_epoch_count as usize { return Err("Insufficient data"); }
         
@@ -234,8 +248,8 @@ impl RtkState {
             
             if let Ok(res) = crate::lambda::resolve_lambda(&a_cycles, &q_cycles) {
                 let dynamic_threshold = crate::ffrt::calculate_threshold(subset_size, ffrt_prob).max(lambda_min_ratio);
-                // Accept if it passes the ratio test OR if the bootstrapped success rate is > 99.9%
-                if res.ratio >= dynamic_threshold || res.success_rate >= 0.999 {
+                // Accept if it passes the ratio test OR if the bootstrapped success rate is > min_ar_success_rate
+                if res.ratio >= dynamic_threshold || res.success_rate >= min_ar_success_rate {
                     let (fixed_state, da_meters, d_full) = self.apply_ar_fix(subset_size, &candidate_vars, &res, ephemerides)?;
                     return Ok((fixed_state, da_meters, d_full, res.ratio, subset_size));
                 }
@@ -449,7 +463,7 @@ mod tests {
             }),
         ];
 
-        let (fixed_state, _, _, _, _) = state.resolve_ambiguities(&ephemerides, 4, 5, 3, 3.0, 0.001).expect("AR should run");
+        let (fixed_state, _, _, _, _) = state.resolve_ambiguities(&ephemerides, 4, 5, 3, 3.0, 0.001, 0.999).expect("AR should run");
         assert!(fixed_state.is_fixed, "Should achieve fix with multi-constellation support");
         
         let idx_ref = fixed_state.ambiguity_keys.iter().position(|&(s, f)| s == gps_ref && f == 1).unwrap();

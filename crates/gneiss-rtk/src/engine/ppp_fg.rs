@@ -27,6 +27,7 @@ pub struct FgMeasurement {
     pub res: f64,
     pub h_row: DVector<f64>,
     pub weight: f64,
+    pub raw_var: f64,
     pub is_phase: bool,
     pub sat: Option<gneiss_core::sat::SatelliteId>,
 }
@@ -35,58 +36,68 @@ impl PppFactorGraph {
     pub fn new() -> Self { Self::default() }
 
     pub fn solve(&self, state: &mut RtkState, sats: &[ProcessedSat]) -> Result<(), EngineError> {
-        let x_pred = extract_state_vector(state);
-        let p_pred = state.covariance.clone();
-        
-        state.full_x_predict = Some(x_pred.clone());
-        state.full_p_predict = Some(p_pred.clone());
-        
-        let mut x_i = x_pred.clone();
-
-        let p_inv = invert_matrix(&p_pred).ok_or(EngineError::StateDisappeared)?;
-
-        for _iter in 0..self.max_iterations {
-            let dx = self.compute_iteration_dx(state, sats, &x_i, &x_pred, &p_inv, _iter)?;
-            if dx.is_none() {
-                break;
-            }
-            let dx = dx.unwrap();
+        let mut outer_iter = 0;
+        loop {
+            let x_pred = extract_state_vector(state);
+            let p_pred = state.covariance.clone();
             
-            // Debug dx
-            if state.epoch_count == 0 {
-                println!("Iter {}: dx_norm={:.2}, dx_pos=[{:.2}, {:.2}, {:.2}], dx_clk={:.2}", _iter, dx.norm(), dx[0], dx[1], dx[2], dx[15]);
-            }
+            state.full_x_predict = Some(x_pred.clone());
+            state.full_p_predict = Some(p_pred.clone());
             
-            x_i = &x_i + &dx;
-            
-            if dx.norm() < self.convergence_threshold {
-                break;
-            }
-        }
-        
-        state.covariance = self.compute_final_covariance(state, sats, &x_i, &p_pred, &p_inv);
+            let mut x_i = x_pred.clone();
 
-        let pre_meas = self.build_measurements(state, sats, &x_pred, 0);
-        let mut removed_sats = Vec::new();
-        for m in &pre_meas {
-            if m.is_phase && m.res.abs() > 0.15 {
-                if let Some(sat) = m.sat {
-                    tracing::warn!("Cycle slip detected by FG for sat={}, res={:.3}m", sat, m.res);
-                    removed_sats.push(sat);
+            let p_inv = invert_matrix(&p_pred).ok_or(EngineError::StateDisappeared)?;
+
+            for _iter in 0..self.max_iterations {
+                let dx = self.compute_iteration_dx(state, sats, &x_i, &x_pred, &p_inv, _iter)?;
+                if dx.is_none() {
+                    break;
+                }
+                let dx = dx.unwrap();
+                
+                // Debug dx
+                if state.epoch_count == 0 {
+                    tracing::trace!("Iter {}: dx_norm={:.2}, dx_pos=[{:.2}, {:.2}, {:.2}], dx_clk={:.2}", _iter, dx.norm(), dx[0], dx[1], dx[2], dx[15]);
+                }
+                
+                x_i = &x_i + &dx;
+                
+                if dx.norm() < self.convergence_threshold {
+                    break;
                 }
             }
+
+            let final_meas = self.build_measurements(state, sats, &x_i, self.max_iterations);
+            let mut worst_sat = None;
+            let mut max_norm = 15.0;
+            
+            for m in &final_meas {
+                if m.is_phase {
+                    let norm = m.res.abs() / m.raw_var.sqrt();
+                    if norm > max_norm {
+                        max_norm = norm;
+                        worst_sat = m.sat;
+                    }
+                }
+            }
+
+            if let Some(sat) = worst_sat {
+                tracing::warn!("PPP FG Outlier Detected for {:?}, norm={:.1}. Removing ambiguity and retrying.", sat, max_norm);
+                state.remove_ambiguity(sat, 0);
+                outer_iter += 1;
+                if outer_iter > 3 {
+                    tracing::warn!("Max outlier rejection iterations reached.");
+                    break; // Just proceed with what we have
+                }
+                continue;
+            }
+
+            let final_p = self.compute_final_covariance(state, sats, &x_i, &p_pred, &p_inv);
+            apply_state_vector(state, &x_i, final_p);
+            log_ppp_convergence(state, sats, &x_i, &x_pred, &p_pred, self);
+            break;
         }
-        
-        log_ppp_convergence(state, sats, &x_i, &x_pred, &p_pred, self);
-        
-        apply_state_vector(state, &x_i, state.covariance.clone());
-        
-        // Remove ambiguities for satellites that had large phase residuals (cycle slips)
-        // We do this AFTER apply_state_vector so the covariance matrix matches the updated state.
-        for sat in removed_sats {
-            state.remove_ambiguity(sat, 1);
-        }
-        
+
         Ok(())
     }
 
@@ -164,7 +175,7 @@ impl PppFactorGraph {
             }
             
             if state.epoch_count == 0 && iter == 0 {
-                println!("PPP {:?}{:02} PR res={:.3}m", sat.sat_obs.sat.constellation, sat.sat_obs.sat.prn, res_pr);
+                tracing::trace!("PPP {:?}{:02} PR res={:.3}m", sat.sat_obs.sat.constellation, sat.sat_obs.sat.prn, res_pr);
             }
             let mut var_pr = PSEUDORANGE_VARIANCE_BASE * snr_scale(sat.snr as i32) / libm::sin(sat.el);
             if sat.is_iono_free { 
@@ -173,7 +184,7 @@ impl PppFactorGraph {
                 var_pr += 9.0; // Single frequency has ~3m Klobuchar residual iono error (3^2 = 9)
             }
             let w_pr = apply_huber(res_pr, var_pr, self.huber_k);
-            meas.push(FgMeasurement { res: res_pr, h_row: build_h_row(&los, sat.map_wet, None, x_i.len(), sat.sat_obs.sat.constellation), weight: w_pr, is_phase: false, sat: Some(sat.sat_obs.sat) });
+            meas.push(FgMeasurement { res: res_pr, h_row: build_h_row(&los, sat.map_wet, None, x_i.len(), sat.sat_obs.sat.constellation), weight: w_pr, raw_var: var_pr, is_phase: false, sat: Some(sat.sat_obs.sat) });
 
             if sat.doppler != 0.0 {
                 let rcv_vel = Vector3::new(x_i[3], x_i[4], x_i[5]);
@@ -184,7 +195,7 @@ impl PppFactorGraph {
                 let res_rr = meas_rr - expected_rr;
                 let var_rr = 0.01; // Decreased Doppler variance (trust velocity more)
                 let w_rr = apply_huber(res_rr, var_rr, 3.0);
-                meas.push(FgMeasurement { res: res_rr, h_row: build_h_row_doppler(&los, x_i.len()), weight: w_rr, is_phase: false, sat: Some(sat.sat_obs.sat) });
+                meas.push(FgMeasurement { res: res_rr, h_row: build_h_row_doppler(&los, x_i.len()), weight: w_rr, raw_var: var_rr, is_phase: false, sat: Some(sat.sat_obs.sat) });
             }
 
             if let Some(cp1) = sat.cp1 {
@@ -218,7 +229,7 @@ impl PppFactorGraph {
                     
                     let w_cp = apply_huber(res_cp, var_cp, self.huber_k);
                     
-                    meas.push(FgMeasurement { res: res_cp, h_row: build_h_row(&los, sat.map_wet, Some(CORE_STATE_SIZE + amb_idx), x_i.len(), sat.sat_obs.sat.constellation), weight: w_cp, is_phase: true, sat: Some(sat.sat_obs.sat) });
+                    meas.push(FgMeasurement { res: res_cp, h_row: build_h_row(&los, sat.map_wet, Some(CORE_STATE_SIZE + amb_idx), x_i.len(), sat.sat_obs.sat.constellation), weight: w_cp, raw_var: var_cp, is_phase: true, sat: Some(sat.sat_obs.sat) });
                 }
             }
         }
@@ -256,8 +267,8 @@ fn log_ppp_convergence(state: &RtkState, sats: &[ProcessedSat], x_i: &DVector<f6
             }
         }
     }
-    if state.epoch_count.is_multiple_of(100) {
-        println!("Epoch {}: Mean PR Res = {:.3} m, Mean RR Res = {:.3} m/s", state.epoch_count, sum_pr / count_pr.max(1) as f64, sum_rr / count_rr.max(1) as f64);
+    if state.epoch_count % 100 == 0 {
+        tracing::trace!("Epoch {}: Mean PR Res = {:.3} m, Mean RR Res = {:.3} m/s", state.epoch_count, sum_pr / count_pr.max(1) as f64, sum_rr / count_rr.max(1) as f64);
     }
 }
 
@@ -423,8 +434,8 @@ mod tests {
 
     #[test]
     fn test_build_weight_matrix() {
-        let m1 = FgMeasurement { res: 1.0, h_row: DVector::zeros(1), weight: 2.0, is_phase: false };
-        let m2 = FgMeasurement { res: 2.0, h_row: DVector::zeros(1), weight: 4.0, is_phase: true };
+        let m1 = FgMeasurement { res: 1.0, h_row: DVector::zeros(1), weight: 2.0, raw_var: 0.5, is_phase: false, sat: None };
+        let m2 = FgMeasurement { res: 2.0, h_row: DVector::zeros(1), weight: 4.0, raw_var: 0.25, is_phase: true, sat: None };
         let meas = vec![m1, m2];
         let mut r = DMatrix::zeros(2, 2);
         r[(0, 0)] = 2.0; r[(1, 1)] = 4.0;
@@ -518,13 +529,17 @@ mod tests {
             res: 1.5,
             h_row: DVector::from_element(3, 1.0),
             weight: 2.0,
+            raw_var: 0.5,
             is_phase: false,
+            sat: None,
         };
         let m2 = FgMeasurement {
             res: 2.5,
             h_row: DVector::from_element(3, 2.0),
             weight: 3.0,
+            raw_var: 0.33,
             is_phase: true,
+            sat: None,
         };
         let meas = vec![m1, m2];
         let (h, z, r) = assemble_matrices(&meas, 3);

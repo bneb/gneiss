@@ -27,6 +27,7 @@ pub fn filter_pre_fit_residuals(
     state_cov: &DMatrix<f64>,
     max_innovation: f64,
     meas_types: Option<&[(gneiss_core::sat::SatelliteId, u8)]>,
+    is_tightly_coupled: bool,
 ) -> Vec<usize> {
     let mut valid_indices = Vec::with_capacity(z.len());
     let hp = h * state_cov;
@@ -34,7 +35,7 @@ pub fn filter_pre_fit_residuals(
     for i in 0..z.len() {
         let s_ii = (hp.row(i) * h.row(i).transpose())[(0, 0)] + r[(i, i)];
         let meas_type = meas_types.map_or(0, |m| m[i].1);
-        let threshold = get_pre_fit_threshold(meas_type, max_innovation);
+        let threshold = get_pre_fit_threshold(meas_type, max_innovation, is_tightly_coupled);
         
         if check_pre_fit_residual(z[i], s_ii, r[(i, i)], meas_type, threshold) {
             valid_indices.push(i);
@@ -66,7 +67,7 @@ pub fn compute_loose_coupling_innovations(
     fn test_huber_scale_covariance() {
         use crate::engine::config::EkfTuningConfig;
         let mut tuning = EkfTuningConfig::default();
-        tuning.huber_threshold_loosely = 2.0; // huber_sq = 4.0
+        tuning.loosely_coupled_mahalanobis_sq = 4.0; 
         
         let p = DMatrix::from_diagonal(&DVector::from_vec(vec![2.0, 2.0]));
         let r = DMatrix::from_diagonal(&DVector::from_vec(vec![3.0, 3.0]));
@@ -100,11 +101,15 @@ pub fn enforce_symmetry(p: &mut DMatrix<f64>) {
     }
 }
 
-pub fn get_pre_fit_threshold(meas_type: u8, max_innovation: f64) -> f64 {
+pub fn get_pre_fit_threshold(meas_type: u8, max_innovation: f64, is_tightly_coupled: bool) -> f64 {
+    let mut multiplier = 1.0;
+    if is_tightly_coupled {
+        multiplier = 5.0; // Inflate thresholds for tight coupling to prevent divergence
+    }
     match meas_type {
-        1 | 2 => CP_PRE_FIT_CHI2_THRESHOLD,
-        3 => DOPPLER_PRE_FIT_CHI2_THRESHOLD,
-        _ => max_innovation * max_innovation * PR_PRE_FIT_CHI2_MULTIPLIER, 
+        1 | 2 => CP_PRE_FIT_CHI2_THRESHOLD * multiplier,
+        3 => DOPPLER_PRE_FIT_CHI2_THRESHOLD * multiplier,
+        _ => max_innovation * max_innovation * PR_PRE_FIT_CHI2_MULTIPLIER * multiplier, 
     }
 }
 
@@ -156,15 +161,26 @@ pub fn evaluate_post_fit_outliers(
         let ratio = v[i].abs() / s[(i, i)].sqrt();
         let (thresh, abs_thresh) = compute_scalar_thresholds(meas_type, max_innovation, tuning, is_tightly_coupled);
         
-        // Scale absolute threshold by the filter's uncertainty to prevent getting stuck
-        // when the filter has intentionally inflated its covariance (e.g., after SPP fallback).
-        let effective_abs_thresh = f64::max(abs_thresh, s[(i, i)].sqrt() * 3.0);
+        // Scale absolute threshold by the filter's uncertainty for pseudoranges to prevent getting stuck
+        // when the filter has intentionally inflated its covariance. Carrier phases should strictly use
+        // their absolute thresholds.
+        let effective_abs_thresh = match meas_type {
+            1 | 2 => abs_thresh,
+            _ => f64::max(abs_thresh, s[(i, i)].sqrt() * 3.0),
+        };
         let is_abs_outlier = current_z[i].abs() > effective_abs_thresh && meas_type != 3;
 
         if is_abs_outlier {
             return (Some(i), f64::INFINITY);
         }
-        if v[i].abs() > thresh && ratio > max_outlier_ratio {
+        
+        let is_ratio_outlier = match meas_type {
+            1 | 2 => ratio > tuning.phase_outlier_ratio_thresh,
+            3 => ratio > tuning.phase_outlier_ratio_thresh * tuning.doppler_outlier_ratio_mult, // Doppler uses scaled ratio
+            _ => ratio > 5.0, // Pseudorange uses ratio > 5.0 instead of hard absolute threshold to allow covariance recovery
+        };
+
+        if is_ratio_outlier && ratio > max_outlier_ratio {
             max_outlier_ratio = ratio;
             worst_idx = Some(i);
         }
@@ -184,7 +200,7 @@ pub fn huber_scale_covariance(
         None => return Err(UpdateError::SingularMatrix),
     };
     let mahal_sq = (&z.transpose() * &s_raw_inv * z)[(0, 0)];
-    let huber_sq = tuning.huber_threshold_loosely.powi(2);
+    let huber_sq = tuning.loosely_coupled_mahalanobis_sq;
 
     if mahal_sq <= huber_sq {
         return Ok(r.clone());
@@ -291,15 +307,15 @@ mod threshold_tests {
         let max_inn = 2.0;
 
         // CP (1 or 2)
-        assert_eq!(get_pre_fit_threshold(1, max_inn), CP_PRE_FIT_CHI2_THRESHOLD);
-        assert_eq!(get_pre_fit_threshold(2, max_inn), CP_PRE_FIT_CHI2_THRESHOLD);
+        assert_eq!(get_pre_fit_threshold(1, max_inn, false), CP_PRE_FIT_CHI2_THRESHOLD);
+        assert_eq!(get_pre_fit_threshold(2, max_inn, false), CP_PRE_FIT_CHI2_THRESHOLD);
         
         // Doppler (3)
-        assert_eq!(get_pre_fit_threshold(3, max_inn), DOPPLER_PRE_FIT_CHI2_THRESHOLD);
+        assert_eq!(get_pre_fit_threshold(3, max_inn, false), DOPPLER_PRE_FIT_CHI2_THRESHOLD);
         
         // Default (0 or others)
-        assert_eq!(get_pre_fit_threshold(0, max_inn), max_inn * max_inn * PR_PRE_FIT_CHI2_MULTIPLIER);
-        assert_eq!(get_pre_fit_threshold(99, max_inn), max_inn * max_inn * PR_PRE_FIT_CHI2_MULTIPLIER);
+        assert_eq!(get_pre_fit_threshold(0, max_inn, false), max_inn * max_inn * PR_PRE_FIT_CHI2_MULTIPLIER);
+        assert_eq!(get_pre_fit_threshold(99, max_inn, false), max_inn * max_inn * PR_PRE_FIT_CHI2_MULTIPLIER);
     }
 
     #[test]
@@ -412,7 +428,7 @@ mod filter_tests {
         // We will make z=1000 for i=2 so it fails pre-fit. s_ii for 2 = 5. nu^2 = 1,000,000. 1000000/5 = 200,000. 
         let z2 = DVector::from_vec(vec![10.0, 5.0, 10000.0]);
         
-        let indices = filter_pre_fit_residuals(&z2, &h, &r, &state_cov, max_innovation, None);
+        let indices = filter_pre_fit_residuals(&z2, &h, &r, &state_cov, max_innovation, None, false);
         assert_eq!(indices, vec![0, 1]);
         
         // If the + r[(i, i)] is replaced by -, then s_ii = 3 - 2 = 1.
@@ -420,7 +436,7 @@ mod filter_tests {
         // Let's set max_innovation such that threshold is just above 20.
         // max_inn * max_inn * 25.0 = 22.0 => max_inn = sqrt(22/25) = 0.938
         let max_inn_tight = (22.0f64 / 25.0).sqrt();
-        let indices_tight = filter_pre_fit_residuals(&z2, &h, &r, &state_cov, max_inn_tight, None);
+        let indices_tight = filter_pre_fit_residuals(&z2, &h, &r, &state_cov, max_inn_tight, None, false);
         
         // i=0: 100/5 = 20 < 22 -> passed. 
         // If mutated to -, s_ii = 1, 100/1 = 100 > 22 -> FAILS.
@@ -443,7 +459,7 @@ mod filter_tests {
         // Set threshold to 12.0
         // max_inn * max_inn * 25.0 = 12.0 => max_inn = sqrt(12/25)
         
-        let indices_catch = filter_pre_fit_residuals(&z_catch, &h, &r_catch, &state_cov, (12.0f64 / 25.0).sqrt(), None);
+        let indices_catch = filter_pre_fit_residuals(&z_catch, &h, &r_catch, &state_cov, (12.0f64 / 25.0).sqrt(), None, false);
         assert_eq!(indices_catch, vec![0, 1, 2]); // Passes with correct logic
     }
 }
@@ -535,8 +551,8 @@ mod missed_mutant_tests {
         let mut r = DMatrix::zeros(3, 3);
         let hp = DVector::zeros(3);
         
-        nu[0] = 2.0; r[(0,0)] = 1.0; // ratio = 2.0
-        nu[1] = 4.0; r[(1,1)] = 4.0; // ratio = 4.0 / 2.0 = 2.0
+        nu[0] = 6.0; r[(0,0)] = 1.0; // ratio = 6.0
+        nu[1] = 12.0; r[(1,1)] = 4.0; // ratio = 12.0 / 2.0 = 6.0
         nu[2] = 1.0; r[(2,2)] = 1.0; // ratio = 1.0
         
         let current_valid = vec![0, 1, 2];
@@ -545,8 +561,8 @@ mod missed_mutant_tests {
         let meas_types = [(sat_id, 0), (sat_id, 0), (sat_id, 0)];
         let tuning = EkfTuningConfig::default();
         let (idx, val) = evaluate_post_fit_outliers(&nu, &r, &hp, &current_valid, Some(&meas_types), 1.0, false, &tuning);
-        assert_eq!(idx, Some(0)); // 0 wins because 2.0 > 2.0 is false
-        assert!((val - 2.0).abs() < 1e-9);
+        assert_eq!(idx, Some(0)); // 0 wins because 6.0 > 6.0 is false
+        assert!((val - 6.0).abs() < 1e-9);
     }
     
     #[test]
@@ -573,7 +589,7 @@ mod missed_mutant_tests {
         let mut r = DMatrix::zeros(4, 4);
         let hp = DVector::zeros(4);
         
-        nu[0] = 2.0; r[(0,0)] = 1.0; 
+        nu[0] = 6.0; r[(0,0)] = 1.0; 
         
         let current_valid = vec![0, 1, 2, 3];
         let sat_id = SatelliteId { constellation: Constellation::Gps, prn: 1 };
@@ -582,7 +598,7 @@ mod missed_mutant_tests {
         let (idx, val) = evaluate_post_fit_outliers(&nu, &r, &hp, &current_valid, Some(&meas_types), 1.0, false, &tuning);
         // Catch mutants in ratio math
         assert_eq!(idx, Some(0));
-        assert!((val - 2.0).abs() < 1e-9);
+        assert!((val - 6.0).abs() < 1e-9);
     }
 
     #[test]

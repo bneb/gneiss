@@ -155,7 +155,7 @@ pub fn update(state: &mut RtkState, z: &DVector<f64>, h: &DMatrix<f64>, r: &DMat
         return Err(UpdateError::DimensionMismatch);
     }
     
-    let valid_indices = filter_pre_fit_residuals(z, h, r, &state.covariance, max_innovation, meas_types);
+    let valid_indices = filter_pre_fit_residuals(z, h, r, &state.covariance, max_innovation, meas_types, is_tightly_coupled);
 
     let pr_valid_count = valid_indices.iter().filter(|&&i| meas_types.map_or(true, |t| t[i].1 == 0)).count();
     let cp_valid_count = valid_indices.iter().filter(|&&i| meas_types.map_or(true, |t| t[i].1 == 1 || t[i].1 == 2)).count();

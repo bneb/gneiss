@@ -135,11 +135,12 @@ mod tests {
         let sat1 = SatelliteId { constellation: Constellation::Gps, prn: 1 };
         let meas_types = [(sat1, 0), (sat1, 1), (sat1, 3)];
         
-        let _valid_idx = crate::engine::updater_math::filter_pre_fit_residuals(&z, &h, &r, &state.covariance, 15.0, Some(&meas_types));
+        let _valid_idx = crate::engine::updater_math::filter_pre_fit_residuals(&z, &h, &r, &state.covariance, 15.0, Some(&meas_types), false);
         
         // Now make phase invalid: z=20.0, nu^2/s_ii = 400/3.5 = 114 > 100 → Invalid
+        let mut z = z.clone();
         z[1] = 20.0;
-        let valid_idx = crate::engine::updater_math::filter_pre_fit_residuals(&mut z, &h, &r, &state.covariance, 15.0, Some(&meas_types));
+        let valid_idx = crate::engine::updater_math::filter_pre_fit_residuals(&mut z, &h, &r, &state.covariance, 15.0, Some(&meas_types), false);
         
         assert!(valid_idx.contains(&0), "PR should pass");
         assert!(!valid_idx.contains(&1), "Phase should be rejected");

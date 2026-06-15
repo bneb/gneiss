@@ -110,11 +110,8 @@ fn build_sats<'a>(engine: &ProcessingEngine, rover_obs: &'a EpochObs) -> Vec<Pro
             }
         }
         
-        // Skip single-frequency satellites in PPP because we do not have accurate IONEX data
-        // and the unmodelled ionosphere (even with Klobuchar) degrades sub-meter performance.
-        if !is_iono_free {
-            continue;
-        }
+        // Allow single-frequency satellites in PPP by using Klobuchar ionosphere correction.
+        // This is critical for consumer devices (like Pixel 4) where most satellites are single-frequency.
         
         let tau_pr = pr1 / LIGHT_SPEED;
         let t_tx_nom = gneiss_core::time::GpsTime::new(rover_obs.time.week, rover_obs.time.tow - tau_pr);
@@ -136,6 +133,10 @@ fn build_sats<'a>(engine: &ProcessingEngine, rover_obs: &'a EpochObs) -> Vec<Pro
         if dt_s != 0.0 { clk_found = true; }
         
         let precise_mode = !engine.sp3_epochs.is_empty() || engine.clk_data.is_some();
+        if !precise_mode {
+            dt_s = brdc_clk;
+            clk_found = true;
+        }
         if precise_mode && !clk_found {
             if let Some((_, sp3_clk)) = crate::engine::ssr::get_precise_orbit(&engine.sp3_epochs, sat_obs.sat, t_tx_nom, 10) {
                 if !sp3_clk.is_nan() && sp3_clk != 0.0 {
@@ -151,7 +152,7 @@ fn build_sats<'a>(engine: &ProcessingEngine, rover_obs: &'a EpochObs) -> Vec<Pro
 
         let t_tx_true = gneiss_core::time::GpsTime::new(rover_obs.time.week, rover_obs.time.tow - tau_pr - dt_s);
         let (mut raw_vec, raw_vel, _, sat_drift) = eph.position(t_tx_true);
-        let mut sat_clk = dt_s; // use the precise clock we just found
+        let mut sat_clk = if precise_mode { dt_s } else { brdc_clk };
         
         if precise_mode {
             // Relativistic clock correction for precise orbits (broadcast already includes this via af0, af1, af2)
@@ -206,7 +207,7 @@ fn build_sats<'a>(engine: &ProcessingEngine, rover_obs: &'a EpochObs) -> Vec<Pro
         
         let dist = (sat_pos - rcv_pos_ecef).norm();
         let (az, el) = gneiss_core::coords::az_el(rcv_pos_llh, rcv_pos_ecef, sat_pos);
-        if el < libm::asin(0.261799) { continue; }
+        if el < 0.261799 { continue; } // 15° elevation mask in radians
 
         let tropo_params = gneiss_core::atmosphere::TropoParams::default();
         let z_dry = 0.0022768 * tropo_params.press_hpa / (1.0 - 0.00266 * libm::cos(2.0 * rcv_pos_llh.x) - 0.00028 * rcv_pos_llh.z / 1000.0);
@@ -278,7 +279,7 @@ fn build_sats<'a>(engine: &ProcessingEngine, rover_obs: &'a EpochObs) -> Vec<Pro
             }
         }
         
-        tracing::error!("DEBUG PPP: sat={}, is_iono_free={}, dist={}, dt_sat_m={}, pcv={}", sat_obs.sat, is_iono_free, dist, sat_clk * LIGHT_SPEED, pcv_correction);
+        tracing::trace!("PPP sat={}, iono_free={}, dist={:.1}, clk_m={:.3}, pcv={:.4}", sat_obs.sat, is_iono_free, dist, sat_clk * LIGHT_SPEED, pcv_correction);
 
         sats.push(ProcessedSat {
             sat_obs, dt_sat_m: sat_clk * LIGHT_SPEED, p_meas: pr1, is_iono_free,

@@ -17,26 +17,31 @@ fn test_ppp_skeleton() {
         code: ObsCode::from_str("C1C").unwrap(),
         value: 20000000.0,
         lock_time: None,
+        lli: None,
     };
     let obs2 = Observation {
         code: ObsCode::from_str("L1C").unwrap(),
         value: 105000000.0,
         lock_time: None,
+        lli: None,
     };
     let obs3 = Observation {
         code: ObsCode::from_str("C2W").unwrap(),
         value: 20000010.0,
         lock_time: None,
+        lli: None,
     };
     let obs4 = Observation {
         code: ObsCode::from_str("L2W").unwrap(),
         value: 82000000.0,
         lock_time: None,
+        lli: None,
     };
     let obs5 = Observation {
         code: ObsCode::from_str("S1C").unwrap(),
         value: 45.0,
         lock_time: None,
+        lli: None,
     };
 
     let sat_obs = SatObs {

@@ -37,6 +37,7 @@ mod integration {
                             code: ObsCode { obs_type: ObsType::Pseudorange, signal: SignalCode { freq_band: 1, attribute: 'C' } },
                             value: 20000000.0,
                             lock_time: Some(100),
+                            lli: None,
                         }
                     ]
                 }

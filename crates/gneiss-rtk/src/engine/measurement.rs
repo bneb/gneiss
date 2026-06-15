@@ -566,7 +566,7 @@ fn filter_innovations_chi_squared(
         
         let passed = chi2 <= threshold;
         if passed { safe_indices.push(i); }
-        else { tracing::warn!("Rejected meas type {} with inn: {:.3}, chi2: {:.1}", type_all[i].1, z_all[i], chi2); }
+        else { tracing::debug!("Rejected meas type {} with inn: {:.3}, chi2: {:.1}", type_all[i].1, z_all[i], chi2); }
         
         if type_all[i].1 == 1 || type_all[i].1 == 2 {
             update_reject_counts(state, &h_row, state_size, passed);

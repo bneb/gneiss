@@ -55,7 +55,7 @@ impl ProcessingEngine {
             || (matches!(config.mode, EngineMode::RtkIns | EngineMode::PppIns | EngineMode::SppIns | EngineMode::RtkInsLooselyCoupled | EngineMode::SppInsLooselyCoupled | EngineMode::PppInsLooselyCoupled) && !had_imu_data);
         
         if use_gnss_only_seed {
-            tracing::warn!("epoch_count = {}", state.epoch_count);
+            tracing::debug!("epoch_count = {}", state.epoch_count);
             let need_spp_reset = if spp_pos.is_some() {
                 state.epoch_count < 3
             } else { false };
@@ -82,7 +82,7 @@ impl ProcessingEngine {
     }
 
     fn perform_spp_fallback_update(config: &EngineConfig, state: &mut RtkState, pos: Coordinate) {
-        tracing::warn!("valid_base IS NONE! Falling back to SPP!");
+        tracing::debug!("No valid base data. Falling back to SPP.");
         tracing::debug!("RTK base missing or stale. Falling back to SPP update.");
         let z_diff = pos.vector - state.position.vector;
         let z_vec = nalgebra::DVector::from_column_slice(z_diff.as_slice());
@@ -149,7 +149,7 @@ impl ProcessingEngine {
 
         if let Some(base) = valid_base {
             state.epoch_count += 1;
-            tracing::warn!("valid_base IS SOME! incrementing epoch_count to {}", state.epoch_count);
+            tracing::debug!("valid_base found, epoch_count = {}", state.epoch_count);
             let mut base_coord = if let Some(base_pos_arr) = self.config.base_position {
                 Coordinate::new(Vector3::new(base_pos_arr[0], base_pos_arr[1], base_pos_arr[2]), Datum::WGS84, Frame::ECEF, rover_obs.time)
             } else { return Err(EngineError::MissingBasePosition); };
@@ -237,10 +237,23 @@ fn process_rtk_update<'a>(
             state.consecutive_rejections += 1;
             tracing::warn!("GNSS EKF rejected for {} epochs.", state.consecutive_rejections);
             
+            // Inflate position and velocity covariance exponentially to force EKF to eventually accept GNSS
+            if state.ins_aligned {
+                let inflate_factor = 1.0 + (state.consecutive_rejections as f64 * 0.02).min(0.5); // Grows up to 1.5x per epoch
+                for i in 0..6 { state.covariance[(i, i)] *= inflate_factor; }
+                for i in 0..3 { state.covariance[(i, i)] += 1.0; } // Base additive inflation
+                for i in 3..6 { state.covariance[(i, i)] += 0.1; }
+            }
+            
             let pos_var = state.covariance[(0, 0)] + state.covariance[(1, 1)] + state.covariance[(2, 2)];
-            let max_rejections = if state.ins_aligned { 500 } else { 3 };
-            if state.consecutive_rejections >= max_rejections || (state.ins_aligned && pos_var > 900.0) {
-                tracing::warn!("Divergence detected after {} epochs (pos_var {:.2}): resetting EKF to SPP fallback.", state.consecutive_rejections, pos_var);
+            if state.ins_aligned && pos_var > 900.0 {
+                tracing::warn!("Divergence detected (pos_var {:.2}): resetting EKF to SPP fallback.", pos_var);
+                if let Some(pos) = spp_pos {
+                    state.reset_to_spp(pos, spp_state_ref, !config.mode.is_ppp());
+                    state.consecutive_rejections = 0;
+                }
+            } else if !state.ins_aligned && state.consecutive_rejections >= 3 {
+                tracing::warn!("Loosely coupled GNSS EKF rejected for 3 epochs: resetting to SPP fallback.");
                 if let Some(pos) = spp_pos {
                     state.reset_to_spp(pos, spp_state_ref, !config.mode.is_ppp());
                     state.consecutive_rejections = 0;
@@ -256,7 +269,7 @@ fn process_rtk_update<'a>(
             }
             
             state.consecutive_rejections = 0;
-            match state.resolve_ambiguities(ephemerides, config.lambda_min_subset, config.ar_min_epoch_count, config.ar_min_lock, config.lambda_min_ratio, config.ar_ffrt_prob) {
+            match state.resolve_ambiguities(ephemerides, config.lambda_min_subset, config.ar_min_epoch_count, config.ar_min_lock, config.lambda_min_ratio, config.ar_ffrt_prob, config.tuning.min_ar_success_rate) {
                 Ok((fixed_state, _da, _q_fixed, _ratio, _subset_size)) => {
                     tracing::debug!("Integer ambiguities resolved!");
                     state.fixed_state = Some(Box::new(fixed_state));
@@ -271,16 +284,28 @@ fn process_rtk_update<'a>(
         state.consecutive_rejections += 1;
         tracing::warn!("GNSS EKF rejected for {} epochs (measurement model empty).", state.consecutive_rejections);
         
+        if state.ins_aligned {
+            let inflate_factor = 1.0 + (state.consecutive_rejections as f64 * 0.02).min(0.5);
+            for i in 0..6 { state.covariance[(i, i)] *= inflate_factor; }
+            for i in 0..3 { state.covariance[(i, i)] += 1.0; }
+            for i in 3..6 { state.covariance[(i, i)] += 0.1; }
+        }
+        
         let pos_var = state.covariance[(0, 0)] + state.covariance[(1, 1)] + state.covariance[(2, 2)];
-        let max_rejections = if state.ins_aligned { 500 } else { 3 };
-        if state.consecutive_rejections >= max_rejections || (state.ins_aligned && pos_var > 900.0) {
-            tracing::warn!("Divergence detected after {} epochs (pos_var {:.2}): resetting EKF to SPP fallback.", state.consecutive_rejections, pos_var);
+        if state.ins_aligned && pos_var > 900.0 {
+            tracing::warn!("Divergence detected (pos_var {:.2}): resetting EKF to SPP fallback.", pos_var);
+            if let Some(pos) = spp_pos {
+                state.reset_to_spp(pos, spp_state_ref, !config.mode.is_ppp());
+                state.consecutive_rejections = 0;
+            }
+        } else if !state.ins_aligned && state.consecutive_rejections >= 3 {
+            tracing::warn!("Loosely coupled GNSS EKF rejected for 3 epochs: resetting to SPP fallback.");
             if let Some(pos) = spp_pos {
                 state.reset_to_spp(pos, spp_state_ref, !config.mode.is_ppp());
                 state.consecutive_rejections = 0;
             }
         }
     }
-    tracing::warn!("End of RTK loop, epoch_count = {}", state.epoch_count);
+    tracing::debug!("End of RTK loop, epoch_count = {}", state.epoch_count);
     state.prune_stale_ambiguities(state.epoch_count as u32, 10);
 }

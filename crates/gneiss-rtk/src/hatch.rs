@@ -71,6 +71,17 @@ impl HatchFilter {
                     let pr_val = sat_obs.observations[pi].value;
                     let cp_val = sat_obs.observations[ci].value; // In meters
                     
+                    let snr_idx = sat_obs.observations.iter().position(|o| o.code.obs_type == ObsType::Snr && o.code.signal == signal);
+                    let snr = snr_idx.map(|i| sat_obs.observations[i].value).unwrap_or(40.0);
+                    
+                    let adaptive_window = if snr >= 40.0 {
+                        self.max_window
+                    } else if snr >= 30.0 {
+                        self.max_window / 2
+                    } else {
+                        self.max_window / 5
+                    }.max(5); // Minimum 5 epochs
+                    
                     let key = (sat_obs.sat, signal);
 
                     let smoothed_val = if let Some(state) = self.states.get_mut(&key) {
@@ -92,7 +103,11 @@ impl HatchFilter {
                             pr_val
                         } else {
                             // Smooth
-                            state.count = std::cmp::min(state.count + 1, self.max_window);
+                            state.count = std::cmp::min(state.count + 1, adaptive_window);
+                            // If SNR dropped and adaptive_window < state.count, we need to handle it gracefully
+                            if state.count > adaptive_window {
+                                state.count = adaptive_window;
+                            }
                             let w = 1.0 / (state.count as f64);
                             
                             let new_smoothed = w * pr_val + (1.0 - w) * projected_pr;
@@ -143,8 +158,8 @@ mod tests {
             satellites: vec![SatObs {
                 sat,
                 observations: vec![
-                    Observation { code: pr_code, value: 20000000.0, lock_time: None },
-                    Observation { code: cp_code, value: 20000000.0, lock_time: None },
+                    Observation { code: pr_code, value: 20000000.0, lock_time: None, lli: None },
+                    Observation { code: cp_code, value: 20000000.0, lock_time: None, lli: None },
                 ]
             }],
         };
@@ -157,8 +172,8 @@ mod tests {
             satellites: vec![SatObs {
                 sat,
                 observations: vec![
-                    Observation { code: pr_code, value: 20000003.0, lock_time: None }, // +3m
-                    Observation { code: cp_code, value: 20000001.0, lock_time: None }, // +1m
+                    Observation { code: pr_code, value: 20000003.0, lock_time: None, lli: None }, // +3m
+                    Observation { code: cp_code, value: 20000001.0, lock_time: None, lli: None }, // +1m
                 ]
             }],
         };

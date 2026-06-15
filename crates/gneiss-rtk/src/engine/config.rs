@@ -53,6 +53,9 @@ pub struct EkfTuningConfig {
     pub huber_threshold_loosely: f64,
     pub huber_threshold_tightly: f64,
 
+    // Ambiguity Resolution
+    pub min_ar_success_rate: f64,
+
     pub ekf_max_iterations: usize,
 
     // Auto-tuning Constraints
@@ -67,11 +70,11 @@ impl Default for EkfTuningConfig {
             dop_base_var: 1.0,
             snr_a: 1.0,
             snr_b: 150.0,
-            sigma_v: 0.01,
-            sigma_phi: 0.001,
+            sigma_v: 0.1,     // Velocity Random Walk (consumer MEMS)
+            sigma_phi: 0.01,  // Angular Random Walk (consumer MEMS)
             sigma_ab: 1e-4,
             sigma_gb: 1e-5,
-            loosely_coupled_mahalanobis_sq: 250.0,
+            loosely_coupled_mahalanobis_sq: 1000.0,
             phase_outlier_ratio_thresh: 5.0,
             doppler_outlier_ratio_mult: 2.0,
             pr_abs_thresh: 40.0,
@@ -79,6 +82,7 @@ impl Default for EkfTuningConfig {
             dop_abs_thresh: 15.0,
             huber_threshold_loosely: 10.0,
             huber_threshold_tightly: 3.0,
+            min_ar_success_rate: 0.999,
             ekf_max_iterations: 20,
             auto_tune: Default::default(),
         }
