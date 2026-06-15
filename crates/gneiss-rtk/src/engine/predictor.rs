@@ -36,6 +36,11 @@ pub fn integrate_imu_mechanization(state: &mut RtkState, dt: f64, imu_buffer: &[
         
         let v_dot = f_e + gravity - coriolis - centrifugal;
         
+        if state.epoch_count == 60 {
+            tracing::info!("IMU MECHANIZATION: f_b={:.2?} f_e={:.2?} gravity={:.2?} v_dot={:.2?} att={:.3?}", 
+                f_b.as_slice(), f_e.as_slice(), gravity.as_slice(), v_dot.as_slice(), state.attitude.coords.as_slice());
+        }
+        
         let v_mid = state.velocity + v_dot * (imu_dt * 0.5);
         state.velocity += v_dot * imu_dt;
         state.position.vector += v_mid * imu_dt;
@@ -93,14 +98,9 @@ pub fn compute_process_noise(dt: f64, config: &EngineConfig, is_imu_active: bool
             DynamicsModel::Automotive => 10.0,
             DynamicsModel::Airborne => 50.0,
         };
-        let q_pos = q_acc * dt_abs.powi(3) / 3.0; 
         let q_vel = q_acc * dt_abs;
-        let q_pos_vel = q_acc * dt_abs.powi(2) / 2.0;
         for i in 0..3 { 
-            q[(i, i)] = q_pos; 
             q[(i+3, i+3)] = q_vel; 
-            q[(i, i+3)] = q_pos_vel;
-            q[(i+3, i)] = q_pos_vel;
         }
         for i in 6..9 { q[(i, i)] = 1e-7 * dt_abs; } 
     } else {

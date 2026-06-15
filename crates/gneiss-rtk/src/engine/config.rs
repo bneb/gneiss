@@ -148,7 +148,7 @@ impl Default for EngineConfig {
             chi_square_pr_threshold: 3.0,
             chi_square_cp_threshold: 1000000.0,
             phase_windup_enabled: true,
-            min_snr_dbhz: 0.0,
+            min_snr_dbhz: 25.0,
             dynamics_model: DynamicsModel::Automotive,
             doppler_slip_threshold_cycles: 5.0,
             max_reject_count: 3,

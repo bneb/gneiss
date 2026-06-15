@@ -53,6 +53,7 @@ pub struct RtkState {
     pub predicted_gyro_bias: Option<Vector3<f64>>,
     pub fixed_state: Option<Box<RtkState>>,
     pub is_reset: bool,
+    pub ins_aligned: bool,
 }
 
 impl RtkState {
@@ -69,7 +70,7 @@ impl RtkState {
         cov[(17, 17)] = 100000.0; // isb_gal
         cov[(18, 18)] = 100000.0; // isb_bds
         cov[(19, 19)] = 1000.0;   // rcv_clk_drift
-        cov[(20, 20)] = 1e-4;     // zwd
+        cov[(20, 20)] = 1.0;      // zwd
 
         Self {
             time,
@@ -118,6 +119,7 @@ impl RtkState {
             predicted_gyro_bias: None,
             fixed_state: None,
             is_reset: false,
+            ins_aligned: false,
         }
     }
 
@@ -151,6 +153,64 @@ impl RtkState {
             }
             self.covariance[(i, i)] = 100000.0;
         }
+    }
+
+    pub fn reset_to_spp(&mut self, spp_pos: Coordinate, spp_state: Option<&crate::spp::SppState>, init_isbs: bool) {
+        self.position = spp_pos;
+        if self.velocity.norm() > 100.0 || self.velocity.norm().is_nan() {
+            self.velocity = Vector3::zeros();
+        }
+        
+        if self.covariance.nrows() > 15 {
+            if let Some(spp) = spp_state {
+                self.rcv_clk_bias = spp.cdt;
+                if init_isbs {
+                    self.isb_glo = spp.cdt_glo - spp.cdt;
+                    self.isb_gal = spp.cdt_gal - spp.cdt;
+                    self.isb_bds = spp.cdt_bds - spp.cdt;
+                } else {
+                    self.isb_glo = 0.0;
+                    self.isb_gal = 0.0;
+                    self.isb_bds = 0.0;
+                }
+                
+                tracing::debug!("SPP Reset: cdt={:.2}, bds={:.2}, glo={:.2}, init_isbs={}, isb_bds={:.2}, isb_glo={:.2}", 
+                    spp.cdt, spp.cdt_bds, spp.cdt_glo, init_isbs, self.isb_bds, self.isb_glo);
+            }
+            if self.rcv_clk_drift.abs() > 10000.0 || self.rcv_clk_drift.is_nan() {
+                self.rcv_clk_drift = 0.0;
+            }
+        }
+        
+        self.clear_ambiguities();
+        
+        let cols = self.covariance.ncols();
+        let reset_indices: Vec<usize> = vec![0, 1, 2, 3, 4, 5, 15];
+        for &i in &reset_indices {
+            for j in 0..cols {
+                if i != j && !reset_indices.contains(&j) {
+                    self.covariance[(i, j)] = 0.0;
+                    self.covariance[(j, i)] = 0.0;
+                }
+            }
+        }
+        for &i in &reset_indices {
+            for &j in &reset_indices {
+                if i != j {
+                    self.covariance[(i, j)] = 0.0;
+                }
+            }
+        }
+        
+        for i in 0..3 { self.covariance[(i, i)] = 100.0; }
+        for i in 3..6 { self.covariance[(i, i)] = 100.0; }
+        if self.covariance.nrows() > 15 {
+            self.covariance[(15, 15)] = 100000.0;
+        }
+
+        self.is_reset = true;
+        self.consecutive_rejections = 0;
+        self.ins_aligned = false;
     }
 
     pub fn update_mw(&mut self, sat: SatelliteId, mw_cycles: f64) {
@@ -264,6 +324,8 @@ impl RtkState {
 
             let cov_idx = CORE_STATE_SIZE + idx;
             self.covariance = self.covariance.clone().remove_row(cov_idx).remove_column(cov_idx);
+            
+            self.gf_values.remove(&sat);
         }
     }
     
@@ -693,6 +755,8 @@ fn find_best_reference_sat(state: &RtkState, constell: gneiss_core::sat::Constel
     for i in 0..state.ambiguities.len() {
         let (sat, freq) = state.ambiguity_keys[i];
         if sat.constellation != constell || freq != 1 { continue; }
+        let reject_count = *state.reject_counts.get(&(sat, freq)).unwrap_or(&0);
+        if reject_count > 0 { continue; }
         let lock = *state.locktimes.get(&(sat, freq)).unwrap_or(&0);
         if lock >= ar_min_lock as u16 && lock > max_lock {
             max_lock = lock; best_ref_idx = Some(i);
@@ -710,6 +774,8 @@ fn collect_candidates_for_constellation(
         if i == ref_idx || Some(i) == l2_ref_idx { continue; }
         let (rov_sat, freq) = state.ambiguity_keys[i];
         if rov_sat.constellation != constell { continue; }
+        let reject_count = *state.reject_counts.get(&(rov_sat, freq)).unwrap_or(&0);
+        if reject_count > 0 { continue; }
         let lock = *state.locktimes.get(&(rov_sat, freq)).unwrap_or(&0);
         if lock >= ar_min_lock as u16 {
             if freq == 1 { candidates.push((i, ref_idx, lock)); }

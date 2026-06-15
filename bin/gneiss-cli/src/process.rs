@@ -46,6 +46,7 @@ pub async fn run_process(
     let time_offset = sync_rover_time(&parent_dir.join("reference.csv"), &mut rover_rinex_epochs, &mut engine)?;
     load_ephemerides(parent_dir, nav, &mut engine);
     load_precise_data(&mut engine, sp3, clk, antex);
+    load_dcbs(&mut engine, &rover);
 
     let imu_measurements = load_imu_measurements(&parent_dir.join("imu.csv"), &parent_dir.join("reference.csv"))?;
 
@@ -279,6 +280,51 @@ fn load_precise_data(engine: &mut ProcessingEngine, sp3: Option<String>, clk: Op
     }
 }
 
+fn load_dcbs(engine: &mut ProcessingEngine, rover_path: &str) {
+    if let Some(dir) = std::path::Path::new(rover_path).parent() {
+        let dcb_files = vec!["P1C1", "P2C2", "P1P2", "C1P1", "C2P2"];
+        if let Ok(entries) = std::fs::read_dir(dir) {
+            for file in entries.flatten() {
+                let path = file.path();
+                if path.extension().and_then(|s| s.to_str()) == Some("DCB") {
+                    if let Some(fname) = path.file_name().and_then(|s| s.to_str()) {
+                        let mut dcb_type = "";
+                        for dt in &dcb_files {
+                            if fname.starts_with(dt) {
+                                dcb_type = dt;
+                                break;
+                            }
+                        }
+                        if dcb_type.is_empty() { continue; }
+                        if let Ok(content) = std::fs::read_to_string(&path) {
+                            let mut count = 0;
+                            for line in content.lines() {
+                                if line.len() > 26 && (line.starts_with('G') || line.starts_with('R') || line.starts_with('E') || line.starts_with('C')) {
+                                    let sys = line.chars().next().unwrap();
+                                    if let Ok(prn) = line[1..3].trim().parse::<u8>() {
+                                        if let Ok(val) = line[15..26].trim().parse::<f64>() {
+                                            let constel = match sys {
+                                                'G' => gneiss_core::sat::Constellation::Gps,
+                                                'R' => gneiss_core::sat::Constellation::Glonass,
+                                                'E' => gneiss_core::sat::Constellation::Galileo,
+                                                'C' => gneiss_core::sat::Constellation::Beidou,
+                                                _ => continue,
+                                            };
+                                            engine.dcbs.insert((gneiss_core::sat::SatelliteId { prn, constellation: constel }, dcb_type.to_string()), val);
+                                            count += 1;
+                                        }
+                                    }
+                                }
+                            }
+                            tracing::info!("Loaded {} {} DCBs from {:?}", count, dcb_type, path);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 fn load_imu_measurements(imu_file_path: &std::path::Path, ref_file_path: &std::path::Path) -> Result<Vec<gneiss_core::imu::ImuMeasurement>, Box<dyn std::error::Error>> {
     let mut ref_gyro = Vec::new();
     if ref_file_path.exists() {
@@ -349,8 +395,9 @@ fn calibrate_imu_mounting(imu_measurements: &[gneiss_core::imu::ImuMeasurement],
     let (roll, pitch) = gneiss_rtk::calibration::mounting::estimate_gravity_alignment(imu_measurements)
         .map_err(|e| e.to_string())?;
     
-    info!("Detected Mounting Offsets: Roll={:.2}°, Pitch={:.2}°", roll.to_degrees(), pitch.to_degrees());
-    engine.config.imu_mounting_angles = Some([roll, pitch, 0.0]);
+    let yaw = engine.config.imu_mounting_angles.map(|a| a[2]).unwrap_or(0.0);
+    info!("Detected Mounting Offsets: Roll={:.2}°, Pitch={:.2}°, preserving Yaw={:.2}°", roll.to_degrees(), pitch.to_degrees(), yaw.to_degrees());
+    engine.config.imu_mounting_angles = Some([roll, pitch, yaw]);
     info!("IMU Re-alignment Complete.");
     Ok(())
 }
@@ -379,6 +426,9 @@ fn process_epochs(
             } else { None };
             
             while imu_idx < imu_measurements.len() && (imu_measurements[imu_idx].time_tag as f64 / 1000.0) <= current_tow {
+                if processed_epochs > 55 && processed_epochs < 65 {
+                    tracing::info!("DEBUG: pushing IMU meas at tow: {}, meas: {:?}", imu_measurements[imu_idx].time_tag, imu_measurements[imu_idx]);
+                }
                 engine.add_imu_measurement(imu_measurements[imu_idx].clone());
                 imu_idx += 1;
             }

@@ -8,3 +8,5 @@ authors.workspace = true
 gneiss-core.workspace = true
 nom = "7.1"
 bitvec = "1.0" # useful for RTCM and UBX binary parsing
+chrono = "0.4.45"
+nalgebra = "0.32"

@@ -115,15 +115,7 @@ impl AtmosphereModel {
         (1.0 + a / (1.0 + b / (1.0 + c))) / (sinel + (a / (sinel + b / (sinel + c))))
     }
 
-    /// Computes Tropospheric delay in meters using the Saastamoinen zenith delay mapped with Niell Mapping Function (NMF).
-    /// `pos_llh`: Receiver position (Lat, Lon, Height) in radians and meters
-    /// `el`: Elevation angle in radians
-    /// `time`: GPS time of observation
-    pub fn tropo_nmf(params: &TropoParams, pos_llh: Vector3<f64>, el: f64, time: GpsTime) -> f64 {
-        if el <= 0.0 {
-            return 0.0;
-        }
-
+    pub fn nmf_mapping_functions(pos_llh: Vector3<f64>, el: f64, time: GpsTime) -> (f64, f64) {
         let hgt = pos_llh.z;
         let mut lat = pos_llh.x * 180.0 / core::f64::consts::PI;
 
@@ -160,6 +152,36 @@ impl AtmosphereModel {
         let dm = (1.0 / libm::sin(el) - Self::nmf_mapf(el, aht[0], aht[1], aht[2])) * hgt / 1000.0;
         let m_h = Self::nmf_mapf(el, ah[0], ah[1], ah[2]) + dm;
         let m_w = Self::nmf_mapf(el, aw[0], aw[1], aw[2]);
+
+        (m_h, m_w)
+    }
+
+    /// Computes Tropospheric delay in meters using the Saastamoinen zenith delay mapped with Niell Mapping Function (NMF).
+    /// `pos_llh`: Receiver position (Lat, Lon, Height) in radians and meters
+    /// `el`: Elevation angle in radians
+    /// `time`: GPS time of observation
+    pub fn tropo_nmf(params: &TropoParams, pos_llh: Vector3<f64>, el: f64, time: GpsTime) -> f64 {
+        if el <= 0.0 {
+            return 0.0;
+        }
+
+        let hgt = pos_llh.z;
+        let mut lat = pos_llh.x * 180.0 / core::f64::consts::PI;
+
+        let coef = [
+            [ 1.2769934E-3, 1.2683230E-3, 1.2465397E-3, 1.2196049E-3, 1.2045996E-3 ],
+            [ 2.9153695E-3, 2.9152299E-3, 2.9288445E-3, 2.9022565E-3, 2.9024912E-3 ],
+            [ 62.610505E-3, 62.837393E-3, 63.721774E-3, 63.824265E-3, 64.258455E-3 ],
+            
+            [ 0.0000000E-0, 1.2709626E-5, 2.6523662E-5, 3.4000452E-5, 4.1202191E-5 ],
+            [ 0.0000000E-0, 2.1414979E-5, 3.0160779E-5, 7.2562722E-5, 11.723375E-5 ],
+            [ 0.0000000E-0, 9.0128400E-5, 4.3497037E-5, 84.795348E-5, 170.37206E-5 ],
+            
+            [ 5.8021897E-4, 5.6794847E-4, 5.8118019E-4, 5.9727542E-4, 6.1641693E-4 ],
+            [ 1.4275268E-3, 1.5138625E-3, 1.4572752E-3, 1.5007428E-3, 1.7599082E-3 ],
+            [ 4.3472961E-2, 4.6729510E-2, 4.3908931E-2, 4.4626982E-2, 5.4736038E-2 ]
+        ];
+        let (m_h, m_w) = Self::nmf_mapping_functions(pos_llh, el, time);
 
         // Zenith dry and wet delays (simplified Saastamoinen)
         let z_dry = 0.0022768 * params.press_hpa / (1.0 - 0.00266 * libm::cos(2.0 * pos_llh.x) - 0.00028 * hgt / 1000.0);

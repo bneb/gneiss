@@ -17,6 +17,7 @@ pub mod smoother;
 pub mod spp_tight;
 pub mod adaptive;
 pub mod processor;
+pub mod ssr;
 
 pub use types::*;
 pub use config::*;

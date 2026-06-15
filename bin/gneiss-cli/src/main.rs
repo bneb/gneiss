@@ -48,6 +48,14 @@ enum Commands {
         nav: Option<String>,
         #[arg(short, long, help = "Path to output trajectory file (.pos)")]
         output: String,
+        #[arg(long, help = "Path to precise orbit file (.sp3)")]
+        sp3: Option<String>,
+        #[arg(long, help = "Path to precise clock file (.clk)")]
+        clk: Option<String>,
+        #[arg(long, help = "Path to antenna exchange file (.atx)")]
+        antex: Option<String>,
+        #[arg(long, help = "Path to differential code bias files (.dcb)")]
+        dcb: Vec<String>,
         #[arg(long, help = "Path to engine configuration file (.json)")]
         config: Option<String>,
         #[arg(long, help = "Enable multi-pass backward smoothing")]
@@ -132,7 +140,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok(())
         },
         Commands::Process { 
-            rover, base, nav, output, config, 
+            rover, base, nav, output, sp3, clk, antex, dcb, config, 
             enable_backward_smoothing, enable_auto_tune, mode, 
             lambda_ratio, lambda_subset, max_epochs, 
             lever_arm, calibrate_imu,
@@ -335,6 +343,116 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 tracing::warn!("Nav file {} does not exist. Engine may fall back to default or fail.", nav_file);
             }
 
+            if let Some(sp3_path) = sp3 {
+                if let Ok(file) = std::fs::File::open(&sp3_path) {
+                    match gneiss_parsers::sp3::parse_sp3(std::io::BufReader::new(file)) {
+                        Ok(epochs) => {
+                            info!("Loaded {} SP3 epochs.", epochs.len());
+                            engine.sp3_epochs = epochs;
+                        },
+                        Err(e) => error!("Failed to parse SP3 file {}: {}", sp3_path, e),
+                    }
+                }
+            }
+
+            if let Some(clk_path) = clk {
+                if let Ok(content) = std::fs::read_to_string(&clk_path) {
+                    let rinex_clk = gneiss_parsers::rinex_clk::RinexClock::parse(&content);
+                    info!("Loaded CLK file with {} satellites.", rinex_clk.satellites.len());
+                    engine.clk_data = Some(rinex_clk);
+                } else {
+                    error!("Failed to read CLK file {}", clk_path);
+                }
+            }
+
+            if let Some(atx_file) = antex {
+                match gneiss_parsers::antex::AntexDatabase::parse(&atx_file) {
+                    Ok(db) => {
+                        info!("Loaded ANTEX database from {} ({} antennas).", atx_file, db.antennas.len());
+                        engine.antex = Some(db);
+                    },
+                    Err(e) => error!("Failed to parse ANTEX file {}: {:?}", atx_file, e),
+                }
+            }
+
+            for dcb_file in dcb {
+                let filename = std::path::Path::new(&dcb_file).file_name().unwrap().to_string_lossy().to_string();
+                let dcb_type = if filename.starts_with("P1C1") { "P1C1" }
+                    else if filename.starts_with("P2C2") { "P2C2" }
+                    else if filename.starts_with("P1P2") { "P1P2" }
+                    else { "UNKNOWN" };
+
+                if dcb_type != "UNKNOWN" {
+                    if let Ok(content) = std::fs::read_to_string(&dcb_file) {
+                        let mut count = 0;
+                        for line in content.lines() {
+                            if line.len() > 30 && line.starts_with(|c: char| c == 'G' || c == 'R' || c == 'E' || c == 'C') {
+                                if let Ok(sat) = std::str::FromStr::from_str(&line[0..3]) {
+                                    let parts: Vec<&str> = line[3..].split_whitespace().collect();
+                                    if parts.len() >= 2 {
+                                        if let Ok(val) = parts[0].parse::<f64>() {
+                                            engine.dcbs.insert((sat, dcb_type.to_string()), val);
+                                            count += 1;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        info!("Loaded {} DCBs of type {} from {}", count, dcb_type, dcb_file);
+                    } else {
+                        error!("Failed to read DCB file {}", dcb_file);
+                    }
+                } else {
+                    error!("Unknown DCB file type from filename: {}", dcb_file);
+                }
+            }
+
+            if let Some(dir) = parent_dir.to_str() {
+                let dcb_files = vec!["P1C1", "P2C2", "P1P2", "C1P1", "C2P2"];
+                if let Ok(entries) = std::fs::read_dir(dir) {
+                    for file in entries.flatten() {
+                        let path = file.path();
+                        if path.extension().and_then(|s| s.to_str()) == Some("DCB") {
+                            if let Some(fname) = path.file_name().and_then(|s| s.to_str()) {
+                                let mut dcb_type = "";
+                                for dt in &dcb_files {
+                                    if fname.starts_with(dt) {
+                                        dcb_type = dt;
+                                        break;
+                                    }
+                                }
+                                if dcb_type.is_empty() { continue; }
+                                if let Ok(content) = std::fs::read_to_string(&path) {
+                                    let mut count = 0;
+                                    for line in content.lines() {
+                                        if line.starts_with('G') || line.starts_with('R') || line.starts_with('E') || line.starts_with('C') {
+                                            let parts: Vec<&str> = line.split_whitespace().collect();
+                                            if parts.len() >= 2 {
+                                                let sys = parts[0].chars().next().unwrap();
+                                                if let Ok(prn) = parts[0][1..].parse::<u8>() {
+                                                    if let Ok(val) = parts[1].parse::<f64>() {
+                                                        let constel = match sys {
+                                                            'G' => gneiss_core::sat::Constellation::Gps,
+                                                            'R' => gneiss_core::sat::Constellation::Glonass,
+                                                            'E' => gneiss_core::sat::Constellation::Galileo,
+                                                            'C' => gneiss_core::sat::Constellation::Beidou,
+                                                            _ => continue,
+                                                        };
+                                                        engine.dcbs.insert((gneiss_core::sat::SatelliteId { prn, constellation: constel }, dcb_type.to_string()), val);
+                                                        count += 1;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    info!("Loaded {} {} DCBs from {:?}", count, dcb_type, path);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             let mut imu_measurements: Vec<gneiss_core::imu::ImuMeasurement> = Vec::new();
             let imu_file_path = parent_dir.join("imu.csv");
             if imu_file_path.exists() {
@@ -368,10 +486,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 }
                             }
                             
-                            // The IMU and Gyro data in this specific dataset are already pre-aligned to the vehicle FRD frame.
-                            // Convert acceleration from g to m/s^2 and gyro from deg/s to rad/s
-                            let accel_frd = nalgebra::Vector3::new(ax, ay, az) * 9.80665;
-                            let gyro_frd = nalgebra::Vector3::new(gx, gy, gz) * (std::f64::consts::PI / 180.0);
+                            // The IMU and Gyro data in this specific dataset are already in m/s^2 and rad/s.
+                            let accel_frd = nalgebra::Vector3::new(ax, ay, az);
+                            let gyro_frd = nalgebra::Vector3::new(gx, gy, gz);
                             imu_measurements.push(gneiss_core::imu::ImuMeasurement::new((tow * 1000.0) as u32, accel_frd, gyro_frd));
                         }
                     }

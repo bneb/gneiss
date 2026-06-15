@@ -6,7 +6,7 @@ use crate::engine::EngineError;
 const SPEED_OF_LIGHT: f64 = gneiss_core::constants::SPEED_OF_LIGHT_M_S;
 const NOMINAL_SNR_DBHZ: f64 = 45.0;
 const SNR_SCALE_DIVISOR: f64 = 10.0;
-const PSEUDORANGE_VARIANCE_BASE: f64 = 10.0;
+const PSEUDORANGE_VARIANCE_BASE: f64 = 1.0;
 
 const MATRIX_REGULARIZATION: f64 = 1e-6;
 
@@ -28,6 +28,7 @@ pub struct FgMeasurement {
     pub h_row: DVector<f64>,
     pub weight: f64,
     pub is_phase: bool,
+    pub sat: Option<gneiss_core::sat::SatelliteId>,
 }
 
 impl PppFactorGraph {
@@ -36,6 +37,10 @@ impl PppFactorGraph {
     pub fn solve(&self, state: &mut RtkState, sats: &[ProcessedSat]) -> Result<(), EngineError> {
         let x_pred = extract_state_vector(state);
         let p_pred = state.covariance.clone();
+        
+        state.full_x_predict = Some(x_pred.clone());
+        state.full_p_predict = Some(p_pred.clone());
+        
         let mut x_i = x_pred.clone();
 
         let p_inv = invert_matrix(&p_pred).ok_or(EngineError::StateDisappeared)?;
@@ -47,6 +52,11 @@ impl PppFactorGraph {
             }
             let dx = dx.unwrap();
             
+            // Debug dx
+            if state.epoch_count == 0 {
+                println!("Iter {}: dx_norm={:.2}, dx_pos=[{:.2}, {:.2}, {:.2}], dx_clk={:.2}", _iter, dx.norm(), dx[0], dx[1], dx[2], dx[15]);
+            }
+            
             x_i = &x_i + &dx;
             
             if dx.norm() < self.convergence_threshold {
@@ -56,9 +66,27 @@ impl PppFactorGraph {
         
         state.covariance = self.compute_final_covariance(state, sats, &x_i, &p_pred, &p_inv);
 
+        let pre_meas = self.build_measurements(state, sats, &x_pred, 0);
+        let mut removed_sats = Vec::new();
+        for m in &pre_meas {
+            if m.is_phase && m.res.abs() > 0.15 {
+                if let Some(sat) = m.sat {
+                    tracing::warn!("Cycle slip detected by FG for sat={}, res={:.3}m", sat, m.res);
+                    removed_sats.push(sat);
+                }
+            }
+        }
+        
         log_ppp_convergence(state, sats, &x_i, &x_pred, &p_pred, self);
         
         apply_state_vector(state, &x_i, state.covariance.clone());
+        
+        // Remove ambiguities for satellites that had large phase residuals (cycle slips)
+        // We do this AFTER apply_state_vector so the covariance matrix matches the updated state.
+        for sat in removed_sats {
+            state.remove_ambiguity(sat, 1);
+        }
+        
         Ok(())
     }
 
@@ -104,12 +132,15 @@ impl PppFactorGraph {
 
     fn build_measurements(&self, state: &RtkState, sats: &[ProcessedSat], x_i: &DVector<f64>, iter: usize) -> Vec<FgMeasurement> {
         let mut meas = Vec::new();
-        let rcv_pos = Vector3::new(x_i[0], x_i[1], x_i[2]);
-        let ztd = if x_i.len() > 20 { x_i[20] } else { 0.0 };
+        // Apply Solid Earth Tide correction (removes ~20-30cm coordinate variation)
+        let tide_offset = gneiss_core::tides::solid_earth_tides_ecef(state.time, state.position.vector);
+        let rcv_pos = Vector3::new(x_i[0], x_i[1], x_i[2]) + tide_offset;
+        let ztd = if x_i.len() > 20 && !x_i[20].is_nan() && x_i[20] != 0.0 { x_i[20] } else { state.zwd };
 
         for sat in sats {
-            let dist = (sat.sat_pos_rot - rcv_pos).norm();
-            let los = (sat.sat_pos_rot - rcv_pos) / dist;
+            let geometric_dist = (sat.sat_pos_rot - rcv_pos).norm();
+            let dist = geometric_dist - sat.pcv_correction;
+            let los = (sat.sat_pos_rot - rcv_pos) / geometric_dist;
             let isb = if x_i.len() > 18 {
                 match sat.sat_obs.sat.constellation {
                     gneiss_core::sat::Constellation::Glonass => x_i[16],
@@ -118,20 +149,31 @@ impl PppFactorGraph {
                     _ => 0.0,
                 }
             } else { 0.0 };
+            let pr_meas = sat.p_meas;
+            let amb_idx = find_ambiguity_index(state, sat.sat_obs.sat).unwrap_or(0);
             let expected_base = dist + x_i[15] + isb - sat.dt_sat_m + sat.tropo_dry + ztd * sat.map_wet;
-            let expected_pr = expected_base + sat.iono_delay;
-
-            let res_pr = sat.p_meas - expected_pr;
-            
-            static mut PPP_PRINTED: bool = false;
-            if unsafe { !PPP_PRINTED } {
-                unsafe { PPP_PRINTED = true; }
-                println!("PPP PRN{} PR res={:.3}m (meas={:.3}, expected_pr={:.3}, expected_base={:.3}, iono={:.3}, dt_sat_m={:.3}, tropo={:.3}, dist={:.3}, x_i[15]={:.3})", 
-                    sat.sat_obs.sat.prn, res_pr, sat.p_meas, expected_pr, expected_base, sat.iono_delay, sat.dt_sat_m, sat.tropo_dry, dist, x_i[15]);
+            let expected_pr = if sat.is_iono_free {
+                expected_base
+            } else {
+                expected_base + sat.iono_delay
+            };
+            let res_pr = pr_meas - expected_pr;
+            if res_pr.abs() > 1000.0 && iter == 0 {
+                tracing::warn!("HUGE res_pr: sat={}, meas={:.2}, exp={:.2}, res={:.2}, dist={:.2}, clk={:.2}, isb={:.2}, dt_sat_m={:.2}", 
+                    sat.sat_obs.sat, pr_meas, expected_pr, res_pr, dist, x_i[15], isb, sat.dt_sat_m);
             }
-            let var_pr = PSEUDORANGE_VARIANCE_BASE * 10.0 * snr_scale(sat.snr as i32) / libm::sin(sat.el);
+            
+            if state.epoch_count == 0 && iter == 0 {
+                println!("PPP {:?}{:02} PR res={:.3}m", sat.sat_obs.sat.constellation, sat.sat_obs.sat.prn, res_pr);
+            }
+            let mut var_pr = PSEUDORANGE_VARIANCE_BASE * snr_scale(sat.snr as i32) / libm::sin(sat.el);
+            if sat.is_iono_free { 
+                var_pr *= 9.0; // Iono-free combination amplifies noise
+            } else {
+                var_pr += 9.0; // Single frequency has ~3m Klobuchar residual iono error (3^2 = 9)
+            }
             let w_pr = apply_huber(res_pr, var_pr, self.huber_k);
-            meas.push(FgMeasurement { res: res_pr, h_row: build_h_row(&los, sat.map_wet, None, x_i.len(), sat.sat_obs.sat.constellation), weight: w_pr, is_phase: false });
+            meas.push(FgMeasurement { res: res_pr, h_row: build_h_row(&los, sat.map_wet, None, x_i.len(), sat.sat_obs.sat.constellation), weight: w_pr, is_phase: false, sat: Some(sat.sat_obs.sat) });
 
             if sat.doppler != 0.0 {
                 let rcv_vel = Vector3::new(x_i[3], x_i[4], x_i[5]);
@@ -140,12 +182,9 @@ impl PppFactorGraph {
                 let expected_rr = los.dot(&sat.sat_vel) - los.dot(&rcv_vel) + rcv_clk_drift - sat.sat_clock_drift * SPEED_OF_LIGHT;
                 
                 let res_rr = meas_rr - expected_rr;
-                if sat.sat_obs.sat.prn == 1 {
-                    println!("PRN1 doppler res_rr = {:.3} m/s (meas={:.3}, expected={:.3})", res_rr, meas_rr, expected_rr);
-                }
                 let var_rr = 0.01; // Decreased Doppler variance (trust velocity more)
                 let w_rr = apply_huber(res_rr, var_rr, 3.0);
-                meas.push(FgMeasurement { res: res_rr, h_row: build_h_row_doppler(&los, x_i.len()), weight: w_rr, is_phase: false });
+                meas.push(FgMeasurement { res: res_rr, h_row: build_h_row_doppler(&los, x_i.len()), weight: w_rr, is_phase: false, sat: Some(sat.sat_obs.sat) });
             }
 
             if let Some(cp1) = sat.cp1 {
@@ -169,14 +208,17 @@ impl PppFactorGraph {
                             sat.sat_obs.sat, l_meas, expected_cp, dist, x_i[15], x_i[CORE_STATE_SIZE + amb_idx]);
                     }
                     
-                    let var_cp = 0.0001;
-                    let var_cp = var_cp * snr_scale(sat.snr as i32) / libm::sin(sat.el);
-                    
-                    // Removed hard rejection of res_cp > 5.0m to allow convergence
+                    let mut var_cp = 0.0001;
+                    var_cp = var_cp * snr_scale(sat.snr as i32) / libm::sin(sat.el);
+                    if sat.is_iono_free { 
+                        var_cp *= 9.0; // Iono-free amplifies phase noise
+                    } else {
+                        var_cp += 9.0; // Single frequency has ~3m Klobuchar residual iono error (3^2 = 9)
+                    }
                     
                     let w_cp = apply_huber(res_cp, var_cp, self.huber_k);
                     
-                    meas.push(FgMeasurement { res: res_cp, h_row: build_h_row(&los, sat.map_wet, Some(CORE_STATE_SIZE + amb_idx), x_i.len(), sat.sat_obs.sat.constellation), weight: w_cp, is_phase: true });
+                    meas.push(FgMeasurement { res: res_cp, h_row: build_h_row(&los, sat.map_wet, Some(CORE_STATE_SIZE + amb_idx), x_i.len(), sat.sat_obs.sat.constellation), weight: w_cp, is_phase: true, sat: Some(sat.sat_obs.sat) });
                 }
             }
         }

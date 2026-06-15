@@ -147,13 +147,13 @@ fn rawx_to_epoch(rawx: &UbxRxmRawx) -> EpochObs {
         
         let mut obs = Vec::new();
         if meas.pr_valid {
-            obs.push(Observation { code: ObsCode { obs_type: ObsType::Pseudorange, signal: sig }, value: meas.pr_mes, lock_time: None });
+            obs.push(Observation { code: ObsCode { obs_type: ObsType::Pseudorange, signal: sig }, value: meas.pr_mes, lock_time: None, lli: None });
         }
         if meas.cp_valid {
-            obs.push(Observation { code: ObsCode { obs_type: ObsType::CarrierPhase, signal: sig }, value: meas.cp_mes, lock_time: Some(meas.locktime) });
+            obs.push(Observation { code: ObsCode { obs_type: ObsType::CarrierPhase, signal: sig }, value: meas.cp_mes, lock_time: Some(meas.locktime), lli: None });
         }
-        obs.push(Observation { code: ObsCode { obs_type: ObsType::Doppler, signal: sig }, value: meas.do_mes as f64, lock_time: None });
-        obs.push(Observation { code: ObsCode { obs_type: ObsType::Snr, signal: sig }, value: meas.cno as f64, lock_time: None });
+        obs.push(Observation { code: ObsCode { obs_type: ObsType::Doppler, signal: sig }, value: meas.do_mes as f64, lock_time: None, lli: None });
+        obs.push(Observation { code: ObsCode { obs_type: ObsType::Snr, signal: sig }, value: meas.cno as f64, lock_time: None, lli: None });
         
         sats.push(SatObs { sat: sat_id, observations: obs });
     }

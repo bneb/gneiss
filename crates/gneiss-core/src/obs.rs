@@ -92,6 +92,8 @@ pub struct Observation {
     pub value: f64,
     /// Optional lock time for carrier phase measurements (in increments)
     pub lock_time: Option<u16>,
+    /// Optional Loss of Lock Indicator (from RINEX)
+    pub lli: Option<u8>,
 }
 
 /// All observations for a specific satellite at a specific epoch.
@@ -116,6 +118,10 @@ impl SatObs {
 
     pub fn get_locktime(&self, freq_band: u8) -> Option<u16> {
         self.observations.iter().find(|o| o.code.obs_type == ObsType::CarrierPhase && o.code.signal.freq_band == freq_band).and_then(|o| o.lock_time)
+    }
+    
+    pub fn get_lli(&self, freq_band: u8) -> Option<u8> {
+        self.observations.iter().find(|o| o.code.obs_type == ObsType::CarrierPhase && o.code.signal.freq_band == freq_band).and_then(|o| o.lli)
     }
 
     pub fn get_snr(&self, freq_band: u8) -> Option<u8> {

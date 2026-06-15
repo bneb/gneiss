@@ -116,6 +116,7 @@ fn compute_update_iteration(
     let hp = current_h * state_cov;
     let s = &hp * current_h.transpose() + current_r;
     if s.iter().any(|x| x.is_nan() || x.is_infinite() || x.abs() > 1e15) {
+        tracing::warn!("EKF update failed: SingularMatrix (NaN/Inf in S)");
         return Err(UpdateError::SingularMatrix);
     }
     
@@ -125,7 +126,10 @@ fn compute_update_iteration(
             let regularized = s.clone() + DMatrix::identity(s.nrows(), s.ncols()) * 1e-6;
             match regularized.try_inverse() {
                 Some(inv) => inv,
-                None => return Err(UpdateError::SingularMatrix),
+                None => {
+                    tracing::warn!("EKF update failed: SingularMatrix (Cholesky and regularized inverse both failed)");
+                    return Err(UpdateError::SingularMatrix);
+                }
             }
         }
     };
@@ -134,6 +138,7 @@ fn compute_update_iteration(
     let dx = &k * current_z;
     
     if dx.iter().any(|x| x.is_nan()) {
+        tracing::warn!("EKF update failed: SingularMatrix (NaN in dx)");
         return Err(UpdateError::SingularMatrix);
     }
 
@@ -146,20 +151,22 @@ fn compute_update_iteration(
 #[allow(clippy::too_many_arguments)]
 pub fn update(state: &mut RtkState, z: &DVector<f64>, h: &DMatrix<f64>, r: &DMatrix<f64>, max_innovation: f64, meas_types: Option<&[(gneiss_core::sat::SatelliteId, u8)]>, is_tightly_coupled: bool, tuning: &crate::engine::config::EkfTuningConfig) -> Result<Vec<usize>, UpdateError> {
     if z.len() != h.nrows() || h.ncols() != state.covariance.nrows() {
+        tracing::warn!("EKF update failed: DimensionMismatch");
         return Err(UpdateError::DimensionMismatch);
     }
     
     let valid_indices = filter_pre_fit_residuals(z, h, r, &state.covariance, max_innovation, meas_types);
 
     let pr_valid_count = valid_indices.iter().filter(|&&i| meas_types.map_or(true, |t| t[i].1 == 0)).count();
-    let total_pr = meas_types.map_or(0, |t| t.iter().filter(|&&type_| type_.1 == 0).count());
+    let cp_valid_count = valid_indices.iter().filter(|&&i| meas_types.map_or(true, |t| t[i].1 == 1 || t[i].1 == 2)).count();
     
-    if total_pr > 0 && pr_valid_count == 0 {
-        tracing::error!("EKF rejected ALL {} pseudoranges! Force reset to SPP.", total_pr);
+    if pr_valid_count == 0 {
+        tracing::error!("EKF update lacks any valid PR measurements! Rejecting update to trigger SPP fallback.");
         return Err(UpdateError::InvalidMeasurement);
     }
 
     if valid_indices.is_empty() {
+        tracing::warn!("EKF update failed: InvalidMeasurement (valid_indices empty)");
         return Err(UpdateError::InvalidMeasurement);
     }
     
@@ -194,14 +201,21 @@ pub fn update(state: &mut RtkState, z: &DVector<f64>, h: &DMatrix<f64>, r: &DMat
         k = k_iter;
         
         if let Some(idx) = worst_idx {
-            if current_valid.len() > 4 {
-                if _iter >= tuning.ekf_max_iterations - 1 { break; }
+            if current_valid.len() > 1 {
+                if _iter >= tuning.ekf_max_iterations - 1 { 
+                    if max_outlier_ratio == f64::INFINITY || max_outlier_ratio > 3.0 {
+                        tracing::warn!("EKF update failed: Iteration limit reached with remaining outliers (ratio {:.2})", max_outlier_ratio);
+                        return Err(UpdateError::InvalidMeasurement);
+                    }
+                    break; 
+                }
                 current_z = current_z.remove_row(idx);
                 current_h = current_h.remove_row(idx);
                 current_r = current_r.remove_row(idx).remove_column(idx);
                 current_valid.remove(idx);
                 continue;
             } else if max_outlier_ratio == f64::INFINITY || max_outlier_ratio > 3.0 {
+                tracing::warn!("EKF update failed: InvalidMeasurement (outlier ratio {:.2})", max_outlier_ratio);
                 return Err(UpdateError::InvalidMeasurement);
             }
         }

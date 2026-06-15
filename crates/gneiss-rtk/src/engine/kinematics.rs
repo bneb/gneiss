@@ -58,6 +58,6 @@ pub fn apply_kinematic_constraints(
         } else {
             nalgebra::Vector3::zeros()
         };
-        let _ = crate::nhc::apply_nhc(state, 0.1, 0.1, &config.imu_mounting_angles, &config.imu_to_nhc_lever_arm, &omega_b);
+        let _ = crate::nhc::apply_nhc(state, 0.1, 0.1, &config.imu_to_nhc_lever_arm, &omega_b, &config.tuning);
     }
 }

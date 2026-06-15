@@ -566,7 +566,7 @@ fn filter_innovations_chi_squared(
         
         let passed = chi2 <= threshold;
         if passed { safe_indices.push(i); }
-        else { tracing::debug!("Rejected meas type {} with inn: {:.3}, chi2: {:.1}", type_all[i].1, z_all[i], chi2); }
+        else { tracing::warn!("Rejected meas type {} with inn: {:.3}, chi2: {:.1}", type_all[i].1, z_all[i], chi2); }
         
         if type_all[i].1 == 1 || type_all[i].1 == 2 {
             update_reject_counts(state, &h_row, state_size, passed);
@@ -593,6 +593,7 @@ fn build_final_measurement_matrices(
         let r_mat = build_dense_covariance_matrix(&r_diagonals, &t_vec);
         Some(EkfMeasurementMatrices { z: z_vec, h: h_mat, r: r_mat, mt: t_vec })
     } else {
+        tracing::warn!("measurement model empty! all_z={}, safe_indices={}", z_all.len(), safe_indices.len());
         None
     }
 }

@@ -81,12 +81,12 @@ impl RinexClock {
         
         if idx == 0 {
             // Check if too far
-            if (records[0].time - t).abs() > 60.0 { return None; }
+            if (records[0].time - t).abs() > 900.0 { return None; }
             return Some(records[0].bias);
         }
         if idx >= records.len() {
             let last = records.len() - 1;
-            if (t - records[last].time).abs() > 60.0 { return None; }
+            if (t - records[last].time).abs() > 900.0 { return None; }
             return Some(records[last].bias);
         }
         
@@ -94,7 +94,7 @@ impl RinexClock {
         let r2 = &records[idx];
         
         let dt = r2.time - r1.time;
-        if dt == 0.0 || (t - r1.time).abs() > 60.0 {
+        if dt == 0.0 || (t - r1.time).abs() > 900.0 {
             return Some(r1.bias);
         }
         

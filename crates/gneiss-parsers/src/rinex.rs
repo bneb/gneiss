@@ -307,33 +307,27 @@ fn parse_rinex_3_obs<I: Iterator<Item = String>>(first_line: String, lines: &mut
 }
 
 fn map_rinex_type(type_str: &str, val: f64, lli: Option<u8>) -> Option<Observation> {
-    let obs_char = type_str.chars().next()?;
-    let freq_char = type_str.chars().nth(1)?;
-    let attr_char = type_str.chars().nth(2).unwrap_or(' ');
-    
-    let obs_type = match obs_char {
+    let obs_type = match type_str.chars().next()? {
         'C' | 'P' => ObsType::Pseudorange,
         'L' => ObsType::CarrierPhase,
         'D' => ObsType::Doppler,
         'S' => ObsType::Snr,
         _ => return None,
     };
-    
-    let freq_band = freq_char.to_digit(10)? as u8;
-    
-    let lock_time = if let Some(l) = lli {
-        if l & 1 != 0 || l & 2 != 0 { Some(0) } else { None }
-    } else {
-        None
+
+    let freq_band = type_str.chars().nth(1)?.to_digit(10)? as u8;
+    let attribute = type_str.chars().nth(2).unwrap_or(' ');
+
+    let code = ObsCode {
+        obs_type,
+        signal: SignalCode { freq_band, attribute },
     };
 
     Some(Observation {
-        code: ObsCode {
-            obs_type,
-            signal: SignalCode { freq_band, attribute: attr_char },
-        },
+        code,
         value: val,
-        lock_time,
+        lock_time: None,
+        lli,
     })
 }
 

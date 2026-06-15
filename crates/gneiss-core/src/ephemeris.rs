@@ -165,7 +165,7 @@ impl GlonassEphemeris {
         }
 
         // Relativistic effect is already absorbed into GLONASS tau_n usually, but we compute clock error:
-        let clk_err = -self.tau_n + self.gamma_n * dt;
+        let clk_err = self.tau_n + self.gamma_n * dt;
         let clk_drift = self.gamma_n;
 
         (
@@ -349,7 +349,7 @@ mod tests {
         let dist_moved = (pos - Vector3::new(10_000_000.0, 15_000_000.0, 20_000_000.0)).norm();
         assert!(dist_moved > 100_000.0 && dist_moved < 200_000.0);
         assert!(vel.norm() > 1000.0);
-        assert!((clk_err - (-1e-5 + 1e-9 * 60.0)).abs() < 1e-12);
+        assert!((clk_err - (1e-5 + 1e-9 * 60.0)).abs() < 1e-12);
     }
 
     #[test]

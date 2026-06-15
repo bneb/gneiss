@@ -5,8 +5,10 @@ edition.workspace = true
 authors.workspace = true
 
 [dependencies]
+chrono = "0.4.45"
 gneiss-core.workspace = true
 gneiss-geodesy = { version = "0.1.0", path = "../gneiss-geodesy" }
+gneiss-parsers = { version = "0.1.0", path = "../gneiss-parsers" }
 libm = "0.2.16"
 nalgebra = { version = "0.32", default-features = false, features = ["alloc"] }
 serde = { version = "1.0.228", features = ["derive"] }

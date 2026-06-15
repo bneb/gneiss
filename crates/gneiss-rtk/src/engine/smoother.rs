@@ -13,7 +13,7 @@ pub fn run_combined_ppk(engine: &mut ProcessingEngine) -> Result<Vec<RtkState>, 
     
     let mut smoothed_states = engine.state_history.clone();
 
-    if matches!(engine.config.mode, EngineMode::Spp | EngineMode::Ppp | EngineMode::PppIns | EngineMode::PppInsLooselyCoupled) {
+    if matches!(engine.config.mode, EngineMode::Spp) {
         return Ok(smoothed_states);
     }
     
@@ -84,7 +84,7 @@ fn smooth_epoch(
     let x_k1_n = build_x_vector(state_k1, core_size, smooth_len, &matched_k1_indices);
     let p_k1_n = extract_submatrix(&state_k1.covariance, &idx_k1, &idx_k1);
     let p_k = extract_submatrix(&state_k.covariance, &idx_k, &idx_k);
-    let p_pred_k1_sub = extract_submatrix(p_pred_k1, &idx_k, &idx_k);
+    let p_pred_k1_sub = extract_submatrix(p_pred_k1, &idx_k1, &idx_k1);
     let phi_k_sub = build_phi_submatrix(phi_k, core_size, smooth_len);
 
     if p_pred_k1_sub.iter().any(|&x| !x.is_finite() || x.abs() > MAX_STATE_VARIANCE) || p_k.iter().any(|&x| !x.is_finite() || x.abs() > MAX_STATE_VARIANCE) {
@@ -93,7 +93,7 @@ fn smooth_epoch(
 
     let p_pred_inv = invert_p_pred(&p_pred_k1_sub, smooth_len)?;
 
-    let x_pred_k1_sub = extract_subvector(x_pred_k1, &idx_k);
+    let x_pred_k1_sub = extract_subvector(x_pred_k1, &idx_k1);
     let c_k = &p_k * phi_k_sub.transpose() * &p_pred_inv;
     
     let x_k = build_x_vector(state_k, core_size, smooth_len, &matched_k_indices);
@@ -202,19 +202,18 @@ fn build_phi_submatrix(phi: &DMatrix<f64>, core_size: usize, len: usize) -> DMat
 
 fn invert_p_pred(p_pred: &DMatrix<f64>, len: usize) -> Result<DMatrix<f64>, &'static str> {
     let active: Vec<usize> = (0..len).filter(|&i| {
-        // Exclude ambiguities (indices 21+) and white-noise clock bias (15) to prevent instability
-        let is_ambiguity = i >= 21;
+        // Exclude white-noise clock bias (15) to prevent instability
         let is_white_noise = i == 15;
-        !is_ambiguity && !is_white_noise && p_pred[(i, i)] > MIN_ACTIVE_STATE_VARIANCE
+        !is_white_noise && p_pred[(i, i)] > MIN_ACTIVE_STATE_VARIANCE
     }).collect();
     let m = active.len();
     if m == len {
         let reg = DMatrix::identity(len, len) * MATRIX_INVERSION_REGULARIZATION;
-        (p_pred + reg).try_inverse().ok_or("inversion failed")
+        Ok((p_pred + reg).cholesky().ok_or("cholesky failed")?.inverse())
     } else if m > 0 {
         let p_act = extract_submatrix(p_pred, &active, &active);
         let reg = DMatrix::identity(m, m) * MATRIX_INVERSION_REGULARIZATION;
-        let inv_act = (p_act + reg).try_inverse().ok_or("inversion failed")?;
+        let inv_act = (p_act + reg).cholesky().ok_or("cholesky failed")?.inverse();
         let mut inv_full = DMatrix::zeros(len, len);
         for (i, &r) in active.iter().enumerate() {
             for (j, &c) in active.iter().enumerate() {

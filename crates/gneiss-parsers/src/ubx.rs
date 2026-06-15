@@ -179,7 +179,7 @@ impl UbxRxmRawx {
                         signal: SignalCode { freq_band, attribute },
                     },
                     value: meas.pr_mes,
-                    lock_time: None,
+                    lock_time: None, lli: None,
                 });
             }
 
@@ -192,6 +192,7 @@ impl UbxRxmRawx {
                     },
                     value: meas.cp_mes,
                     lock_time: Some(meas.locktime),
+                    lli: None,
                 });
             }
 
@@ -201,7 +202,7 @@ impl UbxRxmRawx {
                     signal: SignalCode { freq_band, attribute },
                 },
                 value: meas.do_mes as f64,
-                lock_time: None,
+                lock_time: None, lli: None,
             });
 
             observations.push(Observation {
@@ -210,7 +211,7 @@ impl UbxRxmRawx {
                     signal: SignalCode { freq_band, attribute },
                 },
                 value: meas.cno as f64,
-                lock_time: None,
+                lock_time: None, lli: None,
             });
         }
 

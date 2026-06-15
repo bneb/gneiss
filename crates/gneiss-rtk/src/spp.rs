@@ -35,6 +35,7 @@ pub struct SppMeasurement {
     pub doppler: f64,
     pub time: GpsTime,
     pub eph: Ephemeris,
+    pub is_iono_free: bool,
 }
 
 /// Errors that can occur during an SPP WNLLS step.
@@ -113,21 +114,43 @@ pub fn build_measurements(epoch: &EpochObs, ephemerides: &[Ephemeris], _config: 
             });
 
         if let Some(eph) = eph {
-            let pr_obs = sat_obs.observations.iter().find(|o| o.code.obs_type == ObsType::Pseudorange && o.code.signal.freq_band == 1);
-            
-            if let Some(obs) = pr_obs {
-                let snr = sat_obs.observations.iter().find(|o| o.code.obs_type == ObsType::Snr && o.code.signal.freq_band == 1).map(|o| o.value).unwrap_or(45.0);
-                let doppler = sat_obs.observations.iter().find(|o| o.code.obs_type == ObsType::Doppler && o.code.signal.freq_band == 1).map(|o| o.value).unwrap_or(0.0);
+            let freqs = gneiss_core::signal::satellite_frequencies(sat_obs.sat, eph.freq_num());
+            let f1 = freqs.0;
+            let mut f2 = freqs.1;
+            if f2 == 0.0 { f2 = f1; }
 
-                measurements.push(SppMeasurement {
-                    constellation: sat_obs.sat.constellation,
-                    raw_pr: obs.value,
-                    snr,
-                    doppler,
-                    time: epoch.time,
-                    eph: eph.clone(),
-                });
-            }
+            let mut p1_opt = match sat_obs.sat.constellation {
+                gneiss_core::sat::Constellation::Beidou => sat_obs.get_observable(2),
+                _ => sat_obs.get_observable(1),
+            };
+            let mut p2_opt = match sat_obs.sat.constellation {
+                gneiss_core::sat::Constellation::Galileo => sat_obs.get_observable(7).or(sat_obs.get_observable(5)),
+                gneiss_core::sat::Constellation::Beidou => sat_obs.get_observable(7).or(sat_obs.get_observable(6)),
+                _ => sat_obs.get_observable(2),
+            };
+
+            let (raw_pr, is_iono_free) = if let (Some(p1), Some(p2)) = (p1_opt, p2_opt) {
+                let f1_sq = f1 * f1;
+                let f2_sq = f2 * f2;
+                ((f1_sq * p1 - f2_sq * p2) / (f1_sq - f2_sq), true)
+            } else if let Some(p1) = p1_opt {
+                (p1, false)
+            } else {
+                continue;
+            };
+            
+            let snr = sat_obs.get_snr(1).unwrap_or(45) as f64;
+            let doppler = sat_obs.get_doppler(1).unwrap_or(0.0);
+
+            measurements.push(SppMeasurement {
+                constellation: sat_obs.sat.constellation,
+                raw_pr,
+                snr,
+                doppler,
+                time: epoch.time,
+                eph: eph.clone(),
+                is_iono_free,
+            });
         }
     }
     measurements
@@ -427,7 +450,11 @@ fn compute_measurement_residuals(
     let r = f64::sqrt(dx * dx + dy * dy + dz * dz).max(1e-6);
 
     let (az, el) = az_el(rec_llh, rec_ecef, sat_ecef_rot);
-    let (tropo_delay, iono_delay) = compute_atmospheric_delays(rec_ecef, rec_llh, az, el, m.time, iono_params, config);
+    let (tropo_delay, mut iono_delay) = compute_atmospheric_delays(rec_ecef, rec_llh, az, el, m.time, iono_params, config);
+
+    if m.is_iono_free {
+        iono_delay = 0.0;
+    }
 
     let expected_pr = r + cdt + tropo_delay + iono_delay;
     (dx, dy, dz, r, corrected_pr - expected_pr, el)
