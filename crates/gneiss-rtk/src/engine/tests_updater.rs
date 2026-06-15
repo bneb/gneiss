@@ -313,12 +313,12 @@ mod tests {
         // thresh = max_innovation * mult = 6.0 * 2.0 = 12.0
         // ratio = v.abs() / s.sqrt() = 10.0 / 2.0 = 5.0
         // Since 5.0 <= 12.0, it should NOT be an outlier.
-        let (worst_idx, _) = crate::engine::updater_math::evaluate_post_fit_outliers::<crate::engine::updater_math::LooseCoupling>(&v, &s, &current_z, &current_valid, Some(&meas_types), max_innovation, &tuning);
+        let (worst_idx, _, _) = crate::engine::updater_math::evaluate_post_fit_outliers::<crate::engine::updater_math::LooseCoupling>(&v, &s, &current_z, &current_valid, Some(&meas_types), max_innovation, &tuning);
         assert_eq!(worst_idx, None, "Doppler mult operator * mutated to / (would yield thresh 3.0, causing outlier)");
         
         // If we increase ratio to 15.0 by setting v=30.0, it should be an outlier.
         let v2 = DVector::from_element(1, 30.0);
-        let (worst_idx2, _) = crate::engine::updater_math::evaluate_post_fit_outliers::<crate::engine::updater_math::LooseCoupling>(&v2, &s, &current_z, &current_valid, Some(&meas_types), max_innovation, &tuning);
+        let (worst_idx2, _, _) = crate::engine::updater_math::evaluate_post_fit_outliers::<crate::engine::updater_math::LooseCoupling>(&v2, &s, &current_z, &current_valid, Some(&meas_types), max_innovation, &tuning);
         assert_eq!(worst_idx2, Some(0));
     }
 

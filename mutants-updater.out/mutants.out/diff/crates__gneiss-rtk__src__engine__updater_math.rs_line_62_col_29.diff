@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/engine/updater_math.rs
++++ replace * with + in compute_scalar_thresholds
+@@ -54,17 +54,17 @@
+     meas_type: u8,
+     max_innovation: f64,
+     tuning: &EkfTuningConfig,
+     _is_tightly_coupled: bool,
+ ) -> (f64, f64) {
+     let thresh = match meas_type {
+         0 => max_innovation, 
+         1 | 2 => tuning.phase_outlier_ratio_thresh,
+-        3 => max_innovation * tuning.doppler_outlier_ratio_mult,
++        3 => max_innovation + /* ~ changed by cargo-mutants ~ */ tuning.doppler_outlier_ratio_mult,
+         _ => max_innovation,
+     };
+     let abs_thresh = match meas_type {
+         0 => tuning.pr_abs_thresh,
+         1 | 2 => 1000000.0, // Never hard-reject CP by absolute value
+         3 => tuning.dop_abs_thresh,
+         _ => 40.0,
+     };

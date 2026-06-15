@@ -1,0 +1,51 @@
+--- crates/gneiss-rtk/src/measurements/nhc.rs
++++ replace apply_nhc -> Result<(), &'static str> with Ok(())
+@@ -20,47 +20,17 @@
+ pub fn apply_nhc(
+     state: &mut RtkState,
+     sigma_lateral: f64,
+     sigma_vertical: f64,
+     imu_to_nhc_lever_arm: &[f64; 3],
+     omega_b: &Vector3<f64>,
+     tuning: &crate::engine::config::EkfTuningConfig
+ ) -> Result<(), &'static str> {
+-    let r_e_b = state.attitude.to_rotation_matrix().transpose();
+-    
+-    // Convert IMU velocity and NHC lever arm to vehicle frame
+-    let v_b_imu = r_e_b * state.velocity;
+-    let l_b = Vector3::from_column_slice(imu_to_nhc_lever_arm);
+-    
+-    // Velocity at NHC point in vehicle frame (v_v = v_b_imu + omega x l_b)
+-    let v_v = v_b_imu + omega_b.cross(&l_b);
+-    let z = DVector::from_column_slice(&[-v_v.y, -v_v.z]);
+-    
+-    let mut h = DMatrix::<f64>::zeros(2, state.covariance.nrows());
+-    
+-    // Jacobian w.r.t velocity in ECEF (dr_dv = R_e_b)
+-    assign_jacobian_block(&mut h, 3, r_e_b.matrix().clone());
+-    
+-    // Jacobian w.r.t attitude (dr_dpsi = [v_b_imu x] * R_e_b)
+-    let v_b_skew = skew_symmetric(&v_b_imu);
+-    assign_jacobian_block(&mut h, 6, v_b_skew * r_e_b.matrix());
+-    
+-    // Jacobian w.r.t gyro bias (dr_dbg = [l_b x])
+-    let l_b_skew = skew_symmetric(&l_b);
+-    assign_jacobian_block(&mut h, 12, l_b_skew);
+-
+-    let r = DMatrix::from_diagonal(&DVector::from_column_slice(&[
+-        sigma_lateral * sigma_lateral,
+-        sigma_vertical * sigma_vertical
+-    ]));
+-
+-    updater::update::<crate::engine::updater_math::TightCoupling>(state, &z, &h, &r, 1e9, None, tuning)
+-        .map_err(|_| "NHC update failed")?;
+-    Ok(())
++    Ok(()) /* ~ changed by cargo-mutants ~ */
+ }
+ 
+ pub fn apply_zupt(state: &mut RtkState, sigma: f64, tuning: &crate::engine::config::EkfTuningConfig) -> Result<(), &'static str> {
+     let z = DVector::from_column_slice(&[-state.velocity.x, -state.velocity.y, -state.velocity.z]);
+     let n = state.covariance.nrows();
+     let mut h = DMatrix::<f64>::zeros(3, n);
+     for i in 0..3 { h[(i, 3 + i)] = 1.0; }
+     

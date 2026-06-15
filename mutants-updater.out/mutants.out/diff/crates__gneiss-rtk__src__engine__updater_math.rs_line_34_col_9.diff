@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/engine/updater_math.rs
++++ delete match arm 1 | 2 in get_pre_fit_threshold
+@@ -26,17 +26,17 @@
+             p[(r_idx, c_idx)] = avg;
+             p[(c_idx, r_idx)] = avg;
+         }
+     }
+ }
+ 
+ pub fn get_pre_fit_threshold(meas_type: u8, max_innovation: f64) -> f64 {
+     match meas_type {
+-        1 | 2 => CP_PRE_FIT_CHI2_THRESHOLD,
++         /* ~ changed by cargo-mutants ~ */
+         3 => DOPPLER_PRE_FIT_CHI2_THRESHOLD,
+         _ => max_innovation * max_innovation * PR_PRE_FIT_CHI2_MULTIPLIER, 
+     }
+ }
+ 
+ pub fn check_pre_fit_residual(nu: f64, s_ii: f64, r_ii: f64, meas_type: u8, threshold: f64) -> bool {
+     if nu * nu / s_ii < threshold {
+         true

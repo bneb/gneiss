@@ -1,0 +1,977 @@
+crates/gneiss-rtk/src/engine/measurement.rs:2:5: replace update_windup_state_and_obs with ()
+crates/gneiss-rtk/src/engine/measurement.rs:27:5: replace apply_windup_to_obs with ()
+crates/gneiss-rtk/src/engine/measurement.rs:27:44: replace += with -= in apply_windup_to_obs
+crates/gneiss-rtk/src/engine/measurement.rs:27:44: replace += with *= in apply_windup_to_obs
+crates/gneiss-rtk/src/engine/measurement.rs:28:46: replace += with -= in apply_windup_to_obs
+crates/gneiss-rtk/src/engine/measurement.rs:28:46: replace += with *= in apply_windup_to_obs
+crates/gneiss-rtk/src/engine/measurement.rs:67:9: replace EkfUpdates::push with ()
+crates/gneiss-rtk/src/engine/measurement.rs:70:9: replace EkfUpdates::extend with ()
+crates/gneiss-rtk/src/engine/measurement.rs:100:5: replace compute_pseudorange_update -> SingleUpdate with Default::default()
+crates/gneiss-rtk/src/engine/measurement.rs:100:27: replace - with + in compute_pseudorange_update
+crates/gneiss-rtk/src/engine/measurement.rs:100:27: replace - with / in compute_pseudorange_update
+crates/gneiss-rtk/src/engine/measurement.rs:100:21: replace - with + in compute_pseudorange_update
+crates/gneiss-rtk/src/engine/measurement.rs:100:21: replace - with / in compute_pseudorange_update
+crates/gneiss-rtk/src/engine/measurement.rs:100:33: replace - with + in compute_pseudorange_update
+crates/gneiss-rtk/src/engine/measurement.rs:100:33: replace - with / in compute_pseudorange_update
+crates/gneiss-rtk/src/engine/measurement.rs:104:19: replace > with == in compute_pseudorange_update
+crates/gneiss-rtk/src/engine/measurement.rs:104:19: replace > with < in compute_pseudorange_update
+crates/gneiss-rtk/src/engine/measurement.rs:104:19: replace > with >= in compute_pseudorange_update
+crates/gneiss-rtk/src/engine/measurement.rs:105:29: replace - with + in compute_pseudorange_update
+crates/gneiss-rtk/src/engine/measurement.rs:105:29: replace - with / in compute_pseudorange_update
+crates/gneiss-rtk/src/engine/measurement.rs:105:43: replace + with - in compute_pseudorange_update
+crates/gneiss-rtk/src/engine/measurement.rs:105:43: replace + with * in compute_pseudorange_update
+crates/gneiss-rtk/src/engine/measurement.rs:115:5: replace compute_dd_pseudorange -> Vec<SingleUpdate> with vec![]
+crates/gneiss-rtk/src/engine/measurement.rs:115:5: replace compute_dd_pseudorange -> Vec<SingleUpdate> with vec![Default::default()]
+crates/gneiss-rtk/src/engine/measurement.rs:116:40: replace * with + in compute_dd_pseudorange
+crates/gneiss-rtk/src/engine/measurement.rs:116:40: replace * with / in compute_dd_pseudorange
+crates/gneiss-rtk/src/engine/measurement.rs:117:40: replace * with + in compute_dd_pseudorange
+crates/gneiss-rtk/src/engine/measurement.rs:117:40: replace * with / in compute_dd_pseudorange
+crates/gneiss-rtk/src/engine/measurement.rs:119:105: replace > with == in compute_dd_pseudorange
+crates/gneiss-rtk/src/engine/measurement.rs:119:105: replace > with < in compute_dd_pseudorange
+crates/gneiss-rtk/src/engine/measurement.rs:119:105: replace > with >= in compute_dd_pseudorange
+crates/gneiss-rtk/src/engine/measurement.rs:141:5: replace compute_carrier_phase_update -> SingleUpdate with Default::default()
+crates/gneiss-rtk/src/engine/measurement.rs:142:21: replace / with % in compute_carrier_phase_update
+crates/gneiss-rtk/src/engine/measurement.rs:142:21: replace / with * in compute_carrier_phase_update
+crates/gneiss-rtk/src/engine/measurement.rs:143:21: replace / with % in compute_carrier_phase_update
+crates/gneiss-rtk/src/engine/measurement.rs:143:21: replace / with * in compute_carrier_phase_update
+crates/gneiss-rtk/src/engine/measurement.rs:144:47: replace - with + in compute_carrier_phase_update
+crates/gneiss-rtk/src/engine/measurement.rs:144:47: replace - with / in compute_carrier_phase_update
+crates/gneiss-rtk/src/engine/measurement.rs:144:31: replace - with + in compute_carrier_phase_update
+crates/gneiss-rtk/src/engine/measurement.rs:144:31: replace - with / in compute_carrier_phase_update
+crates/gneiss-rtk/src/engine/measurement.rs:144:21: replace * with + in compute_carrier_phase_update
+crates/gneiss-rtk/src/engine/measurement.rs:144:21: replace * with / in compute_carrier_phase_update
+crates/gneiss-rtk/src/engine/measurement.rs:144:36: replace * with + in compute_carrier_phase_update
+crates/gneiss-rtk/src/engine/measurement.rs:144:36: replace * with / in compute_carrier_phase_update
+crates/gneiss-rtk/src/engine/measurement.rs:144:63: replace - with + in compute_carrier_phase_update
+crates/gneiss-rtk/src/engine/measurement.rs:144:63: replace - with / in compute_carrier_phase_update
+crates/gneiss-rtk/src/engine/measurement.rs:144:53: replace * with + in compute_carrier_phase_update
+crates/gneiss-rtk/src/engine/measurement.rs:144:53: replace * with / in compute_carrier_phase_update
+crates/gneiss-rtk/src/engine/measurement.rs:144:68: replace * with + in compute_carrier_phase_update
+crates/gneiss-rtk/src/engine/measurement.rs:144:68: replace * with / in compute_carrier_phase_update
+crates/gneiss-rtk/src/engine/measurement.rs:145:37: replace - with + in compute_carrier_phase_update
+crates/gneiss-rtk/src/engine/measurement.rs:145:37: replace - with / in compute_carrier_phase_update
+crates/gneiss-rtk/src/engine/measurement.rs:150:41: replace + with - in compute_carrier_phase_update
+crates/gneiss-rtk/src/engine/measurement.rs:150:41: replace + with * in compute_carrier_phase_update
+crates/gneiss-rtk/src/engine/measurement.rs:151:41: replace + with - in compute_carrier_phase_update
+crates/gneiss-rtk/src/engine/measurement.rs:151:41: replace + with * in compute_carrier_phase_update
+crates/gneiss-rtk/src/engine/measurement.rs:151:54: delete - in compute_carrier_phase_update
+crates/gneiss-rtk/src/engine/measurement.rs:152:19: replace > with == in compute_carrier_phase_update
+crates/gneiss-rtk/src/engine/measurement.rs:152:19: replace > with < in compute_carrier_phase_update
+crates/gneiss-rtk/src/engine/measurement.rs:152:19: replace > with >= in compute_carrier_phase_update
+crates/gneiss-rtk/src/engine/measurement.rs:154:29: replace - with + in compute_carrier_phase_update
+crates/gneiss-rtk/src/engine/measurement.rs:154:29: replace - with / in compute_carrier_phase_update
+crates/gneiss-rtk/src/engine/measurement.rs:154:53: replace + with - in compute_carrier_phase_update
+crates/gneiss-rtk/src/engine/measurement.rs:154:53: replace + with * in compute_carrier_phase_update
+crates/gneiss-rtk/src/engine/measurement.rs:154:43: replace - with + in compute_carrier_phase_update
+crates/gneiss-rtk/src/engine/measurement.rs:154:43: replace - with / in compute_carrier_phase_update
+crates/gneiss-rtk/src/engine/measurement.rs:164:5: replace compute_dd_carrier_phase -> Vec<SingleUpdate> with vec![]
+crates/gneiss-rtk/src/engine/measurement.rs:164:5: replace compute_dd_carrier_phase -> Vec<SingleUpdate> with vec![Default::default()]
+crates/gneiss-rtk/src/engine/measurement.rs:165:36: replace * with + in compute_dd_carrier_phase
+crates/gneiss-rtk/src/engine/measurement.rs:165:36: replace * with / in compute_dd_carrier_phase
+crates/gneiss-rtk/src/engine/measurement.rs:165:70: replace * with + in compute_dd_carrier_phase
+crates/gneiss-rtk/src/engine/measurement.rs:165:70: replace * with / in compute_dd_carrier_phase
+crates/gneiss-rtk/src/engine/measurement.rs:166:40: replace * with + in compute_dd_carrier_phase
+crates/gneiss-rtk/src/engine/measurement.rs:166:40: replace * with / in compute_dd_carrier_phase
+crates/gneiss-rtk/src/engine/measurement.rs:166:78: replace * with + in compute_dd_carrier_phase
+crates/gneiss-rtk/src/engine/measurement.rs:166:78: replace * with / in compute_dd_carrier_phase
+crates/gneiss-rtk/src/engine/measurement.rs:191:5: replace compute_doppler_innovation -> f64 with 0.0
+crates/gneiss-rtk/src/engine/measurement.rs:191:5: replace compute_doppler_innovation -> f64 with 1.0
+crates/gneiss-rtk/src/engine/measurement.rs:191:5: replace compute_doppler_innovation -> f64 with -1.0
+crates/gneiss-rtk/src/engine/measurement.rs:191:64: replace / with % in compute_doppler_innovation
+crates/gneiss-rtk/src/engine/measurement.rs:191:64: replace / with * in compute_doppler_innovation
+crates/gneiss-rtk/src/engine/measurement.rs:192:64: replace / with % in compute_doppler_innovation
+crates/gneiss-rtk/src/engine/measurement.rs:192:64: replace / with * in compute_doppler_innovation
+crates/gneiss-rtk/src/engine/measurement.rs:194:44: replace - with + in compute_doppler_innovation
+crates/gneiss-rtk/src/engine/measurement.rs:194:44: replace - with / in compute_doppler_innovation
+crates/gneiss-rtk/src/engine/measurement.rs:195:44: replace - with + in compute_doppler_innovation
+crates/gneiss-rtk/src/engine/measurement.rs:195:44: replace - with / in compute_doppler_innovation
+crates/gneiss-rtk/src/engine/measurement.rs:196:44: replace - with + in compute_doppler_innovation
+crates/gneiss-rtk/src/engine/measurement.rs:196:44: replace - with / in compute_doppler_innovation
+crates/gneiss-rtk/src/engine/measurement.rs:197:44: replace - with + in compute_doppler_innovation
+crates/gneiss-rtk/src/engine/measurement.rs:197:44: replace - with / in compute_doppler_innovation
+crates/gneiss-rtk/src/engine/measurement.rs:199:60: replace - with + in compute_doppler_innovation
+crates/gneiss-rtk/src/engine/measurement.rs:199:60: replace - with / in compute_doppler_innovation
+crates/gneiss-rtk/src/engine/measurement.rs:200:60: replace - with + in compute_doppler_innovation
+crates/gneiss-rtk/src/engine/measurement.rs:200:60: replace - with / in compute_doppler_innovation
+crates/gneiss-rtk/src/engine/measurement.rs:204:53: replace - with + in compute_doppler_innovation
+crates/gneiss-rtk/src/engine/measurement.rs:204:53: replace - with / in compute_doppler_innovation
+crates/gneiss-rtk/src/engine/measurement.rs:204:39: replace - with + in compute_doppler_innovation
+crates/gneiss-rtk/src/engine/measurement.rs:204:39: replace - with / in compute_doppler_innovation
+crates/gneiss-rtk/src/engine/measurement.rs:204:67: replace - with + in compute_doppler_innovation
+crates/gneiss-rtk/src/engine/measurement.rs:204:67: replace - with / in compute_doppler_innovation
+crates/gneiss-rtk/src/engine/measurement.rs:206:44: replace * with + in compute_doppler_innovation
+crates/gneiss-rtk/src/engine/measurement.rs:206:44: replace * with / in compute_doppler_innovation
+crates/gneiss-rtk/src/engine/measurement.rs:206:23: delete - in compute_doppler_innovation
+crates/gneiss-rtk/src/engine/measurement.rs:207:44: replace * with + in compute_doppler_innovation
+crates/gneiss-rtk/src/engine/measurement.rs:207:44: replace * with / in compute_doppler_innovation
+crates/gneiss-rtk/src/engine/measurement.rs:207:23: delete - in compute_doppler_innovation
+crates/gneiss-rtk/src/engine/measurement.rs:208:45: replace * with + in compute_doppler_innovation
+crates/gneiss-rtk/src/engine/measurement.rs:208:45: replace * with / in compute_doppler_innovation
+crates/gneiss-rtk/src/engine/measurement.rs:208:23: delete - in compute_doppler_innovation
+crates/gneiss-rtk/src/engine/measurement.rs:209:45: replace * with + in compute_doppler_innovation
+crates/gneiss-rtk/src/engine/measurement.rs:209:45: replace * with / in compute_doppler_innovation
+crates/gneiss-rtk/src/engine/measurement.rs:209:23: delete - in compute_doppler_innovation
+crates/gneiss-rtk/src/engine/measurement.rs:211:54: replace - with + in compute_doppler_innovation
+crates/gneiss-rtk/src/engine/measurement.rs:211:54: replace - with / in compute_doppler_innovation
+crates/gneiss-rtk/src/engine/measurement.rs:211:39: replace - with + in compute_doppler_innovation
+crates/gneiss-rtk/src/engine/measurement.rs:211:39: replace - with / in compute_doppler_innovation
+crates/gneiss-rtk/src/engine/measurement.rs:211:69: replace - with + in compute_doppler_innovation
+crates/gneiss-rtk/src/engine/measurement.rs:211:69: replace - with / in compute_doppler_innovation
+crates/gneiss-rtk/src/engine/measurement.rs:212:20: replace - with + in compute_doppler_innovation
+crates/gneiss-rtk/src/engine/measurement.rs:212:20: replace - with / in compute_doppler_innovation
+crates/gneiss-rtk/src/engine/measurement.rs:222:5: replace compute_dd_doppler -> Option<SingleUpdate> with None
+crates/gneiss-rtk/src/engine/measurement.rs:222:5: replace compute_dd_doppler -> Option<SingleUpdate> with Some(Default::default())
+crates/gneiss-rtk/src/engine/measurement.rs:222:126: replace != with == in compute_dd_doppler
+crates/gneiss-rtk/src/engine/measurement.rs:224:30: replace + with - in compute_dd_doppler
+crates/gneiss-rtk/src/engine/measurement.rs:224:30: replace + with * in compute_dd_doppler
+crates/gneiss-rtk/src/engine/measurement.rs:224:38: replace * with + in compute_dd_doppler
+crates/gneiss-rtk/src/engine/measurement.rs:224:38: replace * with / in compute_dd_doppler
+crates/gneiss-rtk/src/engine/measurement.rs:235:39: replace * with + in compute_dd_doppler
+crates/gneiss-rtk/src/engine/measurement.rs:235:39: replace * with / in compute_dd_doppler
+crates/gneiss-rtk/src/engine/measurement.rs:236:40: replace * with + in compute_dd_doppler
+crates/gneiss-rtk/src/engine/measurement.rs:236:40: replace * with / in compute_dd_doppler
+crates/gneiss-rtk/src/engine/measurement.rs:239:72: replace * with + in compute_dd_doppler
+crates/gneiss-rtk/src/engine/measurement.rs:239:72: replace * with / in compute_dd_doppler
+crates/gneiss-rtk/src/engine/measurement.rs:239:120: replace * with + in compute_dd_doppler
+crates/gneiss-rtk/src/engine/measurement.rs:239:120: replace * with / in compute_dd_doppler
+crates/gneiss-rtk/src/engine/measurement.rs:279:9: replace EkfGeometryContext::compute_attitude_jacobian -> Vector3<f64> with Vector3::new()
+crates/gneiss-rtk/src/engine/measurement.rs:279:9: replace EkfGeometryContext::compute_attitude_jacobian -> Vector3<f64> with Vector3::from_iter([0.0])
+crates/gneiss-rtk/src/engine/measurement.rs:279:9: replace EkfGeometryContext::compute_attitude_jacobian -> Vector3<f64> with Vector3::new(0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:279:9: replace EkfGeometryContext::compute_attitude_jacobian -> Vector3<f64> with Vector3::from(0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:279:9: replace EkfGeometryContext::compute_attitude_jacobian -> Vector3<f64> with Vector3::from_iter([1.0])
+crates/gneiss-rtk/src/engine/measurement.rs:279:9: replace EkfGeometryContext::compute_attitude_jacobian -> Vector3<f64> with Vector3::new(1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:279:9: replace EkfGeometryContext::compute_attitude_jacobian -> Vector3<f64> with Vector3::from(1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:279:9: replace EkfGeometryContext::compute_attitude_jacobian -> Vector3<f64> with Vector3::from_iter([-1.0])
+crates/gneiss-rtk/src/engine/measurement.rs:279:9: replace EkfGeometryContext::compute_attitude_jacobian -> Vector3<f64> with Vector3::new(-1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:279:9: replace EkfGeometryContext::compute_attitude_jacobian -> Vector3<f64> with Vector3::from(-1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:279:46: replace * with + in EkfGeometryContext::compute_attitude_jacobian
+crates/gneiss-rtk/src/engine/measurement.rs:279:46: replace * with / in EkfGeometryContext::compute_attitude_jacobian
+crates/gneiss-rtk/src/engine/measurement.rs:327:5: replace find_ephemeris -> Option<&'a gneiss_core::ephemeris::Ephemeris> with None
+crates/gneiss-rtk/src/engine/measurement.rs:327:5: replace find_ephemeris -> Option<&'a gneiss_core::ephemeris::Ephemeris> with Some(Box::leak(Box::new(Default::default())))
+crates/gneiss-rtk/src/engine/measurement.rs:327:43: replace == with != in find_ephemeris
+crates/gneiss-rtk/src/engine/measurement.rs:328:31: replace - with + in find_ephemeris
+crates/gneiss-rtk/src/engine/measurement.rs:328:31: replace - with / in find_ephemeris
+crates/gneiss-rtk/src/engine/measurement.rs:329:31: replace - with + in find_ephemeris
+crates/gneiss-rtk/src/engine/measurement.rs:329:31: replace - with / in find_ephemeris
+crates/gneiss-rtk/src/engine/measurement.rs:339:5: replace compute_innovations -> Option<EkfUpdates> with None
+crates/gneiss-rtk/src/engine/measurement.rs:339:5: replace compute_innovations -> Option<EkfUpdates> with Some(Default::default())
+crates/gneiss-rtk/src/engine/measurement.rs:344:93: replace && with || in compute_innovations
+crates/gneiss-rtk/src/engine/measurement.rs:344:71: replace == with != in compute_innovations
+crates/gneiss-rtk/src/engine/measurement.rs:344:98: replace == with != in compute_innovations
+crates/gneiss-rtk/src/engine/measurement.rs:345:93: replace && with || in compute_innovations
+crates/gneiss-rtk/src/engine/measurement.rs:345:71: replace == with != in compute_innovations
+crates/gneiss-rtk/src/engine/measurement.rs:345:98: replace == with != in compute_innovations
+crates/gneiss-rtk/src/engine/measurement.rs:366:5: replace compute_sat_state -> SatState with Default::default()
+crates/gneiss-rtk/src/engine/measurement.rs:379:5: replace process_single_satellite_pair with ()
+crates/gneiss-rtk/src/engine/measurement.rs:381:40: replace - with + in process_single_satellite_pair
+crates/gneiss-rtk/src/engine/measurement.rs:381:40: replace - with / in process_single_satellite_pair
+crates/gneiss-rtk/src/engine/measurement.rs:382:40: replace - with + in process_single_satellite_pair
+crates/gneiss-rtk/src/engine/measurement.rs:382:40: replace - with / in process_single_satellite_pair
+crates/gneiss-rtk/src/engine/measurement.rs:383:25: replace - with + in process_single_satellite_pair
+crates/gneiss-rtk/src/engine/measurement.rs:383:25: replace - with / in process_single_satellite_pair
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, 0.0, 0.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, 0.0, 0.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, 0.0, 0.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, 0.0, 0.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, 0.0, 0.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, 0.0, 0.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, 0.0, 0.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, 0.0, 0.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, 0.0, 1.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, 0.0, 1.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, 0.0, 1.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, 0.0, 1.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, 0.0, 1.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, 0.0, 1.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, 0.0, 1.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, 0.0, 1.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, 0.0, -1.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, 0.0, -1.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, 0.0, -1.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, 0.0, -1.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, 0.0, -1.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, 0.0, -1.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, 0.0, -1.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, 0.0, -1.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, 0.0, -1.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, 1.0, 0.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, 1.0, 0.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, 1.0, 0.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, 1.0, 0.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, 1.0, 0.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, 1.0, 0.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, 1.0, 0.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, 1.0, 0.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, 1.0, 0.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, 1.0, 1.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, 1.0, 1.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, 1.0, 1.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, 1.0, 1.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, 1.0, 1.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, 1.0, 1.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, 1.0, 1.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, 1.0, 1.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, 1.0, 1.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, 1.0, -1.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, 1.0, -1.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, 1.0, -1.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, 1.0, -1.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, 1.0, -1.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, 1.0, -1.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, 1.0, -1.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, 1.0, -1.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, 1.0, -1.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, -1.0, 0.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, -1.0, 0.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, -1.0, 0.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, -1.0, 0.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, -1.0, 0.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, -1.0, 0.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, -1.0, 0.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, -1.0, 0.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, -1.0, 0.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, -1.0, 1.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, -1.0, 1.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, -1.0, 1.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, -1.0, 1.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, -1.0, 1.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, -1.0, 1.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, -1.0, 1.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, -1.0, 1.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, -1.0, 1.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, -1.0, -1.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, -1.0, -1.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, -1.0, -1.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, -1.0, -1.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, -1.0, -1.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, -1.0, -1.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, -1.0, -1.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, -1.0, -1.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 0.0, -1.0, -1.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, 0.0, 0.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, 0.0, 0.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, 0.0, 0.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, 0.0, 0.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, 0.0, 0.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, 0.0, 0.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, 0.0, 0.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, 0.0, 0.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, 0.0, 0.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, 0.0, 1.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, 0.0, 1.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, 0.0, 1.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, 0.0, 1.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, 0.0, 1.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, 0.0, 1.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, 0.0, 1.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, 0.0, 1.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, 0.0, 1.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, 0.0, -1.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, 0.0, -1.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, 0.0, -1.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, 0.0, -1.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, 0.0, -1.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, 0.0, -1.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, 0.0, -1.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, 0.0, -1.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, 0.0, -1.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, 1.0, 0.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, 1.0, 0.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, 1.0, 0.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, 1.0, 0.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, 1.0, 0.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, 1.0, 0.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, 1.0, 0.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, 1.0, 0.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, 1.0, 0.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, 1.0, 1.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, 1.0, 1.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, 1.0, 1.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, 1.0, 1.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, 1.0, 1.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, 1.0, 1.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, 1.0, 1.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, 1.0, 1.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, 1.0, 1.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, 1.0, -1.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, 1.0, -1.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, 1.0, -1.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, 1.0, -1.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, 1.0, -1.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, 1.0, -1.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, 1.0, -1.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, 1.0, -1.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, 1.0, -1.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, -1.0, 0.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, -1.0, 0.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, -1.0, 0.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, -1.0, 0.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, -1.0, 0.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, -1.0, 0.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, -1.0, 0.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, -1.0, 0.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, -1.0, 0.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, -1.0, 1.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, -1.0, 1.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, -1.0, 1.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, -1.0, 1.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, -1.0, 1.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, -1.0, 1.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, -1.0, 1.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, -1.0, 1.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, -1.0, 1.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, -1.0, -1.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, -1.0, -1.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, -1.0, -1.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, -1.0, -1.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, -1.0, -1.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, -1.0, -1.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, -1.0, -1.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, -1.0, -1.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, 1.0, -1.0, -1.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, 0.0, 0.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, 0.0, 0.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, 0.0, 0.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, 0.0, 0.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, 0.0, 0.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, 0.0, 0.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, 0.0, 0.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, 0.0, 0.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, 0.0, 0.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, 0.0, 1.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, 0.0, 1.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, 0.0, 1.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, 0.0, 1.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, 0.0, 1.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, 0.0, 1.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, 0.0, 1.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, 0.0, 1.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, 0.0, 1.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, 0.0, -1.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, 0.0, -1.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, 0.0, -1.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, 0.0, -1.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, 0.0, -1.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, 0.0, -1.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, 0.0, -1.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, 0.0, -1.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, 0.0, -1.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, 1.0, 0.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, 1.0, 0.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, 1.0, 0.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, 1.0, 0.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, 1.0, 0.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, 1.0, 0.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, 1.0, 0.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, 1.0, 0.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, 1.0, 0.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, 1.0, 1.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, 1.0, 1.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, 1.0, 1.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, 1.0, 1.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, 1.0, 1.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, 1.0, 1.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, 1.0, 1.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, 1.0, 1.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, 1.0, 1.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, 1.0, -1.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, 1.0, -1.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, 1.0, -1.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, 1.0, -1.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, 1.0, -1.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, 1.0, -1.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, 1.0, -1.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, 1.0, -1.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, 1.0, -1.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, -1.0, 0.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, -1.0, 0.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, -1.0, 0.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, -1.0, 0.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, -1.0, 0.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, -1.0, 0.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, -1.0, 0.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, -1.0, 0.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, -1.0, 0.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, -1.0, 1.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, -1.0, 1.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, -1.0, 1.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, -1.0, 1.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, -1.0, 1.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, -1.0, 1.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, -1.0, 1.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, -1.0, 1.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, -1.0, 1.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, -1.0, -1.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, -1.0, -1.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, -1.0, -1.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, -1.0, -1.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, -1.0, -1.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, -1.0, -1.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, -1.0, -1.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, -1.0, -1.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (0.0, -1.0, -1.0, -1.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, 0.0, 0.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, 0.0, 0.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, 0.0, 0.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, 0.0, 0.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, 0.0, 0.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, 0.0, 0.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, 0.0, 0.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, 0.0, 0.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, 0.0, 1.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, 0.0, 1.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, 0.0, 1.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, 0.0, 1.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, 0.0, 1.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, 0.0, 1.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, 0.0, 1.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, 0.0, 1.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, 0.0, -1.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, 0.0, -1.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, 0.0, -1.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, 0.0, -1.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, 0.0, -1.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, 0.0, -1.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, 0.0, -1.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, 0.0, -1.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, 0.0, -1.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, 1.0, 0.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, 1.0, 0.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, 1.0, 0.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, 1.0, 0.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, 1.0, 0.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, 1.0, 0.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, 1.0, 0.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, 1.0, 0.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, 1.0, 0.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, 1.0, 1.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, 1.0, 1.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, 1.0, 1.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, 1.0, 1.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, 1.0, 1.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, 1.0, 1.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, 1.0, 1.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, 1.0, 1.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, 1.0, 1.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, 1.0, -1.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, 1.0, -1.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, 1.0, -1.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, 1.0, -1.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, 1.0, -1.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, 1.0, -1.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, 1.0, -1.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, 1.0, -1.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, 1.0, -1.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, -1.0, 0.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, -1.0, 0.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, -1.0, 0.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, -1.0, 0.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, -1.0, 0.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, -1.0, 0.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, -1.0, 0.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, -1.0, 0.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, -1.0, 0.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, -1.0, 1.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, -1.0, 1.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, -1.0, 1.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, -1.0, 1.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, -1.0, 1.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, -1.0, 1.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, -1.0, 1.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, -1.0, 1.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, -1.0, 1.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, -1.0, -1.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, -1.0, -1.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, -1.0, -1.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, -1.0, -1.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, -1.0, -1.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, -1.0, -1.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, -1.0, -1.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, -1.0, -1.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 0.0, -1.0, -1.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, 0.0, 0.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, 0.0, 0.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, 0.0, 0.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, 0.0, 0.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, 0.0, 0.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, 0.0, 0.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, 0.0, 0.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, 0.0, 0.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, 0.0, 0.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, 0.0, 1.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, 0.0, 1.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, 0.0, 1.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, 0.0, 1.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, 0.0, 1.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, 0.0, 1.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, 0.0, 1.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, 0.0, 1.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, 0.0, 1.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, 0.0, -1.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, 0.0, -1.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, 0.0, -1.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, 0.0, -1.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, 0.0, -1.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, 0.0, -1.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, 0.0, -1.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, 0.0, -1.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, 0.0, -1.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, 1.0, 0.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, 1.0, 0.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, 1.0, 0.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, 1.0, 0.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, 1.0, 0.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, 1.0, 0.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, 1.0, 0.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, 1.0, 0.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, 1.0, 0.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, 1.0, 1.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, 1.0, 1.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, 1.0, 1.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, 1.0, 1.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, 1.0, 1.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, 1.0, 1.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, 1.0, 1.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, 1.0, 1.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, 1.0, 1.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, 1.0, -1.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, 1.0, -1.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, 1.0, -1.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, 1.0, -1.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, 1.0, -1.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, 1.0, -1.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, 1.0, -1.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, 1.0, -1.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, 1.0, -1.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, -1.0, 0.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, -1.0, 0.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, -1.0, 0.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, -1.0, 0.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, -1.0, 0.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, -1.0, 0.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, -1.0, 0.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, -1.0, 0.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, -1.0, 0.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, -1.0, 1.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, -1.0, 1.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, -1.0, 1.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, -1.0, 1.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, -1.0, 1.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, -1.0, 1.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, -1.0, 1.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, -1.0, 1.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, -1.0, 1.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, -1.0, -1.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, -1.0, -1.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, -1.0, -1.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, -1.0, -1.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, -1.0, -1.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, -1.0, -1.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, -1.0, -1.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, -1.0, -1.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, 1.0, -1.0, -1.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, 0.0, 0.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, 0.0, 0.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, 0.0, 0.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, 0.0, 0.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, 0.0, 0.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, 0.0, 0.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, 0.0, 0.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, 0.0, 0.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, 0.0, 0.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, 0.0, 1.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, 0.0, 1.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, 0.0, 1.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, 0.0, 1.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, 0.0, 1.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, 0.0, 1.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, 0.0, 1.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, 0.0, 1.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, 0.0, 1.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, 0.0, -1.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, 0.0, -1.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, 0.0, -1.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, 0.0, -1.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, 0.0, -1.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, 0.0, -1.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, 0.0, -1.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, 0.0, -1.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, 0.0, -1.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, 1.0, 0.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, 1.0, 0.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, 1.0, 0.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, 1.0, 0.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, 1.0, 0.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, 1.0, 0.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, 1.0, 0.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, 1.0, 0.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, 1.0, 0.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, 1.0, 1.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, 1.0, 1.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, 1.0, 1.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, 1.0, 1.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, 1.0, 1.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, 1.0, 1.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, 1.0, 1.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, 1.0, 1.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, 1.0, 1.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, 1.0, -1.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, 1.0, -1.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, 1.0, -1.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, 1.0, -1.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, 1.0, -1.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, 1.0, -1.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, 1.0, -1.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, 1.0, -1.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, 1.0, -1.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, -1.0, 0.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, -1.0, 0.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, -1.0, 0.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, -1.0, 0.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, -1.0, 0.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, -1.0, 0.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, -1.0, 0.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, -1.0, 0.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, -1.0, 0.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, -1.0, 1.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, -1.0, 1.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, -1.0, 1.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, -1.0, 1.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, -1.0, 1.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, -1.0, 1.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, -1.0, 1.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, -1.0, 1.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, -1.0, 1.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, -1.0, -1.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, -1.0, -1.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, -1.0, -1.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, -1.0, -1.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, -1.0, -1.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, -1.0, -1.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, -1.0, -1.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, -1.0, -1.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (1.0, -1.0, -1.0, -1.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, 0.0, 0.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, 0.0, 0.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, 0.0, 0.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, 0.0, 0.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, 0.0, 0.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, 0.0, 0.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, 0.0, 0.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, 0.0, 0.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, 0.0, 1.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, 0.0, 1.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, 0.0, 1.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, 0.0, 1.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, 0.0, 1.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, 0.0, 1.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, 0.0, 1.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, 0.0, 1.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, 0.0, -1.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, 0.0, -1.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, 0.0, -1.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, 0.0, -1.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, 0.0, -1.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, 0.0, -1.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, 0.0, -1.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, 0.0, -1.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, 0.0, -1.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, 1.0, 0.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, 1.0, 0.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, 1.0, 0.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, 1.0, 0.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, 1.0, 0.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, 1.0, 0.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, 1.0, 0.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, 1.0, 0.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, 1.0, 0.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, 1.0, 1.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, 1.0, 1.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, 1.0, 1.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, 1.0, 1.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, 1.0, 1.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, 1.0, 1.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, 1.0, 1.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, 1.0, 1.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, 1.0, 1.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, 1.0, -1.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, 1.0, -1.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, 1.0, -1.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, 1.0, -1.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, 1.0, -1.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, 1.0, -1.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, 1.0, -1.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, 1.0, -1.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, 1.0, -1.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, -1.0, 0.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, -1.0, 0.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, -1.0, 0.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, -1.0, 0.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, -1.0, 0.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, -1.0, 0.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, -1.0, 0.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, -1.0, 0.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, -1.0, 0.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, -1.0, 1.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, -1.0, 1.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, -1.0, 1.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, -1.0, 1.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, -1.0, 1.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, -1.0, 1.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, -1.0, 1.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, -1.0, 1.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, -1.0, 1.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, -1.0, -1.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, -1.0, -1.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, -1.0, -1.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, -1.0, -1.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, -1.0, -1.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, -1.0, -1.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, -1.0, -1.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, -1.0, -1.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 0.0, -1.0, -1.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, 0.0, 0.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, 0.0, 0.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, 0.0, 0.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, 0.0, 0.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, 0.0, 0.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, 0.0, 0.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, 0.0, 0.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, 0.0, 0.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, 0.0, 0.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, 0.0, 1.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, 0.0, 1.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, 0.0, 1.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, 0.0, 1.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, 0.0, 1.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, 0.0, 1.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, 0.0, 1.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, 0.0, 1.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, 0.0, 1.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, 0.0, -1.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, 0.0, -1.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, 0.0, -1.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, 0.0, -1.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, 0.0, -1.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, 0.0, -1.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, 0.0, -1.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, 0.0, -1.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, 0.0, -1.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, 1.0, 0.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, 1.0, 0.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, 1.0, 0.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, 1.0, 0.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, 1.0, 0.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, 1.0, 0.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, 1.0, 0.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, 1.0, 0.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, 1.0, 0.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, 1.0, 1.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, 1.0, 1.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, 1.0, 1.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, 1.0, 1.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, 1.0, 1.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, 1.0, 1.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, 1.0, 1.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, 1.0, 1.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, 1.0, 1.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, 1.0, -1.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, 1.0, -1.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, 1.0, -1.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, 1.0, -1.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, 1.0, -1.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, 1.0, -1.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, 1.0, -1.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, 1.0, -1.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, 1.0, -1.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, -1.0, 0.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, -1.0, 0.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, -1.0, 0.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, -1.0, 0.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, -1.0, 0.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, -1.0, 0.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, -1.0, 0.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, -1.0, 0.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, -1.0, 0.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, -1.0, 1.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, -1.0, 1.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, -1.0, 1.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, -1.0, 1.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, -1.0, 1.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, -1.0, 1.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, -1.0, 1.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, -1.0, 1.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, -1.0, 1.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, -1.0, -1.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, -1.0, -1.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, -1.0, -1.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, -1.0, -1.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, -1.0, -1.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, -1.0, -1.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, -1.0, -1.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, -1.0, -1.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, 1.0, -1.0, -1.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, 0.0, 0.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, 0.0, 0.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, 0.0, 0.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, 0.0, 0.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, 0.0, 0.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, 0.0, 0.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, 0.0, 0.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, 0.0, 0.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, 0.0, 0.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, 0.0, 1.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, 0.0, 1.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, 0.0, 1.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, 0.0, 1.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, 0.0, 1.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, 0.0, 1.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, 0.0, 1.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, 0.0, 1.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, 0.0, 1.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, 0.0, -1.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, 0.0, -1.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, 0.0, -1.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, 0.0, -1.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, 0.0, -1.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, 0.0, -1.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, 0.0, -1.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, 0.0, -1.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, 0.0, -1.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, 1.0, 0.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, 1.0, 0.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, 1.0, 0.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, 1.0, 0.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, 1.0, 0.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, 1.0, 0.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, 1.0, 0.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, 1.0, 0.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, 1.0, 0.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, 1.0, 1.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, 1.0, 1.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, 1.0, 1.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, 1.0, 1.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, 1.0, 1.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, 1.0, 1.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, 1.0, 1.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, 1.0, 1.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, 1.0, 1.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, 1.0, -1.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, 1.0, -1.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, 1.0, -1.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, 1.0, -1.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, 1.0, -1.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, 1.0, -1.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, 1.0, -1.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, 1.0, -1.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, 1.0, -1.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, -1.0, 0.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, -1.0, 0.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, -1.0, 0.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, -1.0, 0.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, -1.0, 0.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, -1.0, 0.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, -1.0, 0.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, -1.0, 0.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, -1.0, 0.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, -1.0, 1.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, -1.0, 1.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, -1.0, 1.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, -1.0, 1.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, -1.0, 1.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, -1.0, 1.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, -1.0, 1.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, -1.0, 1.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, -1.0, 1.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, -1.0, -1.0, 0.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, -1.0, -1.0, 0.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, -1.0, -1.0, 0.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, -1.0, -1.0, 1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, -1.0, -1.0, 1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, -1.0, -1.0, 1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, -1.0, -1.0, -1.0, 0.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, -1.0, -1.0, -1.0, 1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:410:5: replace compute_dd_components -> (f64, f64, f64, f64, f64, f64) with (-1.0, -1.0, -1.0, -1.0, -1.0, -1.0)
+crates/gneiss-rtk/src/engine/measurement.rs:429:18: replace + with - in compute_dd_components
+crates/gneiss-rtk/src/engine/measurement.rs:429:18: replace + with * in compute_dd_components
+crates/gneiss-rtk/src/engine/measurement.rs:429:7: replace + with - in compute_dd_components
+crates/gneiss-rtk/src/engine/measurement.rs:429:7: replace + with * in compute_dd_components
+crates/gneiss-rtk/src/engine/measurement.rs:443:5: replace generate_measurement_updates with ()
+crates/gneiss-rtk/src/engine/measurement.rs:448:78: replace && with || in generate_measurement_updates
+crates/gneiss-rtk/src/engine/measurement.rs:448:71: replace == with != in generate_measurement_updates
+crates/gneiss-rtk/src/engine/measurement.rs:448:83: replace == with != in generate_measurement_updates
+crates/gneiss-rtk/src/engine/measurement.rs:449:78: replace && with || in generate_measurement_updates
+crates/gneiss-rtk/src/engine/measurement.rs:449:71: replace == with != in generate_measurement_updates
+crates/gneiss-rtk/src/engine/measurement.rs:449:83: replace == with != in generate_measurement_updates
+crates/gneiss-rtk/src/engine/measurement.rs:471:5: replace build_measurement_model -> Option<EkfMeasurementMatrices> with None
+crates/gneiss-rtk/src/engine/measurement.rs:471:5: replace build_measurement_model -> Option<EkfMeasurementMatrices> with Some(Default::default())
+crates/gneiss-rtk/src/engine/measurement.rs:475:24: replace < with == in build_measurement_model
+crates/gneiss-rtk/src/engine/measurement.rs:475:24: replace < with > in build_measurement_model
+crates/gneiss-rtk/src/engine/measurement.rs:475:24: replace < with <= in build_measurement_model
+crates/gneiss-rtk/src/engine/measurement.rs:485:53: replace + with - in build_measurement_model
+crates/gneiss-rtk/src/engine/measurement.rs:485:53: replace + with * in build_measurement_model
+crates/gneiss-rtk/src/engine/measurement.rs:499:5: replace group_measurements_by_constellation -> std::collections::HashMap<gneiss_core::sat::Constellation, Vec<(DdObservation, DdObservation)>> with HashMap::new()
+crates/gneiss-rtk/src/engine/measurement.rs:499:5: replace group_measurements_by_constellation -> std::collections::HashMap<gneiss_core::sat::Constellation, Vec<(DdObservation, DdObservation)>> with HashMap::from_iter([(Default::default(), vec![])])
+crates/gneiss-rtk/src/engine/measurement.rs:499:5: replace group_measurements_by_constellation -> std::collections::HashMap<gneiss_core::sat::Constellation, Vec<(DdObservation, DdObservation)>> with HashMap::from_iter([(Default::default(), vec![(Default::default(), Default::default())])])
+crates/gneiss-rtk/src/engine/measurement.rs:507:5: replace select_reference_satellite -> usize with 0
+crates/gneiss-rtk/src/engine/measurement.rs:507:5: replace select_reference_satellite -> usize with 1
+crates/gneiss-rtk/src/engine/measurement.rs:507:26: delete - in select_reference_satellite
+crates/gneiss-rtk/src/engine/measurement.rs:511:70: replace == with != in select_reference_satellite
+crates/gneiss-rtk/src/engine/measurement.rs:512:35: replace - with + in select_reference_satellite
+crates/gneiss-rtk/src/engine/measurement.rs:512:35: replace - with / in select_reference_satellite
+crates/gneiss-rtk/src/engine/measurement.rs:513:35: replace - with + in select_reference_satellite
+crates/gneiss-rtk/src/engine/measurement.rs:513:35: replace - with / in select_reference_satellite
+crates/gneiss-rtk/src/engine/measurement.rs:516:31: replace / with % in select_reference_satellite
+crates/gneiss-rtk/src/engine/measurement.rs:516:31: replace / with * in select_reference_satellite
+crates/gneiss-rtk/src/engine/measurement.rs:517:88: replace - with + in select_reference_satellite
+crates/gneiss-rtk/src/engine/measurement.rs:517:88: replace - with / in select_reference_satellite
+crates/gneiss-rtk/src/engine/measurement.rs:521:51: replace + with - in select_reference_satellite
+crates/gneiss-rtk/src/engine/measurement.rs:521:51: replace + with * in select_reference_satellite
+crates/gneiss-rtk/src/engine/measurement.rs:522:22: replace > with == in select_reference_satellite
+crates/gneiss-rtk/src/engine/measurement.rs:522:22: replace > with < in select_reference_satellite
+crates/gneiss-rtk/src/engine/measurement.rs:522:22: replace > with >= in select_reference_satellite
+crates/gneiss-rtk/src/engine/measurement.rs:529:5: replace update_reject_counts with ()
+crates/gneiss-rtk/src/engine/measurement.rs:530:26: replace > with == in update_reject_counts
+crates/gneiss-rtk/src/engine/measurement.rs:530:26: replace > with < in update_reject_counts
+crates/gneiss-rtk/src/engine/measurement.rs:530:26: replace > with >= in update_reject_counts
+crates/gneiss-rtk/src/engine/measurement.rs:531:46: replace - with + in update_reject_counts
+crates/gneiss-rtk/src/engine/measurement.rs:531:46: replace - with / in update_reject_counts
+crates/gneiss-rtk/src/engine/measurement.rs:535:74: replace + with - in update_reject_counts
+crates/gneiss-rtk/src/engine/measurement.rs:535:74: replace + with * in update_reject_counts
+crates/gneiss-rtk/src/engine/measurement.rs:547:5: replace filter_innovations_chi_squared -> Vec<usize> with vec![]
+crates/gneiss-rtk/src/engine/measurement.rs:547:5: replace filter_innovations_chi_squared -> Vec<usize> with vec![0]
+crates/gneiss-rtk/src/engine/measurement.rs:547:5: replace filter_innovations_chi_squared -> Vec<usize> with vec![1]
+crates/gneiss-rtk/src/engine/measurement.rs:551:77: replace + with - in filter_innovations_chi_squared
+crates/gneiss-rtk/src/engine/measurement.rs:551:77: replace + with * in filter_innovations_chi_squared
+crates/gneiss-rtk/src/engine/measurement.rs:551:48: replace * with + in filter_innovations_chi_squared
+crates/gneiss-rtk/src/engine/measurement.rs:551:48: replace * with / in filter_innovations_chi_squared
+crates/gneiss-rtk/src/engine/measurement.rs:551:28: replace * with + in filter_innovations_chi_squared
+crates/gneiss-rtk/src/engine/measurement.rs:551:28: replace * with / in filter_innovations_chi_squared
+crates/gneiss-rtk/src/engine/measurement.rs:552:40: replace / with % in filter_innovations_chi_squared
+crates/gneiss-rtk/src/engine/measurement.rs:552:40: replace / with * in filter_innovations_chi_squared
+crates/gneiss-rtk/src/engine/measurement.rs:552:29: replace * with + in filter_innovations_chi_squared
+crates/gneiss-rtk/src/engine/measurement.rs:552:29: replace * with / in filter_innovations_chi_squared
+crates/gneiss-rtk/src/engine/measurement.rs:555:13: delete match arm 0 in filter_innovations_chi_squared
+crates/gneiss-rtk/src/engine/measurement.rs:555:35: delete match arm 1 | 2 in filter_innovations_chi_squared
+crates/gneiss-rtk/src/engine/measurement.rs:555:61: delete match arm 3 in filter_innovations_chi_squared
+crates/gneiss-rtk/src/engine/measurement.rs:555:25: replace * with + in filter_innovations_chi_squared
+crates/gneiss-rtk/src/engine/measurement.rs:555:25: replace * with / in filter_innovations_chi_squared
+crates/gneiss-rtk/src/engine/measurement.rs:555:51: replace * with + in filter_innovations_chi_squared
+crates/gneiss-rtk/src/engine/measurement.rs:555:51: replace * with / in filter_innovations_chi_squared
+crates/gneiss-rtk/src/engine/measurement.rs:555:73: replace * with + in filter_innovations_chi_squared
+crates/gneiss-rtk/src/engine/measurement.rs:555:73: replace * with / in filter_innovations_chi_squared
+crates/gneiss-rtk/src/engine/measurement.rs:555:95: replace * with + in filter_innovations_chi_squared
+crates/gneiss-rtk/src/engine/measurement.rs:555:95: replace * with / in filter_innovations_chi_squared
+crates/gneiss-rtk/src/engine/measurement.rs:558:27: replace <= with > in filter_innovations_chi_squared
+crates/gneiss-rtk/src/engine/measurement.rs:562:31: replace || with && in filter_innovations_chi_squared
+crates/gneiss-rtk/src/engine/measurement.rs:562:26: replace == with != in filter_innovations_chi_squared
+crates/gneiss-rtk/src/engine/measurement.rs:562:48: replace == with != in filter_innovations_chi_squared
+crates/gneiss-rtk/src/engine/measurement.rs:572:5: replace build_final_measurement_matrices -> Option<EkfMeasurementMatrices> with None
+crates/gneiss-rtk/src/engine/measurement.rs:572:5: replace build_final_measurement_matrices -> Option<EkfMeasurementMatrices> with Some(Default::default())
+crates/gneiss-rtk/src/engine/measurement.rs:572:27: replace >= with < in build_final_measurement_matrices

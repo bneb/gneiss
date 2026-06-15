@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/engine/updater_math.rs
++++ replace * with / in enforce_symmetry
+@@ -17,17 +17,17 @@
+     let mut p_new = &i_kh * p * i_kh.transpose() + k * r * k.transpose();
+     enforce_symmetry(&mut p_new);
+     p_new
+ }
+ 
+ pub fn enforce_symmetry(p: &mut DMatrix<f64>) {
+     for r_idx in 0..p.nrows() {
+         for c_idx in 0..r_idx {
+-            let avg = (p[(r_idx, c_idx)] + p[(c_idx, r_idx)]) * 0.5;
++            let avg = (p[(r_idx, c_idx)] + p[(c_idx, r_idx)]) / /* ~ changed by cargo-mutants ~ */ 0.5;
+             p[(r_idx, c_idx)] = avg;
+             p[(c_idx, r_idx)] = avg;
+         }
+     }
+ }
+ 
+ pub fn get_pre_fit_threshold(meas_type: u8, max_innovation: f64) -> f64 {
+     match meas_type {

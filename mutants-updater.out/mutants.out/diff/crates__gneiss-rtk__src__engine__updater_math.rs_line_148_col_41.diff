@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/engine/updater_math.rs
++++ replace + with - in compute_s_inverse
+@@ -140,17 +140,17 @@
+     h_mat.view_mut((3, 6), (3, 3)).copy_from(&h_vel_att);
+     h_mat.view_mut((3, 12), (3, 3)).copy_from(&h_vel_bg);
+ }
+ 
+ pub fn compute_s_inverse(s: &DMatrix<f64>) -> Result<DMatrix<f64>, UpdateError> {
+     match s.clone().cholesky() {
+         Some(chol) => Ok(chol.inverse()),
+         None => {
+-            let regularized = s.clone() + DMatrix::identity(s.nrows(), s.ncols()) * 1e-6;
++            let regularized = s.clone() - /* ~ changed by cargo-mutants ~ */ DMatrix::identity(s.nrows(), s.ncols()) * 1e-6;
+             match regularized.try_inverse() {
+                 Some(inv) => Ok(inv),
+                 None => Err(UpdateError::SingularMatrix),
+             }
+         }
+     }
+ }
+ 

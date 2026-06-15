@@ -89,6 +89,7 @@ pub struct EkfUpdateResult {
     pub k: DMatrix<f64>,
     pub worst_idx: Option<usize>,
     pub max_outlier_ratio: f64,
+    pub weights: DVector<f64>,
 }
 
 fn compute_update_iteration<C: CouplingStrategy>(
@@ -119,9 +120,9 @@ fn compute_update_iteration<C: CouplingStrategy>(
     }
 
     let v = current_z - current_h * &dx;
-    let (worst_idx, max_outlier_ratio) = evaluate_post_fit_outliers::<C>(&v, &s, current_z, current_valid, meas_types, max_innovation, tuning);
+    let (worst_idx, max_outlier_ratio, weights) = evaluate_post_fit_outliers::<C>(&v, &s, current_z, current_valid, meas_types, max_innovation, tuning);
     
-    Ok(EkfUpdateResult { dx, k, worst_idx, max_outlier_ratio })
+    Ok(EkfUpdateResult { dx, k, worst_idx, max_outlier_ratio, weights })
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -166,13 +167,14 @@ pub fn update<C: CouplingStrategy>(state: &mut RtkState, z: &DVector<f64>, h: &D
     let mut current_valid = valid_indices;
     let mut dx = DVector::zeros(state.covariance.nrows());
     let mut k = DMatrix::zeros(state.covariance.nrows(), current_z.len());
+    let mut base_r = current_r.clone();
     
     for _iter in 0..tuning.ekf_max_iterations {
         let iter_res = compute_update_iteration::<C>(
             &state.covariance, &current_z, &current_h, &current_r, &current_valid, 
             meas_types, max_innovation, tuning
         )?;
-        let (dx_iter, k_iter, worst_idx, max_outlier_ratio) = (iter_res.dx, iter_res.k, iter_res.worst_idx, iter_res.max_outlier_ratio);
+        let (dx_iter, k_iter, worst_idx, max_outlier_ratio, weights) = (iter_res.dx, iter_res.k, iter_res.worst_idx, iter_res.max_outlier_ratio, iter_res.weights);
         
         dx = dx_iter;
         k = k_iter;
@@ -189,6 +191,7 @@ pub fn update<C: CouplingStrategy>(state: &mut RtkState, z: &DVector<f64>, h: &D
                 current_z = current_z.remove_row(idx);
                 current_h = current_h.remove_row(idx);
                 current_r = current_r.remove_row(idx).remove_column(idx);
+                base_r = base_r.remove_row(idx).remove_column(idx);
                 current_valid.remove(idx);
                 continue;
             } else if max_outlier_ratio == f64::INFINITY || max_outlier_ratio > 3.0 {
@@ -196,7 +199,19 @@ pub fn update<C: CouplingStrategy>(state: &mut RtkState, z: &DVector<f64>, h: &D
                 return Err(UpdateError::InvalidMeasurement);
             }
         }
-        break;
+
+        let mut weights_changed = false;
+        for i in 0..weights.len() {
+            let new_r_ii = base_r[(i, i)] / weights[i];
+            if (current_r[(i, i)] - new_r_ii).abs() > base_r[(i, i)] * 0.05 {
+                weights_changed = true;
+            }
+            current_r[(i, i)] = new_r_ii;
+        }
+
+        if !weights_changed || _iter >= tuning.ekf_max_iterations - 1 {
+            break;
+        }
     }
 
     apply_state_correction(state, &dx);

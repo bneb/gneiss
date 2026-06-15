@@ -1,64 +1,84 @@
 # Gneiss vs RTKLIB (demo5) Comparison
 
-Side-by-side comparison on identical datasets and truth references.
-
-## PPP (f9p_ppp)
-
-| Mode | Engine | Hz 50th | Hz 95th | Vt 50th | Winner |
-|:-----|:-------|:--------|:--------|:--------|:-------|
-| SPP | RTKLIB | Failed |  |  |  |
-| SPP | Gneiss | 3.010 m | 3.844 m | 1.839 m | |
-| RTK Kinematic | RTKLIB | Failed |  |  |  |
-| RTK Kinematic | Gneiss | 0.212 m | 0.502 m | 0.181 m | |
-| RTK Kinematic (combined) | RTKLIB | Failed |  |  |  |
-| RTK Kinematic (combined) | Gneiss | Failed |  |  | |
-| PPP Kinematic | RTKLIB | Failed |  |  |  |
-| PPP Kinematic | Gneiss | 6.783 m | 8.399 m | 0.919 m | |
-| PPP Kinematic (combined) | RTKLIB | Failed |  |  |  |
-| PPP Kinematic (combined) | Gneiss | 6.783 m | 8.399 m | 0.919 m | |
-
-## GSDC (Pixel 4)
-
-| Mode | Engine | Hz 50th | Hz 95th | Vt 50th | Winner |
-|:-----|:-------|:--------|:--------|:--------|:-------|
-| SPP | RTKLIB | 3.311 m | 10.191 m | 66.316 m | RTKLIB ⚠️ |
-| SPP | Gneiss | 3.327 m | 8.648 m | 60.507 m | |
-| RTK Kinematic | RTKLIB | 1.773 m | 4.161 m | 64.598 m | RTKLIB ⚠️ |
-| RTK Kinematic | Gneiss | 2.031 m | 9.340 m | 63.252 m | |
-| RTK Kinematic (combined) | RTKLIB | 1.831 m | 3.126 m | 64.471 m | RTKLIB ⚠️ |
-| RTK Kinematic (combined) | Gneiss | 3.277 m | 349.678 m | 63.445 m | |
-| PPP Kinematic | RTKLIB | Failed |  |  |  |
-| PPP Kinematic | Gneiss | 616.378 m | 2988.980 m | 930.022 m | |
-| PPP Kinematic (combined) | RTKLIB | Failed |  |  |  |
-| PPP Kinematic (combined) | Gneiss | 616.378 m | 2988.980 m | 930.022 m | |
-
-## Shinjuku (u-blox)
-
-| Mode | Engine | Hz 50th | Hz 95th | Vt 50th | Winner |
-|:-----|:-------|:--------|:--------|:--------|:-------|
-| SPP | RTKLIB | 14.144 m | 67.742 m | 38.519 m | **Gneiss** ✅ |
-| SPP | Gneiss | 2.257 m | 26.551 m | 7.037 m | |
-| RTK Kinematic | RTKLIB | 5.730 m | 20.200 m | 9.326 m | **Gneiss** ✅ |
-| RTK Kinematic | Gneiss | 1.525 m | 15.639 m | 1.772 m | |
-| RTK Kinematic (combined) | RTKLIB | 5.978 m | 18.029 m | 9.112 m | **Gneiss** ✅ |
-| RTK Kinematic (combined) | Gneiss | 1.521 m | 13.686 m | 1.768 m | |
-| PPP Kinematic | RTKLIB | Failed |  |  |  |
-| PPP Kinematic | Gneiss | 23.241 m | 57.248 m | 17.566 m | |
-| PPP Kinematic (combined) | RTKLIB | Failed |  |  |  |
-| PPP Kinematic (combined) | Gneiss | 23.241 m | 57.248 m | 17.566 m | |
-
-## Odaiba (u-blox)
-
-| Mode | Engine | Hz 50th | Hz 95th | Vt 50th | Winner |
-|:-----|:-------|:--------|:--------|:--------|:-------|
-| SPP | RTKLIB | 7.453 m | 48.906 m | 8.709 m | **Gneiss** ✅ |
-| SPP | Gneiss | 2.533 m | 9.465 m | 2.901 m | |
-| RTK Kinematic | RTKLIB | 4.014 m | 17.444 m | 5.744 m | **Gneiss** ✅ |
-| RTK Kinematic | Gneiss | 1.203 m | 6.244 m | 1.784 m | |
-| RTK Kinematic (combined) | RTKLIB | 3.886 m | 16.086 m | 6.134 m | **Gneiss** ✅ |
-| RTK Kinematic (combined) | Gneiss | 1.201 m | 6.053 m | 1.739 m | |
-| PPP Kinematic | RTKLIB | Failed |  |  |  |
-| PPP Kinematic | Gneiss | 12.518 m | 21.905 m | 23.796 m | |
-| PPP Kinematic (combined) | RTKLIB | Failed |  |  |  |
-| PPP Kinematic (combined) | Gneiss | 12.518 m | 21.905 m | 23.796 m | |
-
+| Dataset | Mode | Engine | Hz 50th | Hz 95th | Vt 50th | Winner |
+|:-----|:-----|:-------|:--------|:--------|:--------|:-------|
+| GSDC (Pixel 4) | SPP | RTKLIB | 2.080 m | 3.311 m | 63.357 m | **Gneiss** |
+| GSDC (Pixel 4) | SPP | Gneiss | 2.037 m | 3.297 m | 60.179 m | |
+| GSDC (Pixel 4) | RTK Kinematic | RTKLIB | 1.176 m | 1.773 m | 63.820 m | RTKLIB |
+| GSDC (Pixel 4) | RTK Kinematic | Gneiss | 293.997 m | 493.410 m | 87.220 m | |
+| GSDC (Pixel 4) | RTK Kinematic (combined) | RTKLIB | 1.104 m | 1.831 m | 64.073 m | RTKLIB |
+| GSDC (Pixel 4) | RTK Kinematic (combined) | Gneiss | 293.997 m | 493.410 m | 87.220 m | |
+| GSDC (Pixel 4) | PPP Kinematic (EKF) | RTKLIB | 2.326 m | 4.253 m | 58.704 m | RTKLIB |
+| GSDC (Pixel 4) | PPP Kinematic (EKF) | Gneiss | 147.223 m | 218.761 m | 30.284 m | |
+| GSDC (Pixel 4) | PPP Kinematic (FG) | RTKLIB | 2.326 m | 4.253 m | 58.704 m | RTKLIB |
+| GSDC (Pixel 4) | PPP Kinematic (FG) | Gneiss | 62832.221 m | 81665.386 m | 62723.990 m | |
+| Shinjuku (UrbanNav) | SPP | RTKLIB | Failed |  |  | **Gneiss** (RTKLIB missing) |
+| Shinjuku (UrbanNav) | SPP | Gneiss | 1.849 m | 3.167 m | 2.446 m | |
+| Shinjuku (UrbanNav) | RTK Kinematic | RTKLIB | 2.205 m | 5.730 m | 4.115 m | RTKLIB |
+| Shinjuku (UrbanNav) | RTK Kinematic | Gneiss | 6.036 m | 14.982 m | 8.143 m | |
+| Shinjuku (UrbanNav) | RTK Kinematic (combined) | RTKLIB | 2.809 m | 5.978 m | 4.700 m | RTKLIB |
+| Shinjuku (UrbanNav) | RTK Kinematic (combined) | Gneiss | 6.036 m | 14.981 m | 8.143 m | |
+| Shinjuku (UrbanNav) | PPP Kinematic (EKF) | RTKLIB | 2.003 m | 3.749 m | 3.235 m | RTKLIB |
+| Shinjuku (UrbanNav) | PPP Kinematic (EKF) | Gneiss | 30.267 m | 54.412 m | 223.067 m | |
+| Shinjuku (UrbanNav) | PPP Kinematic (FG) | RTKLIB | 2.003 m | 3.749 m | 3.235 m | RTKLIB |
+| Shinjuku (UrbanNav) | PPP Kinematic (FG) | Gneiss | 32.933 m | 48.942 m | 92.093 m | |
+| Odaiba (UrbanNav) | SPP | RTKLIB | 2.799 m | 7.453 m | 4.885 m | **Gneiss** |
+| Odaiba (UrbanNav) | SPP | Gneiss | 2.099 m | 2.958 m | 2.253 m | |
+| Odaiba (UrbanNav) | RTK Kinematic | RTKLIB | 2.867 m | 4.014 m | 2.490 m | RTKLIB |
+| Odaiba (UrbanNav) | RTK Kinematic | Gneiss | 5.664 m | 17.037 m | 3.069 m | |
+| Odaiba (UrbanNav) | RTK Kinematic (combined) | RTKLIB | 3.031 m | 3.886 m | 4.168 m | RTKLIB |
+| Odaiba (UrbanNav) | RTK Kinematic (combined) | Gneiss | 5.664 m | 17.037 m | 3.069 m | |
+| Odaiba (UrbanNav) | PPP Kinematic (EKF) | RTKLIB | 3.965 m | 4.691 m | 6.089 m | RTKLIB |
+| Odaiba (UrbanNav) | PPP Kinematic (EKF) | Gneiss | 16.549 m | 21.594 m | 14.939 m | |
+| Odaiba (UrbanNav) | PPP Kinematic (FG) | RTKLIB | 3.965 m | 4.691 m | 6.089 m | RTKLIB |
+| Odaiba (UrbanNav) | PPP Kinematic (FG) | Gneiss | 24.269 m | 27.558 m | 25.265 m | |
+| PPP (f9p_ppp) | SPP | RTKLIB | Failed |  |  | **Gneiss** (RTKLIB missing) |
+| PPP (f9p_ppp) | SPP | Gneiss | 1.367 m | 2.008 m | 0.934 m | |
+| PPP (f9p_ppp) | RTK Kinematic | RTKLIB | Failed |  |  | **Gneiss** (RTKLIB missing) |
+| PPP (f9p_ppp) | RTK Kinematic | Gneiss | 0.246 m | 0.402 m | 0.168 m | |
+| PPP (f9p_ppp) | RTK Kinematic (combined) | RTKLIB | Failed |  |  | **Gneiss** (RTKLIB missing) |
+| PPP (f9p_ppp) | RTK Kinematic (combined) | Gneiss | 0.246 m | 0.402 m | 0.168 m | |
+| PPP (f9p_ppp) | PPP Kinematic (EKF) | RTKLIB | Failed |  |  | **Gneiss** (RTKLIB missing) |
+| PPP (f9p_ppp) | PPP Kinematic (EKF) | Gneiss | 13.137 m | 16.818 m | 16.127 m | |
+| PPP (f9p_ppp) | PPP Kinematic (FG) | RTKLIB | Failed |  |  | **Gneiss** (RTKLIB missing) |
+| PPP (f9p_ppp) | PPP Kinematic (FG) | Gneiss | 3.516 m | 5.081 m | 1.263 m | |
+| UrbanLoco (Example) | SPP | RTKLIB | Failed |  |  |  |
+| UrbanLoco (Example) | SPP | Gneiss | Failed |  |  | |
+| UrbanLoco (Example) | RTK Kinematic | RTKLIB | Failed |  |  |  |
+| UrbanLoco (Example) | RTK Kinematic | Gneiss | Failed |  |  | |
+| UrbanLoco (Example) | RTK Kinematic (combined) | RTKLIB | Failed |  |  |  |
+| UrbanLoco (Example) | RTK Kinematic (combined) | Gneiss | Failed |  |  | |
+| UrbanLoco (Example) | PPP Kinematic (EKF) | RTKLIB | Failed |  |  |  |
+| UrbanLoco (Example) | PPP Kinematic (EKF) | Gneiss | Failed |  |  | |
+| UrbanLoco (Example) | PPP Kinematic (FG) | RTKLIB | Failed |  |  |  |
+| UrbanLoco (Example) | PPP Kinematic (FG) | Gneiss | Failed |  |  | |
+| TEX-CUP (UT Austin) | SPP | RTKLIB | Failed |  |  |  |
+| TEX-CUP (UT Austin) | SPP | Gneiss | Failed |  |  | |
+| TEX-CUP (UT Austin) | RTK Kinematic | RTKLIB | Failed |  |  |  |
+| TEX-CUP (UT Austin) | RTK Kinematic | Gneiss | Failed |  |  | |
+| TEX-CUP (UT Austin) | RTK Kinematic (combined) | RTKLIB | Failed |  |  |  |
+| TEX-CUP (UT Austin) | RTK Kinematic (combined) | Gneiss | Failed |  |  | |
+| TEX-CUP (UT Austin) | PPP Kinematic (EKF) | RTKLIB | Failed |  |  |  |
+| TEX-CUP (UT Austin) | PPP Kinematic (EKF) | Gneiss | Failed |  |  | |
+| TEX-CUP (UT Austin) | PPP Kinematic (FG) | RTKLIB | Failed |  |  |  |
+| TEX-CUP (UT Austin) | PPP Kinematic (FG) | Gneiss | Failed |  |  | |
+| WHU-Smartphone (Xiaomi) | SPP | RTKLIB | Failed |  |  |  |
+| WHU-Smartphone (Xiaomi) | SPP | Gneiss | Failed |  |  | |
+| WHU-Smartphone (Xiaomi) | RTK Kinematic | RTKLIB | Failed |  |  |  |
+| WHU-Smartphone (Xiaomi) | RTK Kinematic | Gneiss | Failed |  |  | |
+| WHU-Smartphone (Xiaomi) | RTK Kinematic (combined) | RTKLIB | Failed |  |  |  |
+| WHU-Smartphone (Xiaomi) | RTK Kinematic (combined) | Gneiss | Failed |  |  | |
+| WHU-Smartphone (Xiaomi) | PPP Kinematic (EKF) | RTKLIB | Failed |  |  |  |
+| WHU-Smartphone (Xiaomi) | PPP Kinematic (EKF) | Gneiss | Failed |  |  | |
+| WHU-Smartphone (Xiaomi) | PPP Kinematic (FG) | RTKLIB | Failed |  |  |  |
+| WHU-Smartphone (Xiaomi) | PPP Kinematic (FG) | Gneiss | Failed |  |  | |
+| smartLoc (TU Chemnitz) | SPP | RTKLIB | Failed |  |  |  |
+| smartLoc (TU Chemnitz) | SPP | Gneiss | Failed |  |  | |
+| smartLoc (TU Chemnitz) | RTK Kinematic | RTKLIB | Failed |  |  |  |
+| smartLoc (TU Chemnitz) | RTK Kinematic | Gneiss | Failed |  |  | |
+| smartLoc (TU Chemnitz) | RTK Kinematic (combined) | RTKLIB | Failed |  |  |  |
+| smartLoc (TU Chemnitz) | RTK Kinematic (combined) | Gneiss | Failed |  |  | |
+| smartLoc (TU Chemnitz) | PPP Kinematic (EKF) | RTKLIB | Failed |  |  |  |
+| smartLoc (TU Chemnitz) | PPP Kinematic (EKF) | Gneiss | Failed |  |  | |
+| smartLoc (TU Chemnitz) | PPP Kinematic (FG) | RTKLIB | Failed |  |  |  |
+| smartLoc (TU Chemnitz) | PPP Kinematic (FG) | Gneiss | Failed |  |  | |

@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/engine/updater_math.rs
++++ replace * with / in check_pre_fit_residual
+@@ -33,17 +33,17 @@
+     match meas_type {
+         1 | 2 => CP_PRE_FIT_CHI2_THRESHOLD,
+         3 => DOPPLER_PRE_FIT_CHI2_THRESHOLD,
+         _ => max_innovation * max_innovation * PR_PRE_FIT_CHI2_MULTIPLIER, 
+     }
+ }
+ 
+ pub fn check_pre_fit_residual(nu: f64, s_ii: f64, r_ii: f64, meas_type: u8, threshold: f64) -> bool {
+-    if nu * nu / s_ii < threshold {
++    if nu / /* ~ changed by cargo-mutants ~ */ nu / s_ii < threshold {
+         true
+     } else {
+         if meas_type != 1 && meas_type != 2 && nu.abs() < 1000.0 && r_ii < 1.0 {
+             tracing::debug!("EKF rejected Doppler/PR measurement! type={}, nu={:.2}, s_ii={:.2}, r_ii={:.4}", meas_type, nu, s_ii, r_ii);
+         } else {
+             tracing::debug!("EKF rejected meas: type={}, nu={:.2}, s_ii={:.2}, r_ii={:.4}", meas_type, nu, s_ii, r_ii);
+         }
+         false

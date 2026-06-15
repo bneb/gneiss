@@ -65,26 +65,13 @@ pub struct EkfTuningConfig {
 impl Default for EkfTuningConfig {
     fn default() -> Self {
         Self {
-            pr_base_var: 1.0,
-            cp_base_var: 9e-6,
-            dop_base_var: 1.0,
-            snr_a: 1.0,
-            snr_b: 150.0,
-            sigma_v: 0.1,     // Velocity Random Walk (consumer MEMS)
-            sigma_phi: 0.01,  // Angular Random Walk (consumer MEMS)
-            sigma_ab: 1e-4,
-            sigma_gb: 1e-5,
-            loosely_coupled_mahalanobis_sq: 1000.0,
-            phase_outlier_ratio_thresh: 5.0,
-            doppler_outlier_ratio_mult: 2.0,
-            pr_abs_thresh: 40.0,
-            cp_abs_thresh: 1.0,
-            dop_abs_thresh: 15.0,
-            huber_threshold_loosely: 10.0,
-            huber_threshold_tightly: 3.0,
-            min_ar_success_rate: 0.999,
-            ekf_max_iterations: 20,
-            auto_tune: Default::default(),
+            pr_base_var: 1.0, cp_base_var: 9e-6, dop_base_var: 1.0,
+            snr_a: 1.0, snr_b: 150.0,
+            sigma_v: 0.1, sigma_phi: 0.01, sigma_ab: 1e-4, sigma_gb: 1e-5,
+            loosely_coupled_mahalanobis_sq: 1000.0, phase_outlier_ratio_thresh: 5.0,
+            doppler_outlier_ratio_mult: 2.0, pr_abs_thresh: 40.0, cp_abs_thresh: 1.0, dop_abs_thresh: 15.0,
+            huber_threshold_loosely: 10.0, huber_threshold_tightly: 3.0, min_ar_success_rate: 0.999,
+            ekf_max_iterations: 20, auto_tune: Default::default(),
         }
     }
 }
@@ -136,38 +123,16 @@ pub struct EngineConfig {
 impl Default for EngineConfig {
     fn default() -> Self {
         Self {
-            mode: EngineMode::Rtk,
-            initial_position: None,
-            base_position: None,
-            base_datum_transform: None,
-            imu_to_antenna_lever_arm: [0.0, 0.0, 0.0],
-            imu_mounting_angles: None,
-            imu_to_nhc_lever_arm: [0.0, 0.0, 0.0],
-            enable_nhc: false,
-            enable_backward_smoothing: false,
-            lambda_min_ratio: 1.5,
-            lambda_min_subset: 5,
-            enabled_constellations: None,
-            raim_pseudorange_outlier_m: 25.0,
-            chi_square_pr_threshold: 3.0,
-            chi_square_cp_threshold: 1000000.0,
-            phase_windup_enabled: true,
-            min_snr_dbhz: 25.0,
-            dynamics_model: DynamicsModel::Automotive,
-            doppler_slip_threshold_cycles: 5.0,
-            max_reject_count: 3,
-            max_base_age_s: 5.0,
-            spp_consistency_threshold_m: 15.0,
-            initial_ambiguity_variance: 10000.0,
-            ar_min_epoch_count: 5,
-            ar_min_lock: 3,
-            ar_ffrt_prob: 0.001,
-            process_noise_cb: 1e6,
-            process_noise_cd: 1e4,
-            process_noise_zwd: 1e-8,
-            process_noise_amb_float: 1e-8,
-            process_noise_amb_fixed: 1e-12,
-            tuning: Default::default(),
+            mode: EngineMode::Rtk, initial_position: None, base_position: None, base_datum_transform: None,
+            imu_to_antenna_lever_arm: [0.0; 3], imu_mounting_angles: None, imu_to_nhc_lever_arm: [0.0; 3],
+            enable_nhc: false, enable_backward_smoothing: false, lambda_min_ratio: 1.5, lambda_min_subset: 5,
+            enabled_constellations: None, raim_pseudorange_outlier_m: 25.0, chi_square_pr_threshold: 3.0,
+            chi_square_cp_threshold: 1e6, phase_windup_enabled: true, min_snr_dbhz: 25.0,
+            dynamics_model: DynamicsModel::Automotive, doppler_slip_threshold_cycles: 5.0,
+            max_reject_count: 3, max_base_age_s: 5.0, spp_consistency_threshold_m: 15.0,
+            initial_ambiguity_variance: 10000.0, ar_min_epoch_count: 5, ar_min_lock: 3, ar_ffrt_prob: 0.001,
+            process_noise_cb: 1e6, process_noise_cd: 1e4, process_noise_zwd: 1e-8,
+            process_noise_amb_float: 1e-8, process_noise_amb_fixed: 1e-12, tuning: Default::default(),
         }
     }
 }

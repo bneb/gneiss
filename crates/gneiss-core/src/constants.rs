@@ -34,3 +34,12 @@ pub const KM_TO_M: f64 = 1_000.0;
 
 /// Microseconds to seconds conversion factor
 pub const MICROSECONDS_TO_SECONDS: f64 = 1e-6;
+
+/// Milliarcseconds to radians conversion factor
+pub const MILLIARCSEC_TO_RAD: f64 = core::f64::consts::PI / (180.0 * 3600.0 * 1000.0);
+
+/// Days between GPS epoch (1980-01-06) and J2000.0 epoch (2000-01-01 12:00:00 UTC)
+pub const DAYS_GPS_TO_J2000: f64 = 7292.5;
+
+/// Days in a Julian century
+pub const DAYS_PER_JULIAN_CENTURY: f64 = 36525.0;

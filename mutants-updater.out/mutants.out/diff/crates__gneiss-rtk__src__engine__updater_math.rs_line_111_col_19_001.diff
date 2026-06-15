@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/engine/updater_math.rs
++++ replace + with * in huber_scale_covariance
+@@ -103,17 +103,17 @@
+ }
+ 
+ pub fn huber_scale_covariance(
+     p: &DMatrix<f64>,
+     r: &DMatrix<f64>,
+     z: &DVector<f64>,
+     tuning: &EkfTuningConfig,
+ ) -> Result<DMatrix<f64>, UpdateError> {
+-    let s_raw = p + r;
++    let s_raw = p * /* ~ changed by cargo-mutants ~ */ r;
+     let s_raw_inv = match s_raw.clone().cholesky() {
+         Some(chol) => chol.inverse(),
+         None => return Err(UpdateError::SingularMatrix),
+     };
+     let mahal_sq = (&z.transpose() * &s_raw_inv * z)[(0, 0)];
+     let huber_sq = tuning.huber_threshold_loosely.powi(2);
+ 
+     if mahal_sq <= huber_sq {

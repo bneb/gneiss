@@ -1,0 +1,145 @@
+crates/gneiss-rtk/src/engine/processor/mod.rs:48:9: replace ProcessingEngine::add_imu_measurement with ()
+crates/gneiss-rtk/src/engine/processor/mod.rs:50:32: replace * with + in ProcessingEngine::add_imu_measurement
+crates/gneiss-rtk/src/engine/processor/mod.rs:50:32: replace * with / in ProcessingEngine::add_imu_measurement
+crates/gneiss-rtk/src/engine/processor/mod.rs:51:31: replace * with + in ProcessingEngine::add_imu_measurement
+crates/gneiss-rtk/src/engine/processor/mod.rs:51:31: replace * with / in ProcessingEngine::add_imu_measurement
+crates/gneiss-rtk/src/engine/processor/mod.rs:57:9: replace ProcessingEngine::add_ephemeris with ()
+crates/gneiss-rtk/src/engine/processor/mod.rs:64:9: replace ProcessingEngine::check_covariance_divergence with ()
+crates/gneiss-rtk/src/engine/processor/mod.rs:65:24: replace > with == in ProcessingEngine::check_covariance_divergence
+crates/gneiss-rtk/src/engine/processor/mod.rs:65:24: replace > with < in ProcessingEngine::check_covariance_divergence
+crates/gneiss-rtk/src/engine/processor/mod.rs:65:24: replace > with >= in ProcessingEngine::check_covariance_divergence
+crates/gneiss-rtk/src/engine/processor/mod.rs:76:51: replace > with == in ProcessingEngine::check_covariance_divergence
+crates/gneiss-rtk/src/engine/processor/mod.rs:76:51: replace > with < in ProcessingEngine::check_covariance_divergence
+crates/gneiss-rtk/src/engine/processor/mod.rs:76:51: replace > with >= in ProcessingEngine::check_covariance_divergence
+crates/gneiss-rtk/src/engine/processor/mod.rs:86:9: replace ProcessingEngine::apply_nhc_updates with ()
+crates/gneiss-rtk/src/engine/processor/mod.rs:87:30: replace && with || in ProcessingEngine::apply_nhc_updates
+crates/gneiss-rtk/src/engine/processor/mod.rs:91:34: replace > with == in ProcessingEngine::apply_nhc_updates
+crates/gneiss-rtk/src/engine/processor/mod.rs:91:34: replace > with < in ProcessingEngine::apply_nhc_updates
+crates/gneiss-rtk/src/engine/processor/mod.rs:91:34: replace > with >= in ProcessingEngine::apply_nhc_updates
+crates/gneiss-rtk/src/engine/processor/mod.rs:94:46: replace += with -= in ProcessingEngine::apply_nhc_updates
+crates/gneiss-rtk/src/engine/processor/mod.rs:94:46: replace += with *= in ProcessingEngine::apply_nhc_updates
+crates/gneiss-rtk/src/engine/processor/mod.rs:94:64: replace += with -= in ProcessingEngine::apply_nhc_updates
+crates/gneiss-rtk/src/engine/processor/mod.rs:94:64: replace += with *= in ProcessingEngine::apply_nhc_updates
+crates/gneiss-rtk/src/engine/processor/mod.rs:95:40: replace / with % in ProcessingEngine::apply_nhc_updates
+crates/gneiss-rtk/src/engine/processor/mod.rs:95:40: replace / with * in ProcessingEngine::apply_nhc_updates
+crates/gneiss-rtk/src/engine/processor/mod.rs:96:40: replace / with % in ProcessingEngine::apply_nhc_updates
+crates/gneiss-rtk/src/engine/processor/mod.rs:96:40: replace / with * in ProcessingEngine::apply_nhc_updates
+crates/gneiss-rtk/src/engine/processor/mod.rs:101:31: replace += with -= in ProcessingEngine::apply_nhc_updates
+crates/gneiss-rtk/src/engine/processor/mod.rs:101:31: replace += with *= in ProcessingEngine::apply_nhc_updates
+crates/gneiss-rtk/src/engine/processor/mod.rs:101:43: replace - with + in ProcessingEngine::apply_nhc_updates
+crates/gneiss-rtk/src/engine/processor/mod.rs:101:43: replace - with / in ProcessingEngine::apply_nhc_updates
+crates/gneiss-rtk/src/engine/processor/mod.rs:102:31: replace += with -= in ProcessingEngine::apply_nhc_updates
+crates/gneiss-rtk/src/engine/processor/mod.rs:102:31: replace += with *= in ProcessingEngine::apply_nhc_updates
+crates/gneiss-rtk/src/engine/processor/mod.rs:102:42: replace - with + in ProcessingEngine::apply_nhc_updates
+crates/gneiss-rtk/src/engine/processor/mod.rs:102:42: replace - with / in ProcessingEngine::apply_nhc_updates
+crates/gneiss-rtk/src/engine/processor/mod.rs:104:27: replace /= with %= in ProcessingEngine::apply_nhc_updates
+crates/gneiss-rtk/src/engine/processor/mod.rs:104:27: replace /= with *= in ProcessingEngine::apply_nhc_updates
+crates/gneiss-rtk/src/engine/processor/mod.rs:105:27: replace /= with %= in ProcessingEngine::apply_nhc_updates
+crates/gneiss-rtk/src/engine/processor/mod.rs:105:27: replace /= with *= in ProcessingEngine::apply_nhc_updates
+crates/gneiss-rtk/src/engine/processor/mod.rs:107:37: replace && with || in ProcessingEngine::apply_nhc_updates
+crates/gneiss-rtk/src/engine/processor/mod.rs:107:30: replace < with == in ProcessingEngine::apply_nhc_updates
+crates/gneiss-rtk/src/engine/processor/mod.rs:107:30: replace < with > in ProcessingEngine::apply_nhc_updates
+crates/gneiss-rtk/src/engine/processor/mod.rs:107:30: replace < with <= in ProcessingEngine::apply_nhc_updates
+crates/gneiss-rtk/src/engine/processor/mod.rs:107:46: replace < with == in ProcessingEngine::apply_nhc_updates
+crates/gneiss-rtk/src/engine/processor/mod.rs:107:46: replace < with > in ProcessingEngine::apply_nhc_updates
+crates/gneiss-rtk/src/engine/processor/mod.rs:107:46: replace < with <= in ProcessingEngine::apply_nhc_updates
+crates/gneiss-rtk/src/engine/processor/mod.rs:112:31: replace && with || in ProcessingEngine::apply_nhc_updates
+crates/gneiss-rtk/src/engine/processor/mod.rs:112:16: delete ! in ProcessingEngine::apply_nhc_updates
+crates/gneiss-rtk/src/engine/processor/mod.rs:112:56: replace < with == in ProcessingEngine::apply_nhc_updates
+crates/gneiss-rtk/src/engine/processor/mod.rs:112:56: replace < with > in ProcessingEngine::apply_nhc_updates
+crates/gneiss-rtk/src/engine/processor/mod.rs:112:56: replace < with <= in ProcessingEngine::apply_nhc_updates
+crates/gneiss-rtk/src/engine/processor/mod.rs:115:43: replace * with + in ProcessingEngine::apply_nhc_updates
+crates/gneiss-rtk/src/engine/processor/mod.rs:115:43: replace * with / in ProcessingEngine::apply_nhc_updates
+crates/gneiss-rtk/src/engine/processor/mod.rs:119:76: replace - with + in ProcessingEngine::apply_nhc_updates
+crates/gneiss-rtk/src/engine/processor/mod.rs:119:76: replace - with / in ProcessingEngine::apply_nhc_updates
+crates/gneiss-rtk/src/engine/processor/mod.rs:127:9: replace ProcessingEngine::reset_for_multipass with ()
+crates/gneiss-rtk/src/engine/processor/mod.rs:147:9: replace ProcessingEngine::process_epoch -> Result<&RtkState, EngineError> with Ok(Box::leak(Box::new(Default::default())))
+crates/gneiss-rtk/src/engine/processor/mod.rs:151:37: replace > with == in ProcessingEngine::process_epoch
+crates/gneiss-rtk/src/engine/processor/mod.rs:151:37: replace > with < in ProcessingEngine::process_epoch
+crates/gneiss-rtk/src/engine/processor/mod.rs:151:37: replace > with >= in ProcessingEngine::process_epoch
+crates/gneiss-rtk/src/engine/processor/mod.rs:153:90: replace && with || in ProcessingEngine::process_epoch
+crates/gneiss-rtk/src/engine/processor/mod.rs:153:74: replace == with != in ProcessingEngine::process_epoch
+crates/gneiss-rtk/src/engine/processor/mod.rs:153:117: replace == with != in ProcessingEngine::process_epoch
+crates/gneiss-rtk/src/engine/processor/mod.rs:154:21: replace >= with < in ProcessingEngine::process_epoch
+crates/gneiss-rtk/src/engine/processor/mod.rs:164:41: replace > with == in ProcessingEngine::process_epoch
+crates/gneiss-rtk/src/engine/processor/mod.rs:164:41: replace > with < in ProcessingEngine::process_epoch
+crates/gneiss-rtk/src/engine/processor/mod.rs:164:41: replace > with >= in ProcessingEngine::process_epoch
+crates/gneiss-rtk/src/engine/processor/mod.rs:166:94: replace && with || in ProcessingEngine::process_epoch
+crates/gneiss-rtk/src/engine/processor/mod.rs:166:78: replace == with != in ProcessingEngine::process_epoch
+crates/gneiss-rtk/src/engine/processor/mod.rs:166:121: replace == with != in ProcessingEngine::process_epoch
+crates/gneiss-rtk/src/engine/processor/mod.rs:167:25: replace >= with < in ProcessingEngine::process_epoch
+crates/gneiss-rtk/src/engine/processor/mod.rs:198:37: replace snr_scale -> f64 with 0.0
+crates/gneiss-rtk/src/engine/processor/mod.rs:198:37: replace snr_scale -> f64 with 1.0
+crates/gneiss-rtk/src/engine/processor/mod.rs:198:37: replace snr_scale -> f64 with -1.0
+crates/gneiss-rtk/src/engine/processor/rtk.rs:13:9: replace ProcessingEngine::init_spp_state -> Result<(Option<Coordinate>, f64), EngineError> with Ok((None, 0.0))
+crates/gneiss-rtk/src/engine/processor/rtk.rs:13:9: replace ProcessingEngine::init_spp_state -> Result<(Option<Coordinate>, f64), EngineError> with Ok((None, 1.0))
+crates/gneiss-rtk/src/engine/processor/rtk.rs:13:9: replace ProcessingEngine::init_spp_state -> Result<(Option<Coordinate>, f64), EngineError> with Ok((None, -1.0))
+crates/gneiss-rtk/src/engine/processor/rtk.rs:13:9: replace ProcessingEngine::init_spp_state -> Result<(Option<Coordinate>, f64), EngineError> with Ok((Some(Default::default()), 0.0))
+crates/gneiss-rtk/src/engine/processor/rtk.rs:13:9: replace ProcessingEngine::init_spp_state -> Result<(Option<Coordinate>, f64), EngineError> with Ok((Some(Default::default()), 1.0))
+crates/gneiss-rtk/src/engine/processor/rtk.rs:13:9: replace ProcessingEngine::init_spp_state -> Result<(Option<Coordinate>, f64), EngineError> with Ok((Some(Default::default()), -1.0))
+crates/gneiss-rtk/src/engine/processor/rtk.rs:33:9: replace ProcessingEngine::evaluate_gnss_only_coasting with ()
+crates/gneiss-rtk/src/engine/processor/rtk.rs:34:13: replace || with && in ProcessingEngine::evaluate_gnss_only_coasting
+crates/gneiss-rtk/src/engine/processor/rtk.rs:34:206: replace && with || in ProcessingEngine::evaluate_gnss_only_coasting
+crates/gneiss-rtk/src/engine/processor/rtk.rs:34:209: delete ! in ProcessingEngine::evaluate_gnss_only_coasting
+crates/gneiss-rtk/src/engine/processor/rtk.rs:39:35: replace < with == in ProcessingEngine::evaluate_gnss_only_coasting
+crates/gneiss-rtk/src/engine/processor/rtk.rs:39:35: replace < with > in ProcessingEngine::evaluate_gnss_only_coasting
+crates/gneiss-rtk/src/engine/processor/rtk.rs:39:35: replace < with <= in ProcessingEngine::evaluate_gnss_only_coasting
+crates/gneiss-rtk/src/engine/processor/rtk.rs:52:34: replace == with != in ProcessingEngine::evaluate_gnss_only_coasting
+crates/gneiss-rtk/src/engine/processor/rtk.rs:57:34: replace == with != in ProcessingEngine::evaluate_gnss_only_coasting
+crates/gneiss-rtk/src/engine/processor/rtk.rs:66:9: replace ProcessingEngine::filter_valid_base -> Option<&'a EpochObs> with None
+crates/gneiss-rtk/src/engine/processor/rtk.rs:66:9: replace ProcessingEngine::filter_valid_base -> Option<&'a EpochObs> with Some(Box::leak(Box::new(Default::default())))
+crates/gneiss-rtk/src/engine/processor/rtk.rs:67:43: replace - with + in ProcessingEngine::filter_valid_base
+crates/gneiss-rtk/src/engine/processor/rtk.rs:67:43: replace - with / in ProcessingEngine::filter_valid_base
+crates/gneiss-rtk/src/engine/processor/rtk.rs:68:20: replace > with == in ProcessingEngine::filter_valid_base
+crates/gneiss-rtk/src/engine/processor/rtk.rs:68:20: replace > with < in ProcessingEngine::filter_valid_base
+crates/gneiss-rtk/src/engine/processor/rtk.rs:68:20: replace > with >= in ProcessingEngine::filter_valid_base
+crates/gneiss-rtk/src/engine/processor/rtk.rs:78:9: replace ProcessingEngine::perform_spp_fallback_update with ()
+crates/gneiss-rtk/src/engine/processor/rtk.rs:80:33: replace - with + in ProcessingEngine::perform_spp_fallback_update
+crates/gneiss-rtk/src/engine/processor/rtk.rs:80:33: replace - with / in ProcessingEngine::perform_spp_fallback_update
+crates/gneiss-rtk/src/engine/processor/rtk.rs:95:9: replace ProcessingEngine::process_rtk_matched_obs with ()
+crates/gneiss-rtk/src/engine/processor/rtk.rs:104:68: replace - with + in ProcessingEngine::process_rtk_matched_obs
+crates/gneiss-rtk/src/engine/processor/rtk.rs:104:68: replace - with / in ProcessingEngine::process_rtk_matched_obs
+crates/gneiss-rtk/src/engine/processor/rtk.rs:122:46: replace += with -= in ProcessingEngine::process_rtk_matched_obs
+crates/gneiss-rtk/src/engine/processor/rtk.rs:122:46: replace += with *= in ProcessingEngine::process_rtk_matched_obs
+crates/gneiss-rtk/src/engine/processor/rtk.rs:143:9: replace ProcessingEngine::process_rtk -> Result<&RtkState, EngineError> with Ok(Box::leak(Box::new(Default::default())))
+crates/gneiss-rtk/src/engine/processor/rtk.rs:145:33: replace - with + in ProcessingEngine::process_rtk
+crates/gneiss-rtk/src/engine/processor/rtk.rs:145:33: replace - with / in ProcessingEngine::process_rtk
+crates/gneiss-rtk/src/engine/processor/rtk.rs:146:28: delete ! in ProcessingEngine::process_rtk
+crates/gneiss-rtk/src/engine/processor/rtk.rs:160:31: replace += with -= in ProcessingEngine::process_rtk
+crates/gneiss-rtk/src/engine/processor/rtk.rs:160:31: replace += with *= in ProcessingEngine::process_rtk
+crates/gneiss-rtk/src/engine/processor/rtk.rs:174:32: replace == with != in ProcessingEngine::process_rtk
+crates/gneiss-rtk/src/engine/processor/rtk.rs:174:26: replace % with / in ProcessingEngine::process_rtk
+crates/gneiss-rtk/src/engine/processor/rtk.rs:174:26: replace % with + in ProcessingEngine::process_rtk
+crates/gneiss-rtk/src/engine/processor/rtk.rs:176:34: replace >= with < in ProcessingEngine::process_rtk
+crates/gneiss-rtk/src/engine/processor/rtk.rs:180:46: replace += with -= in ProcessingEngine::process_rtk
+crates/gneiss-rtk/src/engine/processor/rtk.rs:180:46: replace += with *= in ProcessingEngine::process_rtk
+crates/gneiss-rtk/src/engine/processor/spp.rs:10:9: replace ProcessingEngine::perform_spp_ekf_update with ()
+crates/gneiss-rtk/src/engine/processor/spp.rs:11:37: replace - with + in ProcessingEngine::perform_spp_ekf_update
+crates/gneiss-rtk/src/engine/processor/spp.rs:11:37: replace - with / in ProcessingEngine::perform_spp_ekf_update
+crates/gneiss-rtk/src/engine/processor/spp.rs:15:49: replace && with || in ProcessingEngine::perform_spp_ekf_update
+crates/gneiss-rtk/src/engine/processor/spp.rs:15:66: replace > with == in ProcessingEngine::perform_spp_ekf_update
+crates/gneiss-rtk/src/engine/processor/spp.rs:15:66: replace > with < in ProcessingEngine::perform_spp_ekf_update
+crates/gneiss-rtk/src/engine/processor/spp.rs:15:66: replace > with >= in ProcessingEngine::perform_spp_ekf_update
+crates/gneiss-rtk/src/engine/processor/spp.rs:25:199: replace < with == in ProcessingEngine::perform_spp_ekf_update
+crates/gneiss-rtk/src/engine/processor/spp.rs:25:199: replace < with > in ProcessingEngine::perform_spp_ekf_update
+crates/gneiss-rtk/src/engine/processor/spp.rs:25:199: replace < with <= in ProcessingEngine::perform_spp_ekf_update
+crates/gneiss-rtk/src/engine/processor/spp.rs:31:46: replace += with -= in ProcessingEngine::perform_spp_ekf_update
+crates/gneiss-rtk/src/engine/processor/spp.rs:31:46: replace += with *= in ProcessingEngine::perform_spp_ekf_update
+crates/gneiss-rtk/src/engine/processor/spp.rs:32:49: replace > with == in ProcessingEngine::perform_spp_ekf_update
+crates/gneiss-rtk/src/engine/processor/spp.rs:32:49: replace > with < in ProcessingEngine::perform_spp_ekf_update
+crates/gneiss-rtk/src/engine/processor/spp.rs:32:49: replace > with >= in ProcessingEngine::perform_spp_ekf_update
+crates/gneiss-rtk/src/engine/processor/spp.rs:39:55: replace > with == in ProcessingEngine::perform_spp_ekf_update
+crates/gneiss-rtk/src/engine/processor/spp.rs:39:55: replace > with < in ProcessingEngine::perform_spp_ekf_update
+crates/gneiss-rtk/src/engine/processor/spp.rs:39:55: replace > with >= in ProcessingEngine::perform_spp_ekf_update
+crates/gneiss-rtk/src/engine/processor/spp.rs:48:57: replace < with == in ProcessingEngine::perform_spp_ekf_update
+crates/gneiss-rtk/src/engine/processor/spp.rs:48:57: replace < with > in ProcessingEngine::perform_spp_ekf_update
+crates/gneiss-rtk/src/engine/processor/spp.rs:48:57: replace < with <= in ProcessingEngine::perform_spp_ekf_update
+crates/gneiss-rtk/src/engine/processor/spp.rs:56:55: replace > with == in ProcessingEngine::perform_spp_ekf_update
+crates/gneiss-rtk/src/engine/processor/spp.rs:56:55: replace > with < in ProcessingEngine::perform_spp_ekf_update
+crates/gneiss-rtk/src/engine/processor/spp.rs:56:55: replace > with >= in ProcessingEngine::perform_spp_ekf_update
+crates/gneiss-rtk/src/engine/processor/spp.rs:71:9: replace ProcessingEngine::process_spp -> Result<&RtkState, EngineError> with Ok(Box::leak(Box::new(Default::default())))
+crates/gneiss-rtk/src/engine/processor/spp.rs:86:51: replace > with == in ProcessingEngine::process_spp
+crates/gneiss-rtk/src/engine/processor/spp.rs:86:51: replace > with < in ProcessingEngine::process_spp
+crates/gneiss-rtk/src/engine/processor/spp.rs:86:51: replace > with >= in ProcessingEngine::process_spp
+crates/gneiss-rtk/src/engine/processor/spp.rs:95:33: replace - with + in ProcessingEngine::process_spp
+crates/gneiss-rtk/src/engine/processor/spp.rs:95:33: replace - with / in ProcessingEngine::process_spp

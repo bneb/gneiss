@@ -10,7 +10,7 @@ impl CouplingStrategy for LooseCoupling {
 pub struct TightCoupling;
 impl CouplingStrategy for TightCoupling {
     fn is_tightly_coupled() -> bool { true }
-    fn pre_fit_threshold_multiplier() -> f64 { 5.0 }
+    fn pre_fit_threshold_multiplier() -> f64 { 25.0 }
 }
 
 use nalgebra::{DMatrix, DVector, UnitQuaternion, Vector3};
@@ -112,7 +112,6 @@ pub fn compute_scalar_thresholds<C: CouplingStrategy>(
     (thresh, abs_thresh)
 }
 
-#[allow(clippy::too_many_arguments)]
 pub fn evaluate_post_fit_outliers<C: CouplingStrategy>(
     v: &DVector<f64>,
     s: &DMatrix<f64>,
@@ -121,13 +120,14 @@ pub fn evaluate_post_fit_outliers<C: CouplingStrategy>(
     meas_types: Option<&[(gneiss_core::sat::SatelliteId, u8)]>,
     max_innovation: f64,
     tuning: &EkfTuningConfig,
-) -> (Option<usize>, f64) {
+) -> (Option<usize>, f64, DVector<f64>) {
     let mut max_outlier_ratio = 0.0;
     let mut worst_idx = None;
+    let mut weights = DVector::from_element(v.len(), 1.0);
     
     for i in 0..v.len() {
         let meas_type = meas_types.map_or(0, |m| m[current_valid[i]].1);
-        let ratio = v[i].abs() / s[(i, i)].sqrt();
+        let ratio = (current_z[i] * current_z[i]) / s[(i, i)];
         let (_thresh, abs_thresh) = compute_scalar_thresholds::<C>(meas_type, max_innovation, tuning);
         
         // Scale absolute threshold by the filter's uncertainty for pseudoranges to prevent getting stuck
@@ -137,24 +137,39 @@ pub fn evaluate_post_fit_outliers<C: CouplingStrategy>(
             1 | 2 => abs_thresh,
             _ => f64::max(abs_thresh, s[(i, i)].sqrt() * 3.0),
         };
-        let is_abs_outlier = current_z[i].abs() > effective_abs_thresh && meas_type != 3;
-
-        if is_abs_outlier {
-            return (Some(i), f64::INFINITY);
-        }
         
-        let is_ratio_outlier = match meas_type {
-            1 | 2 => ratio > tuning.phase_outlier_ratio_thresh,
-            3 => ratio > tuning.phase_outlier_ratio_thresh * tuning.doppler_outlier_ratio_mult, // Doppler uses scaled ratio
-            _ => ratio > 5.0, // Pseudorange uses ratio > 5.0 instead of hard absolute threshold to allow covariance recovery
+        let is_tight = C::is_tightly_coupled();
+
+        // If tightly-coupled, we relax the hard absolute rejection threshold by a factor of 5 
+        // to allow Huber scaling to gracefully handle severe multipath instead of hard rejecting.
+        let is_abs_outlier = if is_tight {
+            current_z[i].abs() > (effective_abs_thresh * 5.0) && meas_type != 3
+        } else {
+            current_z[i].abs() > effective_abs_thresh && meas_type != 3
         };
 
-        if is_ratio_outlier && ratio > max_outlier_ratio {
-            max_outlier_ratio = ratio;
-            worst_idx = Some(i);
+        if is_abs_outlier {
+            return (Some(i), f64::INFINITY, weights);
+        }
+        
+        let hard_reject_ratio = match meas_type {
+            1 | 2 => if is_tight { tuning.phase_outlier_ratio_thresh * 3.0 } else { tuning.phase_outlier_ratio_thresh },
+            3 => if is_tight { tuning.phase_outlier_ratio_thresh * tuning.doppler_outlier_ratio_mult * 3.0 } else { tuning.phase_outlier_ratio_thresh * tuning.doppler_outlier_ratio_mult },
+            _ => if is_tight { 15.0 } else { 5.0 },
+        };
+
+        if ratio > hard_reject_ratio {
+            if ratio > max_outlier_ratio {
+                max_outlier_ratio = ratio;
+                worst_idx = Some(i);
+            }
+        } else if is_tight {
+            // Apply Huber weighting ONLY in tightly coupled mode. 
+            // LooseCoupling relies on hard-rejection and doesn't use IRLS.
+            weights[i] = crate::math::thresholding::apply_huber(v[i], s[(i, i)], tuning.huber_threshold_tightly);
         }
     }
-    (worst_idx, max_outlier_ratio)
+    (worst_idx, max_outlier_ratio, weights)
 }
 
 
@@ -193,13 +208,13 @@ pub fn populate_loosely_coupled_jacobian(
         let meas_types = vec![(sat, 1), (sat, 3), (sat, 1)];
         
         // Test 1: meas_type != 3, so v[0] = 1000 is an abs outlier
-        let (outlier, _) = evaluate_post_fit_outliers::<TightCoupling>(&v, &s, &current_z, &current_valid, Some(&meas_types), 50.0, &tuning);
+        let (outlier, _, _) = evaluate_post_fit_outliers::<TightCoupling>(&v, &s, &current_z, &current_valid, Some(&meas_types), 50.0, &tuning);
         assert_eq!(outlier, Some(0)); // Returns immediately on abs outlier
         
         // Test 2: meas_type == 3, so it's NOT an abs outlier, but it will be a ratio outlier
         let v_t2 = DVector::from_vec(vec![0.0, 1000.0, 10.0]); // v[1] corresponds to meas_types[1] which is type 3
         let current_z_t2 = DVector::from_vec(vec![0.0, 1000.0, 10.0]);
-        let (outlier2, ratio) = evaluate_post_fit_outliers::<TightCoupling>(&v_t2, &s, &current_z_t2, &current_valid, Some(&meas_types), 50.0, &tuning);
+        let (outlier2, ratio, _) = evaluate_post_fit_outliers::<TightCoupling>(&v_t2, &s, &current_z_t2, &current_valid, Some(&meas_types), 50.0, &tuning);
         assert_eq!(outlier2, Some(1)); // Because it has a massive ratio, but was NOT flagged as abs outlier
         assert!(ratio > 900.0);
         
@@ -210,7 +225,7 @@ pub fn populate_loosely_coupled_jacobian(
         // ratio 2: 20/sqrt(1) = 20 (worse!)
         let current_z_t3 = DVector::from_vec(vec![0.0, 50.0, 20.0]);
         let meas_types_t3 = vec![(sat, 3), (sat, 3), (sat, 3)]; // all type 3 to bypass abs
-        let (outlier3, ratio3) = evaluate_post_fit_outliers::<TightCoupling>(&v_t3, &s_t3, &current_z_t3, &current_valid, Some(&meas_types_t3), 1.0, &tuning);
+        let (outlier3, ratio3, _) = evaluate_post_fit_outliers::<TightCoupling>(&v_t3, &s_t3, &current_z_t3, &current_valid, Some(&meas_types_t3), 1.0, &tuning);
         assert_eq!(outlier3, Some(2));
         assert_eq!(ratio3, 20.0);
     }
@@ -440,7 +455,7 @@ mod missed_mutant_tests {
         let current_valid = vec![0];
         let sat_id = SatelliteId { constellation: Constellation::Gps, prn: 1 };
         let meas_types = [(sat_id, 0)];
-        let (idx, val) = evaluate_post_fit_outliers::<LooseCoupling>(&nu, &r, &hp, &current_valid, Some(&meas_types), 1.0, &tuning);
+        let (idx, val, _) = evaluate_post_fit_outliers::<LooseCoupling>(&nu, &r, &hp, &current_valid, Some(&meas_types), 1.0, &tuning);
         assert_eq!(idx, None); // Should not be an abs outlier!
     }
     
@@ -459,7 +474,7 @@ mod missed_mutant_tests {
         let sat_id = SatelliteId { constellation: Constellation::Gps, prn: 1 };
         // meas_type = 3 is exempt from abs outlier check!
         let meas_types = [(sat_id, 3)];
-        let (idx, val) = evaluate_post_fit_outliers::<LooseCoupling>(&nu, &r, &hp, &current_valid, Some(&meas_types), 1.0, &tuning);
+        let (idx, val, _) = evaluate_post_fit_outliers::<LooseCoupling>(&nu, &r, &hp, &current_valid, Some(&meas_types), 1.0, &tuning);
         assert_eq!(idx, None); // Should not be an abs outlier because meas_type == 3
     }
 
@@ -478,7 +493,7 @@ mod missed_mutant_tests {
         // meas_type = 0, so thresh = max_innovation = 1.0
         let meas_types = [(sat_id, 0), (sat_id, 0), (sat_id, 0)];
         let tuning = EkfTuningConfig::default();
-        let (idx, val) = evaluate_post_fit_outliers::<LooseCoupling>(&nu, &r, &hp, &current_valid, Some(&meas_types), 1.0, &tuning);
+        let (idx, val, _) = evaluate_post_fit_outliers::<LooseCoupling>(&nu, &r, &hp, &current_valid, Some(&meas_types), 1.0, &tuning);
         assert_eq!(idx, Some(0)); // 0 wins because 6.0 > 6.0 is false
         assert!((val - 6.0).abs() < 1e-9);
     }
@@ -495,7 +510,7 @@ mod missed_mutant_tests {
         let sat_id = SatelliteId { constellation: Constellation::Gps, prn: 1 };
         let meas_types = [(sat_id, 0), (sat_id, 0), (sat_id, 0), (sat_id, 0), (sat_id, 0)];
         let tuning = EkfTuningConfig::default();
-        let (idx, val) = evaluate_post_fit_outliers::<LooseCoupling>(&nu, &r, &hp, &current_valid, Some(&meas_types), 1.0, &tuning);
+        let (idx, val, _) = evaluate_post_fit_outliers::<LooseCoupling>(&nu, &r, &hp, &current_valid, Some(&meas_types), 1.0, &tuning);
         // Expect None because v[0].abs() = 1.0, thresh = 1.0, 1.0 > 1.0 is false.
         assert_eq!(idx, None);
         assert!((val - 0.0).abs() < 1e-9);
@@ -513,7 +528,7 @@ mod missed_mutant_tests {
         let sat_id = SatelliteId { constellation: Constellation::Gps, prn: 1 };
         let meas_types = [(sat_id, 0), (sat_id, 0), (sat_id, 0), (sat_id, 0)];
         let tuning = EkfTuningConfig::default();
-        let (idx, val) = evaluate_post_fit_outliers::<LooseCoupling>(&nu, &r, &hp, &current_valid, Some(&meas_types), 1.0, &tuning);
+        let (idx, val, _) = evaluate_post_fit_outliers::<LooseCoupling>(&nu, &r, &hp, &current_valid, Some(&meas_types), 1.0, &tuning);
         // Catch mutants in ratio math
         assert_eq!(idx, Some(0));
         assert!((val - 6.0).abs() < 1e-9);

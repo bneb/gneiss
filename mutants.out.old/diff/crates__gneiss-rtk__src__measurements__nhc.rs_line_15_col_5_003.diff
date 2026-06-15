@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/measurements/nhc.rs
++++ replace skew_symmetric -> Matrix3<f64> with Matrix3::from(0.0)
+@@ -7,17 +7,17 @@
+     for i in 0..3 {
+         h[(0, col + i)] = m[(1, i)];
+         h[(1, col + i)] = m[(2, i)];
+     }
+ }
+ 
+ /// Helper to generate a skew-symmetric matrix from a 3D vector
+ fn skew_symmetric(v: &Vector3<f64>) -> Matrix3<f64> {
+-    Matrix3::new(0.0, -v.z, v.y, v.z, 0.0, -v.x, -v.y, v.x, 0.0)
++    Matrix3::from(0.0) /* ~ changed by cargo-mutants ~ */
+ }
+ 
+ /// Applies Non-Holonomic Constraints (NHC) to the EKF state.
+ /// This assumes the vehicle's lateral and vertical velocity in the body frame is zero.
+ pub fn apply_nhc(
+     state: &mut RtkState,
+     sigma_lateral: f64,
+     sigma_vertical: f64,

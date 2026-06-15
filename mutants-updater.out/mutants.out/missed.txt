@@ -1,0 +1,66 @@
+crates/gneiss-rtk/src/engine/updater_math.rs:23:5: replace enforce_symmetry with ()
+crates/gneiss-rtk/src/engine/updater_math.rs:34:9: delete match arm 1 | 2 in get_pre_fit_threshold
+crates/gneiss-rtk/src/engine/updater_math.rs:41:16: replace / with * in check_pre_fit_residual
+crates/gneiss-rtk/src/engine/updater_math.rs:41:11: replace * with / in check_pre_fit_residual
+crates/gneiss-rtk/src/engine/updater_math.rs:44:66: replace && with || in check_pre_fit_residual
+crates/gneiss-rtk/src/engine/updater_math.rs:44:45: replace && with || in check_pre_fit_residual
+crates/gneiss-rtk/src/engine/updater_math.rs:44:27: replace && with || in check_pre_fit_residual
+crates/gneiss-rtk/src/engine/updater_math.rs:44:22: replace != with == in check_pre_fit_residual
+crates/gneiss-rtk/src/engine/updater_math.rs:44:40: replace != with == in check_pre_fit_residual
+crates/gneiss-rtk/src/engine/updater_math.rs:44:57: replace < with == in check_pre_fit_residual
+crates/gneiss-rtk/src/engine/updater_math.rs:44:57: replace < with > in check_pre_fit_residual
+crates/gneiss-rtk/src/engine/updater_math.rs:44:57: replace < with <= in check_pre_fit_residual
+crates/gneiss-rtk/src/engine/updater_math.rs:44:74: replace < with == in check_pre_fit_residual
+crates/gneiss-rtk/src/engine/updater_math.rs:44:74: replace < with > in check_pre_fit_residual
+crates/gneiss-rtk/src/engine/updater_math.rs:44:74: replace < with <= in check_pre_fit_residual
+crates/gneiss-rtk/src/engine/updater_math.rs:60:9: delete match arm 0 in compute_scalar_thresholds
+crates/gneiss-rtk/src/engine/updater_math.rs:62:29: replace * with + in compute_scalar_thresholds
+crates/gneiss-rtk/src/engine/updater_math.rs:85:5: replace evaluate_post_fit_outliers -> (Option<usize>, f64) with (None, 0.0)
+crates/gneiss-rtk/src/engine/updater_math.rs:85:5: replace evaluate_post_fit_outliers -> (Option<usize>, f64) with (None, 1.0)
+crates/gneiss-rtk/src/engine/updater_math.rs:85:5: replace evaluate_post_fit_outliers -> (Option<usize>, f64) with (None, -1.0)
+crates/gneiss-rtk/src/engine/updater_math.rs:85:5: replace evaluate_post_fit_outliers -> (Option<usize>, f64) with (Some(0), 0.0)
+crates/gneiss-rtk/src/engine/updater_math.rs:85:5: replace evaluate_post_fit_outliers -> (Option<usize>, f64) with (Some(0), 1.0)
+crates/gneiss-rtk/src/engine/updater_math.rs:85:5: replace evaluate_post_fit_outliers -> (Option<usize>, f64) with (Some(0), -1.0)
+crates/gneiss-rtk/src/engine/updater_math.rs:85:5: replace evaluate_post_fit_outliers -> (Option<usize>, f64) with (Some(1), 0.0)
+crates/gneiss-rtk/src/engine/updater_math.rs:85:5: replace evaluate_post_fit_outliers -> (Option<usize>, f64) with (Some(1), 1.0)
+crates/gneiss-rtk/src/engine/updater_math.rs:85:5: replace evaluate_post_fit_outliers -> (Option<usize>, f64) with (Some(1), -1.0)
+crates/gneiss-rtk/src/engine/updater_math.rs:90:32: replace / with % in evaluate_post_fit_outliers
+crates/gneiss-rtk/src/engine/updater_math.rs:90:32: replace / with * in evaluate_post_fit_outliers
+crates/gneiss-rtk/src/engine/updater_math.rs:92:62: replace && with || in evaluate_post_fit_outliers
+crates/gneiss-rtk/src/engine/updater_math.rs:92:49: replace > with == in evaluate_post_fit_outliers
+crates/gneiss-rtk/src/engine/updater_math.rs:92:49: replace > with < in evaluate_post_fit_outliers
+crates/gneiss-rtk/src/engine/updater_math.rs:92:49: replace > with >= in evaluate_post_fit_outliers
+crates/gneiss-rtk/src/engine/updater_math.rs:92:75: replace != with == in evaluate_post_fit_outliers
+crates/gneiss-rtk/src/engine/updater_math.rs:97:32: replace && with || in evaluate_post_fit_outliers
+crates/gneiss-rtk/src/engine/updater_math.rs:97:23: replace > with == in evaluate_post_fit_outliers
+crates/gneiss-rtk/src/engine/updater_math.rs:97:23: replace > with < in evaluate_post_fit_outliers
+crates/gneiss-rtk/src/engine/updater_math.rs:97:23: replace > with >= in evaluate_post_fit_outliers
+crates/gneiss-rtk/src/engine/updater_math.rs:97:41: replace > with == in evaluate_post_fit_outliers
+crates/gneiss-rtk/src/engine/updater_math.rs:97:41: replace > with < in evaluate_post_fit_outliers
+crates/gneiss-rtk/src/engine/updater_math.rs:97:41: replace > with >= in evaluate_post_fit_outliers
+crates/gneiss-rtk/src/engine/updater_math.rs:111:19: replace + with * in huber_scale_covariance
+crates/gneiss-rtk/src/engine/updater_math.rs:119:17: replace <= with > in huber_scale_covariance
+crates/gneiss-rtk/src/engine/updater_math.rs:123:26: replace / with % in huber_scale_covariance
+crates/gneiss-rtk/src/engine/updater_math.rs:123:26: replace / with * in huber_scale_covariance
+crates/gneiss-rtk/src/engine/updater_math.rs:124:10: replace * with / in huber_scale_covariance
+crates/gneiss-rtk/src/engine/updater_math.rs:133:5: replace populate_loosely_coupled_jacobian with ()
+crates/gneiss-rtk/src/engine/updater_math.rs:134:21: delete - in populate_loosely_coupled_jacobian
+crates/gneiss-rtk/src/engine/updater_math.rs:136:21: delete - in populate_loosely_coupled_jacobian
+crates/gneiss-rtk/src/engine/updater_math.rs:137:56: replace * with + in populate_loosely_coupled_jacobian
+crates/gneiss-rtk/src/engine/updater_math.rs:148:41: replace + with - in compute_s_inverse
+crates/gneiss-rtk/src/engine/updater_math.rs:148:41: replace + with * in compute_s_inverse
+crates/gneiss-rtk/src/engine/updater_math.rs:148:83: replace * with / in compute_s_inverse
+crates/gneiss-rtk/src/engine/updater_math.rs:166:5: replace apply_joseph_scalar with ()
+crates/gneiss-rtk/src/engine/updater_math.rs:167:37: replace / with * in apply_joseph_scalar
+crates/gneiss-rtk/src/engine/updater_math.rs:167:19: replace * with + in apply_joseph_scalar
+crates/gneiss-rtk/src/engine/updater_math.rs:168:9: replace += with -= in apply_joseph_scalar
+crates/gneiss-rtk/src/engine/updater_math.rs:168:9: replace += with *= in apply_joseph_scalar
+crates/gneiss-rtk/src/engine/updater_math.rs:168:17: replace * with / in apply_joseph_scalar
+crates/gneiss-rtk/src/engine/updater_math.rs:171:25: replace - with + in apply_joseph_scalar
+crates/gneiss-rtk/src/engine/updater_math.rs:172:41: replace + with - in apply_joseph_scalar
+crates/gneiss-rtk/src/engine/updater_math.rs:172:41: replace + with * in apply_joseph_scalar
+crates/gneiss-rtk/src/engine/updater_math.rs:172:22: replace * with + in apply_joseph_scalar
+crates/gneiss-rtk/src/engine/updater_math.rs:172:16: replace * with + in apply_joseph_scalar
+crates/gneiss-rtk/src/engine/updater_math.rs:172:48: replace * with / in apply_joseph_scalar
+crates/gneiss-rtk/src/engine/updater_math.rs:298:29: replace + with - in compute_loose_coupling_innovations
+crates/gneiss-rtk/src/engine/updater_math.rs:299:27: replace + with - in compute_loose_coupling_innovations

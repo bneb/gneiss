@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/engine/updater_math.rs
++++ replace / with * in huber_scale_covariance
+@@ -115,17 +115,17 @@
+     };
+     let mahal_sq = (&z.transpose() * &s_raw_inv * z)[(0, 0)];
+     let huber_sq = tuning.huber_threshold_loosely.powi(2);
+ 
+     if mahal_sq <= huber_sq {
+         return Ok(r.clone());
+     }
+     
+-    let scale = mahal_sq / huber_sq;
++    let scale = mahal_sq * /* ~ changed by cargo-mutants ~ */ huber_sq;
+     Ok(r * scale)
+ }
+ 
+ pub fn populate_loosely_coupled_jacobian(
+     h_mat: &mut DMatrix<f64>,
+     r_b_e: &UnitQuaternion<f64>,
+     lever_arm: &Vector3<f64>,
+     omega_b: &Vector3<f64>,

@@ -58,39 +58,38 @@ impl GeodeticTransform for HelmertParams {
 }
 
 impl HelmertParams {
+    /// Computes the translation vector at the given time difference.
+    fn compute_translation(&self, dt: f64) -> Vector3<f64> {
+        Vector3::new(
+            self.tx + self.dtx * dt,
+            self.ty + self.dty * dt,
+            self.tz + self.dtz * dt,
+        )
+    }
+
+    /// Computes the rotation vector (in radians) at the given time difference.
+    fn compute_rotation(&self, dt: f64) -> Vector3<f64> {
+        let mas2rad = gneiss_core::constants::MILLIARCSEC_TO_RAD;
+        Vector3::new(
+            (self.rx + self.drx * dt) * mas2rad,
+            (self.ry + self.dry * dt) * mas2rad,
+            (self.rz + self.drz * dt) * mas2rad,
+        )
+    }
+
     /// Transforms an ECEF vector from the source frame to the target frame at a specific observation epoch.
     pub fn transform(&self, ecef: Vector3<f64>, obs_epoch: f64) -> Vector3<f64> {
         let dt = obs_epoch - self.ref_epoch;
-
-        let tx = self.tx + self.dtx * dt;
-        let ty = self.ty + self.dty * dt;
-        let tz = self.tz + self.dtz * dt;
-
-        let rx_mas = self.rx + self.drx * dt;
-        let ry_mas = self.ry + self.dry * dt;
-        let rz_mas = self.rz + self.drz * dt;
-
-        let s_ppb = self.s + self.ds * dt;
-
-        // Conversions
-        let mas2rad = core::f64::consts::PI / (180.0 * 3600.0 * 1000.0);
-        let rx = rx_mas * mas2rad;
-        let ry = ry_mas * mas2rad;
-        let rz = rz_mas * mas2rad;
-        let scale = 1.0 + s_ppb * 1e-9;
+        let t = self.compute_translation(dt);
+        let r = self.compute_rotation(dt);
+        let scale = 1.0 + (self.s + self.ds * dt) * 1e-9;
 
         // Apply Helmert Transformation (position convention)
-        // X' = T + (1 + s) * R * X
-        // R is the rotation matrix for small angles:
-        // |   1   -rz   ry |
-        // |  rz     1  -rx |
-        // | -ry    rx    1 |
-
-        let x_new = tx + scale * (ecef.x - rz * ecef.y + ry * ecef.z);
-        let y_new = ty + scale * (rz * ecef.x + ecef.y - rx * ecef.z);
-        let z_new = tz + scale * (-ry * ecef.x + rx * ecef.y + ecef.z);
-
-        Vector3::new(x_new, y_new, z_new)
+        Vector3::new(
+            t.x + scale * (ecef.x - r.z * ecef.y + r.y * ecef.z),
+            t.y + scale * (r.z * ecef.x + ecef.y - r.x * ecef.z),
+            t.z + scale * (-r.y * ecef.x + r.x * ecef.y + ecef.z),
+        )
     }
 }
 

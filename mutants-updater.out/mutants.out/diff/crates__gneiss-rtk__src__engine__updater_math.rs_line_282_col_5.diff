@@ -1,0 +1,24 @@
+--- crates/gneiss-rtk/src/engine/updater_math.rs
++++ replace remove_measurement with ()
+@@ -274,20 +274,17 @@
+         for (new_col, &old_col) in valid_indices.iter().enumerate() {
+             r_new[(new_idx, new_col)] = r[(old_idx, old_col)];
+         }
+     }
+     (z_new, h_new, r_new)
+ }
+ 
+ pub fn remove_measurement(z: &mut DVector<f64>, h: &mut DMatrix<f64>, r: &mut DMatrix<f64>, valid: &mut Vec<usize>, idx: usize) {
+-    *z = z.clone().remove_row(idx);
+-    *h = h.clone().remove_row(idx);
+-    *r = r.clone().remove_row(idx).remove_column(idx);
+-    valid.remove(idx);
++    () /* ~ changed by cargo-mutants ~ */
+ }
+ 
+ pub fn compute_loose_coupling_innovations(
+     r_b_e: &nalgebra::Matrix3<f64>,
+     state_pos: &nalgebra::Vector3<f64>,
+     state_vel: &nalgebra::Vector3<f64>,
+     gnss_pos: &nalgebra::Vector3<f64>,
+     gnss_vel: &nalgebra::Vector3<f64>,
