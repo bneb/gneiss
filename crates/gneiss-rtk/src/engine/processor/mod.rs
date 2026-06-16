@@ -9,6 +9,7 @@ mod rtk;
 mod spp;
 mod ins;
 mod ppk;
+pub mod rtk_fg;
 
 
 pub struct ProcessingEngine {
@@ -28,6 +29,7 @@ pub struct ProcessingEngine {
     pub clk_data: Option<gneiss_parsers::rinex_clk::RinexClock>,
     pub antex: Option<gneiss_parsers::antex::AntexDatabase>,
     pub dcbs: std::collections::HashMap<(gneiss_core::sat::SatelliteId, String), f64>,
+    pub gnn_raim: Option<crate::engine::ml::gnn_raim::GnnRaimModel>,
 }
 
 impl ProcessingEngine {
@@ -35,6 +37,18 @@ impl ProcessingEngine {
         if matches!(config.dynamics_model, DynamicsModel::Automotive | DynamicsModel::Pedestrian) {
             config.enable_nhc = true;
         }
+        
+        let gnn_raim = if config.enable_gnn_raim {
+            tracing::info!("Initializing GNN RAIM Model...");
+            // Initialize with dummy VarBuilder for now
+            let dev = candle_core::Device::Cpu;
+            let vm = candle_nn::VarMap::new();
+            let vb = candle_nn::VarBuilder::from_varmap(&vm, candle_core::DType::F32, &dev);
+            crate::engine::ml::gnn_raim::GnnRaimModel::new(vb).ok()
+        } else {
+            None
+        };
+
         Self {
             config,
             klobuchar_params: None,
@@ -52,6 +66,7 @@ impl ProcessingEngine {
             clk_data: None,
             antex: None,
             dcbs: std::collections::HashMap::new(),
+            gnn_raim,
         }
     }
 
@@ -174,8 +189,9 @@ impl ProcessingEngine {
             EngineMode::SppIns => crate::engine::spp_tight::process_spp_tightly_coupled(self, &filtered_rover).err(),
             EngineMode::SppInsLooselyCoupled => self.process_spp_loosely_coupled(&filtered_rover).err(),
             EngineMode::Rtk | EngineMode::RtkIns => self.process_rtk(&filtered_rover, filtered_base).err(),
+            EngineMode::RtkInsFactorGraph => rtk_fg::process_rtk_factor_graph(self, &filtered_rover, filtered_base).err(),
             EngineMode::RtkInsLooselyCoupled => self.process_rtk_loosely_coupled(&filtered_rover, filtered_base).err(),
-            EngineMode::Ppp | EngineMode::PppIns | EngineMode::PppInsLooselyCoupled => crate::engine::ppp::process_ppp(self, &filtered_rover).err(),
+            EngineMode::Ppp | EngineMode::PppIns | EngineMode::PppInsLooselyCoupled | EngineMode::PppFg | EngineMode::PppInsFg => crate::engine::ppp::process_ppp(self, &filtered_rover).err(),
         };
         if let Some(e) = err {
             if let EngineError::StateDisappeared = e {

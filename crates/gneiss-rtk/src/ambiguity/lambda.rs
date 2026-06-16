@@ -36,65 +36,43 @@ fn resolve_lambda_inner(a: &DVector<f64>, q: &DMatrix<f64>, max_iters: usize) ->
     let n = a.len();
     if n == 0 { return Err("Empty ambiguity vector"); }
 
-    // 1. Decorrelation (Z-transformation)
     let dec = decorrelate(a, q)?;
-    let (z_hat, z_mat, l, d) = (dec.z_hat, dec.z_mat, dec.l, dec.d);
+    let (best_z, second_best_z) = run_lambda_search(n, &dec, max_iters)?;
 
-    // 2. Search in the transformed space
-    let mut best_z = DVector::zeros(n);
-    let mut best_dist = f64::MAX;
-    let mut second_best_z = DVector::zeros(n);
-    let mut second_best_dist = f64::MAX;
+    let t_inv = dec.z_mat.transpose().try_inverse().ok_or("Transformation matrix inversion failed")?;
+    let best_a = &t_inv * &best_z.0;
+    let second_best_a = &t_inv * &second_best_z.0;
 
-    let mut current_z = DVector::zeros(n);
-    let mut iter_count = 0;
-
-    // Workspace for the search
-    let mut y = DVector::zeros(n);
-
-    search_recursive(
-        (n - 1) as isize,
-        n,
-        &l,
-        &d,
-        &z_hat,
-        &mut y,
-        &mut current_z,
-        0.0,
-        &mut best_z,
-        &mut best_dist,
-        &mut second_best_z,
-        &mut second_best_dist,
-        &mut iter_count,
-        max_iters,
-    );
-
-    if iter_count > max_iters {
-        return Err("LAMBDA search iteration limit exceeded");
-    }
-
-    if best_dist >= f64::MAX || second_best_dist >= f64::MAX {
-        return Err("LAMBDA search iteration limit exceeded");
-    }
-
-    // 3. Back-transformation to original space: a = Z^-T * z
-    // z_hat = Z^T * a => a = (Z^T)^-1 * z_hat
-    let t_inv = z_mat.transpose().try_inverse().ok_or("Transformation matrix inversion failed")?;
-    let best_a = &t_inv * &best_z;
-    let second_best_a = &t_inv * &second_best_z;
-
-    // 4. Success Rate calculation
-    let success_rate = bootstrapping_success_rate(&d);
-
-    let safe_best_dist = if best_dist < 1e-12 { 1e-12 } else { best_dist };
-    let ratio = second_best_dist / safe_best_dist;
+    let success_rate = bootstrapping_success_rate(&dec.d);
+    let safe_best_dist = if best_z.1 < 1e-12 { 1e-12 } else { best_z.1 };
 
     Ok(LambdaResult {
         best_integers: best_a,
         second_best_integers: second_best_a,
-        ratio,
+        ratio: second_best_z.1 / safe_best_dist,
         success_rate,
     })
+}
+
+fn run_lambda_search(n: usize, dec: &DecorrelateResult, max_iters: usize) -> Result<((DVector<f64>, f64), (DVector<f64>, f64)), &'static str> {
+    let mut best_z = DVector::zeros(n);
+    let mut best_dist = f64::MAX;
+    let mut second_best_z = DVector::zeros(n);
+    let mut second_best_dist = f64::MAX;
+    let mut current_z = DVector::zeros(n);
+    let mut iter_count = 0;
+    let mut y = DVector::zeros(n);
+
+    search_recursive(
+        (n - 1) as isize, n, &dec.l, &dec.d, &dec.z_hat, &mut y, &mut current_z, 0.0,
+        &mut best_z, &mut best_dist, &mut second_best_z, &mut second_best_dist, &mut iter_count, max_iters,
+    );
+
+    if iter_count > max_iters || best_dist >= f64::MAX || second_best_dist >= f64::MAX {
+        return Err("LAMBDA search iteration limit exceeded");
+    }
+
+    Ok(((best_z, best_dist), (second_best_z, second_best_dist)))
 }
 
 /// Decorrelates the ambiguities using the LAMBDA reduction (Z-transformation).
@@ -107,48 +85,27 @@ fn decorrelate(a: &DVector<f64>, q: &DMatrix<f64>) -> Result<DecorrelateResult, 
     let mut q_z = q.clone();
     for i in 0..n { q_z[(i, i)] += 1e-10; }
 
-    let mut l;
-    let mut d;
+    let res = ldlt_lower(&q_z)?;
+    let mut l = res.l;
+    let mut d = res.d;
 
     let mut k = (n - 2) as isize;
     let mut iter = 0;
     while k >= 0 && iter < 100 {
         iter += 1;
         let k_u = k as usize;
-        let k1 = k_u + 1;
 
-        let res = ldlt_lower(&q_z)?;
-        l = res.l;
-        d = res.d;
-
-        let mut modified = false;
-        for i in (k_u + 1)..n {
-            let mu = l[(i, k_u)].round();
-            if mu != 0.0 {
-                let mut e = DMatrix::<f64>::identity(n, n);
-                e[(k_u, i)] = -mu;
-                
-                z_mat = &z_mat * &e;
-                z_hat = e.transpose() * &z_hat;
-                q_z = e.transpose() * &q_z * &e;
-                modified = true;
-            }
-        }
-        
-        if modified {
+        if apply_decorrelation_step(n, k_u, &l, &mut z_mat, &mut z_hat, &mut q_z) {
             let res = ldlt_lower(&q_z)?;
             l = res.l;
             d = res.d;
         }
 
-        let delta = d[k1] + l[(k1, k_u)].powi(2) * d[k_u];
-        if delta < d[k_u] - 1e-6 {
-            let mut p = DMatrix::<f64>::identity(n, n);
-            p.swap_columns(k_u, k1);
-            
-            z_mat = &z_mat * &p;
-            z_hat = p.transpose() * &z_hat;
-            q_z = p.transpose() * &q_z * &p;
+        if check_swap_condition(k_u, &l, &d) {
+            swap_columns(n, k_u, &mut z_mat, &mut z_hat, &mut q_z);
+            let res = ldlt_lower(&q_z)?;
+            l = res.l;
+            d = res.d;
             k = (n - 2) as isize;
         } else {
             k -= 1;
@@ -156,8 +113,39 @@ fn decorrelate(a: &DVector<f64>, q: &DMatrix<f64>) -> Result<DecorrelateResult, 
     }
     
     let res = ldlt_lower(&q_z)?;
-    let (l_final, d_final) = (res.l, res.d);
-    Ok(DecorrelateResult { z_hat, q_z, z_mat, l: l_final, d: d_final })
+    Ok(DecorrelateResult { z_hat, q_z, z_mat, l: res.l, d: res.d })
+}
+
+fn apply_decorrelation_step(n: usize, k_u: usize, l: &DMatrix<f64>, z_mat: &mut DMatrix<f64>, z_hat: &mut DVector<f64>, q_z: &mut DMatrix<f64>) -> bool {
+    let mut modified = false;
+    for i in (k_u + 1)..n {
+        let mu = l[(i, k_u)].round();
+        if mu != 0.0 {
+            let mut e = DMatrix::<f64>::identity(n, n);
+            e[(k_u, i)] = -mu;
+            
+            *z_mat = &*z_mat * &e;
+            *z_hat = e.transpose() * &*z_hat;
+            *q_z = e.transpose() * &*q_z * &e;
+            modified = true;
+        }
+    }
+    modified
+}
+
+fn check_swap_condition(k_u: usize, l: &DMatrix<f64>, d: &DVector<f64>) -> bool {
+    let k1 = k_u + 1;
+    let delta = d[k1] + l[(k1, k_u)].powi(2) * d[k_u];
+    delta < d[k_u] - 1e-6
+}
+
+fn swap_columns(n: usize, k_u: usize, z_mat: &mut DMatrix<f64>, z_hat: &mut DVector<f64>, q_z: &mut DMatrix<f64>) {
+    let mut p = DMatrix::<f64>::identity(n, n);
+    p.swap_columns(k_u, k_u + 1);
+    
+    *z_mat = &*z_mat * &p;
+    *z_hat = p.transpose() * &*z_hat;
+    *q_z = p.transpose() * &*q_z * &p;
 }
 
 fn ldlt_lower(q: &DMatrix<f64>) -> Result<LdltResult, &'static str> {

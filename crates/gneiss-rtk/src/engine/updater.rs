@@ -126,13 +126,21 @@ fn compute_update_iteration<C: CouplingStrategy>(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn update<C: CouplingStrategy>(state: &mut RtkState, z: &DVector<f64>, h: &DMatrix<f64>, r: &DMatrix<f64>, max_innovation: f64, meas_types: Option<&[(gneiss_core::sat::SatelliteId, u8)]>, tuning: &crate::engine::config::EkfTuningConfig) -> Result<Vec<usize>, UpdateError> {
+pub fn update<C: CouplingStrategy>(
+    state: &mut RtkState, 
+    z: &DVector<f64>, 
+    h: &DMatrix<f64>, 
+    r: &DMatrix<f64>, 
+    chi_square_threshold: f64,
+    meas_types: Option<&[(gneiss_core::sat::SatelliteId, u8)]>,
+    tuning: &crate::engine::config::EkfTuningConfig,
+) -> Result<(Vec<usize>, DVector<f64>), UpdateError> {
     if z.len() != h.nrows() || h.ncols() != state.covariance.nrows() {
         tracing::warn!("EKF update failed: DimensionMismatch");
         return Err(UpdateError::DimensionMismatch);
     }
     
-    let valid_indices = filter_pre_fit_residuals::<C>(z, h, r, &state.covariance, max_innovation, meas_types);
+    let valid_indices = filter_pre_fit_residuals::<C>(z, h, r, &state.covariance, chi_square_threshold, meas_types);
 
     let pr_valid_count = valid_indices.iter().filter(|&&i| meas_types.is_none_or(|t| t[i].1 == 0)).count();
     let _cp_valid_count = valid_indices.iter().filter(|&&i| meas_types.is_none_or(|t| t[i].1 == 1 || t[i].1 == 2)).count();
@@ -169,10 +177,10 @@ pub fn update<C: CouplingStrategy>(state: &mut RtkState, z: &DVector<f64>, h: &D
     let mut k = DMatrix::zeros(state.covariance.nrows(), current_z.len());
     let mut base_r = current_r.clone();
     
-    for _iter in 0..tuning.ekf_max_iterations {
+    for _iter in 0..100 {
         let iter_res = compute_update_iteration::<C>(
             &state.covariance, &current_z, &current_h, &current_r, &current_valid, 
-            meas_types, max_innovation, tuning
+            meas_types, chi_square_threshold, tuning
         )?;
         let (dx_iter, k_iter, worst_idx, max_outlier_ratio, weights) = (iter_res.dx, iter_res.k, iter_res.worst_idx, iter_res.max_outlier_ratio, iter_res.weights);
         
@@ -181,7 +189,7 @@ pub fn update<C: CouplingStrategy>(state: &mut RtkState, z: &DVector<f64>, h: &D
         
         if let Some(idx) = worst_idx {
             if current_valid.len() > 1 {
-                if _iter >= tuning.ekf_max_iterations - 1 { 
+                if _iter >= 99 { 
                     if max_outlier_ratio == f64::INFINITY || max_outlier_ratio > 3.0 {
                         tracing::warn!("EKF update failed: Iteration limit reached with remaining outliers (ratio {:.2})", max_outlier_ratio);
                         return Err(UpdateError::InvalidMeasurement);
@@ -209,7 +217,7 @@ pub fn update<C: CouplingStrategy>(state: &mut RtkState, z: &DVector<f64>, h: &D
             current_r[(i, i)] = new_r_ii;
         }
 
-        if !weights_changed || _iter >= tuning.ekf_max_iterations - 1 {
+        if !weights_changed || _iter >= 99 {
             break;
         }
     }
@@ -217,7 +225,7 @@ pub fn update<C: CouplingStrategy>(state: &mut RtkState, z: &DVector<f64>, h: &D
     apply_state_correction(state, &dx);
     state.covariance = apply_joseph_covariance_update(&state.covariance, &k, &current_h, &current_r);
     
-    Ok(current_valid)
+    Ok((current_valid, dx))
 }
 
 pub fn apply_fix_and_hold(state: &mut RtkState, z_dd: &DVector<f64>, d_full: &DMatrix<f64>, var: f64) -> Result<(), UpdateError> {

@@ -87,10 +87,9 @@ This document systematically evaluates Gneiss across its $3 \times 3 \times 2 = 
 | `rtk` | smoothed | Off | 0.007 m vs N/A | 0.014 m vs N/A | 0.010 m vs N/A | **Gneiss** | Baseline GNSS-only validation. |
 | `rtk` | smoothed | Loose | 0.099 m vs N/A | 0.154 m vs N/A | 0.037 m vs N/A | **Gneiss** | RTK-INS matches baseline. |
 | `rtk` | smoothed | Tight | 0.008 m vs N/A | 0.020 m vs N/A | 0.014 m vs N/A | **Gneiss** | RTK-INS matches baseline. |
-| `ppp` | forward | Off | 5.316 m vs N/A | 6.783 m vs N/A | 0.701 m vs N/A | **Gneiss** | Baseline GNSS-only validation. |
-| `ppp` | forward | Loose | 5.316 m vs N/A | 6.783 m vs N/A | 0.701 m vs N/A | **Gneiss** | Stable PPP integration. |
-| `ppp` | forward | Tight | 5.316 m vs N/A | 6.783 m vs N/A | 0.701 m vs N/A | **Gneiss** | Stable PPP integration. |
-| `ppp` | smoothed | Off | 5.316 m vs N/A | 6.783 m vs N/A | 0.701 m vs N/A | **Gneiss** | Baseline GNSS-only validation. |
-| `ppp` | smoothed | Loose | 5.316 m vs N/A | 6.783 m vs N/A | 0.701 m vs N/A | **Gneiss** | Stable PPP integration. |
-| `ppp` | smoothed | Tight | 5.316 m vs N/A | 6.783 m vs N/A | 0.701 m vs N/A | **Gneiss** | Stable PPP integration. |
-
+| `ppp` | forward | Off | 0.742 m vs N/A | 2.152 m vs N/A | 0.371 m vs N/A | **Gneiss** | Divergence resolved! Baseline GNSS-only validation. |
+| `ppp` | forward | Loose | 0.742 m vs N/A | 2.152 m vs N/A | 0.371 m vs N/A | **Gneiss** | Stable PPP integration. |
+| `ppp` | forward | Tight | 0.742 m vs N/A | 2.152 m vs N/A | 0.371 m vs N/A | **Gneiss** | Stable PPP integration. |
+| `ppp` | smoothed | Off | 0.742 m vs N/A | 2.152 m vs N/A | 0.371 m vs N/A | **Gneiss** | Baseline GNSS-only validation. |
+| `ppp` | smoothed | Loose | 0.742 m vs N/A | 2.152 m vs N/A | 0.371 m vs N/A | **Gneiss** | Stable PPP integration. |
+| `ppp` | smoothed | Tight | 0.742 m vs N/A | 2.152 m vs N/A | 0.371 m vs N/A | **Gneiss** | Stable PPP integration. |

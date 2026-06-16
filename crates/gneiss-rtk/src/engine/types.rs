@@ -13,15 +13,18 @@ pub enum EngineMode {
     Ppp,
     PppIns,
     PppInsLooselyCoupled,
+    PppFg,
+    PppInsFg,
+    RtkInsFactorGraph,
 }
 
 impl EngineMode {
     pub fn is_tightly_coupled(&self) -> bool {
-        matches!(self, Self::SppIns | Self::RtkIns | Self::PppIns)
+        matches!(self, Self::SppIns | Self::RtkIns | Self::PppIns | Self::PppInsFg | Self::RtkInsFactorGraph)
     }
     
     pub fn is_ppp(&self) -> bool {
-        matches!(self, Self::Ppp | Self::PppIns | Self::PppInsLooselyCoupled)
+        matches!(self, Self::Ppp | Self::PppIns | Self::PppInsLooselyCoupled | Self::PppFg | Self::PppInsFg)
     }
 }
 

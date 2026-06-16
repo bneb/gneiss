@@ -1,5 +1,6 @@
 pub mod types;
 pub mod config;
+pub mod fgo;
 pub mod ppp_fg;
 pub mod tight_fg;
 pub mod tcar;
@@ -18,6 +19,7 @@ pub mod spp_tight;
 pub mod adaptive;
 pub mod processor;
 pub mod ssr;
+pub mod ml;
 
 pub use types::*;
 pub use config::*;

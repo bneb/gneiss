@@ -17,13 +17,16 @@ The engine integrates high-rate inertial measurements with low-rate satellite ob
 graph TD
     A[Inertial Measurement Unit] -->|100Hz| B(Mechanization)
     B -->|Predict| C{Error-State EKF}
-    D[Satellite Constellations] -->|1Hz Raw| E(Double Difference)
+    D[Satellite Constellations] -->|1Hz Raw| E(Double Difference / PPP-AR)
+    S[RTCM SSR Stream] -->|Orbits/Clocks/Biases| E
     E -->|Innovations| C
     C -->|Correct| F(State Update)
     F -->|Nominal State| B
     F -->|Biases| B
     C -->|Integer Search| G[LAMBDA]
     G -->|Fixed Ambiguities| C
+    C -->|Subset States| H[ARAIM Monitor]
+    H -->|HPL/VPL| I[Integrity Output]
 ```
 
 ## Extended Kalman Filter State Vector
@@ -78,3 +81,14 @@ To handle dynamic noise environments (e.g., urban canyons), Gneiss scales sensor
 1. **MAD RAIM (Median Absolute Deviation):** For initial Single Point Positioning (SPP), Gneiss calculates the median residual across all visible satellites. It dynamically rejects outliers based on deviations from this median, which prevents valid satellites from being dropped during temporary periods of high overall variance.
 2. **Innovation-based Adaptive Estimation (IAE):** The EKF tracks a moving average of the filter innovations ($Z_{actual} - Z_{predicted}$). If the empirical variance exceeds the theoretical noise models (derived from SNR and elevation angles), the filter automatically de-weights those specific satellites.
 3. **Rauch-Tung-Striebel (RTS) Smoothing:** During post-processing, the engine saves the prediction covariance matrices and transition matrices from the forward EKF loop. The RTS backward sweep then propagates these error states in reverse time, significantly improving accuracy during signal outages.
+
+## Integrity Monitoring (ARAIM)
+
+Gneiss implements an Advanced Receiver Autonomous Integrity Monitoring (ARAIM) module using the **Solution Separation** methodology. This enables the engine to guarantee strict integrity limits for autonomous driving or aviation workloads.
+The primary filter runs alongside parallel sub-filters, each excluding specific satellites or constellations. The monitor projects the covariance difference between the full state and sub-states into the North-East-Down (NED) frame. It calculates rigorous Horizontal and Vertical Protection Levels (HPL and VPL) based on the specified Probability of False Alert ($P_{FA}$) and Probability of Missed Detection ($P_{MD}$). 
+
+## Hardware-Agnostic Sensor Calibration
+
+Rather than tying the mathematical models to specific commercial hardware (e.g. u-blox or Septentrio), Gneiss abstracts raw data corrections via a `CalibrationProvider` trait. This allows deeply-coupled integrations to inject their own models at runtime:
+- **IMU Calibration**: Apply temperature-calibrated misalignments, scale factors, and non-orthogonality corrections dynamically before mechanization.
+- **Antenna Phase Center (APC)**: Provide precise elevation and azimuth dependent phase center offsets to achieve millimeter accuracy for any third-party antenna.

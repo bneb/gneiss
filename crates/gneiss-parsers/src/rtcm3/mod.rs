@@ -82,6 +82,8 @@ pub fn sign_extend_i32(value: u32, bits: u32) -> i32 {
 
 pub mod ephemeris;
 pub mod msm;
+pub mod ssr;
 
 pub use ephemeris::*;
 pub use msm::*;
+pub use ssr::*;

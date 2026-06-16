@@ -98,9 +98,14 @@ pub fn compute_process_noise(dt: f64, config: &EngineConfig, is_imu_active: bool
             DynamicsModel::Automotive => 10.0,
             DynamicsModel::Airborne => 50.0,
         };
+        let q_pos = q_acc * dt_abs.powi(3) / 3.0;
         let q_vel = q_acc * dt_abs;
+        let q_pos_vel = q_acc * dt_abs.powi(2) / 2.0;
         for i in 0..3 { 
+            q[(i, i)] = q_pos;
             q[(i+3, i+3)] = q_vel; 
+            q[(i, i+3)] = q_pos_vel;
+            q[(i+3, i)] = q_pos_vel;
         }
         for i in 6..9 { q[(i, i)] = 1e-7 * dt_abs; } 
     } else {
@@ -265,7 +270,9 @@ mod tests {
             ar_ffrt_prob: 0.001,
             process_noise_cb: 100.0,
             process_noise_cd: 10.0,
-            process_noise_zwd: 0.1,
+            process_noise_zwd: 1e-8,
+            enable_gnn_raim: false,
+            export_gnn_dataset_path: None,
             process_noise_amb_float: 1e-4,
             process_noise_amb_fixed: 1e-7,
             tuning: crate::engine::config::EkfTuningConfig::default(),
@@ -290,7 +297,7 @@ mod tests {
         // Clock drift noise goes to 19
         assert_eq!(p_pred[(19, 19)], 10.0);
         // ZWD noise goes to 20
-        assert_eq!(p_pred[(20, 20)], 0.1);
+        assert_eq!(p_pred[(20, 20)], 1e-8);
         // Clock bias noise goes to 15
         assert!(p_pred[(15, 15)] >= 100.0);
         // ISB noises go to 16, 17, 18

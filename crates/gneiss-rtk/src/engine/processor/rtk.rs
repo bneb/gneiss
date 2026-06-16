@@ -18,6 +18,7 @@ fn apply_adaptive_r_scaling(
     h: &DMatrix<f64>,
     r: &mut DMatrix<f64>,
     meas_types: &[(SatelliteId, u8, f64)],
+    matched_obs: &[(crate::filter::DdObservation, crate::filter::DdObservation)],
 ) {
     let state_size = state.covariance.nrows();
     for i in 0..z.nrows() {
@@ -27,7 +28,13 @@ fn apply_adaptive_r_scaling(
         let (sat, mtype, _) = meas_types[i];
         // Determine freq band from measurement type: 0=PR_L1, 1=CP_L1, 2=CP_L2, 3=Dop
         let freq = match mtype { 2 => 2, _ => 1 };
-        let scale = tracker.update_and_scale(sat, freq, z[i], s_ii);
+        
+        let mut snr = None;
+        if let Some((rov_obs, _)) = matched_obs.iter().find(|(rov, _)| rov.sat == sat) {
+            snr = Some(rov_obs.snr);
+        }
+        
+        let scale = tracker.update_and_scale(sat, freq, z[i], s_ii, snr);
         r[(i, i)] *= scale;
     }
 }
@@ -166,10 +173,19 @@ impl ProcessingEngine {
             if epoch_num % 100 == 0 { tracing::info!("Epoch {}: Matched {} satellites, {} ambiguities tracked", epoch_num, matched_obs.len(), state.ambiguity_keys.len()); }
 
             if matched_obs.len() >= 5 {
+                let mut gnn_variances = std::collections::HashMap::new();
+                if let Some(gnn) = &self.gnn_raim {
+                    let pos_apc = state.position.vector;
+                    let rov_llh = gneiss_core::coords::ecef_to_llh(pos_apc);
+                    gnn_variances = crate::engine::ml::gnn_raim::evaluate_gnn_raim(
+                        gnn, &matched_obs, rov_llh, pos_apc, &self.ephemerides, rover_obs.time
+                    );
+                }
+
                 let ctx = RtkUpdateContext {
                     config: &self.config, ephemerides: &self.ephemerides, imu_history: &self.imu_history,
                     rover_obs: &rover_smoothed, base_obs: base, matched_obs: &matched_obs,
-                    base_coord: &base_coord, spp_pos, spp_state_ref,
+                    base_coord: &base_coord, spp_pos, spp_state_ref, gnn_variances,
                 };
                 process_rtk_update::<TightCoupling>(state, &mut self.innovation_tracker, &ctx);
             } else {
@@ -205,6 +221,7 @@ fn build_measurement_environment<'a>(
 
     crate::engine::measurement::MeasurementEnvironment {
         ephemerides, base_coord, base_time, lever_arm, omega_b: omega_ib_b - r_e_b * omega_ie_e, tuning: &config.tuning,
+        gnn_variances: std::collections::HashMap::new(),
     }
 }
 
@@ -218,8 +235,8 @@ fn handle_ekf_rejection(state: &mut RtkState, config: &EngineConfig, spp_pos: Op
         for i in 3..6 { state.covariance[(i, i)] += 0.1; }
     }
     let pos_var = state.covariance[(0, 0)] + state.covariance[(1, 1)] + state.covariance[(2, 2)];
-    if state.ins_aligned && pos_var > 900.0 {
-        tracing::warn!("Divergence detected (pos_var {:.2}): resetting EKF to SPP fallback.", pos_var);
+    if state.ins_aligned && pos_var > 10000.0 {
+        tracing::warn!("Extreme divergence detected (pos_var {:.2}): resetting EKF to SPP fallback.", pos_var);
         if let Some(pos) = spp_pos { state.reset_to_spp(pos, spp_state_ref, !config.mode.is_ppp()); state.consecutive_rejections = 0; }
     } else if !state.ins_aligned && state.consecutive_rejections >= 3 {
         tracing::warn!("Loosely coupled GNSS EKF rejected for 3 epochs: resetting to SPP fallback.");
@@ -229,8 +246,8 @@ fn handle_ekf_rejection(state: &mut RtkState, config: &EngineConfig, spp_pos: Op
 
 fn handle_ekf_acceptance(state: &mut RtkState, config: &EngineConfig, ephemerides: &[gneiss_core::ephemeris::Ephemeris], spp_pos: Option<Coordinate>, spp_state_ref: Option<&crate::spp::SppState>) {
     let pos_var = state.covariance[(0, 0)] + state.covariance[(1, 1)] + state.covariance[(2, 2)];
-    if pos_var > 900.0 {
-        tracing::warn!("Position variance too large ({:.2}): resetting EKF to SPP fallback.", pos_var);
+    if pos_var > 10000.0 {
+        tracing::warn!("Position variance extremely large ({:.2}): resetting EKF to SPP fallback.", pos_var);
         if let Some(pos) = spp_pos { state.reset_to_spp(pos, spp_state_ref, !config.mode.is_ppp()); }
     }
     state.consecutive_rejections = 0;
@@ -253,6 +270,7 @@ pub struct RtkUpdateContext<'a> {
     pub base_coord: &'a Coordinate,
     pub spp_pos: Option<Coordinate>,
     pub spp_state_ref: Option<&'a crate::spp::SppState>,
+    pub gnn_variances: std::collections::HashMap<gneiss_core::sat::SatelliteId, f64>,
 }
 
 fn process_rtk_update<C: CouplingStrategy>(
@@ -265,16 +283,43 @@ fn process_rtk_update<C: CouplingStrategy>(
         if r_obs.cp_l2.is_some() { state.last_observed.insert((r_obs.sat, 2), current_epoch); }
     }
 
-    let env = build_measurement_environment(ctx.config, ctx.imu_history, state, ctx.ephemerides, ctx.base_coord, ctx.base_obs.time);
+    let mut env = build_measurement_environment(ctx.config, ctx.imu_history, state, ctx.ephemerides, ctx.base_coord, ctx.base_obs.time);
+    env.gnn_variances = ctx.gnn_variances.clone();
     let pr_thresh = ctx.config.chi_square_pr_threshold;
 
     if let Some(mut m) = crate::engine::measurement::build_measurement_model(state, ctx.matched_obs, &env, pr_thresh, ctx.config.chi_square_cp_threshold) {
-        apply_adaptive_r_scaling(tracker, state, &m.z, &m.h, &mut m.r, &m.mt);
+        apply_adaptive_r_scaling(tracker, state, &m.z, &m.h, &mut m.r, &m.mt, ctx.matched_obs);
+        
+        let tuning = ctx.config.tuning.clone();
+
         let type_stripped: Vec<_> = m.mt.iter().map(|&(s, t, _)| (s, t)).collect();
-        if crate::engine::updater::update::<C>(state, &m.z, &m.h, &m.r, pr_thresh, Some(&type_stripped), &ctx.config.tuning).is_err() { 
-            handle_ekf_rejection(state, ctx.config, ctx.spp_pos, ctx.spp_state_ref, "failed chi-square");
-        } else {
-            handle_ekf_acceptance(state, ctx.config, ctx.ephemerides, ctx.spp_pos, ctx.spp_state_ref);
+        match crate::engine::updater::update::<C>(state, &m.z, &m.h, &m.r, pr_thresh, Some(&type_stripped), &tuning) {
+            Err(_) => {
+                handle_ekf_rejection(state, ctx.config, ctx.spp_pos, ctx.spp_state_ref, "failed chi-square");
+            }
+            Ok((valid_indices, dx)) => {
+                if let Some(path) = &ctx.config.export_gnn_dataset_path {
+                    let ephemerides = ctx.ephemerides;
+                    let rov_llh = gneiss_core::coords::ecef_to_llh(state.position.vector);
+                    let pos_apc = state.position.vector + state.attitude * nalgebra::Vector3::from(ctx.config.imu_to_antenna_lever_arm);
+                    
+                    crate::engine::ml::dataset::export_epoch_to_csv(
+                        path,
+                        state.epoch_count as u32,
+                        ctx.matched_obs,
+                        rov_llh,
+                        pos_apc,
+                        ephemerides,
+                        ctx.rover_obs.time,
+                        &m.z,
+                        &m.h,
+                        &valid_indices,
+                        &m.mt,
+                        &dx,
+                    );
+                }
+                handle_ekf_acceptance(state, ctx.config, ctx.ephemerides, ctx.spp_pos, ctx.spp_state_ref);
+            }
         }
     } else {
         handle_ekf_rejection(state, ctx.config, ctx.spp_pos, ctx.spp_state_ref, "not enough measurements");

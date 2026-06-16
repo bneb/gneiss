@@ -1,5 +1,5 @@
 {
-    "mode": "Rtk", "export_gnn_dataset_path": "shinjuku_gnn_dataset.csv",
+    "mode": "Rtk", "enable_gnn_raim": true,
     "enable_imu_fusion": true,
     "enable_backward_smoothing": true,
     "enable_nhc": true,

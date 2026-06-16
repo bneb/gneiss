@@ -41,6 +41,7 @@ pub struct MeasurementEnvironment<'a> {
     pub lever_arm: Vector3<f64>,
     pub omega_b: Vector3<f64>,
     pub tuning: &'a crate::engine::config::EkfTuningConfig,
+    pub gnn_variances: std::collections::HashMap<gneiss_core::sat::SatelliteId, f64>,
 }
 
 pub struct SatState {
@@ -454,6 +455,8 @@ fn compute_dd_components(
         el_bas_ref,
         snr_a: env.tuning.snr_a,
         snr_b: env.tuning.snr_b,
+        gnn_var_sat: env.gnn_variances.get(&ctx.rov_sat.sat).copied(),
+        gnn_var_ref: env.gnn_variances.get(&ctx.rov_ref.sat).copied(),
     });
     let (h_zwd, zwd_dd) = compute_zwd_mapping(el_rov_sat, el_rov_ref, state.zwd);
 
@@ -703,6 +706,7 @@ mod tests {
             lever_arm: Vector3::zeros(),
             omega_b: Vector3::zeros(),
             tuning: &config.tuning,
+            gnn_variances: std::collections::HashMap::new(),
         };
         let updates = super::super::measurement::compute_innovations(&mut state, &matched_obs, &ref_rover, &ref_base, &env).unwrap();
         let z = updates.z;
@@ -811,6 +815,7 @@ mod tests {
             lever_arm: Vector3::zeros(),
             omega_b: Vector3::zeros(),
             tuning: &tuning,
+            gnn_variances: std::collections::HashMap::new(),
         };
         
         let ugeom = crate::engine::measurement::UpdateGeometry { comp_dd: 0.0, h_r: Vector3::new(1.0, 0.0, 0.0), h_att: Vector3::zeros(), h_zwd: 0.0, state_size: 22 };
@@ -861,6 +866,7 @@ mod tests {
             lever_arm: Vector3::zeros(),
             omega_b: Vector3::zeros(),
             tuning: &tuning,
+            gnn_variances: std::collections::HashMap::new(),
         };
         
         let r_b_e_rot = state.attitude.to_rotation_matrix();
@@ -971,6 +977,7 @@ mod tests {
             lever_arm: Vector3::zeros(),
             omega_b: Vector3::zeros(),
             tuning: &tuning,
+            gnn_variances: std::collections::HashMap::new(),
         };
         
         let group = vec![(rov_sat, base_sat)];

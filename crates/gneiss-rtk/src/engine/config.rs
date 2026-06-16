@@ -116,6 +116,10 @@ pub struct EngineConfig {
     pub process_noise_amb_float: f64,
     pub process_noise_amb_fixed: f64,
     
+    // GNN RAIM
+    pub enable_gnn_raim: bool,
+    pub export_gnn_dataset_path: Option<String>,
+    
     // External Tuning configuration
     pub tuning: crate::engine::config::EkfTuningConfig,
 }
@@ -133,6 +137,7 @@ impl Default for EngineConfig {
             initial_ambiguity_variance: 10000.0, ar_min_epoch_count: 5, ar_min_lock: 3, ar_ffrt_prob: 0.001,
             process_noise_cb: 1e6, process_noise_cd: 1e4, process_noise_zwd: 1e-8,
             process_noise_amb_float: 1e-8, process_noise_amb_fixed: 1e-12, tuning: Default::default(),
+            enable_gnn_raim: false, export_gnn_dataset_path: None,
         }
     }
 }

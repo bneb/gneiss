@@ -236,7 +236,7 @@ fn process_doppler(ctx: &EkfContext, m: &SppMeasurement, target: &mut MatrixTarg
 fn update_ekf(engine: &mut ProcessingEngine, z: &DVector<f64>, h: &DMatrix<f64>, r: &DMatrix<f64>, types: &[(gneiss_core::sat::SatelliteId, u8)]) -> bool {
     let state = engine.current_state.as_mut().unwrap();
     let res = crate::engine::updater::update::<crate::engine::updater_math::TightCoupling>(state, z, h, r, engine.config.spp_consistency_threshold_m, Some(types), &engine.config.tuning);
-    if let Ok(valid_indices) = res {
+    if let Ok((valid_indices, _)) = res {
         valid_indices.len() < MIN_VALID_MEASUREMENTS
     } else {
         true

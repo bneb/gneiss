@@ -209,7 +209,8 @@ fn build_sats<'a>(engine: &ProcessingEngine, rover_obs: &'a EpochObs) -> Vec<Pro
         if el < 0.261799 { continue; } // 15° elevation mask in radians
 
         let tropo_params = gneiss_core::atmosphere::TropoParams::default();
-        let z_dry = 0.0022768 * tropo_params.press_hpa / (1.0 - 0.00266 * libm::cos(2.0 * rcv_pos_llh.x) - 0.00028 * rcv_pos_llh.z / 1000.0);
+        let p_z = tropo_params.press_hpa * libm::pow(1.0 - 0.0000226 * rcv_pos_llh.z, 5.225);
+        let z_dry = 0.0022768 * p_z / (1.0 - 0.00266 * libm::cos(2.0 * rcv_pos_llh.x) - 0.00028 * rcv_pos_llh.z / 1000.0);
         let (m_h, m_w) = gneiss_core::atmosphere::AtmosphereModel::nmf_mapping_functions(rcv_pos_llh, el, rover_obs.time);
         let tropo_dry = z_dry * m_h;
 

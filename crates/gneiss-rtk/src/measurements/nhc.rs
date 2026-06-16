@@ -38,7 +38,7 @@ pub fn apply_nhc(
     let mut h = DMatrix::<f64>::zeros(2, state.covariance.nrows());
     
     // Jacobian w.r.t velocity in ECEF (dr_dv = R_e_b)
-    assign_jacobian_block(&mut h, 3, r_e_b.matrix().clone());
+    assign_jacobian_block(&mut h, 3, *r_e_b.matrix());
     
     // Jacobian w.r.t attitude (dr_dpsi = [v_b_imu x] * R_e_b)
     let v_b_skew = skew_symmetric(&v_b_imu);

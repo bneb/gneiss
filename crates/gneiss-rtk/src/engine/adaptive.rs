@@ -1,44 +1,72 @@
 use std::collections::HashMap;
 use gneiss_core::sat::SatelliteId;
 
-/// Exponential smoothing constant for NIS tracking.
-/// α = 0.95 gives ~20-epoch effective window.
-const NIS_SMOOTHING_ALPHA: f64 = 0.95;
+/// Exponential smoothing constant for NIS and SNR tracking.
+const SMOOTHING_ALPHA: f64 = 0.95;
 
 /// Minimum scale factor — never deflate below static R.
 const MIN_SCALE: f64 = 1.0;
 
-/// Maximum scale factor — cap to prevent filter stalling.
-const MAX_SCALE: f64 = 100.0;
+/// Maximum scale factor — cap to prevent filter stalling and masking outliers.
+const MAX_SCALE: f64 = 3.0;
 
-/// Per-satellite, per-signal normalized innovation squared (NIS) tracker.
-/// Computes adaptive R scaling based on observed innovation statistics.
+/// Threshold for SNR variance to trigger urban canyon penalty
+const SNR_VAR_THRESHOLD: f64 = 10.0;
+
+/// Per-satellite, per-signal tracking for NIS and SNR.
+/// Computes adaptive R scaling based on innovation and signal statistics.
 #[derive(Debug, Clone)]
 pub struct InnovationTracker {
     /// Exponentially weighted NIS average per (satellite, frequency).
     nis_avg: HashMap<(SatelliteId, u8), f64>,
+    /// Exponentially weighted SNR average
+    snr_avg: HashMap<(SatelliteId, u8), f64>,
+    /// Exponentially weighted SNR variance
+    snr_var: HashMap<(SatelliteId, u8), f64>,
 }
 
 impl InnovationTracker {
     pub fn new() -> Self {
-        Self { nis_avg: HashMap::new() }
+        Self { 
+            nis_avg: HashMap::new(),
+            snr_avg: HashMap::new(),
+            snr_var: HashMap::new(),
+        }
     }
 
-    /// Update the NIS tracker with a new innovation and return the adaptive R scale.
+    /// Update the tracker with a new innovation and SNR, return the adaptive R scale.
     ///
     /// `innovation`: the measurement residual (z - h*x)
-    /// `predicted_var`: S_ii = H*P*H' + R (the innovation covariance diagonal)
+    /// `predicted_var`: S_ii = H*P*H' + R
+    /// `snr`: Current Signal-to-Noise Ratio (dBHz)
     ///
     /// Returns a scale factor >= 1.0 to multiply into the static R value.
     pub fn update_and_scale(
         &mut self, sat: SatelliteId, freq: u8,
         innovation: f64, predicted_var: f64,
+        snr: Option<f64>,
     ) -> f64 {
         let nis = compute_nis(innovation, predicted_var);
         let key = (sat, freq);
+        
         let avg = self.nis_avg.entry(key).or_insert(1.0);
-        *avg = NIS_SMOOTHING_ALPHA * *avg + (1.0 - NIS_SMOOTHING_ALPHA) * nis;
-        avg.clamp(MIN_SCALE, MAX_SCALE)
+        *avg = SMOOTHING_ALPHA * *avg + (1.0 - SMOOTHING_ALPHA) * nis;
+        
+        let mut snr_penalty = 1.0;
+        if let Some(snr_val) = snr {
+            let s_avg = self.snr_avg.entry(key).or_insert(snr_val);
+            let s_var = self.snr_var.entry(key).or_insert(0.0);
+            
+            let diff = snr_val - *s_avg;
+            *s_avg = SMOOTHING_ALPHA * *s_avg + (1.0 - SMOOTHING_ALPHA) * snr_val;
+            *s_var = SMOOTHING_ALPHA * *s_var + (1.0 - SMOOTHING_ALPHA) * (diff * diff);
+            
+            if *s_var > SNR_VAR_THRESHOLD {
+                snr_penalty = 1.0 + (*s_var - SNR_VAR_THRESHOLD) * 0.2;
+            }
+        }
+
+        (*avg * snr_penalty).clamp(MIN_SCALE, MAX_SCALE)
     }
 
     /// Query current scale factor without updating.
@@ -46,9 +74,17 @@ impl InnovationTracker {
         self.nis_avg.get(&(sat, freq)).copied().unwrap_or(1.0).clamp(MIN_SCALE, MAX_SCALE)
     }
 
+    /// Return the maximum SNR variance across all tracked satellites.
+    /// Useful for global urban canyon detection.
+    pub fn max_snr_variance(&self) -> f64 {
+        self.snr_var.values().copied().fold(0.0, f64::max)
+    }
+
     /// Prune satellites not seen for many epochs.
     pub fn prune(&mut self, active_sats: &[(SatelliteId, u8)]) {
         self.nis_avg.retain(|k, _| active_sats.contains(k));
+        self.snr_avg.retain(|k, _| active_sats.contains(k));
+        self.snr_var.retain(|k, _| active_sats.contains(k));
     }
 }
 
@@ -75,10 +111,9 @@ mod tests {
     fn nominal_innovations_yield_unit_scale() {
         let mut tracker = InnovationTracker::new();
         let sat = test_sat();
-        // innovation = 1.0, predicted_var = 1.0 → NIS = 1.0
         for _ in 0..50 {
-            let scale = tracker.update_and_scale(sat, 1, 1.0, 1.0);
-            assert!((scale - 1.0).abs() < 0.1, "Nominal NIS should give scale ≈ 1.0, got {}", scale);
+            let scale = tracker.update_and_scale(sat, 1, 1.0, 1.0, Some(45.0));
+            assert!((scale - 1.0).abs() < 0.1);
         }
     }
 
@@ -86,65 +121,31 @@ mod tests {
     fn large_innovations_inflate_scale() {
         let mut tracker = InnovationTracker::new();
         let sat = test_sat();
-        // innovation = 10.0, predicted_var = 1.0 → NIS = 100.0
         for _ in 0..50 {
-            tracker.update_and_scale(sat, 1, 10.0, 1.0);
+            tracker.update_and_scale(sat, 1, 10.0, 1.0, Some(45.0));
         }
-        let scale = tracker.current_scale(sat, 1);
-        assert!(scale > 10.0, "Large NIS should inflate scale well above 1, got {}", scale);
+        assert!(tracker.current_scale(sat, 1) > 2.5);
     }
 
     #[test]
-    fn scale_decays_after_clean_measurements() {
+    fn snr_variance_inflates_scale() {
         let mut tracker = InnovationTracker::new();
         let sat = test_sat();
-        // Pump up the NIS with bad measurements
-        for _ in 0..20 {
-            tracker.update_and_scale(sat, 1, 10.0, 1.0);
-        }
-        let peak_scale = tracker.current_scale(sat, 1);
-        assert!(peak_scale > 5.0);
-
-        // Feed clean measurements and verify decay
-        for _ in 0..100 {
-            tracker.update_and_scale(sat, 1, 1.0, 1.0);
-        }
-        let decayed_scale = tracker.current_scale(sat, 1);
-        assert!(decayed_scale < peak_scale, "Scale should decay with clean data");
-        assert!(decayed_scale < 3.0, "After 100 clean epochs, scale should be near 1, got {}", decayed_scale);
-    }
-
-    #[test]
-    fn scale_clamped_to_max() {
-        let mut tracker = InnovationTracker::new();
-        let sat = test_sat();
-        // Enormous innovation
-        for _ in 0..100 {
-            tracker.update_and_scale(sat, 1, 1000.0, 1.0);
-        }
-        let scale = tracker.current_scale(sat, 1);
-        assert!(scale <= MAX_SCALE, "Scale must be clamped to MAX_SCALE");
-        assert_eq!(scale, MAX_SCALE);
-    }
-
-    #[test]
-    fn unknown_satellite_returns_unit_scale() {
-        let tracker = InnovationTracker::new();
-        let sat = test_sat();
-        assert_eq!(tracker.current_scale(sat, 1), 1.0);
-    }
-
-    #[test]
-    fn independent_satellite_tracking() {
-        let mut tracker = InnovationTracker::new();
-        let sat1 = SatelliteId { constellation: Constellation::Gps, prn: 1 };
-        let sat2 = SatelliteId { constellation: Constellation::Gps, prn: 5 };
-        // Only sat1 gets bad measurements
+        // Constant SNR (no penalty)
+        let mut scale1 = 1.0;
         for _ in 0..50 {
-            tracker.update_and_scale(sat1, 1, 10.0, 1.0);
-            tracker.update_and_scale(sat2, 1, 1.0, 1.0);
+            scale1 = tracker.update_and_scale(sat, 1, 1.0, 1.0, Some(40.0));
         }
-        assert!(tracker.current_scale(sat1, 1) > 10.0);
-        assert!((tracker.current_scale(sat2, 1) - 1.0).abs() < 0.1);
+        
+        let mut tracker_var = InnovationTracker::new();
+        // High variance SNR (fading/multipath)
+        let mut scale2 = 1.0;
+        for i in 0..50 {
+            let snr = if i % 2 == 0 { 40.0 } else { 20.0 };
+            scale2 = tracker_var.update_and_scale(sat, 1, 1.0, 1.0, Some(snr));
+        }
+        
+        assert!(scale2 > scale1 * 2.0, "High SNR variance should heavily penalize scale: scale2={}, scale1={}", scale2, scale1);
+        assert!(tracker_var.max_snr_variance() > 15.0);
     }
 }

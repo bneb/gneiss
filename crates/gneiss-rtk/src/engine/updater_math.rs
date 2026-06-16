@@ -115,7 +115,7 @@ pub fn compute_scalar_thresholds<C: CouplingStrategy>(
 pub fn evaluate_post_fit_outliers<C: CouplingStrategy>(
     v: &DVector<f64>,
     s: &DMatrix<f64>,
-    current_z: &DVector<f64>,
+    _current_z: &DVector<f64>,
     current_valid: &[usize],
     meas_types: Option<&[(gneiss_core::sat::SatelliteId, u8)]>,
     max_innovation: f64,
@@ -127,7 +127,7 @@ pub fn evaluate_post_fit_outliers<C: CouplingStrategy>(
     
     for i in 0..v.len() {
         let meas_type = meas_types.map_or(0, |m| m[current_valid[i]].1);
-        let ratio = (current_z[i] * current_z[i]) / s[(i, i)];
+        let ratio = v[i].abs() / s[(i, i)].sqrt();
         let (_thresh, abs_thresh) = compute_scalar_thresholds::<C>(meas_type, max_innovation, tuning);
         
         // Scale absolute threshold by the filter's uncertainty for pseudoranges to prevent getting stuck
@@ -143,9 +143,9 @@ pub fn evaluate_post_fit_outliers<C: CouplingStrategy>(
         // If tightly-coupled, we relax the hard absolute rejection threshold by a factor of 5 
         // to allow Huber scaling to gracefully handle severe multipath instead of hard rejecting.
         let is_abs_outlier = if is_tight {
-            current_z[i].abs() > (effective_abs_thresh * 5.0) && meas_type != 3
+            v[i].abs() > (effective_abs_thresh * 5.0) && meas_type != 3
         } else {
-            current_z[i].abs() > effective_abs_thresh && meas_type != 3
+            v[i].abs() > effective_abs_thresh && meas_type != 3
         };
 
         if is_abs_outlier {
@@ -155,7 +155,7 @@ pub fn evaluate_post_fit_outliers<C: CouplingStrategy>(
         let hard_reject_ratio = match meas_type {
             1 | 2 => if is_tight { tuning.phase_outlier_ratio_thresh * 3.0 } else { tuning.phase_outlier_ratio_thresh },
             3 => if is_tight { tuning.phase_outlier_ratio_thresh * tuning.doppler_outlier_ratio_mult * 3.0 } else { tuning.phase_outlier_ratio_thresh * tuning.doppler_outlier_ratio_mult },
-            _ => if is_tight { 15.0 } else { 5.0 },
+            _ => if is_tight { tuning.phase_outlier_ratio_thresh * 5.0 } else { tuning.phase_outlier_ratio_thresh * 1.666 },
         };
 
         if ratio > hard_reject_ratio {
@@ -492,7 +492,8 @@ mod missed_mutant_tests {
         let sat_id = SatelliteId { constellation: Constellation::Gps, prn: 1 };
         // meas_type = 0, so thresh = max_innovation = 1.0
         let meas_types = [(sat_id, 0), (sat_id, 0), (sat_id, 0)];
-        let tuning = EkfTuningConfig::default();
+        let mut tuning = EkfTuningConfig::default();
+        tuning.phase_outlier_ratio_thresh = 1.0;
         let (idx, val, _) = evaluate_post_fit_outliers::<LooseCoupling>(&nu, &r, &hp, &current_valid, Some(&meas_types), 1.0, &tuning);
         assert_eq!(idx, Some(0)); // 0 wins because 6.0 > 6.0 is false
         assert!((val - 6.0).abs() < 1e-9);
@@ -527,7 +528,8 @@ mod missed_mutant_tests {
         let current_valid = vec![0, 1, 2, 3];
         let sat_id = SatelliteId { constellation: Constellation::Gps, prn: 1 };
         let meas_types = [(sat_id, 0), (sat_id, 0), (sat_id, 0), (sat_id, 0)];
-        let tuning = EkfTuningConfig::default();
+        let mut tuning = EkfTuningConfig::default();
+        tuning.phase_outlier_ratio_thresh = 1.0;
         let (idx, val, _) = evaluate_post_fit_outliers::<LooseCoupling>(&nu, &r, &hp, &current_valid, Some(&meas_types), 1.0, &tuning);
         // Catch mutants in ratio math
         assert_eq!(idx, Some(0));

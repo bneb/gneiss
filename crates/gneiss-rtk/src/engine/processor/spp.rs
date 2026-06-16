@@ -22,7 +22,7 @@ impl ProcessingEngine {
                 // Using a tighter variance of 9.0 (3m std dev) forces the INS to track the clean SPP positions
                 r_mat.fill_diagonal(9.0);
 
-                if crate::engine::updater::update::<crate::engine::updater_math::LooseCoupling>(state, &z_vec, &h_mat, &r_mat, config.spp_consistency_threshold_m, None, &config.tuning).map_or(true, |v| v.len() < 3) {
+                if crate::engine::updater::update::<crate::engine::updater_math::LooseCoupling>(state, &z_vec, &h_mat, &r_mat, config.spp_consistency_threshold_m, None, &config.tuning).map_or(true, |v| v.0.len() < 3) {
                     rejected = true;
                 }
             }

@@ -183,6 +183,7 @@ fn build_engine_config(
             "rtk" => EngineMode::Rtk,
             "rtk-ins" => EngineMode::RtkIns,
             "rtk-ins-loosely-coupled" => EngineMode::RtkInsLooselyCoupled,
+            "rtk-ins-fg" | "rtk-fg" => EngineMode::RtkInsFactorGraph,
             "ppp" => EngineMode::Ppp,
             "ppp-ins" => EngineMode::PppIns,
             "ppp-ins-loosely-coupled" => EngineMode::PppInsLooselyCoupled,

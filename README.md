@@ -12,7 +12,10 @@ The engine is designed for robust operation in multi-path environments, utilizin
 
 - **Tightly-Coupled Integration**: Direct fusion of raw GNSS observations and IMU data within the primary state vector.
 - **Adaptive Estimation**: Implements Innovation-based Adaptive Estimation (IAE) and Median Absolute Deviation (MAD) RAIM to scale observation variances dynamically.
-- **Ambiguity Resolution**: Uses the LAMBDA (Least-squares AMBiguity Decorrelation Adjustment) algorithm for carrier-phase integer ambiguity resolution.
+- **Ambiguity Resolution**: Uses the LAMBDA (Least-squares AMBiguity Decorrelation Adjustment) algorithm for carrier-phase integer ambiguity resolution across GPS, Galileo, BeiDou, and GLONASS.
+- **Precise Point Positioning (PPP-AR)**: Supports PPP utilizing RTCM SSR streams with solid earth tides and phase wind-up physical modeling.
+- **Protection Levels & ARAIM**: Employs Solution Separation to rigorously calculate Horizontal and Vertical Protection Levels (HPL/VPL) bounding faults to target integrity risks.
+- **Hardware-Agnostic Calibrations**: Supports injection of custom Temperature-Calibrated IMU misalignments and Antenna Phase Center (APC) models.
 - **Post-Processing (PPK)**: Supports forward-backward Rauch-Tung-Striebel (RTS) smoothing to produce continuous trajectories from static files.
 - **Real-Time Streaming**: `#![no_std]` compatible core engine, with a `tokio`-based `live` subcommand for streaming data via local UART and NTRIP casters.
 
@@ -42,6 +45,7 @@ The engine operates on a causal, recursive filtering architecture:
 graph LR
     A[Raw Satellite Data] --> B(Gneiss Engine)
     C[Raw Inertial Data] --> B
+    S[RTCM SSR Stream] --> B
     B --> D{Extended Kalman Filter}
     D -->|Float State| H[LAMBDA Ambiguity Resolution]
     H -->|Fixed Ambiguities| I{FFRT Validation}
@@ -50,6 +54,8 @@ graph LR
     D --> E[Position Trajectory]
     D --> F[Calibrated Sensor Biases]
     D --> G[Attitude & Heading]
+    D --> K[ARAIM Solution Separation]
+    K --> L[HPL & VPL Bounds]
 ```
 
 ## Quickstart

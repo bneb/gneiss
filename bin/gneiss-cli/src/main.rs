@@ -131,6 +131,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     "ppp" => gneiss_rtk::engine::EngineMode::Ppp,
                     "ppp-ins" => gneiss_rtk::engine::EngineMode::PppIns,
                     "ppp-ins-loosely-coupled" => gneiss_rtk::engine::EngineMode::PppInsLooselyCoupled,
+                    "rtk-ins-fg" | "rtk-fg" => gneiss_rtk::engine::EngineMode::RtkInsFactorGraph,
+                    "ppp-fg" => gneiss_rtk::engine::EngineMode::PppFg,
+                    "ppp-ins-fg" | "tight-fg" => gneiss_rtk::engine::EngineMode::PppInsFg,
                     _ => return Err("Invalid engine mode specified".into()),
                 };
             }
@@ -262,6 +265,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     "ppp" => gneiss_rtk::engine::EngineMode::Ppp,
                     "ppp-ins" => gneiss_rtk::engine::EngineMode::PppIns,
                     "ppp-ins-loosely-coupled" => gneiss_rtk::engine::EngineMode::PppInsLooselyCoupled,
+                    "rtk-ins-fg" | "rtk-fg" => gneiss_rtk::engine::EngineMode::RtkInsFactorGraph,
+                    "ppp-fg" => gneiss_rtk::engine::EngineMode::PppFg,
+                    "ppp-ins-fg" | "tight-fg" => gneiss_rtk::engine::EngineMode::PppInsFg,
                     _ => return Err("Invalid engine mode specified".into()),
                 };
             }

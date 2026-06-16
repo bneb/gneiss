@@ -125,19 +125,26 @@ pub struct VarianceFactors {
     pub el_bas_ref: f64,
     pub snr_a: f64,
     pub snr_b: f64,
+    pub gnn_var_sat: Option<f64>,
+    pub gnn_var_ref: Option<f64>,
 }
 
 pub fn compute_variance_factors(v: &VarianceFactors) -> (f64, f64) {
-    let ref_var_factor =
+    let ref_var = if let Some(var) = v.gnn_var_ref {
+        var
+    } else {
         gneiss_core::variance::observation_variance(v.snr_rov_ref, v.el_rov_ref, v.snr_a, v.snr_b)
-            + gneiss_core::variance::elevation_variance_scale(v.el_bas_ref);
+            + gneiss_core::variance::elevation_variance_scale(v.el_bas_ref)
+    };
 
-    let var_factor =
+    let sat_var = if let Some(var) = v.gnn_var_sat {
+        var
+    } else {
         gneiss_core::variance::observation_variance(v.snr_rov_sat, v.el_rov_sat, v.snr_a, v.snr_b)
             + gneiss_core::variance::elevation_variance_scale(v.el_bas_sat)
-            + ref_var_factor;
-            
-    (var_factor, ref_var_factor)
+    };
+    
+    (sat_var + ref_var, ref_var)
 }
 
 pub fn compute_zwd_mapping(el_rov_sat: f64, el_rov_ref: f64, zwd: f64) -> (f64, f64) {
@@ -227,6 +234,8 @@ mod tests {
             el_bas_ref: 60.0_f64.to_radians(),
             snr_a: 100.0,
             snr_b: 100.0,
+            gnn_var_sat: None,
+            gnn_var_ref: None,
         });
         
         let expected_ref_var = gneiss_core::variance::observation_variance(45.0, 60.0_f64.to_radians(), 100.0, 100.0) +
