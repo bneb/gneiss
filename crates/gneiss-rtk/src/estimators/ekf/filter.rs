@@ -186,7 +186,7 @@ impl RtkState {
         
         let cols = self.covariance.ncols();
         let mut reset_indices: Vec<usize> = vec![0, 1, 2, 3, 4, 5, 15];
-        if self.covariance.nrows() > 15 {
+        if self.covariance.nrows() > 15 && !self.ins_aligned {
             reset_indices = (0..16).collect();
         }
         for &i in &reset_indices {
@@ -208,23 +208,27 @@ impl RtkState {
         for i in 0..3 { self.covariance[(i, i)] = 100.0; }
         for i in 3..6 { self.covariance[(i, i)] = 100.0; }
         if self.covariance.nrows() > 15 {
-            let att_var = (1.0f64.to_radians()).powi(2);
-            for i in 6..9 { self.covariance[(i, i)] = att_var; }
-            for i in 9..12 { self.covariance[(i, i)] = 0.01; }
-            for i in 12..15 { self.covariance[(i, i)] = 1e-6; }
+            if !self.ins_aligned {
+                let att_var = (1.0f64.to_radians()).powi(2);
+                for i in 6..9 { self.covariance[(i, i)] = att_var; }
+                for i in 9..12 { self.covariance[(i, i)] = 0.01; }
+                for i in 12..15 { self.covariance[(i, i)] = 1e-6; }
+                
+                self.accel_bias = Vector3::zeros();
+                self.gyro_bias = Vector3::zeros();
+                let llh = gneiss_core::coords::ecef_to_llh(self.position.vector);
+                let ecef_to_ned = gneiss_core::coords::ecef_to_ned_matrix(llh);
+                let ned_to_ecef = ecef_to_ned.transpose();
+                self.attitude = UnitQuaternion::from_rotation_matrix(&nalgebra::Rotation3::from_matrix(&ned_to_ecef));
+            }
             self.covariance[(15, 15)] = 100000.0;
-            
-            self.accel_bias = Vector3::zeros();
-            self.gyro_bias = Vector3::zeros();
-            let llh = gneiss_core::coords::ecef_to_llh(self.position.vector);
-            let ecef_to_ned = gneiss_core::coords::ecef_to_ned_matrix(llh);
-            let ned_to_ecef = ecef_to_ned.transpose();
-            self.attitude = UnitQuaternion::from_rotation_matrix(&nalgebra::Rotation3::from_matrix(&ned_to_ecef));
         }
 
         self.is_reset = true;
         self.consecutive_rejections = 0;
-        self.ins_aligned = false;
+        if !self.ins_aligned {
+            self.ins_aligned = false;
+        }
     }
 
     pub fn update_mw(&mut self, sat: SatelliteId, mw_cycles: f64) {

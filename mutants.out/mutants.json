@@ -1,1 +1,290 @@
-[]
+[
+  {
+    "diff": "--- crates/gneiss-rtk/src/engine/fgo/solver.rs\n+++ replace LevenbergMarquardt::optimize -> OptimizationReport with Default::default()\n@@ -45,43 +45,17 @@\n impl LevenbergMarquardt {\n     pub fn new(config: SolverConfig) -> Self {\n         Self { config }\n     }\n \n     /// Optimizes the provided factor graph in-place.\n     /// Returns an `OptimizationReport` detailing the convergence.\n     pub fn optimize(&self, graph: &mut FactorGraph) -> OptimizationReport {\n-        let mut report = OptimizationReport::default();\n-\n-        for i in 0..self.config.max_iterations {\n-            report.iterations = i + 1;\n-            let (h, b) = graph.build_linear_system();\n-            let mut lambda_mat = h;\n-            \n-            Self::apply_damping(&mut lambda_mat, self.config.lambda);\n-\n-            let dx = match lambda_mat.cholesky() {\n-                Some(chol) => chol.solve(&b),\n-                None => {\n-                    report.success = false;\n-                    return report;\n-                }\n-            };\n-\n-            if dx.norm() < self.config.tolerance {\n-                report.success = true;\n-                return report;\n-            }\n-\n-            graph.update_state(&dx);\n-        }\n-        \n-        report.success = false;\n-        report\n+        Default::default() /* ~ changed by cargo-mutants ~ */\n     }\n \n     fn apply_damping(lambda_mat: &mut DMatrix<f64>, lambda: f64) {\n         for i in 0..lambda_mat.nrows() {\n             lambda_mat[(i, i)] += lambda;\n         }\n     }\n }\n",
+    "file": "crates/gneiss-rtk/src/engine/fgo/solver.rs",
+    "function": {
+      "function_name": "LevenbergMarquardt::optimize",
+      "return_type": "-> OptimizationReport",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 80
+        },
+        "start": {
+          "column": 5,
+          "line": 50
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "crates/gneiss-rtk/src/engine/fgo/solver.rs:53:9: replace LevenbergMarquardt::optimize -> OptimizationReport with Default::default()",
+    "package": "gneiss-rtk",
+    "replacement": "Default::default()",
+    "span": {
+      "end": {
+        "column": 15,
+        "line": 79
+      },
+      "start": {
+        "column": 9,
+        "line": 53
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/engine/fgo/solver.rs\n+++ replace + with - in LevenbergMarquardt::optimize\n@@ -48,17 +48,17 @@\n     }\n \n     /// Optimizes the provided factor graph in-place.\n     /// Returns an `OptimizationReport` detailing the convergence.\n     pub fn optimize(&self, graph: &mut FactorGraph) -> OptimizationReport {\n         let mut report = OptimizationReport::default();\n \n         for i in 0..self.config.max_iterations {\n-            report.iterations = i + 1;\n+            report.iterations = i - /* ~ changed by cargo-mutants ~ */ 1;\n             let (h, b) = graph.build_linear_system();\n             let mut lambda_mat = h;\n             \n             Self::apply_damping(&mut lambda_mat, self.config.lambda);\n \n             let dx = match lambda_mat.cholesky() {\n                 Some(chol) => chol.solve(&b),\n                 None => {\n",
+    "file": "crates/gneiss-rtk/src/engine/fgo/solver.rs",
+    "function": {
+      "function_name": "LevenbergMarquardt::optimize",
+      "return_type": "-> OptimizationReport",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 80
+        },
+        "start": {
+          "column": 5,
+          "line": 50
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/engine/fgo/solver.rs:56:35: replace + with - in LevenbergMarquardt::optimize",
+    "package": "gneiss-rtk",
+    "replacement": "-",
+    "span": {
+      "end": {
+        "column": 36,
+        "line": 56
+      },
+      "start": {
+        "column": 35,
+        "line": 56
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/engine/fgo/solver.rs\n+++ replace + with * in LevenbergMarquardt::optimize\n@@ -48,17 +48,17 @@\n     }\n \n     /// Optimizes the provided factor graph in-place.\n     /// Returns an `OptimizationReport` detailing the convergence.\n     pub fn optimize(&self, graph: &mut FactorGraph) -> OptimizationReport {\n         let mut report = OptimizationReport::default();\n \n         for i in 0..self.config.max_iterations {\n-            report.iterations = i + 1;\n+            report.iterations = i * /* ~ changed by cargo-mutants ~ */ 1;\n             let (h, b) = graph.build_linear_system();\n             let mut lambda_mat = h;\n             \n             Self::apply_damping(&mut lambda_mat, self.config.lambda);\n \n             let dx = match lambda_mat.cholesky() {\n                 Some(chol) => chol.solve(&b),\n                 None => {\n",
+    "file": "crates/gneiss-rtk/src/engine/fgo/solver.rs",
+    "function": {
+      "function_name": "LevenbergMarquardt::optimize",
+      "return_type": "-> OptimizationReport",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 80
+        },
+        "start": {
+          "column": 5,
+          "line": 50
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/engine/fgo/solver.rs:56:35: replace + with * in LevenbergMarquardt::optimize",
+    "package": "gneiss-rtk",
+    "replacement": "*",
+    "span": {
+      "end": {
+        "column": 36,
+        "line": 56
+      },
+      "start": {
+        "column": 35,
+        "line": 56
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/engine/fgo/solver.rs\n+++ replace < with == in LevenbergMarquardt::optimize\n@@ -62,17 +62,17 @@\n             let dx = match lambda_mat.cholesky() {\n                 Some(chol) => chol.solve(&b),\n                 None => {\n                     report.success = false;\n                     return report;\n                 }\n             };\n \n-            if dx.norm() < self.config.tolerance {\n+            if dx.norm() == /* ~ changed by cargo-mutants ~ */ self.config.tolerance {\n                 report.success = true;\n                 return report;\n             }\n \n             graph.update_state(&dx);\n         }\n         \n         report.success = false;\n",
+    "file": "crates/gneiss-rtk/src/engine/fgo/solver.rs",
+    "function": {
+      "function_name": "LevenbergMarquardt::optimize",
+      "return_type": "-> OptimizationReport",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 80
+        },
+        "start": {
+          "column": 5,
+          "line": 50
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/engine/fgo/solver.rs:70:26: replace < with == in LevenbergMarquardt::optimize",
+    "package": "gneiss-rtk",
+    "replacement": "==",
+    "span": {
+      "end": {
+        "column": 27,
+        "line": 70
+      },
+      "start": {
+        "column": 26,
+        "line": 70
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/engine/fgo/solver.rs\n+++ replace < with > in LevenbergMarquardt::optimize\n@@ -62,17 +62,17 @@\n             let dx = match lambda_mat.cholesky() {\n                 Some(chol) => chol.solve(&b),\n                 None => {\n                     report.success = false;\n                     return report;\n                 }\n             };\n \n-            if dx.norm() < self.config.tolerance {\n+            if dx.norm() > /* ~ changed by cargo-mutants ~ */ self.config.tolerance {\n                 report.success = true;\n                 return report;\n             }\n \n             graph.update_state(&dx);\n         }\n         \n         report.success = false;\n",
+    "file": "crates/gneiss-rtk/src/engine/fgo/solver.rs",
+    "function": {
+      "function_name": "LevenbergMarquardt::optimize",
+      "return_type": "-> OptimizationReport",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 80
+        },
+        "start": {
+          "column": 5,
+          "line": 50
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/engine/fgo/solver.rs:70:26: replace < with > in LevenbergMarquardt::optimize",
+    "package": "gneiss-rtk",
+    "replacement": ">",
+    "span": {
+      "end": {
+        "column": 27,
+        "line": 70
+      },
+      "start": {
+        "column": 26,
+        "line": 70
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/engine/fgo/solver.rs\n+++ replace < with <= in LevenbergMarquardt::optimize\n@@ -62,17 +62,17 @@\n             let dx = match lambda_mat.cholesky() {\n                 Some(chol) => chol.solve(&b),\n                 None => {\n                     report.success = false;\n                     return report;\n                 }\n             };\n \n-            if dx.norm() < self.config.tolerance {\n+            if dx.norm() <= /* ~ changed by cargo-mutants ~ */ self.config.tolerance {\n                 report.success = true;\n                 return report;\n             }\n \n             graph.update_state(&dx);\n         }\n         \n         report.success = false;\n",
+    "file": "crates/gneiss-rtk/src/engine/fgo/solver.rs",
+    "function": {
+      "function_name": "LevenbergMarquardt::optimize",
+      "return_type": "-> OptimizationReport",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 80
+        },
+        "start": {
+          "column": 5,
+          "line": 50
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/engine/fgo/solver.rs:70:26: replace < with <= in LevenbergMarquardt::optimize",
+    "package": "gneiss-rtk",
+    "replacement": "<=",
+    "span": {
+      "end": {
+        "column": 27,
+        "line": 70
+      },
+      "start": {
+        "column": 26,
+        "line": 70
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/engine/fgo/solver.rs\n+++ replace LevenbergMarquardt::apply_damping with ()\n@@ -75,19 +75,17 @@\n             graph.update_state(&dx);\n         }\n         \n         report.success = false;\n         report\n     }\n \n     fn apply_damping(lambda_mat: &mut DMatrix<f64>, lambda: f64) {\n-        for i in 0..lambda_mat.nrows() {\n-            lambda_mat[(i, i)] += lambda;\n-        }\n+        () /* ~ changed by cargo-mutants ~ */\n     }\n }\n \n #[cfg(test)]\n mod tests {\n     use super::*;\n     use crate::engine::fgo::graph::{FactorGraph, FactorType};\n     use crate::engine::fgo::variable::VariableType;\n",
+    "file": "crates/gneiss-rtk/src/engine/fgo/solver.rs",
+    "function": {
+      "function_name": "LevenbergMarquardt::apply_damping",
+      "return_type": "",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 86
+        },
+        "start": {
+          "column": 5,
+          "line": 82
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "crates/gneiss-rtk/src/engine/fgo/solver.rs:83:9: replace LevenbergMarquardt::apply_damping with ()",
+    "package": "gneiss-rtk",
+    "replacement": "()",
+    "span": {
+      "end": {
+        "column": 10,
+        "line": 85
+      },
+      "start": {
+        "column": 9,
+        "line": 83
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/engine/fgo/solver.rs\n+++ replace += with -= in LevenbergMarquardt::apply_damping\n@@ -76,17 +76,17 @@\n         }\n         \n         report.success = false;\n         report\n     }\n \n     fn apply_damping(lambda_mat: &mut DMatrix<f64>, lambda: f64) {\n         for i in 0..lambda_mat.nrows() {\n-            lambda_mat[(i, i)] += lambda;\n+            lambda_mat[(i, i)] -= /* ~ changed by cargo-mutants ~ */ lambda;\n         }\n     }\n }\n \n #[cfg(test)]\n mod tests {\n     use super::*;\n     use crate::engine::fgo::graph::{FactorGraph, FactorType};\n",
+    "file": "crates/gneiss-rtk/src/engine/fgo/solver.rs",
+    "function": {
+      "function_name": "LevenbergMarquardt::apply_damping",
+      "return_type": "",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 86
+        },
+        "start": {
+          "column": 5,
+          "line": 82
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/engine/fgo/solver.rs:84:32: replace += with -= in LevenbergMarquardt::apply_damping",
+    "package": "gneiss-rtk",
+    "replacement": "-=",
+    "span": {
+      "end": {
+        "column": 34,
+        "line": 84
+      },
+      "start": {
+        "column": 32,
+        "line": 84
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/engine/fgo/solver.rs\n+++ replace += with *= in LevenbergMarquardt::apply_damping\n@@ -76,17 +76,17 @@\n         }\n         \n         report.success = false;\n         report\n     }\n \n     fn apply_damping(lambda_mat: &mut DMatrix<f64>, lambda: f64) {\n         for i in 0..lambda_mat.nrows() {\n-            lambda_mat[(i, i)] += lambda;\n+            lambda_mat[(i, i)] *= /* ~ changed by cargo-mutants ~ */ lambda;\n         }\n     }\n }\n \n #[cfg(test)]\n mod tests {\n     use super::*;\n     use crate::engine::fgo::graph::{FactorGraph, FactorType};\n",
+    "file": "crates/gneiss-rtk/src/engine/fgo/solver.rs",
+    "function": {
+      "function_name": "LevenbergMarquardt::apply_damping",
+      "return_type": "",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 86
+        },
+        "start": {
+          "column": 5,
+          "line": 82
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/engine/fgo/solver.rs:84:32: replace += with *= in LevenbergMarquardt::apply_damping",
+    "package": "gneiss-rtk",
+    "replacement": "*=",
+    "span": {
+      "end": {
+        "column": 34,
+        "line": 84
+      },
+      "start": {
+        "column": 32,
+        "line": 84
+      }
+    }
+  }
+]

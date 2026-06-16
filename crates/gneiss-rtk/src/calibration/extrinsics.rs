@@ -57,6 +57,68 @@ pub fn estimate_lever_arm(
     Ok(Vector3::new(lever_arm[0], lever_arm[1], lever_arm[2]))
 }
 
+/// Evaluates a specific GNSS lever arm configuration using a simplified processing pass
+/// over a subset of the data (the first 1000 epochs).
+pub fn calibrate_lever_arms_grid_search<F>(
+    base_config: &crate::engine::EngineConfig,
+    mut evaluate_fn: F,
+) -> Result<([f64; 3], [f64; 3]), &'static str> 
+where
+    F: FnMut(&crate::engine::EngineConfig) -> f64,
+{
+    tracing::info!("Starting Grid Search for GNSS Lever Arm...");
+    let x_range = [0.0, 0.5, 1.0, 1.5, 2.0];
+    let z_range = [-1.0, -0.5, 0.0, 0.5, 1.0];
+    
+    let mut combinations = Vec::new();
+    for &x in &x_range {
+        for &z in &z_range {
+            combinations.push((x, z));
+        }
+    }
+    
+    let mut results = Vec::new();
+    for (x, z) in combinations {
+        let mut cfg = base_config.clone();
+        cfg.imu_to_antenna_lever_arm = [x, 0.0, z];
+        cfg.enable_nhc = false; // Disable NHC while tuning GNSS lever arm
+        
+        let error = evaluate_fn(&cfg);
+        results.push((x, z, error));
+    }
+    
+    let best_gnss = results.into_iter().min_by(|a, b| a.2.partial_cmp(&b.2).unwrap_or(std::cmp::Ordering::Equal)).unwrap();
+    tracing::info!("Best GNSS Lever Arm: [{:.2}, 0.0, {:.2}] with error metric {:.4}", best_gnss.0, best_gnss.1, best_gnss.2);
+    
+    let best_gnss_arm = [best_gnss.0, 0.0, best_gnss.1];
+    
+    tracing::info!("Starting Grid Search for NHC Lever Arm...");
+    let mut nhc_combinations = Vec::new();
+    for &x in &[0.0, 0.5, 1.0, 1.5, 2.0] {
+        for &z in &[0.0, 0.5, 1.0, 1.5, 2.0] {
+            nhc_combinations.push((x, z));
+        }
+    }
+    
+    let mut nhc_results = Vec::new();
+    for (x, z) in nhc_combinations {
+        let mut cfg = base_config.clone();
+        cfg.imu_to_antenna_lever_arm = best_gnss_arm;
+        cfg.enable_nhc = true;
+        cfg.imu_to_nhc_lever_arm = [x, 0.0, z];
+        
+        let error = evaluate_fn(&cfg);
+        nhc_results.push((x, z, error));
+    }
+    
+    let best_nhc = nhc_results.into_iter().min_by(|a, b| a.2.partial_cmp(&b.2).unwrap_or(std::cmp::Ordering::Equal)).unwrap();
+    tracing::info!("Best NHC Lever Arm: [{:.2}, 0.0, {:.2}] with error metric {:.4}", best_nhc.0, best_nhc.1, best_nhc.2);
+    
+    let best_nhc_arm = [best_nhc.0, 0.0, best_nhc.1];
+    
+    Ok((best_gnss_arm, best_nhc_arm))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -58,8 +58,16 @@ pub struct EkfTuningConfig {
 
     pub ekf_max_iterations: usize,
 
+    // FGO robust thresholds
+    pub fgo_pr_robust_threshold: f64,
+    pub fgo_cp_robust_threshold: f64,
+    pub fgo_dop_robust_threshold: f64,
+
     // Auto-tuning Constraints
     pub auto_tune: AutoTuneConfig,
+    
+    pub nhc_sigma_lateral: f64,
+    pub nhc_sigma_vertical: f64,
 }
 
 impl Default for EkfTuningConfig {
@@ -69,9 +77,13 @@ impl Default for EkfTuningConfig {
             snr_a: 1.0, snr_b: 150.0,
             sigma_v: 0.1, sigma_phi: 0.01, sigma_ab: 1e-4, sigma_gb: 1e-5,
             loosely_coupled_mahalanobis_sq: 1000.0, phase_outlier_ratio_thresh: 5.0,
-            doppler_outlier_ratio_mult: 2.0, pr_abs_thresh: 40.0, cp_abs_thresh: 1.0, dop_abs_thresh: 15.0,
+            doppler_outlier_ratio_mult: 2.0, pr_abs_thresh: 50.0, cp_abs_thresh: 0.10, dop_abs_thresh: 2.0,
             huber_threshold_loosely: 10.0, huber_threshold_tightly: 3.0, min_ar_success_rate: 0.999,
-            ekf_max_iterations: 20, auto_tune: Default::default(),
+            ekf_max_iterations: 3,
+            fgo_pr_robust_threshold: 10.0, fgo_cp_robust_threshold: 3.0, fgo_dop_robust_threshold: 5.0,
+            auto_tune: Default::default(),
+            nhc_sigma_lateral: 2.0,
+            nhc_sigma_vertical: 2.0,
         }
     }
 }

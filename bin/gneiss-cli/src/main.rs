@@ -74,6 +74,8 @@ enum Commands {
         lever_arm: String,
         #[arg(long, help = "Automatically detect and calibrate IMU mounting offsets")]
         calibrate_imu: bool,
+        #[arg(long, help = "Automatically calibrate extrinsics (lever arms) via grid search")]
+        calibrate_extrinsics: bool,
         #[arg(long, help = "SPP RAIM Outlier Rejection Threshold (m)")]
         raim_outlier_m: Option<f64>,
         #[arg(long, help = "Pseudorange Chi-Square Reject Threshold")]
@@ -146,7 +148,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             rover, base, nav, output, sp3, clk, antex, dcb, config, 
             enable_backward_smoothing, enable_auto_tune, mode, 
             lambda_ratio, lambda_subset, max_epochs, 
-            lever_arm, calibrate_imu,
+            lever_arm, calibrate_imu, calibrate_extrinsics,
             raim_outlier_m, chi_square_pr, chi_square_cp, min_snr,
             base_position,
             systems
@@ -290,10 +292,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
             
-            // Force NHC for Automotive/Pedestrian
-            if matches!(engine_config.dynamics_model, gneiss_rtk::engine::DynamicsModel::Automotive | gneiss_rtk::engine::DynamicsModel::Pedestrian) {
-                engine_config.enable_nhc = true;
-            }
 
             let mut engine = ProcessingEngine::new(engine_config.clone());
             let parent_dir = std::path::Path::new(&rover).parent().unwrap();
@@ -320,7 +318,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
 
-            if let (Some(r_epochs), Some((truth_tow, mut state))) = (&mut rover_rinex_epochs, initial_truth) {
+            if let (Some(r_epochs), Some((truth_tow, mut state))) = (&mut rover_rinex_epochs, initial_truth.clone()) {
                 if let Some(first_r) = r_epochs.first() {
                     time_offset = truth_tow - first_r.time.tow;
                     info!("Detected Time Offset: {:.3}s. Aligning Observations...", time_offset);
@@ -515,6 +513,64 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             let mut final_results = Vec::new();
             let mut final_processed_epochs = 0;
+            
+            if calibrate_extrinsics {
+                info!("Starting Extrinsics Calibration Grid Search...");
+                
+                // We will evaluate each config by running 1000 epochs and returning the final SPP residual
+                // or the final covariance norm as the error metric. We'll use covariance trace for simplicity.
+                let rover_slice = if let Some(ref r) = rover_rinex_epochs {
+                    &r[..r.len().min(1000)]
+                } else {
+                    &[]
+                };
+                
+                let eval_fn = |cfg: &EngineConfig| -> f64 {
+                    let mut eval_engine = ProcessingEngine::new(cfg.clone());
+                    let mut eval_imu_idx = 0;
+                    
+                    // Set up initial state if needed
+                    if let (Some((_truth_tow, state)), Some(first_r)) = (initial_truth.clone(), rover_slice.first()) {
+                        let mut s = state.clone();
+                        s.time = first_r.time;
+                        eval_engine.current_state = Some(s);
+                    }
+                    
+                    for r in rover_slice {
+                        let current_tow = r.time.tow + time_offset;
+                        let b = if let Some(ref b_epochs) = base_rinex_epochs {
+                            b_epochs.iter().min_by(|a, b| 
+                                (a.time.tow - r.time.tow).abs().partial_cmp(&(b.time.tow - r.time.tow).abs()).unwrap()
+                            )
+                        } else { None };
+                        
+                        while eval_imu_idx < imu_measurements.len() && (imu_measurements[eval_imu_idx].time_tag as f64 / 1000.0) <= current_tow {
+                            eval_engine.add_imu_measurement(imu_measurements[eval_imu_idx].clone());
+                            eval_imu_idx += 1;
+                        }
+                        
+                        let _ = eval_engine.process_epoch(r, b);
+                    }
+                    
+                    if let Some(final_state) = eval_engine.state_history.last() {
+                        // The error metric is the trace of the position covariance (smaller is better)
+                        // Or if SPP is used, the mean SPP residual.
+                        final_state.covariance[(0,0)] + final_state.covariance[(1,1)] + final_state.covariance[(2,2)]
+                    } else {
+                        1e9
+                    }
+                };
+                
+                if let Ok((best_gnss, best_nhc)) = gneiss_rtk::calibration::extrinsics::calibrate_lever_arms_grid_search(&engine_config, eval_fn) {
+                    engine_config.imu_to_antenna_lever_arm = best_gnss;
+                    engine_config.imu_to_nhc_lever_arm = best_nhc;
+                    engine.config.imu_to_antenna_lever_arm = best_gnss;
+                    engine.config.imu_to_nhc_lever_arm = best_nhc;
+                    info!("Calibration complete. Applying Best GNSS: {:?}, Best NHC: {:?}", best_gnss, best_nhc);
+                } else {
+                    error!("Extrinsics calibration failed.");
+                }
+            }
             
             let passes = if enable_auto_tune { 2 } else { 1 };
             

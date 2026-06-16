@@ -166,7 +166,7 @@ pub fn evaluate_post_fit_outliers<C: CouplingStrategy>(
         } else if is_tight {
             // Apply Huber weighting ONLY in tightly coupled mode. 
             // LooseCoupling relies on hard-rejection and doesn't use IRLS.
-            weights[i] = crate::math::thresholding::apply_huber(v[i], s[(i, i)], tuning.huber_threshold_tightly);
+            weights[i] = crate::math::thresholding::apply_cauchy(v[i], s[(i, i)], 3.0);
         }
     }
     (worst_idx, max_outlier_ratio, weights)

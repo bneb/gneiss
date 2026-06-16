@@ -1,0 +1,8 @@
+crates/gneiss-rtk/src/engine/fgo/solver.rs:53:9: replace LevenbergMarquardt::optimize -> OptimizationReport with Default::default()
+crates/gneiss-rtk/src/engine/fgo/solver.rs:56:35: replace + with - in LevenbergMarquardt::optimize
+crates/gneiss-rtk/src/engine/fgo/solver.rs:56:35: replace + with * in LevenbergMarquardt::optimize
+crates/gneiss-rtk/src/engine/fgo/solver.rs:70:26: replace < with == in LevenbergMarquardt::optimize
+crates/gneiss-rtk/src/engine/fgo/solver.rs:70:26: replace < with > in LevenbergMarquardt::optimize
+crates/gneiss-rtk/src/engine/fgo/solver.rs:83:9: replace LevenbergMarquardt::apply_damping with ()
+crates/gneiss-rtk/src/engine/fgo/solver.rs:84:32: replace += with -= in LevenbergMarquardt::apply_damping
+crates/gneiss-rtk/src/engine/fgo/solver.rs:84:32: replace += with *= in LevenbergMarquardt::apply_damping

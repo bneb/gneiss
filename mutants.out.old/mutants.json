@@ -1,1249 +1,289 @@
 [
   {
-    "diff": "--- crates/gneiss-rtk/src/measurements/nhc.rs\n+++ replace assign_jacobian_block with ()\n@@ -1,18 +1,15 @@\n use crate::filter::RtkState;\n use crate::engine::updater;\n use nalgebra::{DMatrix, DVector, Matrix3, Vector3};\n \n /// Assigns a 3x3 matrix block to a 2xN measurement Jacobian matrix\n fn assign_jacobian_block(h: &mut DMatrix<f64>, col: usize, m: nalgebra::Matrix3<f64>) {\n-    for i in 0..3 {\n-        h[(0, col + i)] = m[(1, i)];\n-        h[(1, col + i)] = m[(2, i)];\n-    }\n+    () /* ~ changed by cargo-mutants ~ */\n }\n \n /// Helper to generate a skew-symmetric matrix from a 3D vector\n fn skew_symmetric(v: &Vector3<f64>) -> Matrix3<f64> {\n     Matrix3::new(0.0, -v.z, v.y, v.z, 0.0, -v.x, -v.y, v.x, 0.0)\n }\n \n /// Applies Non-Holonomic Constraints (NHC) to the EKF state.\n",
-    "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
+    "diff": "--- crates/gneiss-rtk/src/engine/fgo/solver.rs\n+++ replace LevenbergMarquardt::optimize -> OptimizationReport with Default::default()\n@@ -45,43 +45,17 @@\n impl LevenbergMarquardt {\n     pub fn new(config: SolverConfig) -> Self {\n         Self { config }\n     }\n \n     /// Optimizes the provided factor graph in-place.\n     /// Returns an `OptimizationReport` detailing the convergence.\n     pub fn optimize(&self, graph: &mut FactorGraph) -> OptimizationReport {\n-        let mut report = OptimizationReport::default();\n-\n-        for i in 0..self.config.max_iterations {\n-            report.iterations = i + 1;\n-            let (h, b) = graph.build_linear_system();\n-            let mut lambda_mat = h;\n-            \n-            Self::apply_damping(&mut lambda_mat, self.config.lambda);\n-\n-            let dx = match lambda_mat.cholesky() {\n-                Some(chol) => chol.solve(&b),\n-                None => {\n-                    report.success = false;\n-                    return report;\n-                }\n-            };\n-\n-            if dx.norm() < self.config.tolerance {\n-                report.success = true;\n-                return report;\n-            }\n-\n-            graph.update_state(&dx);\n-        }\n-        \n-        report.success = false;\n-        report\n+        Default::default() /* ~ changed by cargo-mutants ~ */\n     }\n \n     fn apply_damping(lambda_mat: &mut DMatrix<f64>, lambda: f64) {\n         for i in 0..lambda_mat.nrows() {\n             lambda_mat[(i, i)] += lambda;\n         }\n     }\n }\n",
+    "file": "crates/gneiss-rtk/src/engine/fgo/solver.rs",
     "function": {
-      "function_name": "assign_jacobian_block",
-      "return_type": "",
+      "function_name": "LevenbergMarquardt::optimize",
+      "return_type": "-> OptimizationReport",
       "span": {
         "end": {
-          "column": 2,
-          "line": 11
+          "column": 6,
+          "line": 80
         },
         "start": {
-          "column": 1,
-          "line": 5
+          "column": 5,
+          "line": 50
         }
       }
     },
     "genre": "FnValue",
-    "name": "crates/gneiss-rtk/src/measurements/nhc.rs:7:5: replace assign_jacobian_block with ()",
+    "name": "crates/gneiss-rtk/src/engine/fgo/solver.rs:53:9: replace LevenbergMarquardt::optimize -> OptimizationReport with Default::default()",
+    "package": "gneiss-rtk",
+    "replacement": "Default::default()",
+    "span": {
+      "end": {
+        "column": 15,
+        "line": 79
+      },
+      "start": {
+        "column": 9,
+        "line": 53
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/engine/fgo/solver.rs\n+++ replace + with - in LevenbergMarquardt::optimize\n@@ -48,17 +48,17 @@\n     }\n \n     /// Optimizes the provided factor graph in-place.\n     /// Returns an `OptimizationReport` detailing the convergence.\n     pub fn optimize(&self, graph: &mut FactorGraph) -> OptimizationReport {\n         let mut report = OptimizationReport::default();\n \n         for i in 0..self.config.max_iterations {\n-            report.iterations = i + 1;\n+            report.iterations = i - /* ~ changed by cargo-mutants ~ */ 1;\n             let (h, b) = graph.build_linear_system();\n             let mut lambda_mat = h;\n             \n             Self::apply_damping(&mut lambda_mat, self.config.lambda);\n \n             let dx = match lambda_mat.cholesky() {\n                 Some(chol) => chol.solve(&b),\n                 None => {\n",
+    "file": "crates/gneiss-rtk/src/engine/fgo/solver.rs",
+    "function": {
+      "function_name": "LevenbergMarquardt::optimize",
+      "return_type": "-> OptimizationReport",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 80
+        },
+        "start": {
+          "column": 5,
+          "line": 50
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/engine/fgo/solver.rs:56:35: replace + with - in LevenbergMarquardt::optimize",
+    "package": "gneiss-rtk",
+    "replacement": "-",
+    "span": {
+      "end": {
+        "column": 36,
+        "line": 56
+      },
+      "start": {
+        "column": 35,
+        "line": 56
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/engine/fgo/solver.rs\n+++ replace + with * in LevenbergMarquardt::optimize\n@@ -48,17 +48,17 @@\n     }\n \n     /// Optimizes the provided factor graph in-place.\n     /// Returns an `OptimizationReport` detailing the convergence.\n     pub fn optimize(&self, graph: &mut FactorGraph) -> OptimizationReport {\n         let mut report = OptimizationReport::default();\n \n         for i in 0..self.config.max_iterations {\n-            report.iterations = i + 1;\n+            report.iterations = i * /* ~ changed by cargo-mutants ~ */ 1;\n             let (h, b) = graph.build_linear_system();\n             let mut lambda_mat = h;\n             \n             Self::apply_damping(&mut lambda_mat, self.config.lambda);\n \n             let dx = match lambda_mat.cholesky() {\n                 Some(chol) => chol.solve(&b),\n                 None => {\n",
+    "file": "crates/gneiss-rtk/src/engine/fgo/solver.rs",
+    "function": {
+      "function_name": "LevenbergMarquardt::optimize",
+      "return_type": "-> OptimizationReport",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 80
+        },
+        "start": {
+          "column": 5,
+          "line": 50
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/engine/fgo/solver.rs:56:35: replace + with * in LevenbergMarquardt::optimize",
+    "package": "gneiss-rtk",
+    "replacement": "*",
+    "span": {
+      "end": {
+        "column": 36,
+        "line": 56
+      },
+      "start": {
+        "column": 35,
+        "line": 56
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/engine/fgo/solver.rs\n+++ replace < with == in LevenbergMarquardt::optimize\n@@ -62,17 +62,17 @@\n             let dx = match lambda_mat.cholesky() {\n                 Some(chol) => chol.solve(&b),\n                 None => {\n                     report.success = false;\n                     return report;\n                 }\n             };\n \n-            if dx.norm() < self.config.tolerance {\n+            if dx.norm() == /* ~ changed by cargo-mutants ~ */ self.config.tolerance {\n                 report.success = true;\n                 return report;\n             }\n \n             graph.update_state(&dx);\n         }\n         \n         report.success = false;\n",
+    "file": "crates/gneiss-rtk/src/engine/fgo/solver.rs",
+    "function": {
+      "function_name": "LevenbergMarquardt::optimize",
+      "return_type": "-> OptimizationReport",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 80
+        },
+        "start": {
+          "column": 5,
+          "line": 50
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/engine/fgo/solver.rs:70:26: replace < with == in LevenbergMarquardt::optimize",
+    "package": "gneiss-rtk",
+    "replacement": "==",
+    "span": {
+      "end": {
+        "column": 27,
+        "line": 70
+      },
+      "start": {
+        "column": 26,
+        "line": 70
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/engine/fgo/solver.rs\n+++ replace < with > in LevenbergMarquardt::optimize\n@@ -62,17 +62,17 @@\n             let dx = match lambda_mat.cholesky() {\n                 Some(chol) => chol.solve(&b),\n                 None => {\n                     report.success = false;\n                     return report;\n                 }\n             };\n \n-            if dx.norm() < self.config.tolerance {\n+            if dx.norm() > /* ~ changed by cargo-mutants ~ */ self.config.tolerance {\n                 report.success = true;\n                 return report;\n             }\n \n             graph.update_state(&dx);\n         }\n         \n         report.success = false;\n",
+    "file": "crates/gneiss-rtk/src/engine/fgo/solver.rs",
+    "function": {
+      "function_name": "LevenbergMarquardt::optimize",
+      "return_type": "-> OptimizationReport",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 80
+        },
+        "start": {
+          "column": 5,
+          "line": 50
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/engine/fgo/solver.rs:70:26: replace < with > in LevenbergMarquardt::optimize",
+    "package": "gneiss-rtk",
+    "replacement": ">",
+    "span": {
+      "end": {
+        "column": 27,
+        "line": 70
+      },
+      "start": {
+        "column": 26,
+        "line": 70
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/engine/fgo/solver.rs\n+++ replace < with <= in LevenbergMarquardt::optimize\n@@ -62,17 +62,17 @@\n             let dx = match lambda_mat.cholesky() {\n                 Some(chol) => chol.solve(&b),\n                 None => {\n                     report.success = false;\n                     return report;\n                 }\n             };\n \n-            if dx.norm() < self.config.tolerance {\n+            if dx.norm() <= /* ~ changed by cargo-mutants ~ */ self.config.tolerance {\n                 report.success = true;\n                 return report;\n             }\n \n             graph.update_state(&dx);\n         }\n         \n         report.success = false;\n",
+    "file": "crates/gneiss-rtk/src/engine/fgo/solver.rs",
+    "function": {
+      "function_name": "LevenbergMarquardt::optimize",
+      "return_type": "-> OptimizationReport",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 80
+        },
+        "start": {
+          "column": 5,
+          "line": 50
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/gneiss-rtk/src/engine/fgo/solver.rs:70:26: replace < with <= in LevenbergMarquardt::optimize",
+    "package": "gneiss-rtk",
+    "replacement": "<=",
+    "span": {
+      "end": {
+        "column": 27,
+        "line": 70
+      },
+      "start": {
+        "column": 26,
+        "line": 70
+      }
+    }
+  },
+  {
+    "diff": "--- crates/gneiss-rtk/src/engine/fgo/solver.rs\n+++ replace LevenbergMarquardt::apply_damping with ()\n@@ -75,19 +75,17 @@\n             graph.update_state(&dx);\n         }\n         \n         report.success = false;\n         report\n     }\n \n     fn apply_damping(lambda_mat: &mut DMatrix<f64>, lambda: f64) {\n-        for i in 0..lambda_mat.nrows() {\n-            lambda_mat[(i, i)] += lambda;\n-        }\n+        () /* ~ changed by cargo-mutants ~ */\n     }\n }\n \n #[cfg(test)]\n mod tests {\n     use super::*;\n     use crate::engine::fgo::graph::{FactorGraph, FactorType};\n     use crate::engine::fgo::variable::VariableType;\n",
+    "file": "crates/gneiss-rtk/src/engine/fgo/solver.rs",
+    "function": {
+      "function_name": "LevenbergMarquardt::apply_damping",
+      "return_type": "",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 86
+        },
+        "start": {
+          "column": 5,
+          "line": 82
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "crates/gneiss-rtk/src/engine/fgo/solver.rs:83:9: replace LevenbergMarquardt::apply_damping with ()",
     "package": "gneiss-rtk",
     "replacement": "()",
     "span": {
       "end": {
-        "column": 6,
-        "line": 10
+        "column": 10,
+        "line": 85
       },
       "start": {
-        "column": 5,
-        "line": 7
+        "column": 9,
+        "line": 83
       }
     }
   },
   {
-    "diff": "--- crates/gneiss-rtk/src/measurements/nhc.rs\n+++ replace + with - in assign_jacobian_block\n@@ -1,16 +1,16 @@\n use crate::filter::RtkState;\n use crate::engine::updater;\n use nalgebra::{DMatrix, DVector, Matrix3, Vector3};\n \n /// Assigns a 3x3 matrix block to a 2xN measurement Jacobian matrix\n fn assign_jacobian_block(h: &mut DMatrix<f64>, col: usize, m: nalgebra::Matrix3<f64>) {\n     for i in 0..3 {\n-        h[(0, col + i)] = m[(1, i)];\n+        h[(0, col - /* ~ changed by cargo-mutants ~ */ i)] = m[(1, i)];\n         h[(1, col + i)] = m[(2, i)];\n     }\n }\n \n /// Helper to generate a skew-symmetric matrix from a 3D vector\n fn skew_symmetric(v: &Vector3<f64>) -> Matrix3<f64> {\n     Matrix3::new(0.0, -v.z, v.y, v.z, 0.0, -v.x, -v.y, v.x, 0.0)\n }\n",
-    "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
+    "diff": "--- crates/gneiss-rtk/src/engine/fgo/solver.rs\n+++ replace += with -= in LevenbergMarquardt::apply_damping\n@@ -76,17 +76,17 @@\n         }\n         \n         report.success = false;\n         report\n     }\n \n     fn apply_damping(lambda_mat: &mut DMatrix<f64>, lambda: f64) {\n         for i in 0..lambda_mat.nrows() {\n-            lambda_mat[(i, i)] += lambda;\n+            lambda_mat[(i, i)] -= /* ~ changed by cargo-mutants ~ */ lambda;\n         }\n     }\n }\n \n #[cfg(test)]\n mod tests {\n     use super::*;\n     use crate::engine::fgo::graph::{FactorGraph, FactorType};\n",
+    "file": "crates/gneiss-rtk/src/engine/fgo/solver.rs",
     "function": {
-      "function_name": "assign_jacobian_block",
+      "function_name": "LevenbergMarquardt::apply_damping",
       "return_type": "",
       "span": {
         "end": {
-          "column": 2,
-          "line": 11
+          "column": 6,
+          "line": 86
         },
         "start": {
-          "column": 1,
-          "line": 5
+          "column": 5,
+          "line": 82
         }
       }
     },
     "genre": "BinaryOperator",
-    "name": "crates/gneiss-rtk/src/measurements/nhc.rs:8:19: replace + with - in assign_jacobian_block",
+    "name": "crates/gneiss-rtk/src/engine/fgo/solver.rs:84:32: replace += with -= in LevenbergMarquardt::apply_damping",
     "package": "gneiss-rtk",
-    "replacement": "-",
+    "replacement": "-=",
     "span": {
       "end": {
-        "column": 20,
-        "line": 8
+        "column": 34,
+        "line": 84
       },
       "start": {
-        "column": 19,
-        "line": 8
+        "column": 32,
+        "line": 84
       }
     }
   },
   {
-    "diff": "--- crates/gneiss-rtk/src/measurements/nhc.rs\n+++ replace + with * in assign_jacobian_block\n@@ -1,16 +1,16 @@\n use crate::filter::RtkState;\n use crate::engine::updater;\n use nalgebra::{DMatrix, DVector, Matrix3, Vector3};\n \n /// Assigns a 3x3 matrix block to a 2xN measurement Jacobian matrix\n fn assign_jacobian_block(h: &mut DMatrix<f64>, col: usize, m: nalgebra::Matrix3<f64>) {\n     for i in 0..3 {\n-        h[(0, col + i)] = m[(1, i)];\n+        h[(0, col * /* ~ changed by cargo-mutants ~ */ i)] = m[(1, i)];\n         h[(1, col + i)] = m[(2, i)];\n     }\n }\n \n /// Helper to generate a skew-symmetric matrix from a 3D vector\n fn skew_symmetric(v: &Vector3<f64>) -> Matrix3<f64> {\n     Matrix3::new(0.0, -v.z, v.y, v.z, 0.0, -v.x, -v.y, v.x, 0.0)\n }\n",
-    "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
+    "diff": "--- crates/gneiss-rtk/src/engine/fgo/solver.rs\n+++ replace += with *= in LevenbergMarquardt::apply_damping\n@@ -76,17 +76,17 @@\n         }\n         \n         report.success = false;\n         report\n     }\n \n     fn apply_damping(lambda_mat: &mut DMatrix<f64>, lambda: f64) {\n         for i in 0..lambda_mat.nrows() {\n-            lambda_mat[(i, i)] += lambda;\n+            lambda_mat[(i, i)] *= /* ~ changed by cargo-mutants ~ */ lambda;\n         }\n     }\n }\n \n #[cfg(test)]\n mod tests {\n     use super::*;\n     use crate::engine::fgo::graph::{FactorGraph, FactorType};\n",
+    "file": "crates/gneiss-rtk/src/engine/fgo/solver.rs",
     "function": {
-      "function_name": "assign_jacobian_block",
+      "function_name": "LevenbergMarquardt::apply_damping",
       "return_type": "",
       "span": {
         "end": {
-          "column": 2,
-          "line": 11
+          "column": 6,
+          "line": 86
         },
         "start": {
-          "column": 1,
-          "line": 5
+          "column": 5,
+          "line": 82
         }
       }
     },
     "genre": "BinaryOperator",
-    "name": "crates/gneiss-rtk/src/measurements/nhc.rs:8:19: replace + with * in assign_jacobian_block",
+    "name": "crates/gneiss-rtk/src/engine/fgo/solver.rs:84:32: replace += with *= in LevenbergMarquardt::apply_damping",
     "package": "gneiss-rtk",
-    "replacement": "*",
+    "replacement": "*=",
     "span": {
       "end": {
-        "column": 20,
-        "line": 8
+        "column": 34,
+        "line": 84
       },
       "start": {
-        "column": 19,
-        "line": 8
-      }
-    }
-  },
-  {
-    "diff": "--- crates/gneiss-rtk/src/measurements/nhc.rs\n+++ replace + with - in assign_jacobian_block\n@@ -1,17 +1,17 @@\n use crate::filter::RtkState;\n use crate::engine::updater;\n use nalgebra::{DMatrix, DVector, Matrix3, Vector3};\n \n /// Assigns a 3x3 matrix block to a 2xN measurement Jacobian matrix\n fn assign_jacobian_block(h: &mut DMatrix<f64>, col: usize, m: nalgebra::Matrix3<f64>) {\n     for i in 0..3 {\n         h[(0, col + i)] = m[(1, i)];\n-        h[(1, col + i)] = m[(2, i)];\n+        h[(1, col - /* ~ changed by cargo-mutants ~ */ i)] = m[(2, i)];\n     }\n }\n \n /// Helper to generate a skew-symmetric matrix from a 3D vector\n fn skew_symmetric(v: &Vector3<f64>) -> Matrix3<f64> {\n     Matrix3::new(0.0, -v.z, v.y, v.z, 0.0, -v.x, -v.y, v.x, 0.0)\n }\n \n",
-    "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-    "function": {
-      "function_name": "assign_jacobian_block",
-      "return_type": "",
-      "span": {
-        "end": {
-          "column": 2,
-          "line": 11
-        },
-        "start": {
-          "column": 1,
-          "line": 5
-        }
-      }
-    },
-    "genre": "BinaryOperator",
-    "name": "crates/gneiss-rtk/src/measurements/nhc.rs:9:19: replace + with - in assign_jacobian_block",
-    "package": "gneiss-rtk",
-    "replacement": "-",
-    "span": {
-      "end": {
-        "column": 20,
-        "line": 9
-      },
-      "start": {
-        "column": 19,
-        "line": 9
-      }
-    }
-  },
-  {
-    "diff": "--- crates/gneiss-rtk/src/measurements/nhc.rs\n+++ replace + with * in assign_jacobian_block\n@@ -1,17 +1,17 @@\n use crate::filter::RtkState;\n use crate::engine::updater;\n use nalgebra::{DMatrix, DVector, Matrix3, Vector3};\n \n /// Assigns a 3x3 matrix block to a 2xN measurement Jacobian matrix\n fn assign_jacobian_block(h: &mut DMatrix<f64>, col: usize, m: nalgebra::Matrix3<f64>) {\n     for i in 0..3 {\n         h[(0, col + i)] = m[(1, i)];\n-        h[(1, col + i)] = m[(2, i)];\n+        h[(1, col * /* ~ changed by cargo-mutants ~ */ i)] = m[(2, i)];\n     }\n }\n \n /// Helper to generate a skew-symmetric matrix from a 3D vector\n fn skew_symmetric(v: &Vector3<f64>) -> Matrix3<f64> {\n     Matrix3::new(0.0, -v.z, v.y, v.z, 0.0, -v.x, -v.y, v.x, 0.0)\n }\n \n",
-    "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-    "function": {
-      "function_name": "assign_jacobian_block",
-      "return_type": "",
-      "span": {
-        "end": {
-          "column": 2,
-          "line": 11
-        },
-        "start": {
-          "column": 1,
-          "line": 5
-        }
-      }
-    },
-    "genre": "BinaryOperator",
-    "name": "crates/gneiss-rtk/src/measurements/nhc.rs:9:19: replace + with * in assign_jacobian_block",
-    "package": "gneiss-rtk",
-    "replacement": "*",
-    "span": {
-      "end": {
-        "column": 20,
-        "line": 9
-      },
-      "start": {
-        "column": 19,
-        "line": 9
-      }
-    }
-  },
-  {
-    "diff": "--- crates/gneiss-rtk/src/measurements/nhc.rs\n+++ replace skew_symmetric -> Matrix3<f64> with Matrix3::new()\n@@ -7,17 +7,17 @@\n     for i in 0..3 {\n         h[(0, col + i)] = m[(1, i)];\n         h[(1, col + i)] = m[(2, i)];\n     }\n }\n \n /// Helper to generate a skew-symmetric matrix from a 3D vector\n fn skew_symmetric(v: &Vector3<f64>) -> Matrix3<f64> {\n-    Matrix3::new(0.0, -v.z, v.y, v.z, 0.0, -v.x, -v.y, v.x, 0.0)\n+    Matrix3::new() /* ~ changed by cargo-mutants ~ */\n }\n \n /// Applies Non-Holonomic Constraints (NHC) to the EKF state.\n /// This assumes the vehicle's lateral and vertical velocity in the body frame is zero.\n pub fn apply_nhc(\n     state: &mut RtkState,\n     sigma_lateral: f64,\n     sigma_vertical: f64,\n",
-    "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-    "function": {
-      "function_name": "skew_symmetric",
-      "return_type": "-> Matrix3<f64>",
-      "span": {
-        "end": {
-          "column": 2,
-          "line": 16
-        },
-        "start": {
-          "column": 1,
-          "line": 13
-        }
-      }
-    },
-    "genre": "FnValue",
-    "name": "crates/gneiss-rtk/src/measurements/nhc.rs:15:5: replace skew_symmetric -> Matrix3<f64> with Matrix3::new()",
-    "package": "gneiss-rtk",
-    "replacement": "Matrix3::new()",
-    "span": {
-      "end": {
-        "column": 65,
-        "line": 15
-      },
-      "start": {
-        "column": 5,
-        "line": 15
-      }
-    }
-  },
-  {
-    "diff": "--- crates/gneiss-rtk/src/measurements/nhc.rs\n+++ replace skew_symmetric -> Matrix3<f64> with Matrix3::from_iter([0.0])\n@@ -7,17 +7,17 @@\n     for i in 0..3 {\n         h[(0, col + i)] = m[(1, i)];\n         h[(1, col + i)] = m[(2, i)];\n     }\n }\n \n /// Helper to generate a skew-symmetric matrix from a 3D vector\n fn skew_symmetric(v: &Vector3<f64>) -> Matrix3<f64> {\n-    Matrix3::new(0.0, -v.z, v.y, v.z, 0.0, -v.x, -v.y, v.x, 0.0)\n+    Matrix3::from_iter([0.0]) /* ~ changed by cargo-mutants ~ */\n }\n \n /// Applies Non-Holonomic Constraints (NHC) to the EKF state.\n /// This assumes the vehicle's lateral and vertical velocity in the body frame is zero.\n pub fn apply_nhc(\n     state: &mut RtkState,\n     sigma_lateral: f64,\n     sigma_vertical: f64,\n",
-    "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-    "function": {
-      "function_name": "skew_symmetric",
-      "return_type": "-> Matrix3<f64>",
-      "span": {
-        "end": {
-          "column": 2,
-          "line": 16
-        },
-        "start": {
-          "column": 1,
-          "line": 13
-        }
-      }
-    },
-    "genre": "FnValue",
-    "name": "crates/gneiss-rtk/src/measurements/nhc.rs:15:5: replace skew_symmetric -> Matrix3<f64> with Matrix3::from_iter([0.0])",
-    "package": "gneiss-rtk",
-    "replacement": "Matrix3::from_iter([0.0])",
-    "span": {
-      "end": {
-        "column": 65,
-        "line": 15
-      },
-      "start": {
-        "column": 5,
-        "line": 15
-      }
-    }
-  },
-  {
-    "diff": "--- crates/gneiss-rtk/src/measurements/nhc.rs\n+++ replace skew_symmetric -> Matrix3<f64> with Matrix3::new(0.0)\n@@ -7,17 +7,17 @@\n     for i in 0..3 {\n         h[(0, col + i)] = m[(1, i)];\n         h[(1, col + i)] = m[(2, i)];\n     }\n }\n \n /// Helper to generate a skew-symmetric matrix from a 3D vector\n fn skew_symmetric(v: &Vector3<f64>) -> Matrix3<f64> {\n-    Matrix3::new(0.0, -v.z, v.y, v.z, 0.0, -v.x, -v.y, v.x, 0.0)\n+    Matrix3::new(0.0) /* ~ changed by cargo-mutants ~ */\n }\n \n /// Applies Non-Holonomic Constraints (NHC) to the EKF state.\n /// This assumes the vehicle's lateral and vertical velocity in the body frame is zero.\n pub fn apply_nhc(\n     state: &mut RtkState,\n     sigma_lateral: f64,\n     sigma_vertical: f64,\n",
-    "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-    "function": {
-      "function_name": "skew_symmetric",
-      "return_type": "-> Matrix3<f64>",
-      "span": {
-        "end": {
-          "column": 2,
-          "line": 16
-        },
-        "start": {
-          "column": 1,
-          "line": 13
-        }
-      }
-    },
-    "genre": "FnValue",
-    "name": "crates/gneiss-rtk/src/measurements/nhc.rs:15:5: replace skew_symmetric -> Matrix3<f64> with Matrix3::new(0.0)",
-    "package": "gneiss-rtk",
-    "replacement": "Matrix3::new(0.0)",
-    "span": {
-      "end": {
-        "column": 65,
-        "line": 15
-      },
-      "start": {
-        "column": 5,
-        "line": 15
-      }
-    }
-  },
-  {
-    "diff": "--- crates/gneiss-rtk/src/measurements/nhc.rs\n+++ replace skew_symmetric -> Matrix3<f64> with Matrix3::from(0.0)\n@@ -7,17 +7,17 @@\n     for i in 0..3 {\n         h[(0, col + i)] = m[(1, i)];\n         h[(1, col + i)] = m[(2, i)];\n     }\n }\n \n /// Helper to generate a skew-symmetric matrix from a 3D vector\n fn skew_symmetric(v: &Vector3<f64>) -> Matrix3<f64> {\n-    Matrix3::new(0.0, -v.z, v.y, v.z, 0.0, -v.x, -v.y, v.x, 0.0)\n+    Matrix3::from(0.0) /* ~ changed by cargo-mutants ~ */\n }\n \n /// Applies Non-Holonomic Constraints (NHC) to the EKF state.\n /// This assumes the vehicle's lateral and vertical velocity in the body frame is zero.\n pub fn apply_nhc(\n     state: &mut RtkState,\n     sigma_lateral: f64,\n     sigma_vertical: f64,\n",
-    "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-    "function": {
-      "function_name": "skew_symmetric",
-      "return_type": "-> Matrix3<f64>",
-      "span": {
-        "end": {
-          "column": 2,
-          "line": 16
-        },
-        "start": {
-          "column": 1,
-          "line": 13
-        }
-      }
-    },
-    "genre": "FnValue",
-    "name": "crates/gneiss-rtk/src/measurements/nhc.rs:15:5: replace skew_symmetric -> Matrix3<f64> with Matrix3::from(0.0)",
-    "package": "gneiss-rtk",
-    "replacement": "Matrix3::from(0.0)",
-    "span": {
-      "end": {
-        "column": 65,
-        "line": 15
-      },
-      "start": {
-        "column": 5,
-        "line": 15
-      }
-    }
-  },
-  {
-    "diff": "--- crates/gneiss-rtk/src/measurements/nhc.rs\n+++ replace skew_symmetric -> Matrix3<f64> with Matrix3::from_iter([1.0])\n@@ -7,17 +7,17 @@\n     for i in 0..3 {\n         h[(0, col + i)] = m[(1, i)];\n         h[(1, col + i)] = m[(2, i)];\n     }\n }\n \n /// Helper to generate a skew-symmetric matrix from a 3D vector\n fn skew_symmetric(v: &Vector3<f64>) -> Matrix3<f64> {\n-    Matrix3::new(0.0, -v.z, v.y, v.z, 0.0, -v.x, -v.y, v.x, 0.0)\n+    Matrix3::from_iter([1.0]) /* ~ changed by cargo-mutants ~ */\n }\n \n /// Applies Non-Holonomic Constraints (NHC) to the EKF state.\n /// This assumes the vehicle's lateral and vertical velocity in the body frame is zero.\n pub fn apply_nhc(\n     state: &mut RtkState,\n     sigma_lateral: f64,\n     sigma_vertical: f64,\n",
-    "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-    "function": {
-      "function_name": "skew_symmetric",
-      "return_type": "-> Matrix3<f64>",
-      "span": {
-        "end": {
-          "column": 2,
-          "line": 16
-        },
-        "start": {
-          "column": 1,
-          "line": 13
-        }
-      }
-    },
-    "genre": "FnValue",
-    "name": "crates/gneiss-rtk/src/measurements/nhc.rs:15:5: replace skew_symmetric -> Matrix3<f64> with Matrix3::from_iter([1.0])",
-    "package": "gneiss-rtk",
-    "replacement": "Matrix3::from_iter([1.0])",
-    "span": {
-      "end": {
-        "column": 65,
-        "line": 15
-      },
-      "start": {
-        "column": 5,
-        "line": 15
-      }
-    }
-  },
-  {
-    "diff": "--- crates/gneiss-rtk/src/measurements/nhc.rs\n+++ replace skew_symmetric -> Matrix3<f64> with Matrix3::new(1.0)\n@@ -7,17 +7,17 @@\n     for i in 0..3 {\n         h[(0, col + i)] = m[(1, i)];\n         h[(1, col + i)] = m[(2, i)];\n     }\n }\n \n /// Helper to generate a skew-symmetric matrix from a 3D vector\n fn skew_symmetric(v: &Vector3<f64>) -> Matrix3<f64> {\n-    Matrix3::new(0.0, -v.z, v.y, v.z, 0.0, -v.x, -v.y, v.x, 0.0)\n+    Matrix3::new(1.0) /* ~ changed by cargo-mutants ~ */\n }\n \n /// Applies Non-Holonomic Constraints (NHC) to the EKF state.\n /// This assumes the vehicle's lateral and vertical velocity in the body frame is zero.\n pub fn apply_nhc(\n     state: &mut RtkState,\n     sigma_lateral: f64,\n     sigma_vertical: f64,\n",
-    "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-    "function": {
-      "function_name": "skew_symmetric",
-      "return_type": "-> Matrix3<f64>",
-      "span": {
-        "end": {
-          "column": 2,
-          "line": 16
-        },
-        "start": {
-          "column": 1,
-          "line": 13
-        }
-      }
-    },
-    "genre": "FnValue",
-    "name": "crates/gneiss-rtk/src/measurements/nhc.rs:15:5: replace skew_symmetric -> Matrix3<f64> with Matrix3::new(1.0)",
-    "package": "gneiss-rtk",
-    "replacement": "Matrix3::new(1.0)",
-    "span": {
-      "end": {
-        "column": 65,
-        "line": 15
-      },
-      "start": {
-        "column": 5,
-        "line": 15
-      }
-    }
-  },
-  {
-    "diff": "--- crates/gneiss-rtk/src/measurements/nhc.rs\n+++ replace skew_symmetric -> Matrix3<f64> with Matrix3::from(1.0)\n@@ -7,17 +7,17 @@\n     for i in 0..3 {\n         h[(0, col + i)] = m[(1, i)];\n         h[(1, col + i)] = m[(2, i)];\n     }\n }\n \n /// Helper to generate a skew-symmetric matrix from a 3D vector\n fn skew_symmetric(v: &Vector3<f64>) -> Matrix3<f64> {\n-    Matrix3::new(0.0, -v.z, v.y, v.z, 0.0, -v.x, -v.y, v.x, 0.0)\n+    Matrix3::from(1.0) /* ~ changed by cargo-mutants ~ */\n }\n \n /// Applies Non-Holonomic Constraints (NHC) to the EKF state.\n /// This assumes the vehicle's lateral and vertical velocity in the body frame is zero.\n pub fn apply_nhc(\n     state: &mut RtkState,\n     sigma_lateral: f64,\n     sigma_vertical: f64,\n",
-    "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-    "function": {
-      "function_name": "skew_symmetric",
-      "return_type": "-> Matrix3<f64>",
-      "span": {
-        "end": {
-          "column": 2,
-          "line": 16
-        },
-        "start": {
-          "column": 1,
-          "line": 13
-        }
-      }
-    },
-    "genre": "FnValue",
-    "name": "crates/gneiss-rtk/src/measurements/nhc.rs:15:5: replace skew_symmetric -> Matrix3<f64> with Matrix3::from(1.0)",
-    "package": "gneiss-rtk",
-    "replacement": "Matrix3::from(1.0)",
-    "span": {
-      "end": {
-        "column": 65,
-        "line": 15
-      },
-      "start": {
-        "column": 5,
-        "line": 15
-      }
-    }
-  },
-  {
-    "diff": "--- crates/gneiss-rtk/src/measurements/nhc.rs\n+++ replace skew_symmetric -> Matrix3<f64> with Matrix3::from_iter([-1.0])\n@@ -7,17 +7,17 @@\n     for i in 0..3 {\n         h[(0, col + i)] = m[(1, i)];\n         h[(1, col + i)] = m[(2, i)];\n     }\n }\n \n /// Helper to generate a skew-symmetric matrix from a 3D vector\n fn skew_symmetric(v: &Vector3<f64>) -> Matrix3<f64> {\n-    Matrix3::new(0.0, -v.z, v.y, v.z, 0.0, -v.x, -v.y, v.x, 0.0)\n+    Matrix3::from_iter([-1.0]) /* ~ changed by cargo-mutants ~ */\n }\n \n /// Applies Non-Holonomic Constraints (NHC) to the EKF state.\n /// This assumes the vehicle's lateral and vertical velocity in the body frame is zero.\n pub fn apply_nhc(\n     state: &mut RtkState,\n     sigma_lateral: f64,\n     sigma_vertical: f64,\n",
-    "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-    "function": {
-      "function_name": "skew_symmetric",
-      "return_type": "-> Matrix3<f64>",
-      "span": {
-        "end": {
-          "column": 2,
-          "line": 16
-        },
-        "start": {
-          "column": 1,
-          "line": 13
-        }
-      }
-    },
-    "genre": "FnValue",
-    "name": "crates/gneiss-rtk/src/measurements/nhc.rs:15:5: replace skew_symmetric -> Matrix3<f64> with Matrix3::from_iter([-1.0])",
-    "package": "gneiss-rtk",
-    "replacement": "Matrix3::from_iter([-1.0])",
-    "span": {
-      "end": {
-        "column": 65,
-        "line": 15
-      },
-      "start": {
-        "column": 5,
-        "line": 15
-      }
-    }
-  },
-  {
-    "diff": "--- crates/gneiss-rtk/src/measurements/nhc.rs\n+++ replace skew_symmetric -> Matrix3<f64> with Matrix3::new(-1.0)\n@@ -7,17 +7,17 @@\n     for i in 0..3 {\n         h[(0, col + i)] = m[(1, i)];\n         h[(1, col + i)] = m[(2, i)];\n     }\n }\n \n /// Helper to generate a skew-symmetric matrix from a 3D vector\n fn skew_symmetric(v: &Vector3<f64>) -> Matrix3<f64> {\n-    Matrix3::new(0.0, -v.z, v.y, v.z, 0.0, -v.x, -v.y, v.x, 0.0)\n+    Matrix3::new(-1.0) /* ~ changed by cargo-mutants ~ */\n }\n \n /// Applies Non-Holonomic Constraints (NHC) to the EKF state.\n /// This assumes the vehicle's lateral and vertical velocity in the body frame is zero.\n pub fn apply_nhc(\n     state: &mut RtkState,\n     sigma_lateral: f64,\n     sigma_vertical: f64,\n",
-    "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-    "function": {
-      "function_name": "skew_symmetric",
-      "return_type": "-> Matrix3<f64>",
-      "span": {
-        "end": {
-          "column": 2,
-          "line": 16
-        },
-        "start": {
-          "column": 1,
-          "line": 13
-        }
-      }
-    },
-    "genre": "FnValue",
-    "name": "crates/gneiss-rtk/src/measurements/nhc.rs:15:5: replace skew_symmetric -> Matrix3<f64> with Matrix3::new(-1.0)",
-    "package": "gneiss-rtk",
-    "replacement": "Matrix3::new(-1.0)",
-    "span": {
-      "end": {
-        "column": 65,
-        "line": 15
-      },
-      "start": {
-        "column": 5,
-        "line": 15
-      }
-    }
-  },
-  {
-    "diff": "--- crates/gneiss-rtk/src/measurements/nhc.rs\n+++ replace skew_symmetric -> Matrix3<f64> with Matrix3::from(-1.0)\n@@ -7,17 +7,17 @@\n     for i in 0..3 {\n         h[(0, col + i)] = m[(1, i)];\n         h[(1, col + i)] = m[(2, i)];\n     }\n }\n \n /// Helper to generate a skew-symmetric matrix from a 3D vector\n fn skew_symmetric(v: &Vector3<f64>) -> Matrix3<f64> {\n-    Matrix3::new(0.0, -v.z, v.y, v.z, 0.0, -v.x, -v.y, v.x, 0.0)\n+    Matrix3::from(-1.0) /* ~ changed by cargo-mutants ~ */\n }\n \n /// Applies Non-Holonomic Constraints (NHC) to the EKF state.\n /// This assumes the vehicle's lateral and vertical velocity in the body frame is zero.\n pub fn apply_nhc(\n     state: &mut RtkState,\n     sigma_lateral: f64,\n     sigma_vertical: f64,\n",
-    "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-    "function": {
-      "function_name": "skew_symmetric",
-      "return_type": "-> Matrix3<f64>",
-      "span": {
-        "end": {
-          "column": 2,
-          "line": 16
-        },
-        "start": {
-          "column": 1,
-          "line": 13
-        }
-      }
-    },
-    "genre": "FnValue",
-    "name": "crates/gneiss-rtk/src/measurements/nhc.rs:15:5: replace skew_symmetric -> Matrix3<f64> with Matrix3::from(-1.0)",
-    "package": "gneiss-rtk",
-    "replacement": "Matrix3::from(-1.0)",
-    "span": {
-      "end": {
-        "column": 65,
-        "line": 15
-      },
-      "start": {
-        "column": 5,
-        "line": 15
-      }
-    }
-  },
-  {
-    "diff": "--- crates/gneiss-rtk/src/measurements/nhc.rs\n+++ delete - in skew_symmetric\n@@ -7,17 +7,17 @@\n     for i in 0..3 {\n         h[(0, col + i)] = m[(1, i)];\n         h[(1, col + i)] = m[(2, i)];\n     }\n }\n \n /// Helper to generate a skew-symmetric matrix from a 3D vector\n fn skew_symmetric(v: &Vector3<f64>) -> Matrix3<f64> {\n-    Matrix3::new(0.0, -v.z, v.y, v.z, 0.0, -v.x, -v.y, v.x, 0.0)\n+    Matrix3::new(0.0,  /* ~ changed by cargo-mutants ~ */v.z, v.y, v.z, 0.0, -v.x, -v.y, v.x, 0.0)\n }\n \n /// Applies Non-Holonomic Constraints (NHC) to the EKF state.\n /// This assumes the vehicle's lateral and vertical velocity in the body frame is zero.\n pub fn apply_nhc(\n     state: &mut RtkState,\n     sigma_lateral: f64,\n     sigma_vertical: f64,\n",
-    "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-    "function": {
-      "function_name": "skew_symmetric",
-      "return_type": "-> Matrix3<f64>",
-      "span": {
-        "end": {
-          "column": 2,
-          "line": 16
-        },
-        "start": {
-          "column": 1,
-          "line": 13
-        }
-      }
-    },
-    "genre": "UnaryOperator",
-    "name": "crates/gneiss-rtk/src/measurements/nhc.rs:15:23: delete - in skew_symmetric",
-    "package": "gneiss-rtk",
-    "replacement": "",
-    "span": {
-      "end": {
-        "column": 24,
-        "line": 15
-      },
-      "start": {
-        "column": 23,
-        "line": 15
-      }
-    }
-  },
-  {
-    "diff": "--- crates/gneiss-rtk/src/measurements/nhc.rs\n+++ delete - in skew_symmetric\n@@ -7,17 +7,17 @@\n     for i in 0..3 {\n         h[(0, col + i)] = m[(1, i)];\n         h[(1, col + i)] = m[(2, i)];\n     }\n }\n \n /// Helper to generate a skew-symmetric matrix from a 3D vector\n fn skew_symmetric(v: &Vector3<f64>) -> Matrix3<f64> {\n-    Matrix3::new(0.0, -v.z, v.y, v.z, 0.0, -v.x, -v.y, v.x, 0.0)\n+    Matrix3::new(0.0, -v.z, v.y, v.z, 0.0,  /* ~ changed by cargo-mutants ~ */v.x, -v.y, v.x, 0.0)\n }\n \n /// Applies Non-Holonomic Constraints (NHC) to the EKF state.\n /// This assumes the vehicle's lateral and vertical velocity in the body frame is zero.\n pub fn apply_nhc(\n     state: &mut RtkState,\n     sigma_lateral: f64,\n     sigma_vertical: f64,\n",
-    "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-    "function": {
-      "function_name": "skew_symmetric",
-      "return_type": "-> Matrix3<f64>",
-      "span": {
-        "end": {
-          "column": 2,
-          "line": 16
-        },
-        "start": {
-          "column": 1,
-          "line": 13
-        }
-      }
-    },
-    "genre": "UnaryOperator",
-    "name": "crates/gneiss-rtk/src/measurements/nhc.rs:15:44: delete - in skew_symmetric",
-    "package": "gneiss-rtk",
-    "replacement": "",
-    "span": {
-      "end": {
-        "column": 45,
-        "line": 15
-      },
-      "start": {
-        "column": 44,
-        "line": 15
-      }
-    }
-  },
-  {
-    "diff": "--- crates/gneiss-rtk/src/measurements/nhc.rs\n+++ delete - in skew_symmetric\n@@ -7,17 +7,17 @@\n     for i in 0..3 {\n         h[(0, col + i)] = m[(1, i)];\n         h[(1, col + i)] = m[(2, i)];\n     }\n }\n \n /// Helper to generate a skew-symmetric matrix from a 3D vector\n fn skew_symmetric(v: &Vector3<f64>) -> Matrix3<f64> {\n-    Matrix3::new(0.0, -v.z, v.y, v.z, 0.0, -v.x, -v.y, v.x, 0.0)\n+    Matrix3::new(0.0, -v.z, v.y, v.z, 0.0, -v.x,  /* ~ changed by cargo-mutants ~ */v.y, v.x, 0.0)\n }\n \n /// Applies Non-Holonomic Constraints (NHC) to the EKF state.\n /// This assumes the vehicle's lateral and vertical velocity in the body frame is zero.\n pub fn apply_nhc(\n     state: &mut RtkState,\n     sigma_lateral: f64,\n     sigma_vertical: f64,\n",
-    "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-    "function": {
-      "function_name": "skew_symmetric",
-      "return_type": "-> Matrix3<f64>",
-      "span": {
-        "end": {
-          "column": 2,
-          "line": 16
-        },
-        "start": {
-          "column": 1,
-          "line": 13
-        }
-      }
-    },
-    "genre": "UnaryOperator",
-    "name": "crates/gneiss-rtk/src/measurements/nhc.rs:15:50: delete - in skew_symmetric",
-    "package": "gneiss-rtk",
-    "replacement": "",
-    "span": {
-      "end": {
-        "column": 51,
-        "line": 15
-      },
-      "start": {
-        "column": 50,
-        "line": 15
-      }
-    }
-  },
-  {
-    "diff": "--- crates/gneiss-rtk/src/measurements/nhc.rs\n+++ replace apply_nhc -> Result<(), &'static str> with Ok(())\n@@ -20,47 +20,17 @@\n pub fn apply_nhc(\n     state: &mut RtkState,\n     sigma_lateral: f64,\n     sigma_vertical: f64,\n     imu_to_nhc_lever_arm: &[f64; 3],\n     omega_b: &Vector3<f64>,\n     tuning: &crate::engine::config::EkfTuningConfig\n ) -> Result<(), &'static str> {\n-    let r_e_b = state.attitude.to_rotation_matrix().transpose();\n-    \n-    // Convert IMU velocity and NHC lever arm to vehicle frame\n-    let v_b_imu = r_e_b * state.velocity;\n-    let l_b = Vector3::from_column_slice(imu_to_nhc_lever_arm);\n-    \n-    // Velocity at NHC point in vehicle frame (v_v = v_b_imu + omega x l_b)\n-    let v_v = v_b_imu + omega_b.cross(&l_b);\n-    let z = DVector::from_column_slice(&[-v_v.y, -v_v.z]);\n-    \n-    let mut h = DMatrix::<f64>::zeros(2, state.covariance.nrows());\n-    \n-    // Jacobian w.r.t velocity in ECEF (dr_dv = R_e_b)\n-    assign_jacobian_block(&mut h, 3, r_e_b.matrix().clone());\n-    \n-    // Jacobian w.r.t attitude (dr_dpsi = [v_b_imu x] * R_e_b)\n-    let v_b_skew = skew_symmetric(&v_b_imu);\n-    assign_jacobian_block(&mut h, 6, v_b_skew * r_e_b.matrix());\n-    \n-    // Jacobian w.r.t gyro bias (dr_dbg = [l_b x])\n-    let l_b_skew = skew_symmetric(&l_b);\n-    assign_jacobian_block(&mut h, 12, l_b_skew);\n-\n-    let r = DMatrix::from_diagonal(&DVector::from_column_slice(&[\n-        sigma_lateral * sigma_lateral,\n-        sigma_vertical * sigma_vertical\n-    ]));\n-\n-    updater::update::<crate::engine::updater_math::TightCoupling>(state, &z, &h, &r, 1e9, None, tuning)\n-        .map_err(|_| \"NHC update failed\")?;\n-    Ok(())\n+    Ok(()) /* ~ changed by cargo-mutants ~ */\n }\n \n pub fn apply_zupt(state: &mut RtkState, sigma: f64, tuning: &crate::engine::config::EkfTuningConfig) -> Result<(), &'static str> {\n     let z = DVector::from_column_slice(&[-state.velocity.x, -state.velocity.y, -state.velocity.z]);\n     let n = state.covariance.nrows();\n     let mut h = DMatrix::<f64>::zeros(3, n);\n     for i in 0..3 { h[(i, 3 + i)] = 1.0; }\n     \n",
-    "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-    "function": {
-      "function_name": "apply_nhc",
-      "return_type": "-> Result<(), &'static str>",
-      "span": {
-        "end": {
-          "column": 2,
-          "line": 59
-        },
-        "start": {
-          "column": 1,
-          "line": 18
-        }
-      }
-    },
-    "genre": "FnValue",
-    "name": "crates/gneiss-rtk/src/measurements/nhc.rs:28:5: replace apply_nhc -> Result<(), &'static str> with Ok(())",
-    "package": "gneiss-rtk",
-    "replacement": "Ok(())",
-    "span": {
-      "end": {
-        "column": 11,
-        "line": 58
-      },
-      "start": {
-        "column": 5,
-        "line": 28
-      }
-    }
-  },
-  {
-    "diff": "--- crates/gneiss-rtk/src/measurements/nhc.rs\n+++ replace * with + in apply_nhc\n@@ -23,17 +23,17 @@\n     sigma_vertical: f64,\n     imu_to_nhc_lever_arm: &[f64; 3],\n     omega_b: &Vector3<f64>,\n     tuning: &crate::engine::config::EkfTuningConfig\n ) -> Result<(), &'static str> {\n     let r_e_b = state.attitude.to_rotation_matrix().transpose();\n     \n     // Convert IMU velocity and NHC lever arm to vehicle frame\n-    let v_b_imu = r_e_b * state.velocity;\n+    let v_b_imu = r_e_b + /* ~ changed by cargo-mutants ~ */ state.velocity;\n     let l_b = Vector3::from_column_slice(imu_to_nhc_lever_arm);\n     \n     // Velocity at NHC point in vehicle frame (v_v = v_b_imu + omega x l_b)\n     let v_v = v_b_imu + omega_b.cross(&l_b);\n     let z = DVector::from_column_slice(&[-v_v.y, -v_v.z]);\n     \n     let mut h = DMatrix::<f64>::zeros(2, state.covariance.nrows());\n     \n",
-    "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-    "function": {
-      "function_name": "apply_nhc",
-      "return_type": "-> Result<(), &'static str>",
-      "span": {
-        "end": {
-          "column": 2,
-          "line": 59
-        },
-        "start": {
-          "column": 1,
-          "line": 18
-        }
-      }
-    },
-    "genre": "BinaryOperator",
-    "name": "crates/gneiss-rtk/src/measurements/nhc.rs:31:25: replace * with + in apply_nhc",
-    "package": "gneiss-rtk",
-    "replacement": "+",
-    "span": {
-      "end": {
-        "column": 26,
-        "line": 31
-      },
-      "start": {
-        "column": 25,
-        "line": 31
-      }
-    }
-  },
-  {
-    "diff": "--- crates/gneiss-rtk/src/measurements/nhc.rs\n+++ replace * with / in apply_nhc\n@@ -23,17 +23,17 @@\n     sigma_vertical: f64,\n     imu_to_nhc_lever_arm: &[f64; 3],\n     omega_b: &Vector3<f64>,\n     tuning: &crate::engine::config::EkfTuningConfig\n ) -> Result<(), &'static str> {\n     let r_e_b = state.attitude.to_rotation_matrix().transpose();\n     \n     // Convert IMU velocity and NHC lever arm to vehicle frame\n-    let v_b_imu = r_e_b * state.velocity;\n+    let v_b_imu = r_e_b / /* ~ changed by cargo-mutants ~ */ state.velocity;\n     let l_b = Vector3::from_column_slice(imu_to_nhc_lever_arm);\n     \n     // Velocity at NHC point in vehicle frame (v_v = v_b_imu + omega x l_b)\n     let v_v = v_b_imu + omega_b.cross(&l_b);\n     let z = DVector::from_column_slice(&[-v_v.y, -v_v.z]);\n     \n     let mut h = DMatrix::<f64>::zeros(2, state.covariance.nrows());\n     \n",
-    "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-    "function": {
-      "function_name": "apply_nhc",
-      "return_type": "-> Result<(), &'static str>",
-      "span": {
-        "end": {
-          "column": 2,
-          "line": 59
-        },
-        "start": {
-          "column": 1,
-          "line": 18
-        }
-      }
-    },
-    "genre": "BinaryOperator",
-    "name": "crates/gneiss-rtk/src/measurements/nhc.rs:31:25: replace * with / in apply_nhc",
-    "package": "gneiss-rtk",
-    "replacement": "/",
-    "span": {
-      "end": {
-        "column": 26,
-        "line": 31
-      },
-      "start": {
-        "column": 25,
-        "line": 31
-      }
-    }
-  },
-  {
-    "diff": "--- crates/gneiss-rtk/src/measurements/nhc.rs\n+++ replace + with - in apply_nhc\n@@ -27,17 +27,17 @@\n ) -> Result<(), &'static str> {\n     let r_e_b = state.attitude.to_rotation_matrix().transpose();\n     \n     // Convert IMU velocity and NHC lever arm to vehicle frame\n     let v_b_imu = r_e_b * state.velocity;\n     let l_b = Vector3::from_column_slice(imu_to_nhc_lever_arm);\n     \n     // Velocity at NHC point in vehicle frame (v_v = v_b_imu + omega x l_b)\n-    let v_v = v_b_imu + omega_b.cross(&l_b);\n+    let v_v = v_b_imu - /* ~ changed by cargo-mutants ~ */ omega_b.cross(&l_b);\n     let z = DVector::from_column_slice(&[-v_v.y, -v_v.z]);\n     \n     let mut h = DMatrix::<f64>::zeros(2, state.covariance.nrows());\n     \n     // Jacobian w.r.t velocity in ECEF (dr_dv = R_e_b)\n     assign_jacobian_block(&mut h, 3, r_e_b.matrix().clone());\n     \n     // Jacobian w.r.t attitude (dr_dpsi = [v_b_imu x] * R_e_b)\n",
-    "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-    "function": {
-      "function_name": "apply_nhc",
-      "return_type": "-> Result<(), &'static str>",
-      "span": {
-        "end": {
-          "column": 2,
-          "line": 59
-        },
-        "start": {
-          "column": 1,
-          "line": 18
-        }
-      }
-    },
-    "genre": "BinaryOperator",
-    "name": "crates/gneiss-rtk/src/measurements/nhc.rs:35:23: replace + with - in apply_nhc",
-    "package": "gneiss-rtk",
-    "replacement": "-",
-    "span": {
-      "end": {
-        "column": 24,
-        "line": 35
-      },
-      "start": {
-        "column": 23,
-        "line": 35
-      }
-    }
-  },
-  {
-    "diff": "--- crates/gneiss-rtk/src/measurements/nhc.rs\n+++ replace + with * in apply_nhc\n@@ -27,17 +27,17 @@\n ) -> Result<(), &'static str> {\n     let r_e_b = state.attitude.to_rotation_matrix().transpose();\n     \n     // Convert IMU velocity and NHC lever arm to vehicle frame\n     let v_b_imu = r_e_b * state.velocity;\n     let l_b = Vector3::from_column_slice(imu_to_nhc_lever_arm);\n     \n     // Velocity at NHC point in vehicle frame (v_v = v_b_imu + omega x l_b)\n-    let v_v = v_b_imu + omega_b.cross(&l_b);\n+    let v_v = v_b_imu * /* ~ changed by cargo-mutants ~ */ omega_b.cross(&l_b);\n     let z = DVector::from_column_slice(&[-v_v.y, -v_v.z]);\n     \n     let mut h = DMatrix::<f64>::zeros(2, state.covariance.nrows());\n     \n     // Jacobian w.r.t velocity in ECEF (dr_dv = R_e_b)\n     assign_jacobian_block(&mut h, 3, r_e_b.matrix().clone());\n     \n     // Jacobian w.r.t attitude (dr_dpsi = [v_b_imu x] * R_e_b)\n",
-    "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-    "function": {
-      "function_name": "apply_nhc",
-      "return_type": "-> Result<(), &'static str>",
-      "span": {
-        "end": {
-          "column": 2,
-          "line": 59
-        },
-        "start": {
-          "column": 1,
-          "line": 18
-        }
-      }
-    },
-    "genre": "BinaryOperator",
-    "name": "crates/gneiss-rtk/src/measurements/nhc.rs:35:23: replace + with * in apply_nhc",
-    "package": "gneiss-rtk",
-    "replacement": "*",
-    "span": {
-      "end": {
-        "column": 24,
-        "line": 35
-      },
-      "start": {
-        "column": 23,
-        "line": 35
-      }
-    }
-  },
-  {
-    "diff": "--- crates/gneiss-rtk/src/measurements/nhc.rs\n+++ delete - in apply_nhc\n@@ -28,17 +28,17 @@\n     let r_e_b = state.attitude.to_rotation_matrix().transpose();\n     \n     // Convert IMU velocity and NHC lever arm to vehicle frame\n     let v_b_imu = r_e_b * state.velocity;\n     let l_b = Vector3::from_column_slice(imu_to_nhc_lever_arm);\n     \n     // Velocity at NHC point in vehicle frame (v_v = v_b_imu + omega x l_b)\n     let v_v = v_b_imu + omega_b.cross(&l_b);\n-    let z = DVector::from_column_slice(&[-v_v.y, -v_v.z]);\n+    let z = DVector::from_column_slice(&[ /* ~ changed by cargo-mutants ~ */v_v.y, -v_v.z]);\n     \n     let mut h = DMatrix::<f64>::zeros(2, state.covariance.nrows());\n     \n     // Jacobian w.r.t velocity in ECEF (dr_dv = R_e_b)\n     assign_jacobian_block(&mut h, 3, r_e_b.matrix().clone());\n     \n     // Jacobian w.r.t attitude (dr_dpsi = [v_b_imu x] * R_e_b)\n     let v_b_skew = skew_symmetric(&v_b_imu);\n",
-    "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-    "function": {
-      "function_name": "apply_nhc",
-      "return_type": "-> Result<(), &'static str>",
-      "span": {
-        "end": {
-          "column": 2,
-          "line": 59
-        },
-        "start": {
-          "column": 1,
-          "line": 18
-        }
-      }
-    },
-    "genre": "UnaryOperator",
-    "name": "crates/gneiss-rtk/src/measurements/nhc.rs:36:42: delete - in apply_nhc",
-    "package": "gneiss-rtk",
-    "replacement": "",
-    "span": {
-      "end": {
-        "column": 43,
-        "line": 36
-      },
-      "start": {
-        "column": 42,
-        "line": 36
-      }
-    }
-  },
-  {
-    "diff": "--- crates/gneiss-rtk/src/measurements/nhc.rs\n+++ delete - in apply_nhc\n@@ -28,17 +28,17 @@\n     let r_e_b = state.attitude.to_rotation_matrix().transpose();\n     \n     // Convert IMU velocity and NHC lever arm to vehicle frame\n     let v_b_imu = r_e_b * state.velocity;\n     let l_b = Vector3::from_column_slice(imu_to_nhc_lever_arm);\n     \n     // Velocity at NHC point in vehicle frame (v_v = v_b_imu + omega x l_b)\n     let v_v = v_b_imu + omega_b.cross(&l_b);\n-    let z = DVector::from_column_slice(&[-v_v.y, -v_v.z]);\n+    let z = DVector::from_column_slice(&[-v_v.y,  /* ~ changed by cargo-mutants ~ */v_v.z]);\n     \n     let mut h = DMatrix::<f64>::zeros(2, state.covariance.nrows());\n     \n     // Jacobian w.r.t velocity in ECEF (dr_dv = R_e_b)\n     assign_jacobian_block(&mut h, 3, r_e_b.matrix().clone());\n     \n     // Jacobian w.r.t attitude (dr_dpsi = [v_b_imu x] * R_e_b)\n     let v_b_skew = skew_symmetric(&v_b_imu);\n",
-    "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-    "function": {
-      "function_name": "apply_nhc",
-      "return_type": "-> Result<(), &'static str>",
-      "span": {
-        "end": {
-          "column": 2,
-          "line": 59
-        },
-        "start": {
-          "column": 1,
-          "line": 18
-        }
-      }
-    },
-    "genre": "UnaryOperator",
-    "name": "crates/gneiss-rtk/src/measurements/nhc.rs:36:50: delete - in apply_nhc",
-    "package": "gneiss-rtk",
-    "replacement": "",
-    "span": {
-      "end": {
-        "column": 51,
-        "line": 36
-      },
-      "start": {
-        "column": 50,
-        "line": 36
-      }
-    }
-  },
-  {
-    "diff": "--- crates/gneiss-rtk/src/measurements/nhc.rs\n+++ replace * with + in apply_nhc\n@@ -37,17 +37,17 @@\n     \n     let mut h = DMatrix::<f64>::zeros(2, state.covariance.nrows());\n     \n     // Jacobian w.r.t velocity in ECEF (dr_dv = R_e_b)\n     assign_jacobian_block(&mut h, 3, r_e_b.matrix().clone());\n     \n     // Jacobian w.r.t attitude (dr_dpsi = [v_b_imu x] * R_e_b)\n     let v_b_skew = skew_symmetric(&v_b_imu);\n-    assign_jacobian_block(&mut h, 6, v_b_skew * r_e_b.matrix());\n+    assign_jacobian_block(&mut h, 6, v_b_skew + /* ~ changed by cargo-mutants ~ */ r_e_b.matrix());\n     \n     // Jacobian w.r.t gyro bias (dr_dbg = [l_b x])\n     let l_b_skew = skew_symmetric(&l_b);\n     assign_jacobian_block(&mut h, 12, l_b_skew);\n \n     let r = DMatrix::from_diagonal(&DVector::from_column_slice(&[\n         sigma_lateral * sigma_lateral,\n         sigma_vertical * sigma_vertical\n",
-    "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-    "function": {
-      "function_name": "apply_nhc",
-      "return_type": "-> Result<(), &'static str>",
-      "span": {
-        "end": {
-          "column": 2,
-          "line": 59
-        },
-        "start": {
-          "column": 1,
-          "line": 18
-        }
-      }
-    },
-    "genre": "BinaryOperator",
-    "name": "crates/gneiss-rtk/src/measurements/nhc.rs:45:47: replace * with + in apply_nhc",
-    "package": "gneiss-rtk",
-    "replacement": "+",
-    "span": {
-      "end": {
-        "column": 48,
-        "line": 45
-      },
-      "start": {
-        "column": 47,
-        "line": 45
-      }
-    }
-  },
-  {
-    "diff": "--- crates/gneiss-rtk/src/measurements/nhc.rs\n+++ replace * with / in apply_nhc\n@@ -37,17 +37,17 @@\n     \n     let mut h = DMatrix::<f64>::zeros(2, state.covariance.nrows());\n     \n     // Jacobian w.r.t velocity in ECEF (dr_dv = R_e_b)\n     assign_jacobian_block(&mut h, 3, r_e_b.matrix().clone());\n     \n     // Jacobian w.r.t attitude (dr_dpsi = [v_b_imu x] * R_e_b)\n     let v_b_skew = skew_symmetric(&v_b_imu);\n-    assign_jacobian_block(&mut h, 6, v_b_skew * r_e_b.matrix());\n+    assign_jacobian_block(&mut h, 6, v_b_skew / /* ~ changed by cargo-mutants ~ */ r_e_b.matrix());\n     \n     // Jacobian w.r.t gyro bias (dr_dbg = [l_b x])\n     let l_b_skew = skew_symmetric(&l_b);\n     assign_jacobian_block(&mut h, 12, l_b_skew);\n \n     let r = DMatrix::from_diagonal(&DVector::from_column_slice(&[\n         sigma_lateral * sigma_lateral,\n         sigma_vertical * sigma_vertical\n",
-    "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-    "function": {
-      "function_name": "apply_nhc",
-      "return_type": "-> Result<(), &'static str>",
-      "span": {
-        "end": {
-          "column": 2,
-          "line": 59
-        },
-        "start": {
-          "column": 1,
-          "line": 18
-        }
-      }
-    },
-    "genre": "BinaryOperator",
-    "name": "crates/gneiss-rtk/src/measurements/nhc.rs:45:47: replace * with / in apply_nhc",
-    "package": "gneiss-rtk",
-    "replacement": "/",
-    "span": {
-      "end": {
-        "column": 48,
-        "line": 45
-      },
-      "start": {
-        "column": 47,
-        "line": 45
-      }
-    }
-  },
-  {
-    "diff": "--- crates/gneiss-rtk/src/measurements/nhc.rs\n+++ replace * with + in apply_nhc\n@@ -44,17 +44,17 @@\n     let v_b_skew = skew_symmetric(&v_b_imu);\n     assign_jacobian_block(&mut h, 6, v_b_skew * r_e_b.matrix());\n     \n     // Jacobian w.r.t gyro bias (dr_dbg = [l_b x])\n     let l_b_skew = skew_symmetric(&l_b);\n     assign_jacobian_block(&mut h, 12, l_b_skew);\n \n     let r = DMatrix::from_diagonal(&DVector::from_column_slice(&[\n-        sigma_lateral * sigma_lateral,\n+        sigma_lateral + /* ~ changed by cargo-mutants ~ */ sigma_lateral,\n         sigma_vertical * sigma_vertical\n     ]));\n \n     updater::update::<crate::engine::updater_math::TightCoupling>(state, &z, &h, &r, 1e9, None, tuning)\n         .map_err(|_| \"NHC update failed\")?;\n     Ok(())\n }\n \n",
-    "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-    "function": {
-      "function_name": "apply_nhc",
-      "return_type": "-> Result<(), &'static str>",
-      "span": {
-        "end": {
-          "column": 2,
-          "line": 59
-        },
-        "start": {
-          "column": 1,
-          "line": 18
-        }
-      }
-    },
-    "genre": "BinaryOperator",
-    "name": "crates/gneiss-rtk/src/measurements/nhc.rs:52:23: replace * with + in apply_nhc",
-    "package": "gneiss-rtk",
-    "replacement": "+",
-    "span": {
-      "end": {
-        "column": 24,
-        "line": 52
-      },
-      "start": {
-        "column": 23,
-        "line": 52
-      }
-    }
-  },
-  {
-    "diff": "--- crates/gneiss-rtk/src/measurements/nhc.rs\n+++ replace * with / in apply_nhc\n@@ -44,17 +44,17 @@\n     let v_b_skew = skew_symmetric(&v_b_imu);\n     assign_jacobian_block(&mut h, 6, v_b_skew * r_e_b.matrix());\n     \n     // Jacobian w.r.t gyro bias (dr_dbg = [l_b x])\n     let l_b_skew = skew_symmetric(&l_b);\n     assign_jacobian_block(&mut h, 12, l_b_skew);\n \n     let r = DMatrix::from_diagonal(&DVector::from_column_slice(&[\n-        sigma_lateral * sigma_lateral,\n+        sigma_lateral / /* ~ changed by cargo-mutants ~ */ sigma_lateral,\n         sigma_vertical * sigma_vertical\n     ]));\n \n     updater::update::<crate::engine::updater_math::TightCoupling>(state, &z, &h, &r, 1e9, None, tuning)\n         .map_err(|_| \"NHC update failed\")?;\n     Ok(())\n }\n \n",
-    "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-    "function": {
-      "function_name": "apply_nhc",
-      "return_type": "-> Result<(), &'static str>",
-      "span": {
-        "end": {
-          "column": 2,
-          "line": 59
-        },
-        "start": {
-          "column": 1,
-          "line": 18
-        }
-      }
-    },
-    "genre": "BinaryOperator",
-    "name": "crates/gneiss-rtk/src/measurements/nhc.rs:52:23: replace * with / in apply_nhc",
-    "package": "gneiss-rtk",
-    "replacement": "/",
-    "span": {
-      "end": {
-        "column": 24,
-        "line": 52
-      },
-      "start": {
-        "column": 23,
-        "line": 52
-      }
-    }
-  },
-  {
-    "diff": "--- crates/gneiss-rtk/src/measurements/nhc.rs\n+++ replace * with + in apply_nhc\n@@ -45,17 +45,17 @@\n     assign_jacobian_block(&mut h, 6, v_b_skew * r_e_b.matrix());\n     \n     // Jacobian w.r.t gyro bias (dr_dbg = [l_b x])\n     let l_b_skew = skew_symmetric(&l_b);\n     assign_jacobian_block(&mut h, 12, l_b_skew);\n \n     let r = DMatrix::from_diagonal(&DVector::from_column_slice(&[\n         sigma_lateral * sigma_lateral,\n-        sigma_vertical * sigma_vertical\n+        sigma_vertical + /* ~ changed by cargo-mutants ~ */ sigma_vertical\n     ]));\n \n     updater::update::<crate::engine::updater_math::TightCoupling>(state, &z, &h, &r, 1e9, None, tuning)\n         .map_err(|_| \"NHC update failed\")?;\n     Ok(())\n }\n \n pub fn apply_zupt(state: &mut RtkState, sigma: f64, tuning: &crate::engine::config::EkfTuningConfig) -> Result<(), &'static str> {\n",
-    "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-    "function": {
-      "function_name": "apply_nhc",
-      "return_type": "-> Result<(), &'static str>",
-      "span": {
-        "end": {
-          "column": 2,
-          "line": 59
-        },
-        "start": {
-          "column": 1,
-          "line": 18
-        }
-      }
-    },
-    "genre": "BinaryOperator",
-    "name": "crates/gneiss-rtk/src/measurements/nhc.rs:53:24: replace * with + in apply_nhc",
-    "package": "gneiss-rtk",
-    "replacement": "+",
-    "span": {
-      "end": {
-        "column": 25,
-        "line": 53
-      },
-      "start": {
-        "column": 24,
-        "line": 53
-      }
-    }
-  },
-  {
-    "diff": "--- crates/gneiss-rtk/src/measurements/nhc.rs\n+++ replace * with / in apply_nhc\n@@ -45,17 +45,17 @@\n     assign_jacobian_block(&mut h, 6, v_b_skew * r_e_b.matrix());\n     \n     // Jacobian w.r.t gyro bias (dr_dbg = [l_b x])\n     let l_b_skew = skew_symmetric(&l_b);\n     assign_jacobian_block(&mut h, 12, l_b_skew);\n \n     let r = DMatrix::from_diagonal(&DVector::from_column_slice(&[\n         sigma_lateral * sigma_lateral,\n-        sigma_vertical * sigma_vertical\n+        sigma_vertical / /* ~ changed by cargo-mutants ~ */ sigma_vertical\n     ]));\n \n     updater::update::<crate::engine::updater_math::TightCoupling>(state, &z, &h, &r, 1e9, None, tuning)\n         .map_err(|_| \"NHC update failed\")?;\n     Ok(())\n }\n \n pub fn apply_zupt(state: &mut RtkState, sigma: f64, tuning: &crate::engine::config::EkfTuningConfig) -> Result<(), &'static str> {\n",
-    "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-    "function": {
-      "function_name": "apply_nhc",
-      "return_type": "-> Result<(), &'static str>",
-      "span": {
-        "end": {
-          "column": 2,
-          "line": 59
-        },
-        "start": {
-          "column": 1,
-          "line": 18
-        }
-      }
-    },
-    "genre": "BinaryOperator",
-    "name": "crates/gneiss-rtk/src/measurements/nhc.rs:53:24: replace * with / in apply_nhc",
-    "package": "gneiss-rtk",
-    "replacement": "/",
-    "span": {
-      "end": {
-        "column": 25,
-        "line": 53
-      },
-      "start": {
-        "column": 24,
-        "line": 53
-      }
-    }
-  },
-  {
-    "diff": "--- crates/gneiss-rtk/src/measurements/nhc.rs\n+++ replace apply_zupt -> Result<(), &'static str> with Ok(())\n@@ -54,24 +54,17 @@\n     ]));\n \n     updater::update::<crate::engine::updater_math::TightCoupling>(state, &z, &h, &r, 1e9, None, tuning)\n         .map_err(|_| \"NHC update failed\")?;\n     Ok(())\n }\n \n pub fn apply_zupt(state: &mut RtkState, sigma: f64, tuning: &crate::engine::config::EkfTuningConfig) -> Result<(), &'static str> {\n-    let z = DVector::from_column_slice(&[-state.velocity.x, -state.velocity.y, -state.velocity.z]);\n-    let n = state.covariance.nrows();\n-    let mut h = DMatrix::<f64>::zeros(3, n);\n-    for i in 0..3 { h[(i, 3 + i)] = 1.0; }\n-    \n-    let r = DMatrix::from_diagonal(&DVector::from_element(3, sigma * sigma));\n-    updater::update::<crate::engine::updater_math::TightCoupling>(state, &z, &h, &r, 1e9, None, tuning).map_err(|_| \"ZUPT update failed\")?;\n-    Ok(())}\n+    Ok(()) /* ~ changed by cargo-mutants ~ */}\n \n #[cfg(test)]\n mod tests {\n     use super::*;\n     use crate::filter::RtkState;\n     use gneiss_core::time::GpsTime;\n     use nalgebra::{Vector3, UnitQuaternion};\n \n",
-    "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-    "function": {
-      "function_name": "apply_zupt",
-      "return_type": "-> Result<(), &'static str>",
-      "span": {
-        "end": {
-          "column": 12,
-          "line": 69
-        },
-        "start": {
-          "column": 1,
-          "line": 61
-        }
-      }
-    },
-    "genre": "FnValue",
-    "name": "crates/gneiss-rtk/src/measurements/nhc.rs:62:5: replace apply_zupt -> Result<(), &'static str> with Ok(())",
-    "package": "gneiss-rtk",
-    "replacement": "Ok(())",
-    "span": {
-      "end": {
-        "column": 11,
-        "line": 69
-      },
-      "start": {
-        "column": 5,
-        "line": 62
-      }
-    }
-  },
-  {
-    "diff": "--- crates/gneiss-rtk/src/measurements/nhc.rs\n+++ delete - in apply_zupt\n@@ -54,17 +54,17 @@\n     ]));\n \n     updater::update::<crate::engine::updater_math::TightCoupling>(state, &z, &h, &r, 1e9, None, tuning)\n         .map_err(|_| \"NHC update failed\")?;\n     Ok(())\n }\n \n pub fn apply_zupt(state: &mut RtkState, sigma: f64, tuning: &crate::engine::config::EkfTuningConfig) -> Result<(), &'static str> {\n-    let z = DVector::from_column_slice(&[-state.velocity.x, -state.velocity.y, -state.velocity.z]);\n+    let z = DVector::from_column_slice(&[ /* ~ changed by cargo-mutants ~ */state.velocity.x, -state.velocity.y, -state.velocity.z]);\n     let n = state.covariance.nrows();\n     let mut h = DMatrix::<f64>::zeros(3, n);\n     for i in 0..3 { h[(i, 3 + i)] = 1.0; }\n     \n     let r = DMatrix::from_diagonal(&DVector::from_element(3, sigma * sigma));\n     updater::update::<crate::engine::updater_math::TightCoupling>(state, &z, &h, &r, 1e9, None, tuning).map_err(|_| \"ZUPT update failed\")?;\n     Ok(())}\n \n",
-    "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-    "function": {
-      "function_name": "apply_zupt",
-      "return_type": "-> Result<(), &'static str>",
-      "span": {
-        "end": {
-          "column": 12,
-          "line": 69
-        },
-        "start": {
-          "column": 1,
-          "line": 61
-        }
-      }
-    },
-    "genre": "UnaryOperator",
-    "name": "crates/gneiss-rtk/src/measurements/nhc.rs:62:42: delete - in apply_zupt",
-    "package": "gneiss-rtk",
-    "replacement": "",
-    "span": {
-      "end": {
-        "column": 43,
-        "line": 62
-      },
-      "start": {
-        "column": 42,
-        "line": 62
-      }
-    }
-  },
-  {
-    "diff": "--- crates/gneiss-rtk/src/measurements/nhc.rs\n+++ delete - in apply_zupt\n@@ -54,17 +54,17 @@\n     ]));\n \n     updater::update::<crate::engine::updater_math::TightCoupling>(state, &z, &h, &r, 1e9, None, tuning)\n         .map_err(|_| \"NHC update failed\")?;\n     Ok(())\n }\n \n pub fn apply_zupt(state: &mut RtkState, sigma: f64, tuning: &crate::engine::config::EkfTuningConfig) -> Result<(), &'static str> {\n-    let z = DVector::from_column_slice(&[-state.velocity.x, -state.velocity.y, -state.velocity.z]);\n+    let z = DVector::from_column_slice(&[-state.velocity.x,  /* ~ changed by cargo-mutants ~ */state.velocity.y, -state.velocity.z]);\n     let n = state.covariance.nrows();\n     let mut h = DMatrix::<f64>::zeros(3, n);\n     for i in 0..3 { h[(i, 3 + i)] = 1.0; }\n     \n     let r = DMatrix::from_diagonal(&DVector::from_element(3, sigma * sigma));\n     updater::update::<crate::engine::updater_math::TightCoupling>(state, &z, &h, &r, 1e9, None, tuning).map_err(|_| \"ZUPT update failed\")?;\n     Ok(())}\n \n",
-    "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-    "function": {
-      "function_name": "apply_zupt",
-      "return_type": "-> Result<(), &'static str>",
-      "span": {
-        "end": {
-          "column": 12,
-          "line": 69
-        },
-        "start": {
-          "column": 1,
-          "line": 61
-        }
-      }
-    },
-    "genre": "UnaryOperator",
-    "name": "crates/gneiss-rtk/src/measurements/nhc.rs:62:61: delete - in apply_zupt",
-    "package": "gneiss-rtk",
-    "replacement": "",
-    "span": {
-      "end": {
-        "column": 62,
-        "line": 62
-      },
-      "start": {
-        "column": 61,
-        "line": 62
-      }
-    }
-  },
-  {
-    "diff": "--- crates/gneiss-rtk/src/measurements/nhc.rs\n+++ delete - in apply_zupt\n@@ -54,17 +54,17 @@\n     ]));\n \n     updater::update::<crate::engine::updater_math::TightCoupling>(state, &z, &h, &r, 1e9, None, tuning)\n         .map_err(|_| \"NHC update failed\")?;\n     Ok(())\n }\n \n pub fn apply_zupt(state: &mut RtkState, sigma: f64, tuning: &crate::engine::config::EkfTuningConfig) -> Result<(), &'static str> {\n-    let z = DVector::from_column_slice(&[-state.velocity.x, -state.velocity.y, -state.velocity.z]);\n+    let z = DVector::from_column_slice(&[-state.velocity.x, -state.velocity.y,  /* ~ changed by cargo-mutants ~ */state.velocity.z]);\n     let n = state.covariance.nrows();\n     let mut h = DMatrix::<f64>::zeros(3, n);\n     for i in 0..3 { h[(i, 3 + i)] = 1.0; }\n     \n     let r = DMatrix::from_diagonal(&DVector::from_element(3, sigma * sigma));\n     updater::update::<crate::engine::updater_math::TightCoupling>(state, &z, &h, &r, 1e9, None, tuning).map_err(|_| \"ZUPT update failed\")?;\n     Ok(())}\n \n",
-    "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-    "function": {
-      "function_name": "apply_zupt",
-      "return_type": "-> Result<(), &'static str>",
-      "span": {
-        "end": {
-          "column": 12,
-          "line": 69
-        },
-        "start": {
-          "column": 1,
-          "line": 61
-        }
-      }
-    },
-    "genre": "UnaryOperator",
-    "name": "crates/gneiss-rtk/src/measurements/nhc.rs:62:80: delete - in apply_zupt",
-    "package": "gneiss-rtk",
-    "replacement": "",
-    "span": {
-      "end": {
-        "column": 81,
-        "line": 62
-      },
-      "start": {
-        "column": 80,
-        "line": 62
-      }
-    }
-  },
-  {
-    "diff": "--- crates/gneiss-rtk/src/measurements/nhc.rs\n+++ replace + with - in apply_zupt\n@@ -57,17 +57,17 @@\n         .map_err(|_| \"NHC update failed\")?;\n     Ok(())\n }\n \n pub fn apply_zupt(state: &mut RtkState, sigma: f64, tuning: &crate::engine::config::EkfTuningConfig) -> Result<(), &'static str> {\n     let z = DVector::from_column_slice(&[-state.velocity.x, -state.velocity.y, -state.velocity.z]);\n     let n = state.covariance.nrows();\n     let mut h = DMatrix::<f64>::zeros(3, n);\n-    for i in 0..3 { h[(i, 3 + i)] = 1.0; }\n+    for i in 0..3 { h[(i, 3 - /* ~ changed by cargo-mutants ~ */ i)] = 1.0; }\n     \n     let r = DMatrix::from_diagonal(&DVector::from_element(3, sigma * sigma));\n     updater::update::<crate::engine::updater_math::TightCoupling>(state, &z, &h, &r, 1e9, None, tuning).map_err(|_| \"ZUPT update failed\")?;\n     Ok(())}\n \n #[cfg(test)]\n mod tests {\n     use super::*;\n",
-    "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-    "function": {
-      "function_name": "apply_zupt",
-      "return_type": "-> Result<(), &'static str>",
-      "span": {
-        "end": {
-          "column": 12,
-          "line": 69
-        },
-        "start": {
-          "column": 1,
-          "line": 61
-        }
-      }
-    },
-    "genre": "BinaryOperator",
-    "name": "crates/gneiss-rtk/src/measurements/nhc.rs:65:29: replace + with - in apply_zupt",
-    "package": "gneiss-rtk",
-    "replacement": "-",
-    "span": {
-      "end": {
-        "column": 30,
-        "line": 65
-      },
-      "start": {
-        "column": 29,
-        "line": 65
-      }
-    }
-  },
-  {
-    "diff": "--- crates/gneiss-rtk/src/measurements/nhc.rs\n+++ replace + with * in apply_zupt\n@@ -57,17 +57,17 @@\n         .map_err(|_| \"NHC update failed\")?;\n     Ok(())\n }\n \n pub fn apply_zupt(state: &mut RtkState, sigma: f64, tuning: &crate::engine::config::EkfTuningConfig) -> Result<(), &'static str> {\n     let z = DVector::from_column_slice(&[-state.velocity.x, -state.velocity.y, -state.velocity.z]);\n     let n = state.covariance.nrows();\n     let mut h = DMatrix::<f64>::zeros(3, n);\n-    for i in 0..3 { h[(i, 3 + i)] = 1.0; }\n+    for i in 0..3 { h[(i, 3 * /* ~ changed by cargo-mutants ~ */ i)] = 1.0; }\n     \n     let r = DMatrix::from_diagonal(&DVector::from_element(3, sigma * sigma));\n     updater::update::<crate::engine::updater_math::TightCoupling>(state, &z, &h, &r, 1e9, None, tuning).map_err(|_| \"ZUPT update failed\")?;\n     Ok(())}\n \n #[cfg(test)]\n mod tests {\n     use super::*;\n",
-    "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-    "function": {
-      "function_name": "apply_zupt",
-      "return_type": "-> Result<(), &'static str>",
-      "span": {
-        "end": {
-          "column": 12,
-          "line": 69
-        },
-        "start": {
-          "column": 1,
-          "line": 61
-        }
-      }
-    },
-    "genre": "BinaryOperator",
-    "name": "crates/gneiss-rtk/src/measurements/nhc.rs:65:29: replace + with * in apply_zupt",
-    "package": "gneiss-rtk",
-    "replacement": "*",
-    "span": {
-      "end": {
-        "column": 30,
-        "line": 65
-      },
-      "start": {
-        "column": 29,
-        "line": 65
-      }
-    }
-  },
-  {
-    "diff": "--- crates/gneiss-rtk/src/measurements/nhc.rs\n+++ replace * with + in apply_zupt\n@@ -59,17 +59,17 @@\n }\n \n pub fn apply_zupt(state: &mut RtkState, sigma: f64, tuning: &crate::engine::config::EkfTuningConfig) -> Result<(), &'static str> {\n     let z = DVector::from_column_slice(&[-state.velocity.x, -state.velocity.y, -state.velocity.z]);\n     let n = state.covariance.nrows();\n     let mut h = DMatrix::<f64>::zeros(3, n);\n     for i in 0..3 { h[(i, 3 + i)] = 1.0; }\n     \n-    let r = DMatrix::from_diagonal(&DVector::from_element(3, sigma * sigma));\n+    let r = DMatrix::from_diagonal(&DVector::from_element(3, sigma + /* ~ changed by cargo-mutants ~ */ sigma));\n     updater::update::<crate::engine::updater_math::TightCoupling>(state, &z, &h, &r, 1e9, None, tuning).map_err(|_| \"ZUPT update failed\")?;\n     Ok(())}\n \n #[cfg(test)]\n mod tests {\n     use super::*;\n     use crate::filter::RtkState;\n     use gneiss_core::time::GpsTime;\n",
-    "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-    "function": {
-      "function_name": "apply_zupt",
-      "return_type": "-> Result<(), &'static str>",
-      "span": {
-        "end": {
-          "column": 12,
-          "line": 69
-        },
-        "start": {
-          "column": 1,
-          "line": 61
-        }
-      }
-    },
-    "genre": "BinaryOperator",
-    "name": "crates/gneiss-rtk/src/measurements/nhc.rs:67:68: replace * with + in apply_zupt",
-    "package": "gneiss-rtk",
-    "replacement": "+",
-    "span": {
-      "end": {
-        "column": 69,
-        "line": 67
-      },
-      "start": {
-        "column": 68,
-        "line": 67
-      }
-    }
-  },
-  {
-    "diff": "--- crates/gneiss-rtk/src/measurements/nhc.rs\n+++ replace * with / in apply_zupt\n@@ -59,17 +59,17 @@\n }\n \n pub fn apply_zupt(state: &mut RtkState, sigma: f64, tuning: &crate::engine::config::EkfTuningConfig) -> Result<(), &'static str> {\n     let z = DVector::from_column_slice(&[-state.velocity.x, -state.velocity.y, -state.velocity.z]);\n     let n = state.covariance.nrows();\n     let mut h = DMatrix::<f64>::zeros(3, n);\n     for i in 0..3 { h[(i, 3 + i)] = 1.0; }\n     \n-    let r = DMatrix::from_diagonal(&DVector::from_element(3, sigma * sigma));\n+    let r = DMatrix::from_diagonal(&DVector::from_element(3, sigma / /* ~ changed by cargo-mutants ~ */ sigma));\n     updater::update::<crate::engine::updater_math::TightCoupling>(state, &z, &h, &r, 1e9, None, tuning).map_err(|_| \"ZUPT update failed\")?;\n     Ok(())}\n \n #[cfg(test)]\n mod tests {\n     use super::*;\n     use crate::filter::RtkState;\n     use gneiss_core::time::GpsTime;\n",
-    "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-    "function": {
-      "function_name": "apply_zupt",
-      "return_type": "-> Result<(), &'static str>",
-      "span": {
-        "end": {
-          "column": 12,
-          "line": 69
-        },
-        "start": {
-          "column": 1,
-          "line": 61
-        }
-      }
-    },
-    "genre": "BinaryOperator",
-    "name": "crates/gneiss-rtk/src/measurements/nhc.rs:67:68: replace * with / in apply_zupt",
-    "package": "gneiss-rtk",
-    "replacement": "/",
-    "span": {
-      "end": {
-        "column": 69,
-        "line": 67
-      },
-      "start": {
-        "column": 68,
-        "line": 67
+        "column": 32,
+        "line": 84
       }
     }
   }

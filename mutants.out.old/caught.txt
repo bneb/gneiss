@@ -1,7 +1,5 @@
-crates/gneiss-rtk/src/measurements/nhc.rs:7:5: replace assign_jacobian_block with ()
-crates/gneiss-rtk/src/measurements/nhc.rs:8:19: replace + with * in assign_jacobian_block
-crates/gneiss-rtk/src/measurements/nhc.rs:9:19: replace + with * in assign_jacobian_block
-crates/gneiss-rtk/src/measurements/nhc.rs:28:5: replace apply_nhc -> Result<(), &'static str> with Ok(())
-crates/gneiss-rtk/src/measurements/nhc.rs:62:5: replace apply_zupt -> Result<(), &'static str> with Ok(())
-crates/gneiss-rtk/src/measurements/nhc.rs:65:29: replace + with - in apply_zupt
-crates/gneiss-rtk/src/measurements/nhc.rs:65:29: replace + with * in apply_zupt
+crates/gneiss-rtk/src/engine/fgo/solver.rs:53:9: replace LevenbergMarquardt::optimize -> OptimizationReport with Default::default()
+crates/gneiss-rtk/src/engine/fgo/solver.rs:56:35: replace + with - in LevenbergMarquardt::optimize
+crates/gneiss-rtk/src/engine/fgo/solver.rs:70:26: replace < with == in LevenbergMarquardt::optimize
+crates/gneiss-rtk/src/engine/fgo/solver.rs:70:26: replace < with > in LevenbergMarquardt::optimize
+crates/gneiss-rtk/src/engine/fgo/solver.rs:84:32: replace += with *= in LevenbergMarquardt::apply_damping

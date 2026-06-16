@@ -1,5 +1,6 @@
 {
-    "mode": "Rtk", "export_gnn_dataset_path": "shinjuku_gnn_dataset.csv",
+    "mode": "Rtk",
+    "export_gnn_dataset_path": "shinjuku_gnn_dataset.csv",
     "enable_imu_fusion": true,
     "enable_backward_smoothing": true,
     "enable_nhc": true,
@@ -19,7 +20,7 @@
     "imu_to_antenna_lever_arm": [
         0.0,
         0.0,
-        0.0
+        -0.5
     ],
     "imu_mounting_angles": [
         0.0,
@@ -48,9 +49,11 @@
         "phase_outlier_ratio_thresh": 3.0,
         "doppler_outlier_ratio_mult": 5.809658542941578,
         "loosely_coupled_mahalanobis_sq": 25.0,
-        "sigma_v": 0.05,
+        "sigma_v": 0.5,
         "sigma_phi": 0.01,
-        "sigma_ab": 0.001,
-        "sigma_gb": 0.0001
+        "sigma_ab": 1e-06,
+        "sigma_gb": 1e-07,
+        "nhc_sigma_lateral": 0.5,
+        "nhc_sigma_vertical": 0.5
     }
 }

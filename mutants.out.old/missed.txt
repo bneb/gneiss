@@ -1,18 +1,4 @@
-crates/gneiss-rtk/src/measurements/nhc.rs:8:19: replace + with - in assign_jacobian_block
-crates/gneiss-rtk/src/measurements/nhc.rs:9:19: replace + with - in assign_jacobian_block
-crates/gneiss-rtk/src/measurements/nhc.rs:15:23: delete - in skew_symmetric
-crates/gneiss-rtk/src/measurements/nhc.rs:15:44: delete - in skew_symmetric
-crates/gneiss-rtk/src/measurements/nhc.rs:15:50: delete - in skew_symmetric
-crates/gneiss-rtk/src/measurements/nhc.rs:35:23: replace + with - in apply_nhc
-crates/gneiss-rtk/src/measurements/nhc.rs:36:42: delete - in apply_nhc
-crates/gneiss-rtk/src/measurements/nhc.rs:36:50: delete - in apply_nhc
-crates/gneiss-rtk/src/measurements/nhc.rs:45:47: replace * with + in apply_nhc
-crates/gneiss-rtk/src/measurements/nhc.rs:52:23: replace * with + in apply_nhc
-crates/gneiss-rtk/src/measurements/nhc.rs:52:23: replace * with / in apply_nhc
-crates/gneiss-rtk/src/measurements/nhc.rs:53:24: replace * with + in apply_nhc
-crates/gneiss-rtk/src/measurements/nhc.rs:53:24: replace * with / in apply_nhc
-crates/gneiss-rtk/src/measurements/nhc.rs:62:42: delete - in apply_zupt
-crates/gneiss-rtk/src/measurements/nhc.rs:62:61: delete - in apply_zupt
-crates/gneiss-rtk/src/measurements/nhc.rs:62:80: delete - in apply_zupt
-crates/gneiss-rtk/src/measurements/nhc.rs:67:68: replace * with + in apply_zupt
-crates/gneiss-rtk/src/measurements/nhc.rs:67:68: replace * with / in apply_zupt
+crates/gneiss-rtk/src/engine/fgo/solver.rs:56:35: replace + with * in LevenbergMarquardt::optimize
+crates/gneiss-rtk/src/engine/fgo/solver.rs:70:26: replace < with <= in LevenbergMarquardt::optimize
+crates/gneiss-rtk/src/engine/fgo/solver.rs:83:9: replace LevenbergMarquardt::apply_damping with ()
+crates/gneiss-rtk/src/engine/fgo/solver.rs:84:32: replace += with -= in LevenbergMarquardt::apply_damping

@@ -39,6 +39,7 @@ pub struct PseudorangeFactor {
     pub index_z: usize, // index of z
     pub index_dt: usize, // index of receiver clock bias
     pub index_zwd: Option<usize>, // index of zenith wet delay
+    pub robust_threshold: f64,
 }
 
 impl Factor for PseudorangeFactor {
@@ -91,7 +92,7 @@ impl Factor for PseudorangeFactor {
     }
     
     fn robust_threshold(&self) -> Option<f64> {
-        Some(3.0) // 3-sigma threshold
+        Some(self.robust_threshold)
     }
     
     fn is_cauchy_rejectable(&self) -> bool {
@@ -114,6 +115,7 @@ pub struct CarrierPhaseFactor {
     pub index_dt: usize,
     pub index_zwd: Option<usize>,
     pub index_amb: usize, // index of the ambiguity state (in cycles)
+    pub robust_threshold: f64,
 }
 
 impl Factor for CarrierPhaseFactor {
@@ -169,7 +171,7 @@ impl Factor for CarrierPhaseFactor {
     }
     
     fn robust_threshold(&self) -> Option<f64> {
-        Some(3.0)
+        Some(self.robust_threshold)
     }
     
     fn is_cauchy_rejectable(&self) -> bool {
@@ -204,6 +206,7 @@ pub struct ErrorStatePseudorangeFactor {
     pub index_dt_glo: Option<usize>,
     pub index_zwd: Option<usize>,
     pub sat_id: gneiss_core::sat::SatelliteId,
+    pub robust_threshold: f64,
 }
 
 impl Factor for ErrorStatePseudorangeFactor {
@@ -216,7 +219,7 @@ impl Factor for ErrorStatePseudorangeFactor {
         DVector::from_vec(vec![self.measured_pr - expected_pr])
     }
     
-    fn robust_threshold(&self) -> Option<f64> { Some(3.0) }
+    fn robust_threshold(&self) -> Option<f64> { Some(self.robust_threshold) }
     fn is_cauchy_rejectable(&self) -> bool { true }
     
     fn jacobian(&self, delta: &DVector<f64>) -> DMatrix<f64> {
@@ -267,6 +270,7 @@ pub struct ErrorStateCarrierPhaseFactor {
     pub index_zwd: Option<usize>,
     pub index_amb: usize,
     pub sat_id: gneiss_core::sat::SatelliteId,
+    pub robust_threshold: f64,
 }
 
 impl Factor for ErrorStateCarrierPhaseFactor {
@@ -299,7 +303,7 @@ impl Factor for ErrorStateCarrierPhaseFactor {
     }
     
     fn robust_threshold(&self) -> Option<f64> {
-        Some(3.0) // 3-sigma threshold to reject cycle slips.
+        Some(self.robust_threshold) // threshold to reject cycle slips.
     }
     
     fn is_cauchy_rejectable(&self) -> bool {
@@ -335,7 +339,7 @@ mod tests {
 
     #[test]
     fn test_error_state_pseudorange_jacobian() {
-        let factor = ErrorStatePseudorangeFactor {
+        let factor = ErrorStatePseudorangeFactor { robust_threshold: 3.0,
             sat_pos: Vector3::new(20000000.0, 10000000.0, 5000000.0),
             measured_pr: 22000000.0,
             variance: 1.0,
@@ -362,7 +366,7 @@ mod tests {
 
     #[test]
     fn test_error_state_carrier_phase_jacobian() {
-        let factor = ErrorStateCarrierPhaseFactor {
+        let factor = ErrorStateCarrierPhaseFactor { robust_threshold: 3.0,
             sat_pos: Vector3::new(20000000.0, 10000000.0, 5000000.0),
             measured_cp: 120000000.0,
             variance: 1.0,
@@ -408,6 +412,7 @@ pub struct ErrorStateDopplerFactor {
     pub index_vy: usize,
     pub index_vz: usize,
     pub index_cdt: usize,
+    pub robust_threshold: f64,
 }
 
 impl Factor for ErrorStateDopplerFactor {
@@ -446,7 +451,7 @@ impl Factor for ErrorStateDopplerFactor {
     }
     
     fn robust_threshold(&self) -> Option<f64> {
-        Some(3.0)
+        Some(self.robust_threshold)
     }
     
     fn is_cauchy_rejectable(&self) -> bool {
@@ -473,7 +478,7 @@ mod doppler_tests {
         let wavelength = 0.19;
         let doppler_hz = -8.0 / wavelength;
         
-        let factor = ErrorStateDopplerFactor {
+        let factor = ErrorStateDopplerFactor { robust_threshold: 3.0,
             los, sat_vel, measured_doppler_hz: doppler_hz, variance: 1.0, wavelength,
             sat_clock_drift: 0.0, nominal_vx: 0.0, nominal_vy: 0.0, nominal_vz: 0.0, nominal_cdt: 0.0,
             index_vx: 0, index_vy: 1, index_vz: 2, index_cdt: 3,

@@ -8,7 +8,7 @@
       "phase_results": [
         {
           "phase": "Build",
-          "duration": 7.675251666,
+          "duration": 9.706366,
           "process_status": "Success",
           "argv": [
             "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
@@ -20,7 +20,7 @@
         },
         {
           "phase": "Test",
-          "duration": 0.703566208,
+          "duration": 0.747168208,
           "process_status": "Success",
           "argv": [
             "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
@@ -34,44 +34,430 @@
     {
       "scenario": {
         "Mutant": {
-          "name": "crates/gneiss-rtk/src/measurements/nhc.rs:7:5: replace assign_jacobian_block with ()",
+          "name": "crates/gneiss-rtk/src/engine/fgo/solver.rs:53:9: replace LevenbergMarquardt::optimize -> OptimizationReport with Default::default()",
           "package": "gneiss-rtk",
-          "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
+          "file": "crates/gneiss-rtk/src/engine/fgo/solver.rs",
           "function": {
-            "function_name": "assign_jacobian_block",
-            "return_type": "",
+            "function_name": "LevenbergMarquardt::optimize",
+            "return_type": "-> OptimizationReport",
             "span": {
               "start": {
-                "line": 5,
-                "column": 1
+                "line": 50,
+                "column": 5
               },
               "end": {
-                "line": 11,
-                "column": 2
+                "line": 80,
+                "column": 6
               }
             }
           },
           "span": {
             "start": {
-              "line": 7,
-              "column": 5
+              "line": 53,
+              "column": 9
             },
             "end": {
-              "line": 10,
-              "column": 6
+              "line": 79,
+              "column": 15
+            }
+          },
+          "replacement": "Default::default()",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__fgo__solver.rs_line_53_col_9.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__fgo__solver.rs_line_53_col_9.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.595514416,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.322067584,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/fgo/solver.rs:56:35: replace + with - in LevenbergMarquardt::optimize",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/fgo/solver.rs",
+          "function": {
+            "function_name": "LevenbergMarquardt::optimize",
+            "return_type": "-> OptimizationReport",
+            "span": {
+              "start": {
+                "line": 50,
+                "column": 5
+              },
+              "end": {
+                "line": 80,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 56,
+              "column": 35
+            },
+            "end": {
+              "line": 56,
+              "column": 36
+            }
+          },
+          "replacement": "-",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__fgo__solver.rs_line_56_col_35.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__fgo__solver.rs_line_56_col_35.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.65571425,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.275551416,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/fgo/solver.rs:56:35: replace + with * in LevenbergMarquardt::optimize",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/fgo/solver.rs",
+          "function": {
+            "function_name": "LevenbergMarquardt::optimize",
+            "return_type": "-> OptimizationReport",
+            "span": {
+              "start": {
+                "line": 50,
+                "column": 5
+              },
+              "end": {
+                "line": 80,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 56,
+              "column": 35
+            },
+            "end": {
+              "line": 56,
+              "column": 36
+            }
+          },
+          "replacement": "*",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__fgo__solver.rs_line_56_col_35_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__fgo__solver.rs_line_56_col_35_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.7063685,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.706538416,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/fgo/solver.rs:70:26: replace < with == in LevenbergMarquardt::optimize",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/fgo/solver.rs",
+          "function": {
+            "function_name": "LevenbergMarquardt::optimize",
+            "return_type": "-> OptimizationReport",
+            "span": {
+              "start": {
+                "line": 50,
+                "column": 5
+              },
+              "end": {
+                "line": 80,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 70,
+              "column": 26
+            },
+            "end": {
+              "line": 70,
+              "column": 27
+            }
+          },
+          "replacement": "==",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__fgo__solver.rs_line_70_col_26.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__fgo__solver.rs_line_70_col_26.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.701759916,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.325985917,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/fgo/solver.rs:70:26: replace < with > in LevenbergMarquardt::optimize",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/fgo/solver.rs",
+          "function": {
+            "function_name": "LevenbergMarquardt::optimize",
+            "return_type": "-> OptimizationReport",
+            "span": {
+              "start": {
+                "line": 50,
+                "column": 5
+              },
+              "end": {
+                "line": 80,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 70,
+              "column": 26
+            },
+            "end": {
+              "line": 70,
+              "column": 27
+            }
+          },
+          "replacement": ">",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__fgo__solver.rs_line_70_col_26_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__fgo__solver.rs_line_70_col_26_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.701688333,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.2686535,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/fgo/solver.rs:70:26: replace < with <= in LevenbergMarquardt::optimize",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/fgo/solver.rs",
+          "function": {
+            "function_name": "LevenbergMarquardt::optimize",
+            "return_type": "-> OptimizationReport",
+            "span": {
+              "start": {
+                "line": 50,
+                "column": 5
+              },
+              "end": {
+                "line": 80,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 70,
+              "column": 26
+            },
+            "end": {
+              "line": 70,
+              "column": 27
+            }
+          },
+          "replacement": "<=",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__fgo__solver.rs_line_70_col_26_002.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__fgo__solver.rs_line_70_col_26_002.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.646456542,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.014457542,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/fgo/solver.rs:83:9: replace LevenbergMarquardt::apply_damping with ()",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/fgo/solver.rs",
+          "function": {
+            "function_name": "LevenbergMarquardt::apply_damping",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 82,
+                "column": 5
+              },
+              "end": {
+                "line": 86,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 83,
+              "column": 9
+            },
+            "end": {
+              "line": 85,
+              "column": 10
             }
           },
           "replacement": "()",
           "genre": "FnValue"
         }
       },
-      "summary": "CaughtMutant",
-      "log_path": "log/crates__gneiss-rtk__src__measurements__nhc.rs_line_7_col_5.log",
-      "diff_path": "diff/crates__gneiss-rtk__src__measurements__nhc.rs_line_7_col_5.diff",
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__fgo__solver.rs_line_83_col_9.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__fgo__solver.rs_line_83_col_9.diff",
       "phase_results": [
         {
           "phase": "Build",
-          "duration": 0.542984959,
+          "duration": 0.795622583,
           "process_status": "Success",
           "argv": [
             "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
@@ -83,10 +469,8 @@
         },
         {
           "phase": "Test",
-          "duration": 0.275560875,
-          "process_status": {
-            "Failure": 101
-          },
+          "duration": 0.746892625,
+          "process_status": "Success",
           "argv": [
             "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
             "test",
@@ -99,44 +483,44 @@
     {
       "scenario": {
         "Mutant": {
-          "name": "crates/gneiss-rtk/src/measurements/nhc.rs:8:19: replace + with - in assign_jacobian_block",
+          "name": "crates/gneiss-rtk/src/engine/fgo/solver.rs:84:32: replace += with -= in LevenbergMarquardt::apply_damping",
           "package": "gneiss-rtk",
-          "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
+          "file": "crates/gneiss-rtk/src/engine/fgo/solver.rs",
           "function": {
-            "function_name": "assign_jacobian_block",
+            "function_name": "LevenbergMarquardt::apply_damping",
             "return_type": "",
             "span": {
               "start": {
-                "line": 5,
-                "column": 1
+                "line": 82,
+                "column": 5
               },
               "end": {
-                "line": 11,
-                "column": 2
+                "line": 86,
+                "column": 6
               }
             }
           },
           "span": {
             "start": {
-              "line": 8,
-              "column": 19
+              "line": 84,
+              "column": 32
             },
             "end": {
-              "line": 8,
-              "column": 20
+              "line": 84,
+              "column": 34
             }
           },
-          "replacement": "-",
+          "replacement": "-=",
           "genre": "BinaryOperator"
         }
       },
       "summary": "MissedMutant",
-      "log_path": "log/crates__gneiss-rtk__src__measurements__nhc.rs_line_8_col_19.log",
-      "diff_path": "diff/crates__gneiss-rtk__src__measurements__nhc.rs_line_8_col_19.diff",
+      "log_path": "log/crates__gneiss-rtk__src__engine__fgo__solver.rs_line_84_col_32.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__fgo__solver.rs_line_84_col_32.diff",
       "phase_results": [
         {
           "phase": "Build",
-          "duration": 0.532988916,
+          "duration": 0.648951167,
           "process_status": "Success",
           "argv": [
             "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
@@ -148,7 +532,7 @@
         },
         {
           "phase": "Test",
-          "duration": 0.748266792,
+          "duration": 0.75089425,
           "process_status": "Success",
           "argv": [
             "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
@@ -162,44 +546,44 @@
     {
       "scenario": {
         "Mutant": {
-          "name": "crates/gneiss-rtk/src/measurements/nhc.rs:8:19: replace + with * in assign_jacobian_block",
+          "name": "crates/gneiss-rtk/src/engine/fgo/solver.rs:84:32: replace += with *= in LevenbergMarquardt::apply_damping",
           "package": "gneiss-rtk",
-          "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
+          "file": "crates/gneiss-rtk/src/engine/fgo/solver.rs",
           "function": {
-            "function_name": "assign_jacobian_block",
+            "function_name": "LevenbergMarquardt::apply_damping",
             "return_type": "",
             "span": {
               "start": {
-                "line": 5,
-                "column": 1
+                "line": 82,
+                "column": 5
               },
               "end": {
-                "line": 11,
-                "column": 2
+                "line": 86,
+                "column": 6
               }
             }
           },
           "span": {
             "start": {
-              "line": 8,
-              "column": 19
+              "line": 84,
+              "column": 32
             },
             "end": {
-              "line": 8,
-              "column": 20
+              "line": 84,
+              "column": 34
             }
           },
-          "replacement": "*",
+          "replacement": "*=",
           "genre": "BinaryOperator"
         }
       },
       "summary": "CaughtMutant",
-      "log_path": "log/crates__gneiss-rtk__src__measurements__nhc.rs_line_8_col_19_001.log",
-      "diff_path": "diff/crates__gneiss-rtk__src__measurements__nhc.rs_line_8_col_19_001.diff",
+      "log_path": "log/crates__gneiss-rtk__src__engine__fgo__solver.rs_line_84_col_32_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__fgo__solver.rs_line_84_col_32_001.diff",
       "phase_results": [
         {
           "phase": "Build",
-          "duration": 0.585615375,
+          "duration": 0.645932042,
           "process_status": "Success",
           "argv": [
             "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
@@ -211,2162 +595,10 @@
         },
         {
           "phase": "Test",
-          "duration": 0.3148085,
+          "duration": 0.328464792,
           "process_status": {
             "Failure": 101
           },
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        }
-      ]
-    },
-    {
-      "scenario": {
-        "Mutant": {
-          "name": "crates/gneiss-rtk/src/measurements/nhc.rs:9:19: replace + with - in assign_jacobian_block",
-          "package": "gneiss-rtk",
-          "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-          "function": {
-            "function_name": "assign_jacobian_block",
-            "return_type": "",
-            "span": {
-              "start": {
-                "line": 5,
-                "column": 1
-              },
-              "end": {
-                "line": 11,
-                "column": 2
-              }
-            }
-          },
-          "span": {
-            "start": {
-              "line": 9,
-              "column": 19
-            },
-            "end": {
-              "line": 9,
-              "column": 20
-            }
-          },
-          "replacement": "-",
-          "genre": "BinaryOperator"
-        }
-      },
-      "summary": "MissedMutant",
-      "log_path": "log/crates__gneiss-rtk__src__measurements__nhc.rs_line_9_col_19.log",
-      "diff_path": "diff/crates__gneiss-rtk__src__measurements__nhc.rs_line_9_col_19.diff",
-      "phase_results": [
-        {
-          "phase": "Build",
-          "duration": 0.544085125,
-          "process_status": "Success",
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--no-run",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        },
-        {
-          "phase": "Test",
-          "duration": 0.751955417,
-          "process_status": "Success",
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        }
-      ]
-    },
-    {
-      "scenario": {
-        "Mutant": {
-          "name": "crates/gneiss-rtk/src/measurements/nhc.rs:9:19: replace + with * in assign_jacobian_block",
-          "package": "gneiss-rtk",
-          "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-          "function": {
-            "function_name": "assign_jacobian_block",
-            "return_type": "",
-            "span": {
-              "start": {
-                "line": 5,
-                "column": 1
-              },
-              "end": {
-                "line": 11,
-                "column": 2
-              }
-            }
-          },
-          "span": {
-            "start": {
-              "line": 9,
-              "column": 19
-            },
-            "end": {
-              "line": 9,
-              "column": 20
-            }
-          },
-          "replacement": "*",
-          "genre": "BinaryOperator"
-        }
-      },
-      "summary": "CaughtMutant",
-      "log_path": "log/crates__gneiss-rtk__src__measurements__nhc.rs_line_9_col_19_001.log",
-      "diff_path": "diff/crates__gneiss-rtk__src__measurements__nhc.rs_line_9_col_19_001.diff",
-      "phase_results": [
-        {
-          "phase": "Build",
-          "duration": 0.585623792,
-          "process_status": "Success",
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--no-run",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        },
-        {
-          "phase": "Test",
-          "duration": 0.32598875,
-          "process_status": {
-            "Failure": 101
-          },
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        }
-      ]
-    },
-    {
-      "scenario": {
-        "Mutant": {
-          "name": "crates/gneiss-rtk/src/measurements/nhc.rs:15:5: replace skew_symmetric -> Matrix3<f64> with Matrix3::new()",
-          "package": "gneiss-rtk",
-          "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-          "function": {
-            "function_name": "skew_symmetric",
-            "return_type": "-> Matrix3<f64>",
-            "span": {
-              "start": {
-                "line": 13,
-                "column": 1
-              },
-              "end": {
-                "line": 16,
-                "column": 2
-              }
-            }
-          },
-          "span": {
-            "start": {
-              "line": 15,
-              "column": 5
-            },
-            "end": {
-              "line": 15,
-              "column": 65
-            }
-          },
-          "replacement": "Matrix3::new()",
-          "genre": "FnValue"
-        }
-      },
-      "summary": "Unviable",
-      "log_path": "log/crates__gneiss-rtk__src__measurements__nhc.rs_line_15_col_5.log",
-      "diff_path": "diff/crates__gneiss-rtk__src__measurements__nhc.rs_line_15_col_5.diff",
-      "phase_results": [
-        {
-          "phase": "Build",
-          "duration": 0.324401167,
-          "process_status": {
-            "Failure": 101
-          },
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--no-run",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        }
-      ]
-    },
-    {
-      "scenario": {
-        "Mutant": {
-          "name": "crates/gneiss-rtk/src/measurements/nhc.rs:15:5: replace skew_symmetric -> Matrix3<f64> with Matrix3::from_iter([0.0])",
-          "package": "gneiss-rtk",
-          "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-          "function": {
-            "function_name": "skew_symmetric",
-            "return_type": "-> Matrix3<f64>",
-            "span": {
-              "start": {
-                "line": 13,
-                "column": 1
-              },
-              "end": {
-                "line": 16,
-                "column": 2
-              }
-            }
-          },
-          "span": {
-            "start": {
-              "line": 15,
-              "column": 5
-            },
-            "end": {
-              "line": 15,
-              "column": 65
-            }
-          },
-          "replacement": "Matrix3::from_iter([0.0])",
-          "genre": "FnValue"
-        }
-      },
-      "summary": "Unviable",
-      "log_path": "log/crates__gneiss-rtk__src__measurements__nhc.rs_line_15_col_5_001.log",
-      "diff_path": "diff/crates__gneiss-rtk__src__measurements__nhc.rs_line_15_col_5_001.diff",
-      "phase_results": [
-        {
-          "phase": "Build",
-          "duration": 0.32797175,
-          "process_status": {
-            "Failure": 101
-          },
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--no-run",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        }
-      ]
-    },
-    {
-      "scenario": {
-        "Mutant": {
-          "name": "crates/gneiss-rtk/src/measurements/nhc.rs:15:5: replace skew_symmetric -> Matrix3<f64> with Matrix3::new(0.0)",
-          "package": "gneiss-rtk",
-          "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-          "function": {
-            "function_name": "skew_symmetric",
-            "return_type": "-> Matrix3<f64>",
-            "span": {
-              "start": {
-                "line": 13,
-                "column": 1
-              },
-              "end": {
-                "line": 16,
-                "column": 2
-              }
-            }
-          },
-          "span": {
-            "start": {
-              "line": 15,
-              "column": 5
-            },
-            "end": {
-              "line": 15,
-              "column": 65
-            }
-          },
-          "replacement": "Matrix3::new(0.0)",
-          "genre": "FnValue"
-        }
-      },
-      "summary": "Unviable",
-      "log_path": "log/crates__gneiss-rtk__src__measurements__nhc.rs_line_15_col_5_002.log",
-      "diff_path": "diff/crates__gneiss-rtk__src__measurements__nhc.rs_line_15_col_5_002.diff",
-      "phase_results": [
-        {
-          "phase": "Build",
-          "duration": 0.316656875,
-          "process_status": {
-            "Failure": 101
-          },
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--no-run",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        }
-      ]
-    },
-    {
-      "scenario": {
-        "Mutant": {
-          "name": "crates/gneiss-rtk/src/measurements/nhc.rs:15:5: replace skew_symmetric -> Matrix3<f64> with Matrix3::from(0.0)",
-          "package": "gneiss-rtk",
-          "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-          "function": {
-            "function_name": "skew_symmetric",
-            "return_type": "-> Matrix3<f64>",
-            "span": {
-              "start": {
-                "line": 13,
-                "column": 1
-              },
-              "end": {
-                "line": 16,
-                "column": 2
-              }
-            }
-          },
-          "span": {
-            "start": {
-              "line": 15,
-              "column": 5
-            },
-            "end": {
-              "line": 15,
-              "column": 65
-            }
-          },
-          "replacement": "Matrix3::from(0.0)",
-          "genre": "FnValue"
-        }
-      },
-      "summary": "Unviable",
-      "log_path": "log/crates__gneiss-rtk__src__measurements__nhc.rs_line_15_col_5_003.log",
-      "diff_path": "diff/crates__gneiss-rtk__src__measurements__nhc.rs_line_15_col_5_003.diff",
-      "phase_results": [
-        {
-          "phase": "Build",
-          "duration": 0.320184708,
-          "process_status": {
-            "Failure": 101
-          },
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--no-run",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        }
-      ]
-    },
-    {
-      "scenario": {
-        "Mutant": {
-          "name": "crates/gneiss-rtk/src/measurements/nhc.rs:15:5: replace skew_symmetric -> Matrix3<f64> with Matrix3::from_iter([1.0])",
-          "package": "gneiss-rtk",
-          "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-          "function": {
-            "function_name": "skew_symmetric",
-            "return_type": "-> Matrix3<f64>",
-            "span": {
-              "start": {
-                "line": 13,
-                "column": 1
-              },
-              "end": {
-                "line": 16,
-                "column": 2
-              }
-            }
-          },
-          "span": {
-            "start": {
-              "line": 15,
-              "column": 5
-            },
-            "end": {
-              "line": 15,
-              "column": 65
-            }
-          },
-          "replacement": "Matrix3::from_iter([1.0])",
-          "genre": "FnValue"
-        }
-      },
-      "summary": "Unviable",
-      "log_path": "log/crates__gneiss-rtk__src__measurements__nhc.rs_line_15_col_5_004.log",
-      "diff_path": "diff/crates__gneiss-rtk__src__measurements__nhc.rs_line_15_col_5_004.diff",
-      "phase_results": [
-        {
-          "phase": "Build",
-          "duration": 0.324751459,
-          "process_status": {
-            "Failure": 101
-          },
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--no-run",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        }
-      ]
-    },
-    {
-      "scenario": {
-        "Mutant": {
-          "name": "crates/gneiss-rtk/src/measurements/nhc.rs:15:5: replace skew_symmetric -> Matrix3<f64> with Matrix3::new(1.0)",
-          "package": "gneiss-rtk",
-          "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-          "function": {
-            "function_name": "skew_symmetric",
-            "return_type": "-> Matrix3<f64>",
-            "span": {
-              "start": {
-                "line": 13,
-                "column": 1
-              },
-              "end": {
-                "line": 16,
-                "column": 2
-              }
-            }
-          },
-          "span": {
-            "start": {
-              "line": 15,
-              "column": 5
-            },
-            "end": {
-              "line": 15,
-              "column": 65
-            }
-          },
-          "replacement": "Matrix3::new(1.0)",
-          "genre": "FnValue"
-        }
-      },
-      "summary": "Unviable",
-      "log_path": "log/crates__gneiss-rtk__src__measurements__nhc.rs_line_15_col_5_005.log",
-      "diff_path": "diff/crates__gneiss-rtk__src__measurements__nhc.rs_line_15_col_5_005.diff",
-      "phase_results": [
-        {
-          "phase": "Build",
-          "duration": 0.313155417,
-          "process_status": {
-            "Failure": 101
-          },
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--no-run",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        }
-      ]
-    },
-    {
-      "scenario": {
-        "Mutant": {
-          "name": "crates/gneiss-rtk/src/measurements/nhc.rs:15:5: replace skew_symmetric -> Matrix3<f64> with Matrix3::from(1.0)",
-          "package": "gneiss-rtk",
-          "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-          "function": {
-            "function_name": "skew_symmetric",
-            "return_type": "-> Matrix3<f64>",
-            "span": {
-              "start": {
-                "line": 13,
-                "column": 1
-              },
-              "end": {
-                "line": 16,
-                "column": 2
-              }
-            }
-          },
-          "span": {
-            "start": {
-              "line": 15,
-              "column": 5
-            },
-            "end": {
-              "line": 15,
-              "column": 65
-            }
-          },
-          "replacement": "Matrix3::from(1.0)",
-          "genre": "FnValue"
-        }
-      },
-      "summary": "Unviable",
-      "log_path": "log/crates__gneiss-rtk__src__measurements__nhc.rs_line_15_col_5_006.log",
-      "diff_path": "diff/crates__gneiss-rtk__src__measurements__nhc.rs_line_15_col_5_006.diff",
-      "phase_results": [
-        {
-          "phase": "Build",
-          "duration": 0.318419042,
-          "process_status": {
-            "Failure": 101
-          },
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--no-run",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        }
-      ]
-    },
-    {
-      "scenario": {
-        "Mutant": {
-          "name": "crates/gneiss-rtk/src/measurements/nhc.rs:15:5: replace skew_symmetric -> Matrix3<f64> with Matrix3::from_iter([-1.0])",
-          "package": "gneiss-rtk",
-          "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-          "function": {
-            "function_name": "skew_symmetric",
-            "return_type": "-> Matrix3<f64>",
-            "span": {
-              "start": {
-                "line": 13,
-                "column": 1
-              },
-              "end": {
-                "line": 16,
-                "column": 2
-              }
-            }
-          },
-          "span": {
-            "start": {
-              "line": 15,
-              "column": 5
-            },
-            "end": {
-              "line": 15,
-              "column": 65
-            }
-          },
-          "replacement": "Matrix3::from_iter([-1.0])",
-          "genre": "FnValue"
-        }
-      },
-      "summary": "Unviable",
-      "log_path": "log/crates__gneiss-rtk__src__measurements__nhc.rs_line_15_col_5_007.log",
-      "diff_path": "diff/crates__gneiss-rtk__src__measurements__nhc.rs_line_15_col_5_007.diff",
-      "phase_results": [
-        {
-          "phase": "Build",
-          "duration": 0.32339475,
-          "process_status": {
-            "Failure": 101
-          },
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--no-run",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        }
-      ]
-    },
-    {
-      "scenario": {
-        "Mutant": {
-          "name": "crates/gneiss-rtk/src/measurements/nhc.rs:15:5: replace skew_symmetric -> Matrix3<f64> with Matrix3::new(-1.0)",
-          "package": "gneiss-rtk",
-          "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-          "function": {
-            "function_name": "skew_symmetric",
-            "return_type": "-> Matrix3<f64>",
-            "span": {
-              "start": {
-                "line": 13,
-                "column": 1
-              },
-              "end": {
-                "line": 16,
-                "column": 2
-              }
-            }
-          },
-          "span": {
-            "start": {
-              "line": 15,
-              "column": 5
-            },
-            "end": {
-              "line": 15,
-              "column": 65
-            }
-          },
-          "replacement": "Matrix3::new(-1.0)",
-          "genre": "FnValue"
-        }
-      },
-      "summary": "Unviable",
-      "log_path": "log/crates__gneiss-rtk__src__measurements__nhc.rs_line_15_col_5_008.log",
-      "diff_path": "diff/crates__gneiss-rtk__src__measurements__nhc.rs_line_15_col_5_008.diff",
-      "phase_results": [
-        {
-          "phase": "Build",
-          "duration": 0.324569166,
-          "process_status": {
-            "Failure": 101
-          },
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--no-run",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        }
-      ]
-    },
-    {
-      "scenario": {
-        "Mutant": {
-          "name": "crates/gneiss-rtk/src/measurements/nhc.rs:15:5: replace skew_symmetric -> Matrix3<f64> with Matrix3::from(-1.0)",
-          "package": "gneiss-rtk",
-          "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-          "function": {
-            "function_name": "skew_symmetric",
-            "return_type": "-> Matrix3<f64>",
-            "span": {
-              "start": {
-                "line": 13,
-                "column": 1
-              },
-              "end": {
-                "line": 16,
-                "column": 2
-              }
-            }
-          },
-          "span": {
-            "start": {
-              "line": 15,
-              "column": 5
-            },
-            "end": {
-              "line": 15,
-              "column": 65
-            }
-          },
-          "replacement": "Matrix3::from(-1.0)",
-          "genre": "FnValue"
-        }
-      },
-      "summary": "Unviable",
-      "log_path": "log/crates__gneiss-rtk__src__measurements__nhc.rs_line_15_col_5_009.log",
-      "diff_path": "diff/crates__gneiss-rtk__src__measurements__nhc.rs_line_15_col_5_009.diff",
-      "phase_results": [
-        {
-          "phase": "Build",
-          "duration": 0.321966542,
-          "process_status": {
-            "Failure": 101
-          },
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--no-run",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        }
-      ]
-    },
-    {
-      "scenario": {
-        "Mutant": {
-          "name": "crates/gneiss-rtk/src/measurements/nhc.rs:15:23: delete - in skew_symmetric",
-          "package": "gneiss-rtk",
-          "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-          "function": {
-            "function_name": "skew_symmetric",
-            "return_type": "-> Matrix3<f64>",
-            "span": {
-              "start": {
-                "line": 13,
-                "column": 1
-              },
-              "end": {
-                "line": 16,
-                "column": 2
-              }
-            }
-          },
-          "span": {
-            "start": {
-              "line": 15,
-              "column": 23
-            },
-            "end": {
-              "line": 15,
-              "column": 24
-            }
-          },
-          "replacement": "",
-          "genre": "UnaryOperator"
-        }
-      },
-      "summary": "MissedMutant",
-      "log_path": "log/crates__gneiss-rtk__src__measurements__nhc.rs_line_15_col_23.log",
-      "diff_path": "diff/crates__gneiss-rtk__src__measurements__nhc.rs_line_15_col_23.diff",
-      "phase_results": [
-        {
-          "phase": "Build",
-          "duration": 0.58855775,
-          "process_status": "Success",
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--no-run",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        },
-        {
-          "phase": "Test",
-          "duration": 0.749669583,
-          "process_status": "Success",
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        }
-      ]
-    },
-    {
-      "scenario": {
-        "Mutant": {
-          "name": "crates/gneiss-rtk/src/measurements/nhc.rs:15:44: delete - in skew_symmetric",
-          "package": "gneiss-rtk",
-          "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-          "function": {
-            "function_name": "skew_symmetric",
-            "return_type": "-> Matrix3<f64>",
-            "span": {
-              "start": {
-                "line": 13,
-                "column": 1
-              },
-              "end": {
-                "line": 16,
-                "column": 2
-              }
-            }
-          },
-          "span": {
-            "start": {
-              "line": 15,
-              "column": 44
-            },
-            "end": {
-              "line": 15,
-              "column": 45
-            }
-          },
-          "replacement": "",
-          "genre": "UnaryOperator"
-        }
-      },
-      "summary": "MissedMutant",
-      "log_path": "log/crates__gneiss-rtk__src__measurements__nhc.rs_line_15_col_44.log",
-      "diff_path": "diff/crates__gneiss-rtk__src__measurements__nhc.rs_line_15_col_44.diff",
-      "phase_results": [
-        {
-          "phase": "Build",
-          "duration": 0.530146042,
-          "process_status": "Success",
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--no-run",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        },
-        {
-          "phase": "Test",
-          "duration": 0.746325292,
-          "process_status": "Success",
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        }
-      ]
-    },
-    {
-      "scenario": {
-        "Mutant": {
-          "name": "crates/gneiss-rtk/src/measurements/nhc.rs:15:50: delete - in skew_symmetric",
-          "package": "gneiss-rtk",
-          "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-          "function": {
-            "function_name": "skew_symmetric",
-            "return_type": "-> Matrix3<f64>",
-            "span": {
-              "start": {
-                "line": 13,
-                "column": 1
-              },
-              "end": {
-                "line": 16,
-                "column": 2
-              }
-            }
-          },
-          "span": {
-            "start": {
-              "line": 15,
-              "column": 50
-            },
-            "end": {
-              "line": 15,
-              "column": 51
-            }
-          },
-          "replacement": "",
-          "genre": "UnaryOperator"
-        }
-      },
-      "summary": "MissedMutant",
-      "log_path": "log/crates__gneiss-rtk__src__measurements__nhc.rs_line_15_col_50.log",
-      "diff_path": "diff/crates__gneiss-rtk__src__measurements__nhc.rs_line_15_col_50.diff",
-      "phase_results": [
-        {
-          "phase": "Build",
-          "duration": 0.540807375,
-          "process_status": "Success",
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--no-run",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        },
-        {
-          "phase": "Test",
-          "duration": 0.704679458,
-          "process_status": "Success",
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        }
-      ]
-    },
-    {
-      "scenario": {
-        "Mutant": {
-          "name": "crates/gneiss-rtk/src/measurements/nhc.rs:28:5: replace apply_nhc -> Result<(), &'static str> with Ok(())",
-          "package": "gneiss-rtk",
-          "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-          "function": {
-            "function_name": "apply_nhc",
-            "return_type": "-> Result<(), &'static str>",
-            "span": {
-              "start": {
-                "line": 18,
-                "column": 1
-              },
-              "end": {
-                "line": 59,
-                "column": 2
-              }
-            }
-          },
-          "span": {
-            "start": {
-              "line": 28,
-              "column": 5
-            },
-            "end": {
-              "line": 58,
-              "column": 11
-            }
-          },
-          "replacement": "Ok(())",
-          "genre": "FnValue"
-        }
-      },
-      "summary": "CaughtMutant",
-      "log_path": "log/crates__gneiss-rtk__src__measurements__nhc.rs_line_28_col_5.log",
-      "diff_path": "diff/crates__gneiss-rtk__src__measurements__nhc.rs_line_28_col_5.diff",
-      "phase_results": [
-        {
-          "phase": "Build",
-          "duration": 0.586831416,
-          "process_status": "Success",
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--no-run",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        },
-        {
-          "phase": "Test",
-          "duration": 0.271154125,
-          "process_status": {
-            "Failure": 101
-          },
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        }
-      ]
-    },
-    {
-      "scenario": {
-        "Mutant": {
-          "name": "crates/gneiss-rtk/src/measurements/nhc.rs:31:25: replace * with + in apply_nhc",
-          "package": "gneiss-rtk",
-          "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-          "function": {
-            "function_name": "apply_nhc",
-            "return_type": "-> Result<(), &'static str>",
-            "span": {
-              "start": {
-                "line": 18,
-                "column": 1
-              },
-              "end": {
-                "line": 59,
-                "column": 2
-              }
-            }
-          },
-          "span": {
-            "start": {
-              "line": 31,
-              "column": 25
-            },
-            "end": {
-              "line": 31,
-              "column": 26
-            }
-          },
-          "replacement": "+",
-          "genre": "BinaryOperator"
-        }
-      },
-      "summary": "Unviable",
-      "log_path": "log/crates__gneiss-rtk__src__measurements__nhc.rs_line_31_col_25.log",
-      "diff_path": "diff/crates__gneiss-rtk__src__measurements__nhc.rs_line_31_col_25.diff",
-      "phase_results": [
-        {
-          "phase": "Build",
-          "duration": 0.324694583,
-          "process_status": {
-            "Failure": 101
-          },
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--no-run",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        }
-      ]
-    },
-    {
-      "scenario": {
-        "Mutant": {
-          "name": "crates/gneiss-rtk/src/measurements/nhc.rs:31:25: replace * with / in apply_nhc",
-          "package": "gneiss-rtk",
-          "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-          "function": {
-            "function_name": "apply_nhc",
-            "return_type": "-> Result<(), &'static str>",
-            "span": {
-              "start": {
-                "line": 18,
-                "column": 1
-              },
-              "end": {
-                "line": 59,
-                "column": 2
-              }
-            }
-          },
-          "span": {
-            "start": {
-              "line": 31,
-              "column": 25
-            },
-            "end": {
-              "line": 31,
-              "column": 26
-            }
-          },
-          "replacement": "/",
-          "genre": "BinaryOperator"
-        }
-      },
-      "summary": "Unviable",
-      "log_path": "log/crates__gneiss-rtk__src__measurements__nhc.rs_line_31_col_25_001.log",
-      "diff_path": "diff/crates__gneiss-rtk__src__measurements__nhc.rs_line_31_col_25_001.diff",
-      "phase_results": [
-        {
-          "phase": "Build",
-          "duration": 0.370668167,
-          "process_status": {
-            "Failure": 101
-          },
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--no-run",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        }
-      ]
-    },
-    {
-      "scenario": {
-        "Mutant": {
-          "name": "crates/gneiss-rtk/src/measurements/nhc.rs:35:23: replace + with - in apply_nhc",
-          "package": "gneiss-rtk",
-          "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-          "function": {
-            "function_name": "apply_nhc",
-            "return_type": "-> Result<(), &'static str>",
-            "span": {
-              "start": {
-                "line": 18,
-                "column": 1
-              },
-              "end": {
-                "line": 59,
-                "column": 2
-              }
-            }
-          },
-          "span": {
-            "start": {
-              "line": 35,
-              "column": 23
-            },
-            "end": {
-              "line": 35,
-              "column": 24
-            }
-          },
-          "replacement": "-",
-          "genre": "BinaryOperator"
-        }
-      },
-      "summary": "MissedMutant",
-      "log_path": "log/crates__gneiss-rtk__src__measurements__nhc.rs_line_35_col_23.log",
-      "diff_path": "diff/crates__gneiss-rtk__src__measurements__nhc.rs_line_35_col_23.diff",
-      "phase_results": [
-        {
-          "phase": "Build",
-          "duration": 0.587871834,
-          "process_status": "Success",
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--no-run",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        },
-        {
-          "phase": "Test",
-          "duration": 0.764054125,
-          "process_status": "Success",
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        }
-      ]
-    },
-    {
-      "scenario": {
-        "Mutant": {
-          "name": "crates/gneiss-rtk/src/measurements/nhc.rs:35:23: replace + with * in apply_nhc",
-          "package": "gneiss-rtk",
-          "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-          "function": {
-            "function_name": "apply_nhc",
-            "return_type": "-> Result<(), &'static str>",
-            "span": {
-              "start": {
-                "line": 18,
-                "column": 1
-              },
-              "end": {
-                "line": 59,
-                "column": 2
-              }
-            }
-          },
-          "span": {
-            "start": {
-              "line": 35,
-              "column": 23
-            },
-            "end": {
-              "line": 35,
-              "column": 24
-            }
-          },
-          "replacement": "*",
-          "genre": "BinaryOperator"
-        }
-      },
-      "summary": "Unviable",
-      "log_path": "log/crates__gneiss-rtk__src__measurements__nhc.rs_line_35_col_23_001.log",
-      "diff_path": "diff/crates__gneiss-rtk__src__measurements__nhc.rs_line_35_col_23_001.diff",
-      "phase_results": [
-        {
-          "phase": "Build",
-          "duration": 0.31792275,
-          "process_status": {
-            "Failure": 101
-          },
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--no-run",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        }
-      ]
-    },
-    {
-      "scenario": {
-        "Mutant": {
-          "name": "crates/gneiss-rtk/src/measurements/nhc.rs:36:42: delete - in apply_nhc",
-          "package": "gneiss-rtk",
-          "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-          "function": {
-            "function_name": "apply_nhc",
-            "return_type": "-> Result<(), &'static str>",
-            "span": {
-              "start": {
-                "line": 18,
-                "column": 1
-              },
-              "end": {
-                "line": 59,
-                "column": 2
-              }
-            }
-          },
-          "span": {
-            "start": {
-              "line": 36,
-              "column": 42
-            },
-            "end": {
-              "line": 36,
-              "column": 43
-            }
-          },
-          "replacement": "",
-          "genre": "UnaryOperator"
-        }
-      },
-      "summary": "MissedMutant",
-      "log_path": "log/crates__gneiss-rtk__src__measurements__nhc.rs_line_36_col_42.log",
-      "diff_path": "diff/crates__gneiss-rtk__src__measurements__nhc.rs_line_36_col_42.diff",
-      "phase_results": [
-        {
-          "phase": "Build",
-          "duration": 0.584230834,
-          "process_status": "Success",
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--no-run",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        },
-        {
-          "phase": "Test",
-          "duration": 0.746671458,
-          "process_status": "Success",
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        }
-      ]
-    },
-    {
-      "scenario": {
-        "Mutant": {
-          "name": "crates/gneiss-rtk/src/measurements/nhc.rs:36:50: delete - in apply_nhc",
-          "package": "gneiss-rtk",
-          "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-          "function": {
-            "function_name": "apply_nhc",
-            "return_type": "-> Result<(), &'static str>",
-            "span": {
-              "start": {
-                "line": 18,
-                "column": 1
-              },
-              "end": {
-                "line": 59,
-                "column": 2
-              }
-            }
-          },
-          "span": {
-            "start": {
-              "line": 36,
-              "column": 50
-            },
-            "end": {
-              "line": 36,
-              "column": 51
-            }
-          },
-          "replacement": "",
-          "genre": "UnaryOperator"
-        }
-      },
-      "summary": "MissedMutant",
-      "log_path": "log/crates__gneiss-rtk__src__measurements__nhc.rs_line_36_col_50.log",
-      "diff_path": "diff/crates__gneiss-rtk__src__measurements__nhc.rs_line_36_col_50.diff",
-      "phase_results": [
-        {
-          "phase": "Build",
-          "duration": 0.591279709,
-          "process_status": "Success",
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--no-run",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        },
-        {
-          "phase": "Test",
-          "duration": 0.750840542,
-          "process_status": "Success",
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        }
-      ]
-    },
-    {
-      "scenario": {
-        "Mutant": {
-          "name": "crates/gneiss-rtk/src/measurements/nhc.rs:45:47: replace * with + in apply_nhc",
-          "package": "gneiss-rtk",
-          "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-          "function": {
-            "function_name": "apply_nhc",
-            "return_type": "-> Result<(), &'static str>",
-            "span": {
-              "start": {
-                "line": 18,
-                "column": 1
-              },
-              "end": {
-                "line": 59,
-                "column": 2
-              }
-            }
-          },
-          "span": {
-            "start": {
-              "line": 45,
-              "column": 47
-            },
-            "end": {
-              "line": 45,
-              "column": 48
-            }
-          },
-          "replacement": "+",
-          "genre": "BinaryOperator"
-        }
-      },
-      "summary": "MissedMutant",
-      "log_path": "log/crates__gneiss-rtk__src__measurements__nhc.rs_line_45_col_47.log",
-      "diff_path": "diff/crates__gneiss-rtk__src__measurements__nhc.rs_line_45_col_47.diff",
-      "phase_results": [
-        {
-          "phase": "Build",
-          "duration": 0.875046083,
-          "process_status": "Success",
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--no-run",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        },
-        {
-          "phase": "Test",
-          "duration": 0.801540042,
-          "process_status": "Success",
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        }
-      ]
-    },
-    {
-      "scenario": {
-        "Mutant": {
-          "name": "crates/gneiss-rtk/src/measurements/nhc.rs:45:47: replace * with / in apply_nhc",
-          "package": "gneiss-rtk",
-          "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-          "function": {
-            "function_name": "apply_nhc",
-            "return_type": "-> Result<(), &'static str>",
-            "span": {
-              "start": {
-                "line": 18,
-                "column": 1
-              },
-              "end": {
-                "line": 59,
-                "column": 2
-              }
-            }
-          },
-          "span": {
-            "start": {
-              "line": 45,
-              "column": 47
-            },
-            "end": {
-              "line": 45,
-              "column": 48
-            }
-          },
-          "replacement": "/",
-          "genre": "BinaryOperator"
-        }
-      },
-      "summary": "Unviable",
-      "log_path": "log/crates__gneiss-rtk__src__measurements__nhc.rs_line_45_col_47_001.log",
-      "diff_path": "diff/crates__gneiss-rtk__src__measurements__nhc.rs_line_45_col_47_001.diff",
-      "phase_results": [
-        {
-          "phase": "Build",
-          "duration": 0.320792708,
-          "process_status": {
-            "Failure": 101
-          },
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--no-run",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        }
-      ]
-    },
-    {
-      "scenario": {
-        "Mutant": {
-          "name": "crates/gneiss-rtk/src/measurements/nhc.rs:52:23: replace * with + in apply_nhc",
-          "package": "gneiss-rtk",
-          "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-          "function": {
-            "function_name": "apply_nhc",
-            "return_type": "-> Result<(), &'static str>",
-            "span": {
-              "start": {
-                "line": 18,
-                "column": 1
-              },
-              "end": {
-                "line": 59,
-                "column": 2
-              }
-            }
-          },
-          "span": {
-            "start": {
-              "line": 52,
-              "column": 23
-            },
-            "end": {
-              "line": 52,
-              "column": 24
-            }
-          },
-          "replacement": "+",
-          "genre": "BinaryOperator"
-        }
-      },
-      "summary": "MissedMutant",
-      "log_path": "log/crates__gneiss-rtk__src__measurements__nhc.rs_line_52_col_23.log",
-      "diff_path": "diff/crates__gneiss-rtk__src__measurements__nhc.rs_line_52_col_23.diff",
-      "phase_results": [
-        {
-          "phase": "Build",
-          "duration": 0.805023,
-          "process_status": "Success",
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--no-run",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        },
-        {
-          "phase": "Test",
-          "duration": 0.806018334,
-          "process_status": "Success",
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        }
-      ]
-    },
-    {
-      "scenario": {
-        "Mutant": {
-          "name": "crates/gneiss-rtk/src/measurements/nhc.rs:52:23: replace * with / in apply_nhc",
-          "package": "gneiss-rtk",
-          "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-          "function": {
-            "function_name": "apply_nhc",
-            "return_type": "-> Result<(), &'static str>",
-            "span": {
-              "start": {
-                "line": 18,
-                "column": 1
-              },
-              "end": {
-                "line": 59,
-                "column": 2
-              }
-            }
-          },
-          "span": {
-            "start": {
-              "line": 52,
-              "column": 23
-            },
-            "end": {
-              "line": 52,
-              "column": 24
-            }
-          },
-          "replacement": "/",
-          "genre": "BinaryOperator"
-        }
-      },
-      "summary": "MissedMutant",
-      "log_path": "log/crates__gneiss-rtk__src__measurements__nhc.rs_line_52_col_23_001.log",
-      "diff_path": "diff/crates__gneiss-rtk__src__measurements__nhc.rs_line_52_col_23_001.diff",
-      "phase_results": [
-        {
-          "phase": "Build",
-          "duration": 0.588853667,
-          "process_status": "Success",
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--no-run",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        },
-        {
-          "phase": "Test",
-          "duration": 0.761188333,
-          "process_status": "Success",
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        }
-      ]
-    },
-    {
-      "scenario": {
-        "Mutant": {
-          "name": "crates/gneiss-rtk/src/measurements/nhc.rs:53:24: replace * with + in apply_nhc",
-          "package": "gneiss-rtk",
-          "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-          "function": {
-            "function_name": "apply_nhc",
-            "return_type": "-> Result<(), &'static str>",
-            "span": {
-              "start": {
-                "line": 18,
-                "column": 1
-              },
-              "end": {
-                "line": 59,
-                "column": 2
-              }
-            }
-          },
-          "span": {
-            "start": {
-              "line": 53,
-              "column": 24
-            },
-            "end": {
-              "line": 53,
-              "column": 25
-            }
-          },
-          "replacement": "+",
-          "genre": "BinaryOperator"
-        }
-      },
-      "summary": "MissedMutant",
-      "log_path": "log/crates__gneiss-rtk__src__measurements__nhc.rs_line_53_col_24.log",
-      "diff_path": "diff/crates__gneiss-rtk__src__measurements__nhc.rs_line_53_col_24.diff",
-      "phase_results": [
-        {
-          "phase": "Build",
-          "duration": 0.596654709,
-          "process_status": "Success",
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--no-run",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        },
-        {
-          "phase": "Test",
-          "duration": 0.821305292,
-          "process_status": "Success",
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        }
-      ]
-    },
-    {
-      "scenario": {
-        "Mutant": {
-          "name": "crates/gneiss-rtk/src/measurements/nhc.rs:53:24: replace * with / in apply_nhc",
-          "package": "gneiss-rtk",
-          "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-          "function": {
-            "function_name": "apply_nhc",
-            "return_type": "-> Result<(), &'static str>",
-            "span": {
-              "start": {
-                "line": 18,
-                "column": 1
-              },
-              "end": {
-                "line": 59,
-                "column": 2
-              }
-            }
-          },
-          "span": {
-            "start": {
-              "line": 53,
-              "column": 24
-            },
-            "end": {
-              "line": 53,
-              "column": 25
-            }
-          },
-          "replacement": "/",
-          "genre": "BinaryOperator"
-        }
-      },
-      "summary": "MissedMutant",
-      "log_path": "log/crates__gneiss-rtk__src__measurements__nhc.rs_line_53_col_24_001.log",
-      "diff_path": "diff/crates__gneiss-rtk__src__measurements__nhc.rs_line_53_col_24_001.diff",
-      "phase_results": [
-        {
-          "phase": "Build",
-          "duration": 0.575885666,
-          "process_status": "Success",
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--no-run",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        },
-        {
-          "phase": "Test",
-          "duration": 0.8115575,
-          "process_status": "Success",
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        }
-      ]
-    },
-    {
-      "scenario": {
-        "Mutant": {
-          "name": "crates/gneiss-rtk/src/measurements/nhc.rs:62:5: replace apply_zupt -> Result<(), &'static str> with Ok(())",
-          "package": "gneiss-rtk",
-          "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-          "function": {
-            "function_name": "apply_zupt",
-            "return_type": "-> Result<(), &'static str>",
-            "span": {
-              "start": {
-                "line": 61,
-                "column": 1
-              },
-              "end": {
-                "line": 69,
-                "column": 12
-              }
-            }
-          },
-          "span": {
-            "start": {
-              "line": 62,
-              "column": 5
-            },
-            "end": {
-              "line": 69,
-              "column": 11
-            }
-          },
-          "replacement": "Ok(())",
-          "genre": "FnValue"
-        }
-      },
-      "summary": "CaughtMutant",
-      "log_path": "log/crates__gneiss-rtk__src__measurements__nhc.rs_line_62_col_5.log",
-      "diff_path": "diff/crates__gneiss-rtk__src__measurements__nhc.rs_line_62_col_5.diff",
-      "phase_results": [
-        {
-          "phase": "Build",
-          "duration": 0.861113458,
-          "process_status": "Success",
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--no-run",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        },
-        {
-          "phase": "Test",
-          "duration": 0.323338084,
-          "process_status": {
-            "Failure": 101
-          },
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        }
-      ]
-    },
-    {
-      "scenario": {
-        "Mutant": {
-          "name": "crates/gneiss-rtk/src/measurements/nhc.rs:62:42: delete - in apply_zupt",
-          "package": "gneiss-rtk",
-          "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-          "function": {
-            "function_name": "apply_zupt",
-            "return_type": "-> Result<(), &'static str>",
-            "span": {
-              "start": {
-                "line": 61,
-                "column": 1
-              },
-              "end": {
-                "line": 69,
-                "column": 12
-              }
-            }
-          },
-          "span": {
-            "start": {
-              "line": 62,
-              "column": 42
-            },
-            "end": {
-              "line": 62,
-              "column": 43
-            }
-          },
-          "replacement": "",
-          "genre": "UnaryOperator"
-        }
-      },
-      "summary": "MissedMutant",
-      "log_path": "log/crates__gneiss-rtk__src__measurements__nhc.rs_line_62_col_42.log",
-      "diff_path": "diff/crates__gneiss-rtk__src__measurements__nhc.rs_line_62_col_42.diff",
-      "phase_results": [
-        {
-          "phase": "Build",
-          "duration": 0.811127167,
-          "process_status": "Success",
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--no-run",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        },
-        {
-          "phase": "Test",
-          "duration": 0.804491333,
-          "process_status": "Success",
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        }
-      ]
-    },
-    {
-      "scenario": {
-        "Mutant": {
-          "name": "crates/gneiss-rtk/src/measurements/nhc.rs:62:61: delete - in apply_zupt",
-          "package": "gneiss-rtk",
-          "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-          "function": {
-            "function_name": "apply_zupt",
-            "return_type": "-> Result<(), &'static str>",
-            "span": {
-              "start": {
-                "line": 61,
-                "column": 1
-              },
-              "end": {
-                "line": 69,
-                "column": 12
-              }
-            }
-          },
-          "span": {
-            "start": {
-              "line": 62,
-              "column": 61
-            },
-            "end": {
-              "line": 62,
-              "column": 62
-            }
-          },
-          "replacement": "",
-          "genre": "UnaryOperator"
-        }
-      },
-      "summary": "MissedMutant",
-      "log_path": "log/crates__gneiss-rtk__src__measurements__nhc.rs_line_62_col_61.log",
-      "diff_path": "diff/crates__gneiss-rtk__src__measurements__nhc.rs_line_62_col_61.diff",
-      "phase_results": [
-        {
-          "phase": "Build",
-          "duration": 0.63741875,
-          "process_status": "Success",
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--no-run",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        },
-        {
-          "phase": "Test",
-          "duration": 0.75819975,
-          "process_status": "Success",
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        }
-      ]
-    },
-    {
-      "scenario": {
-        "Mutant": {
-          "name": "crates/gneiss-rtk/src/measurements/nhc.rs:62:80: delete - in apply_zupt",
-          "package": "gneiss-rtk",
-          "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-          "function": {
-            "function_name": "apply_zupt",
-            "return_type": "-> Result<(), &'static str>",
-            "span": {
-              "start": {
-                "line": 61,
-                "column": 1
-              },
-              "end": {
-                "line": 69,
-                "column": 12
-              }
-            }
-          },
-          "span": {
-            "start": {
-              "line": 62,
-              "column": 80
-            },
-            "end": {
-              "line": 62,
-              "column": 81
-            }
-          },
-          "replacement": "",
-          "genre": "UnaryOperator"
-        }
-      },
-      "summary": "MissedMutant",
-      "log_path": "log/crates__gneiss-rtk__src__measurements__nhc.rs_line_62_col_80.log",
-      "diff_path": "diff/crates__gneiss-rtk__src__measurements__nhc.rs_line_62_col_80.diff",
-      "phase_results": [
-        {
-          "phase": "Build",
-          "duration": 0.641221959,
-          "process_status": "Success",
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--no-run",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        },
-        {
-          "phase": "Test",
-          "duration": 0.811277709,
-          "process_status": "Success",
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        }
-      ]
-    },
-    {
-      "scenario": {
-        "Mutant": {
-          "name": "crates/gneiss-rtk/src/measurements/nhc.rs:65:29: replace + with - in apply_zupt",
-          "package": "gneiss-rtk",
-          "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-          "function": {
-            "function_name": "apply_zupt",
-            "return_type": "-> Result<(), &'static str>",
-            "span": {
-              "start": {
-                "line": 61,
-                "column": 1
-              },
-              "end": {
-                "line": 69,
-                "column": 12
-              }
-            }
-          },
-          "span": {
-            "start": {
-              "line": 65,
-              "column": 29
-            },
-            "end": {
-              "line": 65,
-              "column": 30
-            }
-          },
-          "replacement": "-",
-          "genre": "BinaryOperator"
-        }
-      },
-      "summary": "CaughtMutant",
-      "log_path": "log/crates__gneiss-rtk__src__measurements__nhc.rs_line_65_col_29.log",
-      "diff_path": "diff/crates__gneiss-rtk__src__measurements__nhc.rs_line_65_col_29.diff",
-      "phase_results": [
-        {
-          "phase": "Build",
-          "duration": 0.603633875,
-          "process_status": "Success",
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--no-run",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        },
-        {
-          "phase": "Test",
-          "duration": 0.329037333,
-          "process_status": {
-            "Failure": 101
-          },
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        }
-      ]
-    },
-    {
-      "scenario": {
-        "Mutant": {
-          "name": "crates/gneiss-rtk/src/measurements/nhc.rs:65:29: replace + with * in apply_zupt",
-          "package": "gneiss-rtk",
-          "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-          "function": {
-            "function_name": "apply_zupt",
-            "return_type": "-> Result<(), &'static str>",
-            "span": {
-              "start": {
-                "line": 61,
-                "column": 1
-              },
-              "end": {
-                "line": 69,
-                "column": 12
-              }
-            }
-          },
-          "span": {
-            "start": {
-              "line": 65,
-              "column": 29
-            },
-            "end": {
-              "line": 65,
-              "column": 30
-            }
-          },
-          "replacement": "*",
-          "genre": "BinaryOperator"
-        }
-      },
-      "summary": "CaughtMutant",
-      "log_path": "log/crates__gneiss-rtk__src__measurements__nhc.rs_line_65_col_29_001.log",
-      "diff_path": "diff/crates__gneiss-rtk__src__measurements__nhc.rs_line_65_col_29_001.diff",
-      "phase_results": [
-        {
-          "phase": "Build",
-          "duration": 0.579906208,
-          "process_status": "Success",
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--no-run",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        },
-        {
-          "phase": "Test",
-          "duration": 0.32576925,
-          "process_status": {
-            "Failure": 101
-          },
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        }
-      ]
-    },
-    {
-      "scenario": {
-        "Mutant": {
-          "name": "crates/gneiss-rtk/src/measurements/nhc.rs:67:68: replace * with + in apply_zupt",
-          "package": "gneiss-rtk",
-          "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-          "function": {
-            "function_name": "apply_zupt",
-            "return_type": "-> Result<(), &'static str>",
-            "span": {
-              "start": {
-                "line": 61,
-                "column": 1
-              },
-              "end": {
-                "line": 69,
-                "column": 12
-              }
-            }
-          },
-          "span": {
-            "start": {
-              "line": 67,
-              "column": 68
-            },
-            "end": {
-              "line": 67,
-              "column": 69
-            }
-          },
-          "replacement": "+",
-          "genre": "BinaryOperator"
-        }
-      },
-      "summary": "MissedMutant",
-      "log_path": "log/crates__gneiss-rtk__src__measurements__nhc.rs_line_67_col_68.log",
-      "diff_path": "diff/crates__gneiss-rtk__src__measurements__nhc.rs_line_67_col_68.diff",
-      "phase_results": [
-        {
-          "phase": "Build",
-          "duration": 0.589895875,
-          "process_status": "Success",
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--no-run",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        },
-        {
-          "phase": "Test",
-          "duration": 0.857955375,
-          "process_status": "Success",
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        }
-      ]
-    },
-    {
-      "scenario": {
-        "Mutant": {
-          "name": "crates/gneiss-rtk/src/measurements/nhc.rs:67:68: replace * with / in apply_zupt",
-          "package": "gneiss-rtk",
-          "file": "crates/gneiss-rtk/src/measurements/nhc.rs",
-          "function": {
-            "function_name": "apply_zupt",
-            "return_type": "-> Result<(), &'static str>",
-            "span": {
-              "start": {
-                "line": 61,
-                "column": 1
-              },
-              "end": {
-                "line": 69,
-                "column": 12
-              }
-            }
-          },
-          "span": {
-            "start": {
-              "line": 67,
-              "column": 68
-            },
-            "end": {
-              "line": 67,
-              "column": 69
-            }
-          },
-          "replacement": "/",
-          "genre": "BinaryOperator"
-        }
-      },
-      "summary": "MissedMutant",
-      "log_path": "log/crates__gneiss-rtk__src__measurements__nhc.rs_line_67_col_68_001.log",
-      "diff_path": "diff/crates__gneiss-rtk__src__measurements__nhc.rs_line_67_col_68_001.diff",
-      "phase_results": [
-        {
-          "phase": "Build",
-          "duration": 0.632684209,
-          "process_status": "Success",
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--no-run",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        },
-        {
-          "phase": "Test",
-          "duration": 0.867129416,
-          "process_status": "Success",
           "argv": [
             "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
             "test",
@@ -2377,13 +609,13 @@
       ]
     }
   ],
-  "total_mutants": 39,
-  "missed": 18,
-  "caught": 7,
+  "total_mutants": 9,
+  "missed": 4,
+  "caught": 5,
   "timeout": 0,
-  "unviable": 14,
+  "unviable": 0,
   "success": 0,
-  "start_time": "2026-06-15T19:48:57.819524Z",
-  "end_time": "2026-06-15T19:49:45.062491Z",
+  "start_time": "2026-06-16T03:04:25.494853Z",
+  "end_time": "2026-06-16T03:04:49.019531Z",
   "cargo_mutants_version": "27.1.0"
 }

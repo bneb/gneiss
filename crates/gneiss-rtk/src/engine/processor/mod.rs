@@ -34,10 +34,7 @@ pub struct ProcessingEngine {
 
 impl ProcessingEngine {
     pub fn new(mut config: EngineConfig) -> Self {
-        if matches!(config.dynamics_model, DynamicsModel::Automotive | DynamicsModel::Pedestrian) {
-            config.enable_nhc = true;
-        }
-        
+
         let gnn_raim = if config.enable_gnn_raim {
             tracing::info!("Initializing GNN RAIM Model...");
             // Initialize with dummy VarBuilder for now
@@ -131,7 +128,7 @@ impl ProcessingEngine {
                 let omega_b = if let Some(imu_buf) = imu_history.last() {
                     if let Some(last_imu) = imu_buf.last() { last_imu.gyro - state.gyro_bias } else { nalgebra::Vector3::<f64>::zeros() }
                 } else { nalgebra::Vector3::<f64>::zeros() };
-                let _ = crate::nhc::apply_nhc(state, 0.1, 0.1, &config.imu_to_nhc_lever_arm, &omega_b, &config.tuning);
+                let _ = crate::nhc::apply_nhc(state, config.tuning.nhc_sigma_lateral, config.tuning.nhc_sigma_vertical, &config.imu_to_nhc_lever_arm, &omega_b, &config.tuning);
             }
         }
     }

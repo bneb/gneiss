@@ -107,95 +107,96 @@ impl ProcessingEngine {
     }
 
 
-    pub fn process_rtk(&mut self, rover_obs: &EpochObs, base_obs: Option<&EpochObs>) -> Result<&RtkState, EngineError> {
-        let spp_res = self.init_spp_state(rover_obs)?;
-        let spp_pos = spp_res.as_ref().map(|s| s.position);
-        let _spp_cdt = spp_res.as_ref().map(|s| s.cdt).unwrap_or(0.0);
-        let spp_state_ref = spp_res.as_ref();
-
-        // Carrier-smooth rover pseudoranges before any state access
-        let mut rover_smoothed = rover_obs.clone();
-        self.hatch_filter.smooth_epoch(&mut rover_smoothed);
-
-        let dt = rover_obs.time.tow - self.current_state.as_ref().ok_or(EngineError::StateDisappeared)?.time.tow ;
-        
+    fn manage_imu_buffer_on_start(&mut self) {
         if let Some(state) = &self.current_state {
             if !state.ins_aligned {
                 self.imu_buffer.clear();
             }
         }
-        
-        let had_imu_data = !self.imu_buffer.is_empty();
-        
-        if let Some(state) = &self.current_state {
-            if state.epoch_count == 59 || state.epoch_count == 60 || state.epoch_count == 61 {
-                tracing::info!("BEFORE predict_state({}): Pos={:.2?} Vel={:.2?} AccelBias={:.5?} GyroBias={:.5?}", dt, state.position.vector.as_slice(), state.velocity.as_slice(), state.accel_bias.as_slice(), state.gyro_bias.as_slice());
-            }
-        }
-        
-        self.predict_state(dt);
-        
-        if let Some(state) = &self.current_state {
-            if state.epoch_count == 59 || state.epoch_count == 60 || state.epoch_count == 61 {
-                tracing::info!("AFTER predict_state({}): Pos={:.2?} Vel={:.2?} AccelBias={:.5?} GyroBias={:.5?}", dt, state.position.vector.as_slice(), state.velocity.as_slice(), state.accel_bias.as_slice(), state.gyro_bias.as_slice());
-            }
-        }
-        
+    }
+
+    fn update_state_time(&mut self, time: gneiss_core::time::GpsTime) -> Result<(), EngineError> {
         let state = self.current_state.as_mut().ok_or(EngineError::StateDisappeared)?;
         state.is_reset = false;
-        state.time = rover_obs.time;
-        state.position.epoch = rover_obs.time;
+        state.time = time;
+        state.position.epoch = time;
+        Ok(())
+    }
+
+    fn get_base_coord(config: &EngineConfig, rover_obs: &EpochObs) -> Result<Coordinate, EngineError> {
+        let mut base_coord = if let Some(base_pos_arr) = config.base_position {
+            Coordinate::new(Vector3::new(base_pos_arr[0], base_pos_arr[1], base_pos_arr[2]), Datum::WGS84, Frame::ECEF, rover_obs.time)
+        } else { return Err(EngineError::MissingBasePosition); };
         
-        if state.epoch_count % 100 == 0 {
-            tracing::info!("RTK INS State: Pos={:.2?} Vel={:.2?} AccelBias={:.5?} GyroBias={:.5?}", state.position.vector.as_slice(), state.velocity.as_slice(), state.accel_bias.as_slice(), state.gyro_bias.as_slice());
+        if let Some(helmert) = &config.base_datum_transform {
+            let obs_epoch = rover_obs.time.to_fractional_year();
+            let transformed_vec = helmert.transform(base_coord.vector, obs_epoch);
+            base_coord = Coordinate::new(transformed_vec, Datum::WGS84, Frame::ECEF, rover_obs.time);
         }
+        Ok(base_coord)
+    }
 
-        Self::check_covariance_divergence(state, spp_pos, spp_state_ref, !self.config.mode.is_ppp());
-        Self::evaluate_gnss_only_coasting(&self.config, state, spp_pos, spp_state_ref, had_imu_data);
+    fn evaluate_gnn(gnn_raim: &Option<crate::engine::ml::gnn_raim::GnnRaimModel>, ephemerides: &[gneiss_core::ephemeris::Ephemeris], rover_obs: &EpochObs, matched_obs: &[(crate::filter::DdObservation, crate::filter::DdObservation)], state: &RtkState) -> std::collections::HashMap<SatelliteId, f64> {
+        if let Some(gnn) = gnn_raim {
+            let pos_apc = state.position.vector;
+            let rov_llh = gneiss_core::coords::ecef_to_llh(pos_apc);
+            crate::engine::ml::gnn_raim::evaluate_gnn_raim(
+                gnn, matched_obs, rov_llh, pos_apc, ephemerides, rover_obs.time
+            )
+        } else {
+            std::collections::HashMap::new()
+        }
+    }
 
-        let valid_base = Self::filter_valid_base(&self.config, &rover_smoothed, base_obs);
+    fn apply_observations(&mut self, rover_obs: &EpochObs, base_obs: Option<&EpochObs>, spp_pos: Option<Coordinate>, spp_state_ref: Option<&crate::spp::SppState>) -> Result<(), EngineError> {
+        let valid_base = Self::filter_valid_base(&self.config, rover_obs, base_obs);
+        let base_coord_res = Self::get_base_coord(&self.config, rover_obs);
+        let state = self.current_state.as_mut().ok_or(EngineError::StateDisappeared)?;
 
         if let Some(base) = valid_base {
             state.epoch_count += 1;
-            tracing::debug!("valid_base found, epoch_count = {}", state.epoch_count);
-            let mut base_coord = if let Some(base_pos_arr) = self.config.base_position {
-                Coordinate::new(Vector3::new(base_pos_arr[0], base_pos_arr[1], base_pos_arr[2]), Datum::WGS84, Frame::ECEF, rover_obs.time)
-            } else { return Err(EngineError::MissingBasePosition); };
-            
-            if let Some(helmert) = &self.config.base_datum_transform {
-                let obs_epoch = rover_obs.time.to_fractional_year();
-                let transformed_vec = helmert.transform(base_coord.vector, obs_epoch);
-                base_coord = Coordinate::new(transformed_vec, Datum::WGS84, Frame::ECEF, rover_obs.time);
-            }
-            
-            let matched_obs = match_observations(&rover_smoothed, base, &self.ephemerides);
-            let epoch_num = state.epoch_count;
-            if epoch_num % 100 == 0 { tracing::info!("Epoch {}: Matched {} satellites, {} ambiguities tracked", epoch_num, matched_obs.len(), state.ambiguity_keys.len()); }
+            let base_coord = base_coord_res?;
+            let matched_obs = match_observations(rover_obs, base, &self.ephemerides);
 
             if matched_obs.len() >= 5 {
-                let mut gnn_variances = std::collections::HashMap::new();
-                if let Some(gnn) = &self.gnn_raim {
-                    let pos_apc = state.position.vector;
-                    let rov_llh = gneiss_core::coords::ecef_to_llh(pos_apc);
-                    gnn_variances = crate::engine::ml::gnn_raim::evaluate_gnn_raim(
-                        gnn, &matched_obs, rov_llh, pos_apc, &self.ephemerides, rover_obs.time
-                    );
-                }
-
+                let gnn_variances = Self::evaluate_gnn(&self.gnn_raim, &self.ephemerides, rover_obs, &matched_obs, state);
                 let ctx = RtkUpdateContext {
                     config: &self.config, ephemerides: &self.ephemerides, imu_history: &self.imu_history,
-                    rover_obs: &rover_smoothed, base_obs: base, matched_obs: &matched_obs,
+                    rover_obs, base_obs: base, matched_obs: &matched_obs,
                     base_coord: &base_coord, spp_pos, spp_state_ref, gnn_variances,
                 };
                 process_rtk_update::<TightCoupling>(state, &mut self.innovation_tracker, &ctx);
             } else {
-                tracing::warn!("Not enough valid measurements for EKF update. Riding through outage.");
                 state.consecutive_rejections += 1;
             }
         } else if let Some(pos) = spp_pos {
             Self::perform_spp_fallback_update(&self.config, state, pos);
         }
+        Ok(())
+    }
+
+    pub fn process_rtk(&mut self, rover_obs: &EpochObs, base_obs: Option<&EpochObs>) -> Result<&RtkState, EngineError> {
+        let spp_res = self.init_spp_state(rover_obs)?;
+        let spp_pos = spp_res.as_ref().map(|s| s.position);
+        let spp_state_ref = spp_res.as_ref();
+
+        let mut rover_smoothed = rover_obs.clone();
+        self.hatch_filter.smooth_epoch(&mut rover_smoothed);
+
+        let dt = rover_obs.time.tow - self.current_state.as_ref().ok_or(EngineError::StateDisappeared)?.time.tow ;
+        self.manage_imu_buffer_on_start();
+        let had_imu_data = !self.imu_buffer.is_empty();
         
+        self.predict_state(dt);
+        self.update_state_time(rover_obs.time)?;
+        
+        let state = self.current_state.as_mut().unwrap();
+        Self::check_covariance_divergence(state, spp_pos, spp_state_ref, !self.config.mode.is_ppp());
+        Self::evaluate_gnss_only_coasting(&self.config, state, spp_pos, spp_state_ref, had_imu_data);
+
+        self.apply_observations(&rover_smoothed, base_obs, spp_pos, spp_state_ref)?;
+        
+        let state = self.current_state.as_mut().unwrap();
         Self::apply_nhc_updates(&self.config, &self.imu_history, state);
         
         self.attempt_kinematic_alignment();
@@ -277,53 +278,48 @@ fn process_rtk_update<C: CouplingStrategy>(
     state: &mut RtkState, tracker: &mut crate::engine::adaptive::InnovationTracker, ctx: &RtkUpdateContext
 ) {
     crate::engine::ambiguity::manage_ambiguities_and_slips(state, ctx.config, ctx.matched_obs, ctx.ephemerides, ctx.base_coord, ctx.rover_obs.time, ctx.base_obs.time);
-    let current_epoch = state.epoch_count as u32;
-    for (r_obs, _) in ctx.matched_obs {
-        if r_obs.cp_l1.is_some() { state.last_observed.insert((r_obs.sat, 1), current_epoch); }
-        if r_obs.cp_l2.is_some() { state.last_observed.insert((r_obs.sat, 2), current_epoch); }
-    }
+    update_last_observed(state, ctx.matched_obs);
 
     let mut env = build_measurement_environment(ctx.config, ctx.imu_history, state, ctx.ephemerides, ctx.base_coord, ctx.base_obs.time);
     env.gnn_variances = ctx.gnn_variances.clone();
-    let pr_thresh = ctx.config.chi_square_pr_threshold;
 
-    if let Some(mut m) = crate::engine::measurement::build_measurement_model(state, ctx.matched_obs, &env, pr_thresh, ctx.config.chi_square_cp_threshold) {
+    if let Some(mut m) = crate::engine::measurement::build_measurement_model(state, ctx.matched_obs, &env, ctx.config.chi_square_pr_threshold, ctx.config.chi_square_cp_threshold) {
         apply_adaptive_r_scaling(tracker, state, &m.z, &m.h, &mut m.r, &m.mt, ctx.matched_obs);
-        
-        let tuning = ctx.config.tuning.clone();
-
-        let type_stripped: Vec<_> = m.mt.iter().map(|&(s, t, _)| (s, t)).collect();
-        match crate::engine::updater::update::<C>(state, &m.z, &m.h, &m.r, pr_thresh, Some(&type_stripped), &tuning) {
-            Err(_) => {
-                handle_ekf_rejection(state, ctx.config, ctx.spp_pos, ctx.spp_state_ref, "failed chi-square");
-            }
-            Ok((valid_indices, dx)) => {
-                if let Some(path) = &ctx.config.export_gnn_dataset_path {
-                    let ephemerides = ctx.ephemerides;
-                    let rov_llh = gneiss_core::coords::ecef_to_llh(state.position.vector);
-                    let pos_apc = state.position.vector + state.attitude * nalgebra::Vector3::from(ctx.config.imu_to_antenna_lever_arm);
-                    
-                    crate::engine::ml::dataset::export_epoch_to_csv(
-                        path,
-                        state.epoch_count as u32,
-                        ctx.matched_obs,
-                        rov_llh,
-                        pos_apc,
-                        ephemerides,
-                        ctx.rover_obs.time,
-                        &m.z,
-                        &m.h,
-                        &valid_indices,
-                        &m.mt,
-                        &dx,
-                    );
-                }
-                handle_ekf_acceptance(state, ctx.config, ctx.ephemerides, ctx.spp_pos, ctx.spp_state_ref);
-            }
-        }
+        execute_ekf_update::<C>(state, ctx, &m);
     } else {
         handle_ekf_rejection(state, ctx.config, ctx.spp_pos, ctx.spp_state_ref, "not enough measurements");
     }
-    tracing::debug!("End of RTK loop, epoch_count = {}", state.epoch_count);
     state.prune_stale_ambiguities(state.epoch_count as u32, 10);
+}
+
+fn update_last_observed(state: &mut RtkState, matched_obs: &[(crate::filter::DdObservation, crate::filter::DdObservation)]) {
+    let current_epoch = state.epoch_count as u32;
+    for (r_obs, _) in matched_obs {
+        if r_obs.cp_l1.is_some() { state.last_observed.insert((r_obs.sat, 1), current_epoch); }
+        if r_obs.cp_l2.is_some() { state.last_observed.insert((r_obs.sat, 2), current_epoch); }
+    }
+}
+
+fn execute_ekf_update<C: CouplingStrategy>(state: &mut RtkState, ctx: &RtkUpdateContext, m: &crate::engine::measurement::EkfMeasurementMatrices) {
+    let pr_thresh = ctx.config.chi_square_pr_threshold;
+    let type_stripped: Vec<_> = m.mt.iter().map(|&(s, t, _)| (s, t)).collect();
+    
+    match crate::engine::updater::update::<C>(state, &m.z, &m.h, &m.r, pr_thresh, Some(&type_stripped), &ctx.config.tuning) {
+        Err(_) => handle_ekf_rejection(state, ctx.config, ctx.spp_pos, ctx.spp_state_ref, "failed chi-square"),
+        Ok((valid_indices, dx)) => {
+            export_gnn_dataset(state, ctx, m, &valid_indices, &dx);
+            handle_ekf_acceptance(state, ctx.config, ctx.ephemerides, ctx.spp_pos, ctx.spp_state_ref);
+        }
+    }
+}
+
+fn export_gnn_dataset(state: &RtkState, ctx: &RtkUpdateContext, m: &crate::engine::measurement::EkfMeasurementMatrices, valid_indices: &[usize], dx: &DVector<f64>) {
+    if let Some(path) = &ctx.config.export_gnn_dataset_path {
+        let rov_llh = gneiss_core::coords::ecef_to_llh(state.position.vector);
+        let pos_apc = state.position.vector + state.attitude * nalgebra::Vector3::from(ctx.config.imu_to_antenna_lever_arm);
+        
+        crate::engine::ml::dataset::export_epoch_to_csv(
+            path, state.epoch_count as u32, ctx.matched_obs, rov_llh, pos_apc, ctx.ephemerides, ctx.rover_obs.time, &m.z, &m.h, valid_indices, &m.mt, dx
+        );
+    }
 }

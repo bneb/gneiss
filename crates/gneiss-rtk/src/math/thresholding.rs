@@ -12,6 +12,13 @@ pub fn apply_huber(res: f64, var: f64, k: f64) -> f64 {
     }
 }
 
+pub fn apply_cauchy(res: f64, var: f64, k: f64) -> f64 {
+    let abs_res = res.abs();
+    let threshold = k * var.sqrt();
+    let ratio = abs_res / threshold;
+    1.0 / (1.0 + ratio * ratio)
+}
+
 pub fn huber_scale_covariance(
     p: &CovMatrix,
     r: &CovMatrix,
@@ -42,6 +49,12 @@ mod tests {
         assert!((apply_huber(4.0, 1.0, 3.0) - 0.75).abs() < 1e-6);
     }
     
+    #[test]
+    fn test_apply_cauchy() {
+        assert!((apply_cauchy(1.0, 1.0, 3.0) - 0.9).abs() < 1e-6); // 1 / (1 + (1/3)^2) = 1 / 1.1111 = 0.9
+        assert!((apply_cauchy(6.0, 1.0, 3.0) - 0.2).abs() < 1e-6); // 1 / (1 + (6/3)^2) = 1 / (1 + 4) = 0.2
+    }
+
     #[test]
     fn test_huber_scale_covariance() {
         let p = dmatrix![1.0];
