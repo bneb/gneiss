@@ -91,7 +91,7 @@ impl Default for SppConfig {
         Self {
             max_iterations: 15,
             convergence_threshold: 1e-4,
-            geometry_variance_threshold: 100.0,
+            geometry_variance_threshold: 10000.0,
             enable_sagnac: true,
             enable_tropo: true,
             enable_iono: true,
@@ -240,22 +240,20 @@ fn solve_spp_iteratively(
 fn apply_raim(
     state: SppState, seed_state: SppState, measurements: &[SppMeasurement], iono_params: Option<&KlobucharParams>, config: &SppConfig,
 ) -> Result<SppState, SppError> {
-    let good_measurements = filter_raim_outliers(&state, measurements, config);
+    let good_measurements = filter_raim_outliers(&state, measurements, iono_params, config);
     if good_measurements.len() < measurements.len() && good_measurements.len() >= 4 {
         return solve_spp_iteratively(seed_state, &good_measurements, iono_params, config);
     }
     Ok(state)
 }
 
-fn filter_raim_outliers(state: &SppState, measurements: &[SppMeasurement], config: &SppConfig) -> Vec<SppMeasurement> {
+fn filter_raim_outliers(state: &SppState, measurements: &[SppMeasurement], iono_params: Option<&KlobucharParams>, config: &SppConfig) -> Vec<SppMeasurement> {
+    let rec_ecef = state.position.vector;
+    let rec_llh = ecef_to_llh(rec_ecef);
+
     let mut residuals: Vec<(&SppMeasurement, f64)> = measurements.iter().map(|m| {
-        let cdt = state.get_cdt(m.constellation);
-        let (sat_coord, corrected_pr) = compute_sat_state(m, cdt);
-        let r_dx = state.position.vector.x - sat_coord.vector.x;
-        let r_dy = state.position.vector.y - sat_coord.vector.y;
-        let r_dz = state.position.vector.z - sat_coord.vector.z;
-        let expected_pr = f64::sqrt(r_dx * r_dx + r_dy * r_dy + r_dz * r_dz) + cdt;
-        (m, (corrected_pr - expected_pr).abs())
+        let (_, _, _, _, residual, _) = compute_measurement_residuals(state, m, rec_ecef, rec_llh, iono_params, config);
+        (m, residual.abs())
     }).collect();
 
     residuals.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
@@ -282,13 +280,25 @@ pub fn spp_wnlls_step(
 
     let h_t = h_matrix.transpose();
     let h_t_w = &h_t * &w_matrix;
-    let h_t_w_h_inv = (&h_t_w * &h_matrix).try_inverse().ok_or(SppError::MatrixInversionFailed)?;
+    let h_t_w_h_inv_opt = (&h_t_w * &h_matrix).try_inverse();
+    let h_t_w_h_inv = match h_t_w_h_inv_opt {
+        Some(inv) => inv,
+        None => {
+            tracing::debug!("SPP MatrixInversionFailed. Measurements: {}", measurements.len());
+            return Err(SppError::MatrixInversionFailed);
+        }
+    };
 
-    if (h_t_w_h_inv[(0, 0)] + h_t_w_h_inv[(1, 1)] + h_t_w_h_inv[(2, 2)]) > config.geometry_variance_threshold { 
+    let trace = h_t_w_h_inv[(0, 0)] + h_t_w_h_inv[(1, 1)] + h_t_w_h_inv[(2, 2)];
+    if trace > config.geometry_variance_threshold { 
+        let valid_sats = w_matrix.diagonal().iter().filter(|&w| *w > MIN_WEIGHT).count();
+        tracing::debug!("SPP PoorGeometry. Trace: {:.3}, threshold: {:.3}, valid_sats: {}, total_sats: {}", trace, config.geometry_variance_threshold, valid_sats, measurements.len());
         return Err(SppError::PoorGeometry); 
     }
 
     let dx_vec = h_t_w_h_inv * h_t_w * dz_vector;
+    tracing::debug!("SPP iter: dx_vec=[{:.2}, {:.2}, {:.2}, {:.2}], trace={:.2}", dx_vec[0], dx_vec[1], dx_vec[2], dx_vec[3], trace);
+
     
     Ok(SppState::new(
         Coordinate::new(
