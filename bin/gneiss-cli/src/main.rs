@@ -272,6 +272,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     "ppp-ins-fg" | "tight-fg" => gneiss_rtk::engine::EngineMode::PppInsFg,
                     _ => return Err("Invalid engine mode specified".into()),
                 };
+                
+                let is_ppp = matches!(engine_config.mode, 
+                    gneiss_rtk::engine::EngineMode::Ppp |
+                    gneiss_rtk::engine::EngineMode::PppIns |
+                    gneiss_rtk::engine::EngineMode::PppInsLooselyCoupled |
+                    gneiss_rtk::engine::EngineMode::PppFg |
+                    gneiss_rtk::engine::EngineMode::PppInsFg
+                );
+                
+                if is_ppp && (sp3.is_none() || clk.is_none()) {
+                    return Err("Error: SP3 and CLK files are MANDATORY for PPP evaluations. Without precise clock and orbit corrections, carrier phase ambiguities cannot be resolved, resulting in unbounded drift. Use `gneiss fetch` to download them.".into());
+                }
             }
             if let Some(lr) = lambda_ratio { engine_config.lambda_min_ratio = lr; }
             if let Some(ls) = lambda_subset { engine_config.lambda_min_subset = ls; }

@@ -291,6 +291,11 @@ def main(dry_run=False):
         rtklib_cache = {} # (base_mode, direction) -> metrics
 
         for base_mode in BASE_MODES:
+            # Skip PPP if the dataset doesn't provide precise clocks and orbits
+            if base_mode == "ppp" and ("sp3" not in ds_config or "clk" not in ds_config):
+                print(f"\n  --- Skipping {base_mode} for {ds_name} (Missing SP3/CLK) ---")
+                continue
+                
             for direction in DIRECTIONS:
                 print(f"\n  --- RTKLIB {base_mode}_{direction} Baseline ---")
                 r_sol = run_rtklib(ds_name, ds_config, base_mode, direction, dry_run=dry_run)
