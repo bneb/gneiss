@@ -12,6 +12,7 @@ pub mod measurement;
 pub mod measurement_math;
 pub mod updater_math;
 pub mod ppp;
+pub mod ppp_math;
 pub mod ambiguity;
 pub mod auto_tuner;
 pub mod smoother;
@@ -33,3 +34,6 @@ mod tests_predictor;
 
 #[cfg(test)]
 mod tests_updater;
+
+#[cfg(test)]
+pub mod jacobian_verify;

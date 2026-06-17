@@ -56,6 +56,8 @@ enum Commands {
         antex: Option<String>,
         #[arg(long, help = "Path to differential code bias files (.dcb)")]
         dcb: Vec<String>,
+        #[arg(long, help = "Path to phase/code bias file (.bia/.bsx)")]
+        bia: Option<String>,
         #[arg(long, help = "Path to engine configuration file (.json)")]
         config: Option<String>,
         #[arg(long, help = "Enable multi-pass backward smoothing")]
@@ -84,8 +86,16 @@ enum Commands {
         chi_square_cp: Option<f64>,
         #[arg(long, help = "Minimum SNR in dBHz")]
         min_snr: Option<f64>,
-        #[arg(long, help = "Surveyed base station ECEF coordinate override (x,y,z in meters)")]
-        base_position: Option<String>,
+        
+        #[arg(long, help = "Surveyed base station ECEF coordinate override (x,y,z in meters)", group = "base_coord")]
+        base_coord_manual: Option<String>,
+        #[arg(long, help = "Extract base coordinate from RTCM3 messages 1005/1006", group = "base_coord")]
+        base_coord_rtcm: bool,
+        #[arg(long, help = "Automatically fetch official coordinate from NGS CORS API", group = "base_coord")]
+        base_coord_api: bool,
+        #[arg(long, help = "Survey the base station using PPP before processing rover", group = "base_coord")]
+        base_coord_ppp: bool,
+
         #[arg(long, help = "Enabled constellations (e.g. G,R,E,C). Default: all")]
         systems: Option<String>,
     },
@@ -108,7 +118,7 @@ enum Commands {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> { 
     dotenv::dotenv().ok();
     tracing_subscriber::fmt::init();
     let cli = Cli::parse();
@@ -145,17 +155,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok(())
         },
         Commands::Process { 
-            rover, base, nav, output, sp3, clk, antex, dcb, config, 
+            rover, base, nav, output, sp3, clk, antex, dcb, bia, config, 
             enable_backward_smoothing, enable_auto_tune, mode, 
             lambda_ratio, lambda_subset, max_epochs, 
             lever_arm, calibrate_imu, calibrate,
             raim_outlier_m, chi_square_pr, chi_square_cp, min_snr,
-            base_position,
+            base_coord_manual, base_coord_rtcm, base_coord_api, base_coord_ppp,
             systems
         } => {
             info!("Starting PPK Processing Pipeline...");
             
-            let mut rover_rinex_epochs = if rover.ends_with(".obs") || rover.ends_with("o") {
+            let mut rover_rinex_epochs = if rover.ends_with(".obs") || rover.ends_with("o") || rover.ends_with(".rnx") || rover.ends_with(".RNX") {
                 let file = std::fs::File::open(&rover)?;
                 let epochs = gneiss_parsers::rinex::parse_rinex_obs(std::io::BufReader::new(file))?;
                 info!("Loaded {} RINEX rover epochs.", epochs.len());
@@ -166,6 +176,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             
             let mut base_rinex_epochs = None;
             let mut approx_base_pos = None;
+            let mut base_marker_name = None;
 
             if let Some(base_file) = &base {
                 if base_file.ends_with(".obs") || base_file.ends_with("o") {
@@ -178,7 +189,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             if parts.len() >= 3 {
                                 approx_base_pos = Some([parts[0].parse()?, parts[1].parse()?, parts[2].parse()?]);
                             }
-                            break;
+                        }
+                        if line.contains("MARKER NAME") {
+                            let parts: Vec<&str> = line[0..60].split_whitespace().collect();
+                            if !parts.is_empty() {
+                                base_marker_name = Some(parts[0].to_string());
+                            }
                         }
                         if line.contains("END OF HEADER") {
                             break;
@@ -198,6 +214,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         if let Ok((rem, frame)) = gneiss_parsers::rtcm3::parse_rtcm3_frame(buffer) {
                             if let Ok(msg) = gneiss_parsers::rtcm3::msm::parse_msm_message(frame.payload) {
                                 b_epochs.push(msg.into_epoch_obs());
+                            } else if let Ok(arp) = gneiss_parsers::rtcm3::station::parse_station_arp(frame.payload) {
+                                if base_coord_rtcm {
+                                    approx_base_pos = Some([arp.ecef_x, arp.ecef_y, arp.ecef_z]);
+                                    info!("Extracted base coordinate from RTCM3 ARP: {:?}", approx_base_pos);
+                                }
                             }
                             buffer = rem;
                         } else {
@@ -222,7 +243,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
 
-            if let Some(pos_str) = base_position {
+            if base_coord_rtcm {
+                if approx_base_pos.is_none() {
+                    return Err("Failed to extract base coordinate from RTCM3 messages".into());
+                }
+            } else if base_coord_api {
+                if let Some(marker) = &base_marker_name {
+                    let provider = gneiss_fetch::sources::noaa::NoaaCorsProvider;
+                    info!("Fetching official coordinate for {} from NOAA CORS API...", marker);
+                    match provider.fetch_station_coordinate(marker).await {
+                        Ok(coord) => {
+                            approx_base_pos = Some([coord.vector.x, coord.vector.y, coord.vector.z]);
+                            info!("Base coordinate retrieved from NOAA API: {:?}", approx_base_pos);
+                        },
+                        Err(e) => {
+                            return Err(format!("Failed to fetch coordinate for {}: {}", marker, e).into());
+                        }
+                    }
+                } else {
+                    return Err("No MARKER NAME found in base RINEX. Cannot fetch API coordinate.".into());
+                }
+            } else if base_coord_ppp {
+                info!("PPP Survey mode selected. Surveying base station...");
+                return Err("PPP base survey not yet implemented.".into());
+            } else if let Some(pos_str) = &base_coord_manual {
                 let parts: Vec<&str> = pos_str.split(',').collect();
                 if parts.len() == 3 {
                     approx_base_pos = Some([
@@ -231,6 +275,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         parts[2].trim().parse()?
                     ]);
                     info!("Using CLI overridden base position: {:?}", approx_base_pos);
+                } else {
+                    return Err("Manual base coordinate must be in format x,y,z".into());
                 }
             }
 
@@ -299,7 +345,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
 
             if let Some(pos) = approx_base_pos {
-                if engine_config.base_position.is_none() {
+                // The mutually exclusive CLI flags (--base-coord-*) take precedence over the JSON config.
+                // If they are not specified, approx_base_pos defaults to the fallback extracted from the RINEX header.
+                // So if the config specifies a base position, we should use that OVER the RINEX header fallback,
+                // BUT we should use the CLI flags over the config.
+                // Since approx_base_pos acts as both the fallback and the CLI flag resolution, we need to check if 
+                // a CLI flag was actually used.
+                let cli_override = base_coord_manual.is_some() || base_coord_rtcm || base_coord_api || base_coord_ppp;
+                
+                if cli_override || engine_config.base_position.is_none() {
                     engine_config.base_position = Some(pos);
                 }
             }
@@ -388,6 +442,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         engine.antex = Some(db);
                     },
                     Err(e) => error!("Failed to parse ANTEX file {}: {:?}", atx_file, e),
+                }
+            }
+
+            if let Some(bia_file) = bia {
+                if let Ok(file) = std::fs::File::open(&bia_file) {
+                    match gneiss_parsers::sinex_bia::SinexBias::parse(std::io::BufReader::new(file)) {
+                        Ok(bias) => {
+                            info!("Loaded SINEX/BIA with {} records.", bias.records.len());
+                            engine.sinex_bias = Some(bias);
+                        },
+                        Err(e) => error!("Failed to parse BIA file {}: {:?}", bia_file, e),
+                    }
                 }
             }
 
@@ -733,3 +799,5 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 }
+
+mod mw_test;

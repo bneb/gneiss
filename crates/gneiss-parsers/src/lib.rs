@@ -4,3 +4,4 @@ pub mod rinex;
 pub mod rinex_clk;
 pub mod sp3;
 pub mod antex;
+pub mod sinex_bia;

@@ -8,7 +8,7 @@
       "phase_results": [
         {
           "phase": "Build",
-          "duration": 9.706366,
+          "duration": 27.790882625,
           "process_status": "Success",
           "argv": [
             "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
@@ -20,7 +20,7 @@
         },
         {
           "phase": "Test",
-          "duration": 0.747168208,
+          "duration": 1.086010375,
           "process_status": "Success",
           "argv": [
             "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
@@ -34,44 +34,835 @@
     {
       "scenario": {
         "Mutant": {
-          "name": "crates/gneiss-rtk/src/engine/fgo/solver.rs:53:9: replace LevenbergMarquardt::optimize -> OptimizationReport with Default::default()",
+          "name": "crates/gneiss-rtk/src/bin/train_gnn_raim.rs:20:9: delete field lr from struct ParamsAdamW expression in main",
           "package": "gneiss-rtk",
-          "file": "crates/gneiss-rtk/src/engine/fgo/solver.rs",
+          "file": "crates/gneiss-rtk/src/bin/train_gnn_raim.rs",
           "function": {
-            "function_name": "LevenbergMarquardt::optimize",
-            "return_type": "-> OptimizationReport",
+            "function_name": "main",
+            "return_type": "-> Result<()>",
             "span": {
               "start": {
-                "line": 50,
-                "column": 5
+                "line": 7,
+                "column": 1
               },
               "end": {
-                "line": 80,
-                "column": 6
+                "line": 60,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 20,
+              "column": 9
+            },
+            "end": {
+              "line": 20,
+              "column": 18
+            }
+          },
+          "replacement": "",
+          "genre": "StructField"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__bin__train_gnn_raim.rs_line_20_col_9.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__bin__train_gnn_raim.rs_line_20_col_9.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.32630525,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.494017875,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/bin/train_gnn_raim.rs:21:9: delete field weight_decay from struct ParamsAdamW expression in main",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/bin/train_gnn_raim.rs",
+          "function": {
+            "function_name": "main",
+            "return_type": "-> Result<()>",
+            "span": {
+              "start": {
+                "line": 7,
+                "column": 1
+              },
+              "end": {
+                "line": 60,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 21,
+              "column": 9
+            },
+            "end": {
+              "line": 21,
+              "column": 28
+            }
+          },
+          "replacement": "",
+          "genre": "StructField"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__bin__train_gnn_raim.rs_line_21_col_9.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__bin__train_gnn_raim.rs_line_21_col_9.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.326149708,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.4910895,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/measurement.rs:394:5: replace process_single_satellite_pair with ()",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/measurement.rs",
+          "function": {
+            "function_name": "process_single_satellite_pair",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 388,
+                "column": 1
+              },
+              "end": {
+                "line": 418,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 394,
+              "column": 5
+            },
+            "end": {
+              "line": 417,
+              "column": 87
+            }
+          },
+          "replacement": "()",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__measurement.rs_line_394_col_5.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__measurement.rs_line_394_col_5.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.23512525,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.434257083,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/measurement.rs:396:40: replace - with + in process_single_satellite_pair",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/measurement.rs",
+          "function": {
+            "function_name": "process_single_satellite_pair",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 388,
+                "column": 1
+              },
+              "end": {
+                "line": 418,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 396,
+              "column": 40
+            },
+            "end": {
+              "line": 396,
+              "column": 41
+            }
+          },
+          "replacement": "+",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__measurement.rs_line_396_col_40.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__measurement.rs_line_396_col_40.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.359511,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.173320375,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/measurement.rs:396:40: replace - with / in process_single_satellite_pair",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/measurement.rs",
+          "function": {
+            "function_name": "process_single_satellite_pair",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 388,
+                "column": 1
+              },
+              "end": {
+                "line": 418,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 396,
+              "column": 40
+            },
+            "end": {
+              "line": 396,
+              "column": 41
+            }
+          },
+          "replacement": "/",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__engine__measurement.rs_line_396_col_40_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__measurement.rs_line_396_col_40_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.540520166,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/measurement.rs:397:40: replace - with + in process_single_satellite_pair",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/measurement.rs",
+          "function": {
+            "function_name": "process_single_satellite_pair",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 388,
+                "column": 1
+              },
+              "end": {
+                "line": 418,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 397,
+              "column": 40
+            },
+            "end": {
+              "line": 397,
+              "column": 41
+            }
+          },
+          "replacement": "+",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__measurement.rs_line_397_col_40.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__measurement.rs_line_397_col_40.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.061518334,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.180866917,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/measurement.rs:397:40: replace - with / in process_single_satellite_pair",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/measurement.rs",
+          "function": {
+            "function_name": "process_single_satellite_pair",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 388,
+                "column": 1
+              },
+              "end": {
+                "line": 418,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 397,
+              "column": 40
+            },
+            "end": {
+              "line": 397,
+              "column": 41
+            }
+          },
+          "replacement": "/",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__engine__measurement.rs_line_397_col_40_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__measurement.rs_line_397_col_40_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.535763084,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/measurement.rs:398:25: replace - with + in process_single_satellite_pair",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/measurement.rs",
+          "function": {
+            "function_name": "process_single_satellite_pair",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 388,
+                "column": 1
+              },
+              "end": {
+                "line": 418,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 398,
+              "column": 25
+            },
+            "end": {
+              "line": 398,
+              "column": 26
+            }
+          },
+          "replacement": "+",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__measurement.rs_line_398_col_25.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__measurement.rs_line_398_col_25.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.3931538749999999,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.5882340830000001,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/measurement.rs:398:25: replace - with / in process_single_satellite_pair",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/measurement.rs",
+          "function": {
+            "function_name": "process_single_satellite_pair",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 388,
+                "column": 1
+              },
+              "end": {
+                "line": 418,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 398,
+              "column": 25
+            },
+            "end": {
+              "line": 398,
+              "column": 26
+            }
+          },
+          "replacement": "/",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__engine__measurement.rs_line_398_col_25_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__measurement.rs_line_398_col_25_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.702508125,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:12:5: replace process_ppp -> Result<&'a RtkState, EngineError> with Ok(Box::leak(Box::new(Default::default())))",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "process_ppp",
+            "return_type": "-> Result<&'a RtkState, EngineError>",
+            "span": {
+              "start": {
+                "line": 11,
+                "column": 1
+              },
+              "end": {
+                "line": 28,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 12,
+              "column": 5
+            },
+            "end": {
+              "line": 27,
+              "column": 47
+            }
+          },
+          "replacement": "Ok(Box::leak(Box::new(Default::default())))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_12_col_5.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_12_col_5.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.807108167,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:12:8: delete ! in process_ppp",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "process_ppp",
+            "return_type": "-> Result<&'a RtkState, EngineError>",
+            "span": {
+              "start": {
+                "line": 11,
+                "column": 1
+              },
+              "end": {
+                "line": 28,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 12,
+              "column": 8
+            },
+            "end": {
+              "line": 12,
+              "column": 9
+            }
+          },
+          "replacement": "",
+          "genre": "UnaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_12_col_8.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_12_col_8.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.2845065,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.537777292,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:13:34: replace - with + in process_ppp",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "process_ppp",
+            "return_type": "-> Result<&'a RtkState, EngineError>",
+            "span": {
+              "start": {
+                "line": 11,
+                "column": 1
+              },
+              "end": {
+                "line": 28,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 13,
+              "column": 34
+            },
+            "end": {
+              "line": 13,
+              "column": 35
+            }
+          },
+          "replacement": "+",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_13_col_34.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_13_col_34.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.129879167,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.48391275,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:13:34: replace - with / in process_ppp",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "process_ppp",
+            "return_type": "-> Result<&'a RtkState, EngineError>",
+            "span": {
+              "start": {
+                "line": 11,
+                "column": 1
+              },
+              "end": {
+                "line": 28,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 13,
+              "column": 34
+            },
+            "end": {
+              "line": 13,
+              "column": 35
+            }
+          },
+          "replacement": "/",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_13_col_34_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_13_col_34_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.1291352080000001,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.4821595,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:53:5: replace process_single_sat -> Option<ProcessedSat<'a>> with None",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "process_single_sat",
+            "return_type": "-> Option<ProcessedSat<'a>>",
+            "span": {
+              "start": {
+                "line": 49,
+                "column": 1
+              },
+              "end": {
+                "line": 86,
+                "column": 2
               }
             }
           },
           "span": {
             "start": {
               "line": 53,
-              "column": 9
+              "column": 5
             },
             "end": {
-              "line": 79,
-              "column": 15
+              "line": 85,
+              "column": 7
             }
           },
-          "replacement": "Default::default()",
+          "replacement": "None",
           "genre": "FnValue"
         }
       },
       "summary": "CaughtMutant",
-      "log_path": "log/crates__gneiss-rtk__src__engine__fgo__solver.rs_line_53_col_9.log",
-      "diff_path": "diff/crates__gneiss-rtk__src__engine__fgo__solver.rs_line_53_col_9.diff",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_53_col_5.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_53_col_5.diff",
       "phase_results": [
         {
           "phase": "Build",
-          "duration": 0.595514416,
+          "duration": 1.6702405,
           "process_status": "Success",
           "argv": [
             "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
@@ -83,7 +874,7 @@
         },
         {
           "phase": "Test",
-          "duration": 0.322067584,
+          "duration": 0.487261375,
           "process_status": {
             "Failure": 101
           },
@@ -99,44 +890,98 @@
     {
       "scenario": {
         "Mutant": {
-          "name": "crates/gneiss-rtk/src/engine/fgo/solver.rs:56:35: replace + with - in LevenbergMarquardt::optimize",
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:53:5: replace process_single_sat -> Option<ProcessedSat<'a>> with Some(Default::default())",
           "package": "gneiss-rtk",
-          "file": "crates/gneiss-rtk/src/engine/fgo/solver.rs",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
           "function": {
-            "function_name": "LevenbergMarquardt::optimize",
-            "return_type": "-> OptimizationReport",
+            "function_name": "process_single_sat",
+            "return_type": "-> Option<ProcessedSat<'a>>",
             "span": {
               "start": {
-                "line": 50,
-                "column": 5
+                "line": 49,
+                "column": 1
               },
               "end": {
-                "line": 80,
-                "column": 6
+                "line": 86,
+                "column": 2
               }
             }
           },
           "span": {
             "start": {
-              "line": 56,
-              "column": 35
+              "line": 53,
+              "column": 5
             },
             "end": {
-              "line": 56,
-              "column": 36
+              "line": 85,
+              "column": 7
             }
           },
-          "replacement": "-",
+          "replacement": "Some(Default::default())",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_53_col_5_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_53_col_5_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.541069833,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:53:58: replace == with != in process_single_sat",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "process_single_sat",
+            "return_type": "-> Option<ProcessedSat<'a>>",
+            "span": {
+              "start": {
+                "line": 49,
+                "column": 1
+              },
+              "end": {
+                "line": 86,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 53,
+              "column": 58
+            },
+            "end": {
+              "line": 53,
+              "column": 60
+            }
+          },
+          "replacement": "!=",
           "genre": "BinaryOperator"
         }
       },
       "summary": "CaughtMutant",
-      "log_path": "log/crates__gneiss-rtk__src__engine__fgo__solver.rs_line_56_col_35.log",
-      "diff_path": "diff/crates__gneiss-rtk__src__engine__fgo__solver.rs_line_56_col_35.diff",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_53_col_58.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_53_col_58.diff",
       "phase_results": [
         {
           "phase": "Build",
-          "duration": 0.65571425,
+          "duration": 1.521014333,
           "process_status": "Success",
           "argv": [
             "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
@@ -148,7 +993,7 @@
         },
         {
           "phase": "Test",
-          "duration": 0.275551416,
+          "duration": 0.48601475,
           "process_status": {
             "Failure": 101
           },
@@ -164,44 +1009,174 @@
     {
       "scenario": {
         "Mutant": {
-          "name": "crates/gneiss-rtk/src/engine/fgo/solver.rs:56:35: replace + with * in LevenbergMarquardt::optimize",
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:55:11: replace == with != in process_single_sat",
           "package": "gneiss-rtk",
-          "file": "crates/gneiss-rtk/src/engine/fgo/solver.rs",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
           "function": {
-            "function_name": "LevenbergMarquardt::optimize",
-            "return_type": "-> OptimizationReport",
+            "function_name": "process_single_sat",
+            "return_type": "-> Option<ProcessedSat<'a>>",
             "span": {
               "start": {
-                "line": 50,
-                "column": 5
+                "line": 49,
+                "column": 1
               },
               "end": {
-                "line": 80,
-                "column": 6
+                "line": 86,
+                "column": 2
               }
             }
           },
           "span": {
             "start": {
-              "line": 56,
-              "column": 35
+              "line": 55,
+              "column": 11
             },
             "end": {
-              "line": 56,
+              "line": 55,
+              "column": 13
+            }
+          },
+          "replacement": "!=",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_55_col_11.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_55_col_11.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.143396917,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.597483459,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:58:36: replace / with % in process_single_sat",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "process_single_sat",
+            "return_type": "-> Option<ProcessedSat<'a>>",
+            "span": {
+              "start": {
+                "line": 49,
+                "column": 1
+              },
+              "end": {
+                "line": 86,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 58,
               "column": 36
+            },
+            "end": {
+              "line": 58,
+              "column": 37
+            }
+          },
+          "replacement": "%",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_58_col_36.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_58_col_36.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.1995708330000001,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.541013333,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:58:36: replace / with * in process_single_sat",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "process_single_sat",
+            "return_type": "-> Option<ProcessedSat<'a>>",
+            "span": {
+              "start": {
+                "line": 49,
+                "column": 1
+              },
+              "end": {
+                "line": 86,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 58,
+              "column": 36
+            },
+            "end": {
+              "line": 58,
+              "column": 37
             }
           },
           "replacement": "*",
           "genre": "BinaryOperator"
         }
       },
-      "summary": "MissedMutant",
-      "log_path": "log/crates__gneiss-rtk__src__engine__fgo__solver.rs_line_56_col_35_001.log",
-      "diff_path": "diff/crates__gneiss-rtk__src__engine__fgo__solver.rs_line_56_col_35_001.diff",
+      "summary": "Timeout",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_58_col_36_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_58_col_36_001.diff",
       "phase_results": [
         {
           "phase": "Build",
-          "duration": 0.7063685,
+          "duration": 1.138990167,
           "process_status": "Success",
           "argv": [
             "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
@@ -213,8 +1188,8 @@
         },
         {
           "phase": "Test",
-          "duration": 0.706538416,
-          "process_status": "Success",
+          "duration": 20.037079875,
+          "process_status": "Timeout",
           "argv": [
             "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
             "test",
@@ -227,31 +1202,280 @@
     {
       "scenario": {
         "Mutant": {
-          "name": "crates/gneiss-rtk/src/engine/fgo/solver.rs:70:26: replace < with == in LevenbergMarquardt::optimize",
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:59:81: replace - with + in process_single_sat",
           "package": "gneiss-rtk",
-          "file": "crates/gneiss-rtk/src/engine/fgo/solver.rs",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
           "function": {
-            "function_name": "LevenbergMarquardt::optimize",
-            "return_type": "-> OptimizationReport",
+            "function_name": "process_single_sat",
+            "return_type": "-> Option<ProcessedSat<'a>>",
             "span": {
               "start": {
-                "line": 50,
-                "column": 5
+                "line": 49,
+                "column": 1
               },
               "end": {
-                "line": 80,
-                "column": 6
+                "line": 86,
+                "column": 2
               }
             }
           },
           "span": {
             "start": {
-              "line": 70,
-              "column": 26
+              "line": 59,
+              "column": 81
             },
             "end": {
-              "line": 70,
-              "column": 27
+              "line": 59,
+              "column": 82
+            }
+          },
+          "replacement": "+",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_59_col_81.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_59_col_81.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.04427575,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.485870125,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:59:81: replace - with / in process_single_sat",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "process_single_sat",
+            "return_type": "-> Option<ProcessedSat<'a>>",
+            "span": {
+              "start": {
+                "line": 49,
+                "column": 1
+              },
+              "end": {
+                "line": 86,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 59,
+              "column": 81
+            },
+            "end": {
+              "line": 59,
+              "column": 82
+            }
+          },
+          "replacement": "/",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_59_col_81_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_59_col_81_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.099367709,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.48872625,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:64:25: replace - with + in process_single_sat",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "process_single_sat",
+            "return_type": "-> Option<ProcessedSat<'a>>",
+            "span": {
+              "start": {
+                "line": 49,
+                "column": 1
+              },
+              "end": {
+                "line": 86,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 64,
+              "column": 25
+            },
+            "end": {
+              "line": 64,
+              "column": 26
+            }
+          },
+          "replacement": "+",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_64_col_25.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_64_col_25.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.092585875,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.494227708,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:64:25: replace - with / in process_single_sat",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "process_single_sat",
+            "return_type": "-> Option<ProcessedSat<'a>>",
+            "span": {
+              "start": {
+                "line": 49,
+                "column": 1
+              },
+              "end": {
+                "line": 86,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 64,
+              "column": 25
+            },
+            "end": {
+              "line": 64,
+              "column": 26
+            }
+          },
+          "replacement": "/",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_64_col_25_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_64_col_25_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.589903792,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:66:11: replace < with == in process_single_sat",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "process_single_sat",
+            "return_type": "-> Option<ProcessedSat<'a>>",
+            "span": {
+              "start": {
+                "line": 49,
+                "column": 1
+              },
+              "end": {
+                "line": 86,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 66,
+              "column": 11
+            },
+            "end": {
+              "line": 66,
+              "column": 12
             }
           },
           "replacement": "==",
@@ -259,12 +1483,12 @@
         }
       },
       "summary": "CaughtMutant",
-      "log_path": "log/crates__gneiss-rtk__src__engine__fgo__solver.rs_line_70_col_26.log",
-      "diff_path": "diff/crates__gneiss-rtk__src__engine__fgo__solver.rs_line_70_col_26.diff",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_66_col_11.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_66_col_11.diff",
       "phase_results": [
         {
           "phase": "Build",
-          "duration": 0.701759916,
+          "duration": 1.159416458,
           "process_status": "Success",
           "argv": [
             "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
@@ -276,7 +1500,7 @@
         },
         {
           "phase": "Test",
-          "duration": 0.325985917,
+          "duration": 0.535742375,
           "process_status": {
             "Failure": 101
           },
@@ -292,31 +1516,31 @@
     {
       "scenario": {
         "Mutant": {
-          "name": "crates/gneiss-rtk/src/engine/fgo/solver.rs:70:26: replace < with > in LevenbergMarquardt::optimize",
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:66:11: replace < with > in process_single_sat",
           "package": "gneiss-rtk",
-          "file": "crates/gneiss-rtk/src/engine/fgo/solver.rs",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
           "function": {
-            "function_name": "LevenbergMarquardt::optimize",
-            "return_type": "-> OptimizationReport",
+            "function_name": "process_single_sat",
+            "return_type": "-> Option<ProcessedSat<'a>>",
             "span": {
               "start": {
-                "line": 50,
-                "column": 5
+                "line": 49,
+                "column": 1
               },
               "end": {
-                "line": 80,
-                "column": 6
+                "line": 86,
+                "column": 2
               }
             }
           },
           "span": {
             "start": {
-              "line": 70,
-              "column": 26
+              "line": 66,
+              "column": 11
             },
             "end": {
-              "line": 70,
-              "column": 27
+              "line": 66,
+              "column": 12
             }
           },
           "replacement": ">",
@@ -324,12 +1548,12 @@
         }
       },
       "summary": "CaughtMutant",
-      "log_path": "log/crates__gneiss-rtk__src__engine__fgo__solver.rs_line_70_col_26_001.log",
-      "diff_path": "diff/crates__gneiss-rtk__src__engine__fgo__solver.rs_line_70_col_26_001.diff",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_66_col_11_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_66_col_11_001.diff",
       "phase_results": [
         {
           "phase": "Build",
-          "duration": 0.701688333,
+          "duration": 1.238152209,
           "process_status": "Success",
           "argv": [
             "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
@@ -341,7 +1565,7 @@
         },
         {
           "phase": "Test",
-          "duration": 0.2686535,
+          "duration": 0.495001125,
           "process_status": {
             "Failure": 101
           },
@@ -357,31 +1581,31 @@
     {
       "scenario": {
         "Mutant": {
-          "name": "crates/gneiss-rtk/src/engine/fgo/solver.rs:70:26: replace < with <= in LevenbergMarquardt::optimize",
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:66:11: replace < with <= in process_single_sat",
           "package": "gneiss-rtk",
-          "file": "crates/gneiss-rtk/src/engine/fgo/solver.rs",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
           "function": {
-            "function_name": "LevenbergMarquardt::optimize",
-            "return_type": "-> OptimizationReport",
+            "function_name": "process_single_sat",
+            "return_type": "-> Option<ProcessedSat<'a>>",
             "span": {
               "start": {
-                "line": 50,
-                "column": 5
+                "line": 49,
+                "column": 1
               },
               "end": {
-                "line": 80,
-                "column": 6
+                "line": 86,
+                "column": 2
               }
             }
           },
           "span": {
             "start": {
-              "line": 70,
-              "column": 26
+              "line": 66,
+              "column": 11
             },
             "end": {
-              "line": 70,
-              "column": 27
+              "line": 66,
+              "column": 12
             }
           },
           "replacement": "<=",
@@ -389,12 +1613,12 @@
         }
       },
       "summary": "MissedMutant",
-      "log_path": "log/crates__gneiss-rtk__src__engine__fgo__solver.rs_line_70_col_26_002.log",
-      "diff_path": "diff/crates__gneiss-rtk__src__engine__fgo__solver.rs_line_70_col_26_002.diff",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_66_col_11_002.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_66_col_11_002.diff",
       "phase_results": [
         {
           "phase": "Build",
-          "duration": 0.646456542,
+          "duration": 1.134615084,
           "process_status": "Success",
           "argv": [
             "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
@@ -406,7 +1630,7 @@
         },
         {
           "phase": "Test",
-          "duration": 1.014457542,
+          "duration": 1.290327583,
           "process_status": "Success",
           "argv": [
             "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
@@ -420,170 +1644,44 @@
     {
       "scenario": {
         "Mutant": {
-          "name": "crates/gneiss-rtk/src/engine/fgo/solver.rs:83:9: replace LevenbergMarquardt::apply_damping with ()",
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:79:33: replace * with + in process_single_sat",
           "package": "gneiss-rtk",
-          "file": "crates/gneiss-rtk/src/engine/fgo/solver.rs",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
           "function": {
-            "function_name": "LevenbergMarquardt::apply_damping",
-            "return_type": "",
+            "function_name": "process_single_sat",
+            "return_type": "-> Option<ProcessedSat<'a>>",
             "span": {
               "start": {
-                "line": 82,
-                "column": 5
+                "line": 49,
+                "column": 1
               },
               "end": {
                 "line": 86,
-                "column": 6
+                "column": 2
               }
             }
           },
           "span": {
             "start": {
-              "line": 83,
-              "column": 9
+              "line": 79,
+              "column": 33
             },
             "end": {
-              "line": 85,
-              "column": 10
-            }
-          },
-          "replacement": "()",
-          "genre": "FnValue"
-        }
-      },
-      "summary": "MissedMutant",
-      "log_path": "log/crates__gneiss-rtk__src__engine__fgo__solver.rs_line_83_col_9.log",
-      "diff_path": "diff/crates__gneiss-rtk__src__engine__fgo__solver.rs_line_83_col_9.diff",
-      "phase_results": [
-        {
-          "phase": "Build",
-          "duration": 0.795622583,
-          "process_status": "Success",
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--no-run",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        },
-        {
-          "phase": "Test",
-          "duration": 0.746892625,
-          "process_status": "Success",
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        }
-      ]
-    },
-    {
-      "scenario": {
-        "Mutant": {
-          "name": "crates/gneiss-rtk/src/engine/fgo/solver.rs:84:32: replace += with -= in LevenbergMarquardt::apply_damping",
-          "package": "gneiss-rtk",
-          "file": "crates/gneiss-rtk/src/engine/fgo/solver.rs",
-          "function": {
-            "function_name": "LevenbergMarquardt::apply_damping",
-            "return_type": "",
-            "span": {
-              "start": {
-                "line": 82,
-                "column": 5
-              },
-              "end": {
-                "line": 86,
-                "column": 6
-              }
-            }
-          },
-          "span": {
-            "start": {
-              "line": 84,
-              "column": 32
-            },
-            "end": {
-              "line": 84,
+              "line": 79,
               "column": 34
             }
           },
-          "replacement": "-=",
-          "genre": "BinaryOperator"
-        }
-      },
-      "summary": "MissedMutant",
-      "log_path": "log/crates__gneiss-rtk__src__engine__fgo__solver.rs_line_84_col_32.log",
-      "diff_path": "diff/crates__gneiss-rtk__src__engine__fgo__solver.rs_line_84_col_32.diff",
-      "phase_results": [
-        {
-          "phase": "Build",
-          "duration": 0.648951167,
-          "process_status": "Success",
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--no-run",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        },
-        {
-          "phase": "Test",
-          "duration": 0.75089425,
-          "process_status": "Success",
-          "argv": [
-            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
-            "test",
-            "--verbose",
-            "--package=gneiss-rtk@0.1.0"
-          ]
-        }
-      ]
-    },
-    {
-      "scenario": {
-        "Mutant": {
-          "name": "crates/gneiss-rtk/src/engine/fgo/solver.rs:84:32: replace += with *= in LevenbergMarquardt::apply_damping",
-          "package": "gneiss-rtk",
-          "file": "crates/gneiss-rtk/src/engine/fgo/solver.rs",
-          "function": {
-            "function_name": "LevenbergMarquardt::apply_damping",
-            "return_type": "",
-            "span": {
-              "start": {
-                "line": 82,
-                "column": 5
-              },
-              "end": {
-                "line": 86,
-                "column": 6
-              }
-            }
-          },
-          "span": {
-            "start": {
-              "line": 84,
-              "column": 32
-            },
-            "end": {
-              "line": 84,
-              "column": 34
-            }
-          },
-          "replacement": "*=",
+          "replacement": "+",
           "genre": "BinaryOperator"
         }
       },
       "summary": "CaughtMutant",
-      "log_path": "log/crates__gneiss-rtk__src__engine__fgo__solver.rs_line_84_col_32_001.log",
-      "diff_path": "diff/crates__gneiss-rtk__src__engine__fgo__solver.rs_line_84_col_32_001.diff",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_79_col_33.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_79_col_33.diff",
       "phase_results": [
         {
           "phase": "Build",
-          "duration": 0.645932042,
+          "duration": 1.1743943749999999,
           "process_status": "Success",
           "argv": [
             "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
@@ -595,7 +1693,3751 @@
         },
         {
           "phase": "Test",
-          "duration": 0.328464792,
+          "duration": 0.485625083,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:79:33: replace * with / in process_single_sat",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "process_single_sat",
+            "return_type": "-> Option<ProcessedSat<'a>>",
+            "span": {
+              "start": {
+                "line": 49,
+                "column": 1
+              },
+              "end": {
+                "line": 86,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 79,
+              "column": 33
+            },
+            "end": {
+              "line": 79,
+              "column": 34
+            }
+          },
+          "replacement": "/",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_79_col_33_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_79_col_33_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.203914625,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.245607083,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:81:34: replace / with % in process_single_sat",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "process_single_sat",
+            "return_type": "-> Option<ProcessedSat<'a>>",
+            "span": {
+              "start": {
+                "line": 49,
+                "column": 1
+              },
+              "end": {
+                "line": 86,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 81,
+              "column": 34
+            },
+            "end": {
+              "line": 81,
+              "column": 35
+            }
+          },
+          "replacement": "%",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_81_col_34.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_81_col_34.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.599857042,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:81:34: replace / with * in process_single_sat",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "process_single_sat",
+            "return_type": "-> Option<ProcessedSat<'a>>",
+            "span": {
+              "start": {
+                "line": 49,
+                "column": 1
+              },
+              "end": {
+                "line": 86,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 81,
+              "column": 34
+            },
+            "end": {
+              "line": 81,
+              "column": 35
+            }
+          },
+          "replacement": "*",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_81_col_34_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_81_col_34_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.418838167,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.588506333,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:81:23: replace - with + in process_single_sat",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "process_single_sat",
+            "return_type": "-> Option<ProcessedSat<'a>>",
+            "span": {
+              "start": {
+                "line": 49,
+                "column": 1
+              },
+              "end": {
+                "line": 86,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 81,
+              "column": 23
+            },
+            "end": {
+              "line": 81,
+              "column": 24
+            }
+          },
+          "replacement": "+",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_81_col_23.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_81_col_23.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.666825083,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.541536625,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:81:23: replace - with / in process_single_sat",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "process_single_sat",
+            "return_type": "-> Option<ProcessedSat<'a>>",
+            "span": {
+              "start": {
+                "line": 49,
+                "column": 1
+              },
+              "end": {
+                "line": 86,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 81,
+              "column": 23
+            },
+            "end": {
+              "line": 81,
+              "column": 24
+            }
+          },
+          "replacement": "/",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "Unviable",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_81_col_23_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_81_col_23_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 0.653997417,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:81:53: replace - with + in process_single_sat",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "process_single_sat",
+            "return_type": "-> Option<ProcessedSat<'a>>",
+            "span": {
+              "start": {
+                "line": 49,
+                "column": 1
+              },
+              "end": {
+                "line": 86,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 81,
+              "column": 53
+            },
+            "end": {
+              "line": 81,
+              "column": 54
+            }
+          },
+          "replacement": "+",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_81_col_53.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_81_col_53.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.388764708,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 1.293283166,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:81:53: replace - with / in process_single_sat",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "process_single_sat",
+            "return_type": "-> Option<ProcessedSat<'a>>",
+            "span": {
+              "start": {
+                "line": 49,
+                "column": 1
+              },
+              "end": {
+                "line": 86,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 81,
+              "column": 53
+            },
+            "end": {
+              "line": 81,
+              "column": 54
+            }
+          },
+          "replacement": "/",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_81_col_53_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_81_col_53_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.183202458,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.490880667,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:82:27: replace / with % in process_single_sat",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "process_single_sat",
+            "return_type": "-> Option<ProcessedSat<'a>>",
+            "span": {
+              "start": {
+                "line": 49,
+                "column": 1
+              },
+              "end": {
+                "line": 86,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 82,
+              "column": 27
+            },
+            "end": {
+              "line": 82,
+              "column": 28
+            }
+          },
+          "replacement": "%",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_82_col_27.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_82_col_27.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.294332,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.541238208,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:82:27: replace / with * in process_single_sat",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "process_single_sat",
+            "return_type": "-> Option<ProcessedSat<'a>>",
+            "span": {
+              "start": {
+                "line": 49,
+                "column": 1
+              },
+              "end": {
+                "line": 86,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 82,
+              "column": 27
+            },
+            "end": {
+              "line": 82,
+              "column": 28
+            }
+          },
+          "replacement": "*",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_82_col_27_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_82_col_27_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.385551166,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.531307083,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:82:51: replace / with % in process_single_sat",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "process_single_sat",
+            "return_type": "-> Option<ProcessedSat<'a>>",
+            "span": {
+              "start": {
+                "line": 49,
+                "column": 1
+              },
+              "end": {
+                "line": 86,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 82,
+              "column": 51
+            },
+            "end": {
+              "line": 82,
+              "column": 52
+            }
+          },
+          "replacement": "%",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_82_col_51.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_82_col_51.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.198867417,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.545051959,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:82:51: replace / with * in process_single_sat",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "process_single_sat",
+            "return_type": "-> Option<ProcessedSat<'a>>",
+            "span": {
+              "start": {
+                "line": 49,
+                "column": 1
+              },
+              "end": {
+                "line": 86,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 82,
+              "column": 51
+            },
+            "end": {
+              "line": 82,
+              "column": 52
+            }
+          },
+          "replacement": "*",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_82_col_51_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_82_col_51_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.28935275,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.549982042,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, None, None, Default::default(), true)",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "get_obs_and_corrections",
+            "return_type": "-> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool)",
+            "span": {
+              "start": {
+                "line": 88,
+                "column": 1
+              },
+              "end": {
+                "line": 109,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 91,
+              "column": 5
+            },
+            "end": {
+              "line": 108,
+              "column": 35
+            }
+          },
+          "replacement": "(None, None, None, None, Default::default(), true)",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.5626229999999999,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.4868755,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, None, None, Default::default(), false)",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "get_obs_and_corrections",
+            "return_type": "-> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool)",
+            "span": {
+              "start": {
+                "line": 88,
+                "column": 1
+              },
+              "end": {
+                "line": 109,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 91,
+              "column": 5
+            },
+            "end": {
+              "line": 108,
+              "column": 35
+            }
+          },
+          "replacement": "(None, None, None, None, Default::default(), false)",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_001.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.111382709,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.491505584,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, None, Some(0.0), Default::default(), true)",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "get_obs_and_corrections",
+            "return_type": "-> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool)",
+            "span": {
+              "start": {
+                "line": 88,
+                "column": 1
+              },
+              "end": {
+                "line": 109,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 91,
+              "column": 5
+            },
+            "end": {
+              "line": 108,
+              "column": 35
+            }
+          },
+          "replacement": "(None, None, None, Some(0.0), Default::default(), true)",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_002.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_002.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.232960042,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.597226958,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, None, Some(0.0), Default::default(), false)",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "get_obs_and_corrections",
+            "return_type": "-> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool)",
+            "span": {
+              "start": {
+                "line": 88,
+                "column": 1
+              },
+              "end": {
+                "line": 109,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 91,
+              "column": 5
+            },
+            "end": {
+              "line": 108,
+              "column": 35
+            }
+          },
+          "replacement": "(None, None, None, Some(0.0), Default::default(), false)",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_003.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_003.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.272898834,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.488121375,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, None, Some(1.0), Default::default(), true)",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "get_obs_and_corrections",
+            "return_type": "-> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool)",
+            "span": {
+              "start": {
+                "line": 88,
+                "column": 1
+              },
+              "end": {
+                "line": 109,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 91,
+              "column": 5
+            },
+            "end": {
+              "line": 108,
+              "column": 35
+            }
+          },
+          "replacement": "(None, None, None, Some(1.0), Default::default(), true)",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_004.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_004.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.132857625,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.483539125,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, None, Some(1.0), Default::default(), false)",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "get_obs_and_corrections",
+            "return_type": "-> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool)",
+            "span": {
+              "start": {
+                "line": 88,
+                "column": 1
+              },
+              "end": {
+                "line": 109,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 91,
+              "column": 5
+            },
+            "end": {
+              "line": 108,
+              "column": 35
+            }
+          },
+          "replacement": "(None, None, None, Some(1.0), Default::default(), false)",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_005.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_005.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.126276875,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.540599834,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, None, Some(-1.0), Default::default(), true)",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "get_obs_and_corrections",
+            "return_type": "-> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool)",
+            "span": {
+              "start": {
+                "line": 88,
+                "column": 1
+              },
+              "end": {
+                "line": 109,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 91,
+              "column": 5
+            },
+            "end": {
+              "line": 108,
+              "column": 35
+            }
+          },
+          "replacement": "(None, None, None, Some(-1.0), Default::default(), true)",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_006.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_006.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.230060625,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.486903334,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, None, Some(-1.0), Default::default(), false)",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "get_obs_and_corrections",
+            "return_type": "-> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool)",
+            "span": {
+              "start": {
+                "line": 88,
+                "column": 1
+              },
+              "end": {
+                "line": 109,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 91,
+              "column": 5
+            },
+            "end": {
+              "line": 108,
+              "column": 35
+            }
+          },
+          "replacement": "(None, None, None, Some(-1.0), Default::default(), false)",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_007.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_007.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.129123042,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.487358084,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(0.0), None, Default::default(), true)",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "get_obs_and_corrections",
+            "return_type": "-> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool)",
+            "span": {
+              "start": {
+                "line": 88,
+                "column": 1
+              },
+              "end": {
+                "line": 109,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 91,
+              "column": 5
+            },
+            "end": {
+              "line": 108,
+              "column": 35
+            }
+          },
+          "replacement": "(None, None, Some(0.0), None, Default::default(), true)",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_008.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_008.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.130973125,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.493043834,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(0.0), None, Default::default(), false)",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "get_obs_and_corrections",
+            "return_type": "-> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool)",
+            "span": {
+              "start": {
+                "line": 88,
+                "column": 1
+              },
+              "end": {
+                "line": 109,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 91,
+              "column": 5
+            },
+            "end": {
+              "line": 108,
+              "column": 35
+            }
+          },
+          "replacement": "(None, None, Some(0.0), None, Default::default(), false)",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_009.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_009.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.232824125,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.490687875,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(0.0), Some(0.0), Default::default(), true)",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "get_obs_and_corrections",
+            "return_type": "-> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool)",
+            "span": {
+              "start": {
+                "line": 88,
+                "column": 1
+              },
+              "end": {
+                "line": 109,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 91,
+              "column": 5
+            },
+            "end": {
+              "line": 108,
+              "column": 35
+            }
+          },
+          "replacement": "(None, None, Some(0.0), Some(0.0), Default::default(), true)",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_010.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_010.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.131366791,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.488532083,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(0.0), Some(0.0), Default::default(), false)",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "get_obs_and_corrections",
+            "return_type": "-> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool)",
+            "span": {
+              "start": {
+                "line": 88,
+                "column": 1
+              },
+              "end": {
+                "line": 109,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 91,
+              "column": 5
+            },
+            "end": {
+              "line": 108,
+              "column": 35
+            }
+          },
+          "replacement": "(None, None, Some(0.0), Some(0.0), Default::default(), false)",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_011.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_011.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.125949625,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.489798625,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(0.0), Some(1.0), Default::default(), true)",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "get_obs_and_corrections",
+            "return_type": "-> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool)",
+            "span": {
+              "start": {
+                "line": 88,
+                "column": 1
+              },
+              "end": {
+                "line": 109,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 91,
+              "column": 5
+            },
+            "end": {
+              "line": 108,
+              "column": 35
+            }
+          },
+          "replacement": "(None, None, Some(0.0), Some(1.0), Default::default(), true)",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_012.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_012.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.249448458,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.487460416,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(0.0), Some(1.0), Default::default(), false)",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "get_obs_and_corrections",
+            "return_type": "-> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool)",
+            "span": {
+              "start": {
+                "line": 88,
+                "column": 1
+              },
+              "end": {
+                "line": 109,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 91,
+              "column": 5
+            },
+            "end": {
+              "line": 108,
+              "column": 35
+            }
+          },
+          "replacement": "(None, None, Some(0.0), Some(1.0), Default::default(), false)",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_013.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_013.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.179989667,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.489510833,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(0.0), Some(-1.0), Default::default(), true)",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "get_obs_and_corrections",
+            "return_type": "-> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool)",
+            "span": {
+              "start": {
+                "line": 88,
+                "column": 1
+              },
+              "end": {
+                "line": 109,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 91,
+              "column": 5
+            },
+            "end": {
+              "line": 108,
+              "column": 35
+            }
+          },
+          "replacement": "(None, None, Some(0.0), Some(-1.0), Default::default(), true)",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_014.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_014.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.128465375,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.489436542,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(0.0), Some(-1.0), Default::default(), false)",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "get_obs_and_corrections",
+            "return_type": "-> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool)",
+            "span": {
+              "start": {
+                "line": 88,
+                "column": 1
+              },
+              "end": {
+                "line": 109,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 91,
+              "column": 5
+            },
+            "end": {
+              "line": 108,
+              "column": 35
+            }
+          },
+          "replacement": "(None, None, Some(0.0), Some(-1.0), Default::default(), false)",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_015.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_015.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.166520167,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.488765875,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(1.0), None, Default::default(), true)",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "get_obs_and_corrections",
+            "return_type": "-> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool)",
+            "span": {
+              "start": {
+                "line": 88,
+                "column": 1
+              },
+              "end": {
+                "line": 109,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 91,
+              "column": 5
+            },
+            "end": {
+              "line": 108,
+              "column": 35
+            }
+          },
+          "replacement": "(None, None, Some(1.0), None, Default::default(), true)",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_016.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_016.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.288870708,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.556466375,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(1.0), None, Default::default(), false)",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "get_obs_and_corrections",
+            "return_type": "-> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool)",
+            "span": {
+              "start": {
+                "line": 88,
+                "column": 1
+              },
+              "end": {
+                "line": 109,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 91,
+              "column": 5
+            },
+            "end": {
+              "line": 108,
+              "column": 35
+            }
+          },
+          "replacement": "(None, None, Some(1.0), None, Default::default(), false)",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_017.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_017.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.291893209,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.536745083,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(1.0), Some(0.0), Default::default(), true)",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "get_obs_and_corrections",
+            "return_type": "-> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool)",
+            "span": {
+              "start": {
+                "line": 88,
+                "column": 1
+              },
+              "end": {
+                "line": 109,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 91,
+              "column": 5
+            },
+            "end": {
+              "line": 108,
+              "column": 35
+            }
+          },
+          "replacement": "(None, None, Some(1.0), Some(0.0), Default::default(), true)",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_018.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_018.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.3010074999999999,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.486794792,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(1.0), Some(0.0), Default::default(), false)",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "get_obs_and_corrections",
+            "return_type": "-> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool)",
+            "span": {
+              "start": {
+                "line": 88,
+                "column": 1
+              },
+              "end": {
+                "line": 109,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 91,
+              "column": 5
+            },
+            "end": {
+              "line": 108,
+              "column": 35
+            }
+          },
+          "replacement": "(None, None, Some(1.0), Some(0.0), Default::default(), false)",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_019.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_019.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.229803541,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.485545125,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(1.0), Some(1.0), Default::default(), true)",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "get_obs_and_corrections",
+            "return_type": "-> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool)",
+            "span": {
+              "start": {
+                "line": 88,
+                "column": 1
+              },
+              "end": {
+                "line": 109,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 91,
+              "column": 5
+            },
+            "end": {
+              "line": 108,
+              "column": 35
+            }
+          },
+          "replacement": "(None, None, Some(1.0), Some(1.0), Default::default(), true)",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_020.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_020.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.30059575,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.538734625,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(1.0), Some(1.0), Default::default(), false)",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "get_obs_and_corrections",
+            "return_type": "-> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool)",
+            "span": {
+              "start": {
+                "line": 88,
+                "column": 1
+              },
+              "end": {
+                "line": 109,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 91,
+              "column": 5
+            },
+            "end": {
+              "line": 108,
+              "column": 35
+            }
+          },
+          "replacement": "(None, None, Some(1.0), Some(1.0), Default::default(), false)",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_021.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_021.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.405721041,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.603980125,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(1.0), Some(-1.0), Default::default(), true)",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "get_obs_and_corrections",
+            "return_type": "-> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool)",
+            "span": {
+              "start": {
+                "line": 88,
+                "column": 1
+              },
+              "end": {
+                "line": 109,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 91,
+              "column": 5
+            },
+            "end": {
+              "line": 108,
+              "column": 35
+            }
+          },
+          "replacement": "(None, None, Some(1.0), Some(-1.0), Default::default(), true)",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_022.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_022.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.327118041,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.594268083,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(1.0), Some(-1.0), Default::default(), false)",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "get_obs_and_corrections",
+            "return_type": "-> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool)",
+            "span": {
+              "start": {
+                "line": 88,
+                "column": 1
+              },
+              "end": {
+                "line": 109,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 91,
+              "column": 5
+            },
+            "end": {
+              "line": 108,
+              "column": 35
+            }
+          },
+          "replacement": "(None, None, Some(1.0), Some(-1.0), Default::default(), false)",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_023.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_023.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 2.415189083,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.863175208,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(-1.0), None, Default::default(), true)",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "get_obs_and_corrections",
+            "return_type": "-> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool)",
+            "span": {
+              "start": {
+                "line": 88,
+                "column": 1
+              },
+              "end": {
+                "line": 109,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 91,
+              "column": 5
+            },
+            "end": {
+              "line": 108,
+              "column": 35
+            }
+          },
+          "replacement": "(None, None, Some(-1.0), None, Default::default(), true)",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_024.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_024.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.5073221669999999,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.595447459,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(-1.0), None, Default::default(), false)",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "get_obs_and_corrections",
+            "return_type": "-> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool)",
+            "span": {
+              "start": {
+                "line": 88,
+                "column": 1
+              },
+              "end": {
+                "line": 109,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 91,
+              "column": 5
+            },
+            "end": {
+              "line": 108,
+              "column": 35
+            }
+          },
+          "replacement": "(None, None, Some(-1.0), None, Default::default(), false)",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_025.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_025.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.655197917,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.536727917,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(-1.0), Some(0.0), Default::default(), true)",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "get_obs_and_corrections",
+            "return_type": "-> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool)",
+            "span": {
+              "start": {
+                "line": 88,
+                "column": 1
+              },
+              "end": {
+                "line": 109,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 91,
+              "column": 5
+            },
+            "end": {
+              "line": 108,
+              "column": 35
+            }
+          },
+          "replacement": "(None, None, Some(-1.0), Some(0.0), Default::default(), true)",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_026.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_026.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.335929709,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.600979666,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(-1.0), Some(0.0), Default::default(), false)",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "get_obs_and_corrections",
+            "return_type": "-> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool)",
+            "span": {
+              "start": {
+                "line": 88,
+                "column": 1
+              },
+              "end": {
+                "line": 109,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 91,
+              "column": 5
+            },
+            "end": {
+              "line": 108,
+              "column": 35
+            }
+          },
+          "replacement": "(None, None, Some(-1.0), Some(0.0), Default::default(), false)",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_027.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_027.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.3466977500000001,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.534491209,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(-1.0), Some(1.0), Default::default(), true)",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "get_obs_and_corrections",
+            "return_type": "-> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool)",
+            "span": {
+              "start": {
+                "line": 88,
+                "column": 1
+              },
+              "end": {
+                "line": 109,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 91,
+              "column": 5
+            },
+            "end": {
+              "line": 108,
+              "column": 35
+            }
+          },
+          "replacement": "(None, None, Some(-1.0), Some(1.0), Default::default(), true)",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_028.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_028.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.352650792,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.763416958,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(-1.0), Some(1.0), Default::default(), false)",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "get_obs_and_corrections",
+            "return_type": "-> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool)",
+            "span": {
+              "start": {
+                "line": 88,
+                "column": 1
+              },
+              "end": {
+                "line": 109,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 91,
+              "column": 5
+            },
+            "end": {
+              "line": 108,
+              "column": 35
+            }
+          },
+          "replacement": "(None, None, Some(-1.0), Some(1.0), Default::default(), false)",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_029.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_029.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 2.006974042,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.810437458,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(-1.0), Some(-1.0), Default::default(), true)",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "get_obs_and_corrections",
+            "return_type": "-> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool)",
+            "span": {
+              "start": {
+                "line": 88,
+                "column": 1
+              },
+              "end": {
+                "line": 109,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 91,
+              "column": 5
+            },
+            "end": {
+              "line": 108,
+              "column": 35
+            }
+          },
+          "replacement": "(None, None, Some(-1.0), Some(-1.0), Default::default(), true)",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_030.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_030.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.890163334,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.767990875,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(-1.0), Some(-1.0), Default::default(), false)",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "get_obs_and_corrections",
+            "return_type": "-> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool)",
+            "span": {
+              "start": {
+                "line": 88,
+                "column": 1
+              },
+              "end": {
+                "line": 109,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 91,
+              "column": 5
+            },
+            "end": {
+              "line": 108,
+              "column": 35
+            }
+          },
+          "replacement": "(None, None, Some(-1.0), Some(-1.0), Default::default(), false)",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_031.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_031.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.8630724170000001,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.588585042,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, Some(0.0), None, None, Default::default(), true)",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "get_obs_and_corrections",
+            "return_type": "-> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool)",
+            "span": {
+              "start": {
+                "line": 88,
+                "column": 1
+              },
+              "end": {
+                "line": 109,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 91,
+              "column": 5
+            },
+            "end": {
+              "line": 108,
+              "column": 35
+            }
+          },
+          "replacement": "(None, Some(0.0), None, None, Default::default(), true)",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_032.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_032.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.341705959,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.643468708,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, Some(0.0), None, None, Default::default(), false)",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "get_obs_and_corrections",
+            "return_type": "-> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool)",
+            "span": {
+              "start": {
+                "line": 88,
+                "column": 1
+              },
+              "end": {
+                "line": 109,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 91,
+              "column": 5
+            },
+            "end": {
+              "line": 108,
+              "column": 35
+            }
+          },
+          "replacement": "(None, Some(0.0), None, None, Default::default(), false)",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_033.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_033.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.495025167,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.799481125,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, Some(0.0), None, Some(0.0), Default::default(), true)",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "get_obs_and_corrections",
+            "return_type": "-> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool)",
+            "span": {
+              "start": {
+                "line": 88,
+                "column": 1
+              },
+              "end": {
+                "line": 109,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 91,
+              "column": 5
+            },
+            "end": {
+              "line": 108,
+              "column": 35
+            }
+          },
+          "replacement": "(None, Some(0.0), None, Some(0.0), Default::default(), true)",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_034.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_034.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.793602666,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.5884415,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, Some(0.0), None, Some(0.0), Default::default(), false)",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "get_obs_and_corrections",
+            "return_type": "-> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool)",
+            "span": {
+              "start": {
+                "line": 88,
+                "column": 1
+              },
+              "end": {
+                "line": 109,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 91,
+              "column": 5
+            },
+            "end": {
+              "line": 108,
+              "column": 35
+            }
+          },
+          "replacement": "(None, Some(0.0), None, Some(0.0), Default::default(), false)",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_035.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_035.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.660497791,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.64757125,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, Some(0.0), None, Some(1.0), Default::default(), true)",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "get_obs_and_corrections",
+            "return_type": "-> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool)",
+            "span": {
+              "start": {
+                "line": 88,
+                "column": 1
+              },
+              "end": {
+                "line": 109,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 91,
+              "column": 5
+            },
+            "end": {
+              "line": 108,
+              "column": 35
+            }
+          },
+          "replacement": "(None, Some(0.0), None, Some(1.0), Default::default(), true)",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_036.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_036.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.569979625,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.595932375,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, Some(0.0), None, Some(1.0), Default::default(), false)",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "get_obs_and_corrections",
+            "return_type": "-> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool)",
+            "span": {
+              "start": {
+                "line": 88,
+                "column": 1
+              },
+              "end": {
+                "line": 109,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 91,
+              "column": 5
+            },
+            "end": {
+              "line": 108,
+              "column": 35
+            }
+          },
+          "replacement": "(None, Some(0.0), None, Some(1.0), Default::default(), false)",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_037.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_037.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.290766208,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.589751417,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, Some(0.0), None, Some(-1.0), Default::default(), true)",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "get_obs_and_corrections",
+            "return_type": "-> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool)",
+            "span": {
+              "start": {
+                "line": 88,
+                "column": 1
+              },
+              "end": {
+                "line": 109,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 91,
+              "column": 5
+            },
+            "end": {
+              "line": 108,
+              "column": 35
+            }
+          },
+          "replacement": "(None, Some(0.0), None, Some(-1.0), Default::default(), true)",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_038.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_038.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.358265958,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.53831275,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, Some(0.0), None, Some(-1.0), Default::default(), false)",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "get_obs_and_corrections",
+            "return_type": "-> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool)",
+            "span": {
+              "start": {
+                "line": 88,
+                "column": 1
+              },
+              "end": {
+                "line": 109,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 91,
+              "column": 5
+            },
+            "end": {
+              "line": 108,
+              "column": 35
+            }
+          },
+          "replacement": "(None, Some(0.0), None, Some(-1.0), Default::default(), false)",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_039.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_039.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.328230667,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.719288541,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, Some(0.0), Some(0.0), None, Default::default(), true)",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "get_obs_and_corrections",
+            "return_type": "-> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool)",
+            "span": {
+              "start": {
+                "line": 88,
+                "column": 1
+              },
+              "end": {
+                "line": 109,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 91,
+              "column": 5
+            },
+            "end": {
+              "line": 108,
+              "column": 35
+            }
+          },
+          "replacement": "(None, Some(0.0), Some(0.0), None, Default::default(), true)",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_040.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_040.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.495776042,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.593855208,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, Some(0.0), Some(0.0), None, Default::default(), false)",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "get_obs_and_corrections",
+            "return_type": "-> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool)",
+            "span": {
+              "start": {
+                "line": 88,
+                "column": 1
+              },
+              "end": {
+                "line": 109,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 91,
+              "column": 5
+            },
+            "end": {
+              "line": 108,
+              "column": 35
+            }
+          },
+          "replacement": "(None, Some(0.0), Some(0.0), None, Default::default(), false)",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_041.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_041.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.357745292,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.590718958,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, Some(0.0), Some(0.0), Some(0.0), Default::default(), true)",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "get_obs_and_corrections",
+            "return_type": "-> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool)",
+            "span": {
+              "start": {
+                "line": 88,
+                "column": 1
+              },
+              "end": {
+                "line": 109,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 91,
+              "column": 5
+            },
+            "end": {
+              "line": 108,
+              "column": 35
+            }
+          },
+          "replacement": "(None, Some(0.0), Some(0.0), Some(0.0), Default::default(), true)",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_042.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_042.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.439543292,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.544404708,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, Some(0.0), Some(0.0), Some(0.0), Default::default(), false)",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "get_obs_and_corrections",
+            "return_type": "-> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool)",
+            "span": {
+              "start": {
+                "line": 88,
+                "column": 1
+              },
+              "end": {
+                "line": 109,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 91,
+              "column": 5
+            },
+            "end": {
+              "line": 108,
+              "column": 35
+            }
+          },
+          "replacement": "(None, Some(0.0), Some(0.0), Some(0.0), Default::default(), false)",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_043.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_043.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.8150741670000001,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.689760625,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, Some(0.0), Some(0.0), Some(1.0), Default::default(), true)",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "get_obs_and_corrections",
+            "return_type": "-> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool)",
+            "span": {
+              "start": {
+                "line": 88,
+                "column": 1
+              },
+              "end": {
+                "line": 109,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 91,
+              "column": 5
+            },
+            "end": {
+              "line": 108,
+              "column": 35
+            }
+          },
+          "replacement": "(None, Some(0.0), Some(0.0), Some(1.0), Default::default(), true)",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_044.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_044.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.7341193750000001,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.691533125,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, Some(0.0), Some(0.0), Some(1.0), Default::default(), false)",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "get_obs_and_corrections",
+            "return_type": "-> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool)",
+            "span": {
+              "start": {
+                "line": 88,
+                "column": 1
+              },
+              "end": {
+                "line": 109,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 91,
+              "column": 5
+            },
+            "end": {
+              "line": 108,
+              "column": 35
+            }
+          },
+          "replacement": "(None, Some(0.0), Some(0.0), Some(1.0), Default::default(), false)",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_045.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_045.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.4996015,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.602791292,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, Some(0.0), Some(0.0), Some(-1.0), Default::default(), true)",
+          "package": "gneiss-rtk",
+          "file": "crates/gneiss-rtk/src/engine/ppp.rs",
+          "function": {
+            "function_name": "get_obs_and_corrections",
+            "return_type": "-> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool)",
+            "span": {
+              "start": {
+                "line": 88,
+                "column": 1
+              },
+              "end": {
+                "line": 109,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 91,
+              "column": 5
+            },
+            "end": {
+              "line": 108,
+              "column": 35
+            }
+          },
+          "replacement": "(None, Some(0.0), Some(0.0), Some(-1.0), Default::default(), true)",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_046.log",
+      "diff_path": "diff/crates__gneiss-rtk__src__engine__ppp.rs_line_91_col_5_046.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 1.388843041,
+          "process_status": "Success",
+          "argv": [
+            "/Users/kevin/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=gneiss-rtk@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 0.645057125,
           "process_status": {
             "Failure": 101
           },
@@ -609,13 +5451,13 @@
       ]
     }
   ],
-  "total_mutants": 9,
-  "missed": 4,
-  "caught": 5,
-  "timeout": 0,
-  "unviable": 0,
+  "total_mutants": 85,
+  "missed": 8,
+  "caught": 68,
+  "timeout": 1,
+  "unviable": 8,
   "success": 0,
-  "start_time": "2026-06-16T03:04:25.494853Z",
-  "end_time": "2026-06-16T03:04:49.019531Z",
+  "start_time": "2026-06-17T22:18:02.910245Z",
+  "end_time": null,
   "cargo_mutants_version": "27.1.0"
 }

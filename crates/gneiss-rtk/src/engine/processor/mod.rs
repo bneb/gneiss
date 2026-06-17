@@ -1,4 +1,4 @@
-use crate::engine::{EngineConfig, EngineMode, EngineError, DynamicsModel};
+use crate::engine::{EngineConfig, EngineMode, EngineError};
 use crate::filter::RtkState;
 use gneiss_core::obs::{EpochObs, ObsType};
 use gneiss_core::ephemeris::Ephemeris;
@@ -30,10 +30,11 @@ pub struct ProcessingEngine {
     pub antex: Option<gneiss_parsers::antex::AntexDatabase>,
     pub dcbs: std::collections::HashMap<(gneiss_core::sat::SatelliteId, String), f64>,
     pub gnn_raim: Option<crate::engine::ml::gnn_raim::GnnRaimModel>,
+    pub sinex_bias: Option<gneiss_parsers::sinex_bia::SinexBias>,
 }
 
 impl ProcessingEngine {
-    pub fn new(mut config: EngineConfig) -> Self {
+    pub fn new(config: EngineConfig) -> Self {
 
         let gnn_raim = if config.enable_gnn_raim {
             tracing::info!("Initializing GNN RAIM Model...");
@@ -64,6 +65,7 @@ impl ProcessingEngine {
             antex: None,
             dcbs: std::collections::HashMap::new(),
             gnn_raim,
+            sinex_bias: None,
         }
     }
 

@@ -138,6 +138,7 @@ In deep urban canyons (e.g., Tokyo Shinjuku), the tight coupling engine produces
 For technical implementation details, see the following documents:
 - [Architecture Details](./ARCHITECTURE.md)
 - [Benchmark Methodology](./BENCHMARKS.md)
+- [Precise Point Positioning (PPP-AR) Explained](./docs/PPP_AR_EXPLAINED.md)
 
 ## Workspace Structure
 

@@ -990,6 +990,10 @@ mod tests {
         assert_eq!(h_rows.len(), z_vals.len());
         assert_eq!(r_vals.len(), z_vals.len());
         assert_eq!(meas_type.len(), z_vals.len());
+        
+        println!("h_rows[0] = {:?}", h_rows[0]);
+        // Let's assert a few values of h_rows[0] to kill process_single_satellite_pair mutants
+        assert_eq!(h_rows[0][0], 0.993379336765863);
     }
 
     // -----------------------------------------------------------------------

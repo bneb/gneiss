@@ -1,0 +1,8 @@
+crates/gneiss-rtk/src/engine/measurement.rs:396:40: replace - with / in process_single_satellite_pair
+crates/gneiss-rtk/src/engine/measurement.rs:397:40: replace - with / in process_single_satellite_pair
+crates/gneiss-rtk/src/engine/measurement.rs:398:25: replace - with / in process_single_satellite_pair
+crates/gneiss-rtk/src/engine/ppp.rs:12:5: replace process_ppp -> Result<&'a RtkState, EngineError> with Ok(Box::leak(Box::new(Default::default())))
+crates/gneiss-rtk/src/engine/ppp.rs:53:5: replace process_single_sat -> Option<ProcessedSat<'a>> with Some(Default::default())
+crates/gneiss-rtk/src/engine/ppp.rs:64:25: replace - with / in process_single_sat
+crates/gneiss-rtk/src/engine/ppp.rs:81:34: replace / with % in process_single_sat
+crates/gneiss-rtk/src/engine/ppp.rs:81:23: replace - with / in process_single_sat

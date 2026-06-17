@@ -125,8 +125,11 @@ pub struct EngineConfig {
     pub process_noise_cb: f64,
     pub process_noise_cd: f64,
     pub process_noise_zwd: f64,
+    pub process_noise_iono: f64,
     pub process_noise_amb_float: f64,
     pub process_noise_amb_fixed: f64,
+    
+    pub uduc_ar: bool,
     
     // GNN RAIM
     pub enable_gnn_raim: bool,
@@ -148,7 +151,9 @@ impl Default for EngineConfig {
             max_reject_count: 3, max_base_age_s: 5.0, spp_consistency_threshold_m: 15.0,
             initial_ambiguity_variance: 10000.0, ar_min_epoch_count: 5, ar_min_lock: 3, ar_ffrt_prob: 0.001,
             process_noise_cb: 1e6, process_noise_cd: 1e4, process_noise_zwd: 1e-8,
+            process_noise_iono: 1e-6,
             process_noise_amb_float: 1e-8, process_noise_amb_fixed: 1e-12, tuning: Default::default(),
+            uduc_ar: false,
             enable_gnn_raim: false, export_gnn_dataset_path: None,
         }
     }

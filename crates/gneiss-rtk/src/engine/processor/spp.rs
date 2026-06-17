@@ -68,14 +68,15 @@ impl ProcessingEngine {
     }
 
     pub fn process_spp(&mut self, rover_obs: &EpochObs) -> Result<&RtkState, EngineError> {
-        let spp_res_opt = crate::spp::compute_spp(rover_obs, &self.ephemerides, self.klobuchar_params.as_ref(), &crate::spp::SppConfig::default(), None).ok();
-        let spp_pos = spp_res_opt.as_ref().map(|s| s.position);
-        let spp_cdt = spp_res_opt.as_ref().map(|s| s.cdt).unwrap_or(0.0);
+        let spp_res = crate::spp::compute_spp(rover_obs, &self.ephemerides, self.klobuchar_params.as_ref(), &crate::spp::SppConfig::default(), None);
+        let spp_pos = spp_res.as_ref().ok().map(|s| s.position);
+        let spp_cdt = spp_res.as_ref().ok().map(|s| s.cdt).unwrap_or(0.0);
 
-        if spp_res_opt.is_none() {
-            tracing::warn!("Initial SPP compute failed");
+        if let Err(e) = &spp_res {
+            tracing::warn!("Initial SPP compute failed: {:?}", e);
         }
 
+        let spp_res_opt = spp_res.ok();
         if self.current_state.is_none() {
             if let Some(spp) = &spp_res_opt {
                 let mut new_state = RtkState::new(rover_obs.time, spp.position, 100.0);

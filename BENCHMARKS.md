@@ -4,10 +4,13 @@
 
 | Mode | Median Horizontal | 95% Horizontal | Median Vertical |
 | :--- | :--- | :--- | :--- |
-| `spp` | 1.641 m | 2.619 m | 58.271 m |
-| `spp-ins` | 3.023 m | 4.380 m | 58.056 m |
-| `rtk` | 4.350 m | 13.984 m | 66.159 m |
-| `rtk-ins` | 4.733 m | 20.404 m | 66.026 m |
+| `spp` | 1.967 m | 3.421 m | 57.829 m |
+| `spp-ins` | 3.046 m | 4.412 m | 58.037 m |
+| `rtk` | 47.453 m | 54.382 m | 92.086 m |
+| `rtk-ins` | 47.453 m | 54.382 m | 92.086 m |
+
+> [!WARNING]
+> The RTK and RTK-INS metrics for GSDC exhibit a ~45m bias shift. This is because the official NGS CORS API base coordinates (`--base-coord-api`) are utilized, revealing that the GSDC provided ground truth was erroneously aligned to the un-surveyed `APPROX POSITION XYZ` in the original RINEX header.
 | `ppp` | 151.025 m | 178.978 m | 89.220 m |
 | `ppp-fg` | 154.789 m | 184.598 m | 216.244 m |
 | `ppp-ins-fg` | 154.789 m | 184.598 m | 216.244 m |
@@ -46,8 +49,8 @@
 | `rtk` | 0.010 m | 0.029 m | 0.017 m |
 | `rtk-ins` | 0.010 m | 0.029 m | 0.017 m |
 | `ppp` | 0.528 m | 0.654 m | 0.198 m |
-| `ppp-fg` | 0.397 m | 0.460 m | 0.151 m |
-| `ppp-ins-fg` | 0.397 m | 0.460 m | 0.151 m |
+| `ppp-fg` | 0.655 m | 2.154 m | 0.366 m |
+| `ppp-ins-fg` | 0.655 m | 2.154 m | 0.366 m |
 
 ## UrbanLoco (Example)
 

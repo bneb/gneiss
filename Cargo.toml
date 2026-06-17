@@ -16,7 +16,6 @@ gneiss-core = { path = "crates/gneiss-core" }
 gneiss-rtk = { path = "crates/gneiss-rtk" }
 gneiss-parsers = { path = "crates/gneiss-parsers" }
 gneiss-ntrip = { path = "crates/gneiss-ntrip" }
-gneiss-geodesy = { path = "crates/gneiss-geodesy" }
 gneiss-fetch = { path = "crates/gneiss-fetch" }
 
 [profile.release]

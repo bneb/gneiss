@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/bin/train_gnn_raim.rs
++++ delete field lr from struct ParamsAdamW expression in main
+@@ -12,17 +12,17 @@
+     let loader = DatasetLoader::new(dataset_path, &device)?;
+     println!("Loaded {} epochs/batches.", loader.batches.len());
+ 
+     let varmap = VarMap::new();
+     let vb = VarBuilder::from_varmap(&varmap, candle_core::DType::F32, &device);
+     let model = GnnRaimModel::new(vb)?;
+ 
+     let params = ParamsAdamW {
+-        lr: 1e-4,
++         /* ~ changed by cargo-mutants ~ */
+         weight_decay: 0.01,
+         ..Default::default()
+     };
+     let mut optimizer = AdamW::new(varmap.all_vars(), params)?;
+ 
+     let epochs = 10;
+     use rand::seq::SliceRandom;
+     let mut rng = rand::rng();

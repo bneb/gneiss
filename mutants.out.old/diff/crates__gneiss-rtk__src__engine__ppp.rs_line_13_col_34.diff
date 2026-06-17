@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/engine/ppp.rs
++++ replace - with + in process_ppp
+@@ -5,17 +5,17 @@
+ use crate::engine::ppp_fg::PppFactorGraph;
+ use nalgebra::Vector3;
+ use chrono::TimeZone;
+ 
+ const LIGHT_SPEED: f64 = gneiss_core::constants::SPEED_OF_LIGHT_M_S;
+ 
+ pub fn process_ppp<'a>(engine: &'a mut ProcessingEngine, rover_obs: &'a EpochObs) -> Result<&'a RtkState, EngineError> {
+     if !valid_pos(engine) { return engine.process_spp(rover_obs); }
+-    let dt = (rover_obs.time.tow - engine.current_state.as_ref().unwrap().time.tow).max(0.0);
++    let dt = (rover_obs.time.tow + /* ~ changed by cargo-mutants ~ */ engine.current_state.as_ref().unwrap().time.tow).max(0.0);
+     engine.predict_state(dt);
+     let state = engine.current_state.as_mut().unwrap();
+     state.time = rover_obs.time; state.position.epoch = rover_obs.time;
+     let sats = build_sats(engine, rover_obs);
+     if sats.is_empty() { return Err(EngineError::InsufficientSatellites); }
+     let state = engine.current_state.as_mut().unwrap();
+     update_phase_ambiguities(state, &sats, rover_obs.time);
+     state.prune_stale_ambiguities(state.epoch_count as u32, 10);

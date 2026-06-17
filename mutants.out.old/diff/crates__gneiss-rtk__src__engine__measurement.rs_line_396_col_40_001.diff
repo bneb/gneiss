@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/engine/measurement.rs
++++ replace - with / in process_single_satellite_pair
+@@ -388,17 +388,17 @@
+ #[allow(clippy::too_many_arguments)]
+ fn process_single_satellite_pair(
+     state: &mut RtkState, rover_sat_orig: &DdObservation, base_sat_orig: &DdObservation, ref_rover_orig: &DdObservation, ref_base_orig: &DdObservation,
+     sat_eph: &gneiss_core::ephemeris::Ephemeris, ref_state: &SatState, geom: &EkfGeometryContext, env: &MeasurementEnvironment,
+     ref_idx_l1: Option<usize>, ref_idx_l2: Option<usize>, updates: &mut EkfUpdates,
+ ) {
+     let sat_state = compute_sat_state(sat_eph, rover_sat_orig, base_sat_orig, state.time, geom, env.base_time);
+     
+-    let e_ref_rov = (ref_state.rov_pos - geom.pos_apc).normalize();
++    let e_ref_rov = (ref_state.rov_pos / /* ~ changed by cargo-mutants ~ */ geom.pos_apc).normalize();
+     let e_sat_rov = (sat_state.rov_pos - geom.pos_apc).normalize();
+     let h_r = e_ref_rov - e_sat_rov;
+     let h_att = geom.compute_attitude_jacobian(&h_r);
+ 
+     let mut rov_sat = rover_sat_orig.clone(); let mut bas_sat = base_sat_orig.clone();
+     let mut rov_ref = ref_rover_orig.clone(); let mut bas_ref = ref_base_orig.clone();
+ 
+     let mut ctx = DdContext {

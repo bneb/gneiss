@@ -1,0 +1,16 @@
+--- crates/gneiss-rtk/src/engine/ppp.rs
++++ crates/gneiss-rtk/src/engine/ppp.rs
+@@ -109,6 +109,14 @@
+             if let Some(cp1_val) = cp1.as_mut() { *cp1_val -= osb_cp1 / (LIGHT_SPEED / f1); }
+             if let Some(cp2_val) = cp2.as_mut() { *cp2_val -= osb_cp2 / (LIGHT_SPEED / f2); }
++            
++            if !engine.sp3_epochs.is_empty() || engine.clk_data.is_some() {
++                if let (Some(pv1), Some(pv2)) = (p1, p2) {
++                    let gamma = (f1 * f1) / (f2 * f2);
++                    p1 = Some((gamma * pv1 - pv2) / (gamma - 1.0));
++                    is_iono_free = true;
++                }
++            }
+         } else {
+             // Legacy DCB IF Combination fallback
+             if let Some(p1_val) = p1.as_mut() {

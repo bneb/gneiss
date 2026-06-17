@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/engine/ppp.rs
++++ replace - with + in process_single_sat
+@@ -73,17 +73,17 @@
+     tracing::trace!("PPP sat={}, is_if={}, dist={:.1}, clk_m={:.3}, pcv={:.4}", sat_obs.sat, is_if, dist, dt_s * LIGHT_SPEED, pcv);
+ 
+     let snr = sat_obs.get_snr(1).unwrap_or(45) as f64;
+     let doppler = sat_obs.get_doppler(1).unwrap_or(0.0);
+     
+     Some(ProcessedSat {
+         sat_obs, dt_sat_m: dt_s * LIGHT_SPEED, p1: p1?, p2, is_iono_free: is_if,
+         cp1, cp2, osb_p1: osb.osb_p1, osb_p2: osb.osb_p2, osb_cp1: osb.osb_cp1, osb_cp2: osb.osb_cp2,
+-        los: (sat_pos - rcv_pos) / dist, dist: dist - pcv, el, snr, doppler,
++        los: (sat_pos + /* ~ changed by cargo-mutants ~ */ rcv_pos) / dist, dist: dist - pcv, el, snr, doppler,
+         lam1: LIGHT_SPEED / f1, lam2: LIGHT_SPEED / f2, tropo_dry, map_wet, iono_delay,
+         f1, f2, sat_pos_rot: sat_pos, sat_vel, sat_clock_drift: eph.position(t_tx).3,
+         rcv_pos_ecef: rcv_pos, pcv_correction: pcv,
+     })
+ }
+ 
+ fn get_obs_and_corrections(
+     engine: &ProcessingEngine, sat_obs: &gneiss_core::obs::SatObs, time: gneiss_core::time::GpsTime, f1: f64, f2: f64

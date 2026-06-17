@@ -1,0 +1,53 @@
+--- crates/gneiss-rtk/src/engine/ppp.rs
++++ replace process_single_sat -> Option<ProcessedSat<'a>> with Some(Default::default())
+@@ -45,49 +45,17 @@
+         .filter_map(|sat_obs| process_single_sat(engine, r_obs, sat_obs, rcv_pos, rcv_llh))
+         .collect()
+ }
+ 
+ fn process_single_sat<'a>(
+     engine: &ProcessingEngine, r_obs: &'a EpochObs, sat_obs: &'a gneiss_core::obs::SatObs,
+     rcv_pos: Vector3<f64>, rcv_llh: Vector3<f64>
+ ) -> Option<ProcessedSat<'a>> {
+-    let eph = engine.ephemerides.iter().find(|e| e.sat() == sat_obs.sat)?;
+-    let (f1, mut f2) = gneiss_core::signal::satellite_frequencies(sat_obs.sat, eph.freq_num());
+-    if f2 == 0.0 { f2 = f1; }
+-
+-    let (mut p1, mut p2, mut cp1, mut cp2, osb, is_if) = get_obs_and_corrections(engine, sat_obs, r_obs.time, f1, f2);
+-    let tau_pr = p1.unwrap_or(0.0) / LIGHT_SPEED;
+-    let t_nom = gneiss_core::time::GpsTime::new(r_obs.time.week, r_obs.time.tow - tau_pr);
+-
+-    let (t_tx, dt_s, raw_pos, raw_vel) = compute_sat_state(engine, eph, sat_obs.sat, t_nom)?;
+-    let (sat_pos, sat_vel) = crate::engine::ppp_math::apply_earth_rotation(raw_pos, raw_vel, rcv_pos);
+-    
+-    let dist = (sat_pos - rcv_pos).norm();
+-    let (az, el) = gneiss_core::coords::az_el(rcv_llh, rcv_pos, sat_pos);
+-    if el < 0.261799 { return None; }
+-
+-    let (tropo_dry, map_wet) = crate::engine::ppp_math::compute_tropo_dry(rcv_llh, el, r_obs.time);
+-    let klobuchar = engine.klobuchar_params.unwrap_or_default();
+-    let iono_delay = if is_if { 0.0 } else { gneiss_core::atmosphere::AtmosphereModel::iono_klobuchar(&klobuchar, rcv_llh, az, el, r_obs.time) };
+-    
+-    let pcv = compute_pcv(engine, sat_obs, r_obs.time, f1, f2, is_if, rcv_pos, sat_pos, &mut p2, &mut cp2);
+-    tracing::trace!("PPP sat={}, is_if={}, dist={:.1}, clk_m={:.3}, pcv={:.4}", sat_obs.sat, is_if, dist, dt_s * LIGHT_SPEED, pcv);
+-
+-    let snr = sat_obs.get_snr(1).unwrap_or(45) as f64;
+-    let doppler = sat_obs.get_doppler(1).unwrap_or(0.0);
+-    
+-    Some(ProcessedSat {
+-        sat_obs, dt_sat_m: dt_s * LIGHT_SPEED, p1: p1?, p2, is_iono_free: is_if,
+-        cp1, cp2, osb_p1: osb.osb_p1, osb_p2: osb.osb_p2, osb_cp1: osb.osb_cp1, osb_cp2: osb.osb_cp2,
+-        los: (sat_pos - rcv_pos) / dist, dist: dist - pcv, el, snr, doppler,
+-        lam1: LIGHT_SPEED / f1, lam2: LIGHT_SPEED / f2, tropo_dry, map_wet, iono_delay,
+-        f1, f2, sat_pos_rot: sat_pos, sat_vel, sat_clock_drift: eph.position(t_tx).3,
+-        rcv_pos_ecef: rcv_pos, pcv_correction: pcv,
+-    })
++    Some(Default::default()) /* ~ changed by cargo-mutants ~ */
+ }
+ 
+ fn get_obs_and_corrections(
+     engine: &ProcessingEngine, sat_obs: &gneiss_core::obs::SatObs, time: gneiss_core::time::GpsTime, f1: f64, f2: f64
+ ) -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) {
+     let f1_b = if sat_obs.sat.constellation == Constellation::Beidou { 2 } else { 1 };
+     let f2_b = match sat_obs.sat.constellation { Constellation::Galileo | Constellation::Beidou => 7, _ => 2 };
+ 

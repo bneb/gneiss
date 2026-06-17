@@ -1,75 +1,84 @@
 import re
 
-with open("crates/gneiss-rtk/src/engine/ppp_fg.rs", "r") as f:
+with open('crates/gneiss-rtk/src/engine/ppp_fg.rs', 'r') as f:
     content = f.read()
 
-# build_h_row signature
-content = re.sub(r'fn build_h_row\(los: &Vector3<f64>, map_wet: f64, amb_idx: Option<usize>, size: usize\) -> DVector<f64> \{',
-                 r'fn build_h_row(los: &Vector3<f64>, map_wet: f64, amb_idx: Option<usize>, size: usize, constel: gneiss_core::ephemeris::Constellation) -> DVector<f64> {', content)
+# Replace find_worst_outlier
+old_find_worst_outlier = """    fn find_worst_outlier(&self, state: &RtkState, sats: &[ProcessedSat], x_i: &DVector<f64>) -> Option<gneiss_core::sat::SatelliteId> {
+        let final_meas = self.build_measurements(state, sats, x_i, self.max_iterations);
+        let mut worst_sat = None;
+        let mut max_norm = 15.0;
+        for m in &final_meas {
+            if m.is_phase {
+                let norm = m.res.abs() / m.raw_var.sqrt();
+                if norm > max_norm { max_norm = norm; worst_sat = m.sat; }
+            }
+        }
+        worst_sat
+    }"""
 
-# build_h_row body
-body1_old = """    h[15] = 1.0;
-    if size > 17 { h[17] = map_wet; }
-    if let Some(idx) = amb_idx { h[idx] = 1.0; }"""
-body1_new = """    h[15] = 1.0;
-    if size > 18 {
-        match constel {
-            gneiss_core::ephemeris::Constellation::Glonass => h[16] = 1.0,
-            gneiss_core::ephemeris::Constellation::Galileo => h[17] = 1.0,
-            gneiss_core::ephemeris::Constellation::BeiDou => h[18] = 1.0,
-            _ => {}
+new_find_worst_outlier = """    fn find_worst_outlier(&self, state: &RtkState, sats: &[ProcessedSat], x_i: &DVector<f64>) -> Option<gneiss_core::sat::SatelliteId> {
+        let final_meas = self.build_measurements(state, sats, x_i, self.max_iterations);
+        find_worst_outlier_sat(&final_meas)
+    }"""
+
+content = content.replace(old_find_worst_outlier, new_find_worst_outlier)
+
+find_worst_outlier_sat_func = """
+fn find_worst_outlier_sat(meas: &[Measurement]) -> Option<gneiss_core::sat::SatelliteId> {
+    let mut worst_sat = None;
+    let mut max_norm = 15.0;
+    for m in meas {
+        if m.is_phase {
+            let norm = m.res.abs() / m.raw_var.sqrt();
+            if norm > max_norm { max_norm = norm; worst_sat = m.sat; }
         }
     }
-    if size > 20 { h[20] = map_wet; }
-    if let Some(idx) = amb_idx { h[idx] = 1.0; }"""
-content = content.replace(body1_old, body1_new)
+    worst_sat
+}
+"""
 
-# build_measurements
-meas_old = """        let ztd = if x_i.len() > 17 { x_i[17] } else { 0.0 };
+content = content.replace("#[cfg(test)]\nmod nan_tests", find_worst_outlier_sat_func + "\n#[cfg(test)]\nmod nan_tests")
 
-        for sat in sats {
-            let dist = (sat.sat_pos_rot - rcv_pos).norm();
-            let los = (sat.sat_pos_rot - rcv_pos) / dist;
-            let expected_base = dist + x_i[15] - sat.dt_sat_m + sat.tropo_dry + ztd * sat.map_wet;"""
-meas_new = """        let ztd = if x_i.len() > 20 { x_i[20] } else { 0.0 };
+tests = """
+#[cfg(test)]
+mod mutant_killer_tests {
+    use super::*;
+    use nalgebra::{DMatrix, DVector, Vector3};
+    use gneiss_core::coords::{Coordinate, Datum, Frame};
+    use gneiss_core::time::GpsTime;
+    use gneiss_core::sat::{SatelliteId, Constellation};
+    use crate::engine::updater::MeasurementType;
 
-        for sat in sats {
-            let dist = (sat.sat_pos_rot - rcv_pos).norm();
-            let los = (sat.sat_pos_rot - rcv_pos) / dist;
-            let isb = if x_i.len() > 18 {
-                match sat.sat_obs.sat.constellation {
-                    gneiss_core::ephemeris::Constellation::Glonass => x_i[16],
-                    gneiss_core::ephemeris::Constellation::Galileo => x_i[17],
-                    gneiss_core::ephemeris::Constellation::BeiDou => x_i[18],
-                    _ => 0.0,
-                }
-            } else { 0.0 };
-            let expected_base = dist + x_i[15] + isb - sat.dt_sat_m + sat.tropo_dry + ztd * sat.map_wet;"""
-content = content.replace(meas_old, meas_new)
+    fn dummy_rtk_state() -> RtkState {
+        RtkState::new(
+            GpsTime::new(0, 0.0),
+            Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, GpsTime::new(0, 0.0)),
+            1.0
+        )
+    }
 
-# h_row call PR
-content = content.replace("h_row: build_h_row(&los, sat.map_wet, None, x_i.len()),", 
-                          "h_row: build_h_row(&los, sat.map_wet, None, x_i.len(), sat.sat_obs.sat.constellation),")
-# h_row call CP
-content = content.replace("h_row: build_h_row(&los, sat.map_wet, Some(CORE_STATE_SIZE + amb_idx), x_i.len()),",
-                          "h_row: build_h_row(&los, sat.map_wet, Some(CORE_STATE_SIZE + amb_idx), x_i.len(), sat.sat_obs.sat.constellation),")
+    #[test]
+    fn test_find_worst_outlier() {
+        let sat_id1 = SatelliteId { constellation: Constellation::Gps, prn: 1 };
+        let sat_id2 = SatelliteId { constellation: Constellation::Gps, prn: 2 };
+        let sat_id3 = SatelliteId { constellation: Constellation::Gps, prn: 3 };
+        
+        let meas1 = Measurement { res: 14.0, raw_var: 1.0, is_phase: true, sat: Some(sat_id1), row_idx: 0, typ: MeasurementType::CarrierPhase };
+        let meas2 = Measurement { res: 16.0, raw_var: 1.0, is_phase: true, sat: Some(sat_id2), row_idx: 1, typ: MeasurementType::CarrierPhase };
+        let meas3 = Measurement { res: 17.0, raw_var: 1.0, is_phase: true, sat: Some(sat_id3), row_idx: 2, typ: MeasurementType::CarrierPhase };
+        let meas4 = Measurement { res: 100.0, raw_var: 1.0, is_phase: false, sat: Some(sat_id1), row_idx: 3, typ: MeasurementType::Pseudorange };
 
-# build_h_row_doppler signature
-content = content.replace("fn build_h_row_doppler(los: &Vector3<f64>, size: usize) -> DVector<f64> {",
-                          "fn build_h_row_doppler(los: &Vector3<f64>, size: usize) -> DVector<f64> {") # no ISB in doppler?
-# Wait! Does Doppler have ISB? Clock drift is just 1. It shouldn't differ between constellations because all receiver channels run off the same oscillator! So Doppler is fine.
+        assert_eq!(find_worst_outlier_sat(&[meas1.clone()]), None);
+        assert_eq!(find_worst_outlier_sat(&[meas2.clone()]), Some(sat_id2));
+        assert_eq!(find_worst_outlier_sat(&[meas2.clone(), meas3.clone()]), Some(sat_id3));
+        assert_eq!(find_worst_outlier_sat(&[meas4.clone()]), None);
+    }
+}
+"""
 
-# fix build_h_row_doppler body for size > 19
-dop_old = """    if size > 16 {
-        h[3] = -los.x; h[4] = -los.y; h[5] = -los.z;
-        h[16] = 1.0;
-    }"""
-dop_new = """    if size > 19 {
-        h[3] = -los.x; h[4] = -los.y; h[5] = -los.z;
-        h[19] = 1.0;
-    }"""
-content = content.replace(dop_old, dop_new)
+content = content + tests
 
-with open("crates/gneiss-rtk/src/engine/ppp_fg.rs", "w") as f:
+with open('crates/gneiss-rtk/src/engine/ppp_fg.rs', 'w') as f:
     f.write(content)
 

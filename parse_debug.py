@@ -1,1 +1,5 @@
-# Let's just edit predictor.rs to print the components of the (3,3) element
+with open("/tmp/debug.log") as f:
+    for line in f:
+        if "PPP Epoch" in line:
+            print(line.strip())
+            break

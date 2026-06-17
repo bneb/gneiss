@@ -85,8 +85,8 @@ pub fn compute_transition_matrix(state: &RtkState, dt: f64, imu_buffer: &[gneiss
     phi
 }
 
-pub fn compute_process_noise(dt: f64, config: &EngineConfig, is_imu_active: bool, is_fixed: bool, num_amb: usize) -> DMatrix<f64> {
-    let n = crate::filter::CORE_STATE_SIZE + num_amb;
+pub fn compute_process_noise(dt: f64, config: &EngineConfig, is_imu_active: bool, is_fixed: bool, ambiguity_keys: &[(gneiss_core::sat::SatelliteId, u8)]) -> DMatrix<f64> {
+    let n = crate::filter::CORE_STATE_SIZE + ambiguity_keys.len();
     let mut q = DMatrix::<f64>::zeros(n, n);
     let dt_abs = dt.abs();
     
@@ -132,8 +132,13 @@ pub fn compute_process_noise(dt: f64, config: &EngineConfig, is_imu_active: bool
         q[(20, 20)] = config.process_noise_zwd * dt_abs;
     }
 
-    for i in crate::filter::CORE_STATE_SIZE..n {
-        q[(i, i)] = if is_fixed { config.process_noise_amb_fixed * dt_abs } else { config.process_noise_amb_float * dt_abs };
+    for (i, key) in ambiguity_keys.iter().enumerate() {
+        let idx = crate::filter::CORE_STATE_SIZE + i;
+        if key.1 == 3 {
+            q[(idx, idx)] = config.process_noise_iono * dt_abs;
+        } else {
+            q[(idx, idx)] = if is_fixed { config.process_noise_amb_fixed * dt_abs } else { config.process_noise_amb_float * dt_abs };
+        }
     }
     
     q
@@ -151,7 +156,7 @@ pub fn predict(state: &mut RtkState, dt: f64, config: &EngineConfig, imu_buffer:
     }
     
     let phi = compute_transition_matrix(state, dt, imu_buffer);
-    let q = compute_process_noise(dt, config, !imu_buffer.is_empty(), state.is_fixed, state.ambiguities.len());
+    let q = compute_process_noise(dt, config, !imu_buffer.is_empty(), state.is_fixed, &state.ambiguity_keys);
     
     state.core_phi = Some(phi.view((0, 0), (crate::filter::CORE_STATE_SIZE, crate::filter::CORE_STATE_SIZE)).into_owned());
     
@@ -271,10 +276,12 @@ mod tests {
             process_noise_cb: 100.0,
             process_noise_cd: 10.0,
             process_noise_zwd: 1e-8,
+            process_noise_iono: 1e-6,
             enable_gnn_raim: false,
             export_gnn_dataset_path: None,
             process_noise_amb_float: 1e-4,
             process_noise_amb_fixed: 1e-7,
+            uduc_ar: false,
             tuning: crate::engine::config::EkfTuningConfig::default(),
         };
 

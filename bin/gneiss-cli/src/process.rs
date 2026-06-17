@@ -11,7 +11,7 @@ pub async fn run_process(
     lever_arm: String, calibrate_imu: bool,
     raim_outlier_m: Option<f64>, chi_square_pr: Option<f64>, chi_square_cp: Option<f64>, nominal_snr: Option<f64>,
     base_position: Option<String>, systems: Option<String>, sp3: Option<String>, clk: Option<String>,
-    antex: Option<String>, clock_jump_threshold: Option<f64>, disable_doppler: bool
+    antex: Option<String>, clock_jump_threshold: Option<f64>, disable_doppler: bool, bia: Option<String>
 ) -> Result<(), Box<dyn std::error::Error>> {
     info!("Starting PPK Processing Pipeline...");
     
@@ -45,7 +45,7 @@ pub async fn run_process(
     
     let time_offset = sync_rover_time(&parent_dir.join("reference.csv"), &mut rover_rinex_epochs, &mut engine)?;
     load_ephemerides(parent_dir, nav, &mut engine);
-    load_precise_data(&mut engine, sp3, clk, antex);
+    load_precise_data(&mut engine, sp3, clk, antex, bia);
     load_dcbs(&mut engine, &rover);
 
     let imu_measurements = load_imu_measurements(&parent_dir.join("imu.csv"), &parent_dir.join("reference.csv"))?;
@@ -62,7 +62,7 @@ pub async fn run_process(
 }
 
 fn load_rover_epochs(rover: &str) -> Result<Option<Vec<gneiss_core::obs::EpochObs>>, Box<dyn std::error::Error>> {
-    if rover.ends_with(".obs") || rover.ends_with("o") {
+    if rover.ends_with(".obs") || rover.ends_with("o") || rover.ends_with(".rnx") || rover.ends_with(".RNX") {
         let file = std::fs::File::open(rover)?;
         let epochs = gneiss_parsers::rinex::parse_rinex_obs(std::io::BufReader::new(file))?;
         info!("Loaded {} RINEX rover epochs.", epochs.len());
@@ -247,7 +247,7 @@ fn load_ephemerides(parent_dir: &std::path::Path, nav: Option<String>, engine: &
     }
 }
 
-fn load_precise_data(engine: &mut ProcessingEngine, sp3: Option<String>, clk: Option<String>, antex: Option<String>) {
+fn load_precise_data(engine: &mut ProcessingEngine, sp3: Option<String>, clk: Option<String>, antex: Option<String>, bia: Option<String>) {
     if let Some(sp3_file) = sp3 {
         if let Ok(file) = std::fs::File::open(&sp3_file) {
             match gneiss_parsers::sp3::parse_sp3(std::io::BufReader::new(file)) {
@@ -277,6 +277,18 @@ fn load_precise_data(engine: &mut ProcessingEngine, sp3: Option<String>, clk: Op
                 engine.antex = Some(db);
             },
             Err(e) => error!("Failed to parse ANTEX file {}: {:?}", atx_file, e),
+        }
+    }
+    
+    if let Some(bia_file) = bia {
+        if let Ok(file) = std::fs::File::open(&bia_file) {
+            match gneiss_parsers::sinex_bia::SinexBias::parse(std::io::BufReader::new(file)) {
+                Ok(bias) => {
+                    info!("Loaded SINEX/BIA with {} records.", bias.records.len());
+                    engine.sinex_bias = Some(bias);
+                },
+                Err(e) => error!("Failed to parse BIA file {}: {:?}", bia_file, e),
+            }
         }
     }
 }

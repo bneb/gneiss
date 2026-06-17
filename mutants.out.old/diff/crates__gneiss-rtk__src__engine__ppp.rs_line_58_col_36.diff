@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/engine/ppp.rs
++++ replace / with % in process_single_sat
+@@ -50,17 +50,17 @@
+     engine: &ProcessingEngine, r_obs: &'a EpochObs, sat_obs: &'a gneiss_core::obs::SatObs,
+     rcv_pos: Vector3<f64>, rcv_llh: Vector3<f64>
+ ) -> Option<ProcessedSat<'a>> {
+     let eph = engine.ephemerides.iter().find(|e| e.sat() == sat_obs.sat)?;
+     let (f1, mut f2) = gneiss_core::signal::satellite_frequencies(sat_obs.sat, eph.freq_num());
+     if f2 == 0.0 { f2 = f1; }
+ 
+     let (mut p1, mut p2, mut cp1, mut cp2, osb, is_if) = get_obs_and_corrections(engine, sat_obs, r_obs.time, f1, f2);
+-    let tau_pr = p1.unwrap_or(0.0) / LIGHT_SPEED;
++    let tau_pr = p1.unwrap_or(0.0) % /* ~ changed by cargo-mutants ~ */ LIGHT_SPEED;
+     let t_nom = gneiss_core::time::GpsTime::new(r_obs.time.week, r_obs.time.tow - tau_pr);
+ 
+     let (t_tx, dt_s, raw_pos, raw_vel) = compute_sat_state(engine, eph, sat_obs.sat, t_nom)?;
+     let (sat_pos, sat_vel) = crate::engine::ppp_math::apply_earth_rotation(raw_pos, raw_vel, rcv_pos);
+     
+     let dist = (sat_pos - rcv_pos).norm();
+     let (az, el) = gneiss_core::coords::az_el(rcv_llh, rcv_pos, sat_pos);
+     if el < 0.261799 { return None; }

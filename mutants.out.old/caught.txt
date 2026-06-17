@@ -1,5 +1,68 @@
-crates/gneiss-rtk/src/engine/fgo/solver.rs:53:9: replace LevenbergMarquardt::optimize -> OptimizationReport with Default::default()
-crates/gneiss-rtk/src/engine/fgo/solver.rs:56:35: replace + with - in LevenbergMarquardt::optimize
-crates/gneiss-rtk/src/engine/fgo/solver.rs:70:26: replace < with == in LevenbergMarquardt::optimize
-crates/gneiss-rtk/src/engine/fgo/solver.rs:70:26: replace < with > in LevenbergMarquardt::optimize
-crates/gneiss-rtk/src/engine/fgo/solver.rs:84:32: replace += with *= in LevenbergMarquardt::apply_damping
+crates/gneiss-rtk/src/engine/measurement.rs:394:5: replace process_single_satellite_pair with ()
+crates/gneiss-rtk/src/engine/ppp.rs:12:8: delete ! in process_ppp
+crates/gneiss-rtk/src/engine/ppp.rs:13:34: replace - with + in process_ppp
+crates/gneiss-rtk/src/engine/ppp.rs:13:34: replace - with / in process_ppp
+crates/gneiss-rtk/src/engine/ppp.rs:53:5: replace process_single_sat -> Option<ProcessedSat<'a>> with None
+crates/gneiss-rtk/src/engine/ppp.rs:53:58: replace == with != in process_single_sat
+crates/gneiss-rtk/src/engine/ppp.rs:55:11: replace == with != in process_single_sat
+crates/gneiss-rtk/src/engine/ppp.rs:58:36: replace / with % in process_single_sat
+crates/gneiss-rtk/src/engine/ppp.rs:59:81: replace - with + in process_single_sat
+crates/gneiss-rtk/src/engine/ppp.rs:59:81: replace - with / in process_single_sat
+crates/gneiss-rtk/src/engine/ppp.rs:64:25: replace - with + in process_single_sat
+crates/gneiss-rtk/src/engine/ppp.rs:66:11: replace < with == in process_single_sat
+crates/gneiss-rtk/src/engine/ppp.rs:66:11: replace < with > in process_single_sat
+crates/gneiss-rtk/src/engine/ppp.rs:79:33: replace * with + in process_single_sat
+crates/gneiss-rtk/src/engine/ppp.rs:81:34: replace / with * in process_single_sat
+crates/gneiss-rtk/src/engine/ppp.rs:81:23: replace - with + in process_single_sat
+crates/gneiss-rtk/src/engine/ppp.rs:81:53: replace - with / in process_single_sat
+crates/gneiss-rtk/src/engine/ppp.rs:82:27: replace / with % in process_single_sat
+crates/gneiss-rtk/src/engine/ppp.rs:82:27: replace / with * in process_single_sat
+crates/gneiss-rtk/src/engine/ppp.rs:82:51: replace / with % in process_single_sat
+crates/gneiss-rtk/src/engine/ppp.rs:82:51: replace / with * in process_single_sat
+crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, None, None, Default::default(), true)
+crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, None, None, Default::default(), false)
+crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, None, Some(0.0), Default::default(), true)
+crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, None, Some(0.0), Default::default(), false)
+crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, None, Some(1.0), Default::default(), true)
+crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, None, Some(1.0), Default::default(), false)
+crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, None, Some(-1.0), Default::default(), true)
+crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, None, Some(-1.0), Default::default(), false)
+crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(0.0), None, Default::default(), true)
+crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(0.0), None, Default::default(), false)
+crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(0.0), Some(0.0), Default::default(), true)
+crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(0.0), Some(0.0), Default::default(), false)
+crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(0.0), Some(1.0), Default::default(), true)
+crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(0.0), Some(1.0), Default::default(), false)
+crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(0.0), Some(-1.0), Default::default(), true)
+crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(0.0), Some(-1.0), Default::default(), false)
+crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(1.0), None, Default::default(), true)
+crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(1.0), None, Default::default(), false)
+crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(1.0), Some(0.0), Default::default(), true)
+crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(1.0), Some(0.0), Default::default(), false)
+crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(1.0), Some(1.0), Default::default(), true)
+crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(1.0), Some(1.0), Default::default(), false)
+crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(1.0), Some(-1.0), Default::default(), true)
+crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(1.0), Some(-1.0), Default::default(), false)
+crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(-1.0), None, Default::default(), true)
+crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(-1.0), None, Default::default(), false)
+crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(-1.0), Some(0.0), Default::default(), true)
+crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(-1.0), Some(0.0), Default::default(), false)
+crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(-1.0), Some(1.0), Default::default(), true)
+crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(-1.0), Some(1.0), Default::default(), false)
+crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(-1.0), Some(-1.0), Default::default(), true)
+crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(-1.0), Some(-1.0), Default::default(), false)
+crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, Some(0.0), None, None, Default::default(), true)
+crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, Some(0.0), None, None, Default::default(), false)
+crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, Some(0.0), None, Some(0.0), Default::default(), true)
+crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, Some(0.0), None, Some(0.0), Default::default(), false)
+crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, Some(0.0), None, Some(1.0), Default::default(), true)
+crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, Some(0.0), None, Some(1.0), Default::default(), false)
+crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, Some(0.0), None, Some(-1.0), Default::default(), true)
+crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, Some(0.0), None, Some(-1.0), Default::default(), false)
+crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, Some(0.0), Some(0.0), None, Default::default(), true)
+crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, Some(0.0), Some(0.0), None, Default::default(), false)
+crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, Some(0.0), Some(0.0), Some(0.0), Default::default(), true)
+crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, Some(0.0), Some(0.0), Some(0.0), Default::default(), false)
+crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, Some(0.0), Some(0.0), Some(1.0), Default::default(), true)
+crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, Some(0.0), Some(0.0), Some(1.0), Default::default(), false)
+crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, Some(0.0), Some(0.0), Some(-1.0), Default::default(), true)

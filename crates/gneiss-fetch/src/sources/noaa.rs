@@ -1,8 +1,9 @@
 use crate::provider::{DataSource, FetchError};
 use async_trait::async_trait;
 use std::path::{Path, PathBuf};
-use gneiss_core::coords::Coordinate;
+use gneiss_core::coords::{Coordinate, Datum, Frame};
 use gneiss_core::time::GpsTime;
+use nalgebra::Vector3;
 
 pub struct NoaaCorsProvider;
 
@@ -73,5 +74,84 @@ impl DataSource for NoaaCorsProvider {
 
     async fn fetch_ephemeris(&self, _time: GpsTime, _out_dir: &Path) -> Result<PathBuf, FetchError> {
         Err(FetchError::NotFound("Use CDDIS for ephemeris".into()))
+    }
+}
+
+impl NoaaCorsProvider {
+    pub async fn fetch_station_coordinate(&self, station_id: &str) -> Result<Coordinate, FetchError> {
+        let url = format!("https://geodesy.noaa.gov/corsdata/coord/coord_14/{}_14.coord.txt", station_id.to_lowercase());
+        tracing::info!("Fetching NOAA CORS Coordinate: {}", url);
+        
+        let client = reqwest::Client::new();
+        let response = client.get(&url).send().await?;
+        
+        if !response.status().is_success() {
+            return Err(FetchError::Network(format!("Failed to fetch coordinate for station {}", station_id)));
+        }
+        
+        let text = response.text().await?;
+        
+        let mut x = None;
+        let mut y = None;
+        let mut z = None;
+        
+        let mut in_itrf_block = false;
+        for line in text.lines() {
+            if line.contains("ITRF2014 POSITION") {
+                in_itrf_block = true;
+            } else if line.contains("NAD_83") || line.contains("VELOCITY") || line.contains("L1 Phase Center") {
+                in_itrf_block = false;
+            }
+            
+            if in_itrf_block {
+                if line.contains("X =") {
+                    if let Some(val_str) = line.split("X =").nth(1).and_then(|s| s.split('m').next()) {
+                        x = val_str.trim().parse::<f64>().ok();
+                    }
+                }
+                if line.contains("Y =") {
+                    if let Some(val_str) = line.split("Y =").nth(1).and_then(|s| s.split('m').next()) {
+                        y = val_str.trim().parse::<f64>().ok();
+                    }
+                }
+                if line.contains("Z =") {
+                    if let Some(val_str) = line.split("Z =").nth(1).and_then(|s| s.split('m').next()) {
+                        z = val_str.trim().parse::<f64>().ok();
+                    }
+                }
+                if x.is_some() && y.is_some() && z.is_some() {
+                    break;
+                }
+            }
+        }
+        
+        if let (Some(x), Some(y), Some(z)) = (x, y, z) {
+            Ok(Coordinate {
+                vector: Vector3::new(x, y, z),
+                datum: Datum::ITRF2014,
+                frame: Frame::ECEF,
+                epoch: GpsTime::new(0, 0.0),
+            })
+        } else {
+            Err(FetchError::NotFound(format!("Could not parse ITRF2014 XYZ from {}", url)))
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_fetch_station_coordinate() {
+        let provider = NoaaCorsProvider;
+        let coord = provider.fetch_station_coordinate("P222").await.unwrap();
+        // The ITRF2014 ARP coordinate for P222:
+        // X = -2689640.291
+        // Y = -4290437.370
+        // Z = 3865050.934
+        assert!((coord.vector.x - (-2689640.291)).abs() < 1e-3);
+        assert!((coord.vector.y - (-4290437.370)).abs() < 1e-3);
+        assert!((coord.vector.z - 3865050.934).abs() < 1e-3);
     }
 }

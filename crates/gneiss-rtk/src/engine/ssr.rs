@@ -51,7 +51,7 @@ pub fn get_precise_orbit(
     sat: SatelliteId,
     t: GpsTime,
     degree: usize,
-) -> Option<(Vector3<f64>, f64)> {
+) -> Option<(Vector3<f64>, Vector3<f64>, f64)> {
     let sat_id = format_sp3_id(sat);
 
     // Extract valid points for this satellite
@@ -98,17 +98,24 @@ pub fn get_precise_orbit(
         start_idx = end_idx.saturating_sub(n_points);
     }
 
-    let slice = &valid_points[start_idx..end_idx];
-    
     // Check if the points are too far away in time (e.g., > 2 hours)
     if min_dt > 7200.0 {
         return None;
     }
 
-    let pos = interpolate_orbit_lagrange(slice, t)?;
-    let clk = clock_bias.unwrap_or(0.0);
-
-    Some((pos, clk))
+    let subset = &valid_points[start_idx..end_idx];
+    let pos = interpolate_orbit_lagrange(subset, t);
+    
+    // Compute velocity via central difference (dt = 1.0 second is small enough for orbit, large enough for float precision)
+    for p in subset { tracing::debug!("SP3 point: time={}, pos={:?}", p.0.tow, p.1); } let pos_plus = interpolate_orbit_lagrange(subset, t + 0.5);
+    let pos_minus = interpolate_orbit_lagrange(subset, t - 0.5);
+    
+    if let (Some(p), Some(p_plus), Some(p_minus)) = (pos, pos_plus, pos_minus) {
+        let vel = (p_plus - p_minus) / 1.0;
+        Some((p, vel, clock_bias.unwrap_or(0.0)))
+    } else {
+        None
+    }
 }
 
 #[cfg(test)]
