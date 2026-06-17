@@ -74,8 +74,8 @@ enum Commands {
         lever_arm: String,
         #[arg(long, help = "Automatically detect and calibrate IMU mounting offsets")]
         calibrate_imu: bool,
-        #[arg(long, help = "Automatically calibrate extrinsics (lever arms) via grid search")]
-        calibrate_extrinsics: bool,
+        #[arg(long, help = "Automatically calibrate 6-DOF extrinsics and GNSS intrinsics")]
+        calibrate: bool,
         #[arg(long, help = "SPP RAIM Outlier Rejection Threshold (m)")]
         raim_outlier_m: Option<f64>,
         #[arg(long, help = "Pseudorange Chi-Square Reject Threshold")]
@@ -148,7 +148,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             rover, base, nav, output, sp3, clk, antex, dcb, config, 
             enable_backward_smoothing, enable_auto_tune, mode, 
             lambda_ratio, lambda_subset, max_epochs, 
-            lever_arm, calibrate_imu, calibrate_extrinsics,
+            lever_arm, calibrate_imu, calibrate,
             raim_outlier_m, chi_square_pr, chi_square_cp, min_snr,
             base_position,
             systems
@@ -514,27 +514,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mut final_results = Vec::new();
             let mut final_processed_epochs = 0;
             
-            if calibrate_extrinsics {
-                info!("Starting Extrinsics Calibration Grid Search...");
+            if calibrate {
+                info!("Starting Preprocessing and Calibration Pass...");
                 
-                // We will evaluate each config by running 1000 epochs and returning the final SPP residual
-                // or the final covariance norm as the error metric. We'll use covariance trace for simplicity.
+                // --- Pass 1a: Intrinsics Calibration ---
                 let rover_slice = if let Some(ref r) = rover_rinex_epochs {
-                    &r[..r.len().min(1000)]
+                    let start = r.len().min(3000);
+                    let end = r.len().min(start + 500);
+                    &r[start..end]
                 } else {
                     &[]
                 };
                 
+                let (bias_var, drift_var) = gneiss_rtk::calibration::intrinsics::calibrate_intrinsics(&engine_config, rover_slice);
+                engine_config.process_noise_cb = bias_var;
+                engine_config.process_noise_cd = drift_var;
+                engine.config.process_noise_cb = bias_var;
+                engine.config.process_noise_cd = drift_var;
+                info!("Intrinsics calibrated: Clock Bias Var = {:.4}, Clock Drift Var = {:.4}", bias_var, drift_var);
+                
+                // --- Pass 1b: Extrinsics 6-DOF Optimization ---
                 let eval_fn = |cfg: &EngineConfig| -> f64 {
                     let mut eval_engine = ProcessingEngine::new(cfg.clone());
+                    eval_engine.ephemerides = engine.ephemerides.clone();
+                    eval_engine.klobuchar_params = engine.klobuchar_params.clone();
                     let mut eval_imu_idx = 0;
-                    
-                    // Set up initial state if needed
-                    if let (Some((_truth_tow, state)), Some(first_r)) = (initial_truth.clone(), rover_slice.first()) {
-                        let mut s = state.clone();
-                        s.time = first_r.time;
-                        eval_engine.current_state = Some(s);
-                    }
                     
                     for r in rover_slice {
                         let current_tow = r.time.tow + time_offset;
@@ -551,22 +555,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         
                         let _ = eval_engine.process_epoch(r, b);
                     }
-                    
-                    if let Some(final_state) = eval_engine.state_history.last() {
-                        // The error metric is the trace of the position covariance (smaller is better)
-                        // Or if SPP is used, the mean SPP residual.
-                        final_state.covariance[(0,0)] + final_state.covariance[(1,1)] + final_state.covariance[(2,2)]
+                    if eval_engine.state_history.last().is_some() {
+                        let total_nis = eval_engine.innovation_tracker.get_total_nis();
+                        if total_nis > 0.0 { total_nis } else { 1e9 }
                     } else {
                         1e9
                     }
                 };
                 
-                if let Ok((best_gnss, best_nhc)) = gneiss_rtk::calibration::extrinsics::calibrate_lever_arms_grid_search(&engine_config, eval_fn) {
-                    engine_config.imu_to_antenna_lever_arm = best_gnss;
-                    engine_config.imu_to_nhc_lever_arm = best_nhc;
-                    engine.config.imu_to_antenna_lever_arm = best_gnss;
-                    engine.config.imu_to_nhc_lever_arm = best_nhc;
-                    info!("Calibration complete. Applying Best GNSS: {:?}, Best NHC: {:?}", best_gnss, best_nhc);
+                if let Ok((best_lever_arm, best_angles)) = gneiss_rtk::calibration::extrinsics::calibrate_extrinsics_6dof(&engine_config, eval_fn) {
+                    engine_config.imu_to_antenna_lever_arm = best_lever_arm;
+                    engine_config.imu_mounting_angles = Some(best_angles);
+                    engine.config.imu_to_antenna_lever_arm = best_lever_arm;
+                    engine.config.imu_mounting_angles = Some(best_angles);
+                    // Also use for NHC for now
+                    engine_config.imu_to_nhc_lever_arm = best_lever_arm;
+                    engine.config.imu_to_nhc_lever_arm = best_lever_arm;
+                    info!("Extrinsics calibrated. Lever Arm: {:?}, Mounting Angles: {:?}", best_lever_arm, best_angles);
                 } else {
                     error!("Extrinsics calibration failed.");
                 }

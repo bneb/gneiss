@@ -277,6 +277,9 @@ impl ProcessingEngine {
         let state = if let Some(s) = &mut self.current_state { s } else { return };
         if state.ins_aligned || !self.config.mode.is_tightly_coupled() { return; }
         
+        // Do not attempt to align an INS if we have no IMU data.
+        if self.imu_buffer.is_empty() { return; }
+        
         let speed = state.velocity.norm();
         if speed > 3.0 && self.state_history.len() >= 5 && self.state_history.iter().rev().take(5).all(|s| s.velocity.norm() > 3.0) {
             let llh = gneiss_core::coords::ecef_to_llh(state.position.vector);

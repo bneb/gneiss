@@ -80,6 +80,15 @@ impl InnovationTracker {
         self.snr_var.values().copied().fold(0.0, f64::max)
     }
 
+    pub fn is_stalling(&self) -> bool {
+        let avg_scale = self.nis_avg.values().sum::<f64>() / self.nis_avg.len().max(1) as f64;
+        avg_scale > 10.0
+    }
+    
+    pub fn get_total_nis(&self) -> f64 {
+        self.nis_avg.values().sum::<f64>()
+    }
+
     /// Prune satellites not seen for many epochs.
     pub fn prune(&mut self, active_sats: &[(SatelliteId, u8)]) {
         self.nis_avg.retain(|k, _| active_sats.contains(k));

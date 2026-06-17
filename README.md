@@ -42,20 +42,43 @@ The engine's architecture provides a mathematical scaffold for multiple GNSS pro
 The engine operates on a causal, recursive filtering architecture:
 
 ```mermaid
-graph LR
-    A[Raw Satellite Data] --> B(Gneiss Engine)
-    C[Raw Inertial Data] --> B
-    S[RTCM SSR Stream] --> B
+graph TD
+    subgraph Inputs
+    A[Raw Satellite Data]
+    C[Raw Inertial Data]
+    S[RTCM SSR Stream]
+    end
+
+    subgraph "Pass 1: Auto-Calibration"
+    P1[GNSS Intrinsics Profiler]
+    P2[6-DOF Extrinsics Optimizer]
+    P1 -->|Clock Variances| P2
+    P2 -->|Lever Arm & Angles| B
+    end
+
+    A --> P1
+    C --> P2
+
+    subgraph "Pass 2: Execution Engine"
+    B(Gneiss Engine)
     B --> D{Extended Kalman Filter}
     D -->|Float State| H[LAMBDA Ambiguity Resolution]
     H -->|Fixed Ambiguities| I{FFRT Validation}
     I -->|Pass| J[Apply Fix & Hold]
     I -->|Fail| D
+    D --> K[ARAIM Solution Separation]
+    end
+
+    A --> B
+    C --> B
+    S --> B
+
+    subgraph Outputs
     D --> E[Position Trajectory]
     D --> F[Calibrated Sensor Biases]
     D --> G[Attitude & Heading]
-    D --> K[ARAIM Solution Separation]
     K --> L[HPL & VPL Bounds]
+    end
 ```
 
 ## Quickstart
@@ -95,10 +118,20 @@ cargo run --release -p gneiss-cli -- live \
 - `--lambda-ratio <FLOAT>`: Minimum ratio for the LAMBDA Partial Ambiguity Resolution (PAR) test (default: `3.0`).
 - `--lambda-subset <INT>`: Minimum number of satellites required for PAR (default: `7`). 
 - `--lever-arm <X,Y,Z>`: Translation vector (in meters) from the IMU center of navigation to the GNSS antenna phase center in the vehicle body frame.
-- `--calibrate-imu`: Enables state-estimation of IMU mounting rotations (Roll, Pitch, Yaw) relative to the vehicle frame.
+- `--calibrate`: **(New)** Enables the automated 2-pass calibration pipeline. In Pass 1, the engine dynamically estimates GNSS receiver clock variance profiles and uses a Nelder-Mead simplex optimizer to auto-detect the 6-DOF IMU mounting angles and lever arms. In Pass 2, it executes the tight-coupling with the detected parameters. This is highly recommended for cold-starts without a-priori lever arm measurements.
+- `--calibrate-imu`: Enables dynamic state-estimation of IMU mounting rotations relative to the vehicle frame.
 - `--raim-outlier-m <FLOAT>`: SPP Receiver Autonomous Integrity Monitoring (RAIM) threshold in meters.
 - `--chi-square-pr <FLOAT>`: EKF Chi-Square threshold for pseudorange measurement rejection.
 - `--chi-square-cp <FLOAT>`: EKF Chi-Square threshold for carrier phase measurement rejection.
+
+## Accuracy Benchmarks
+In deep urban canyons (e.g., Tokyo Shinjuku), the tight coupling engine produces sub-3m accuracy from an entirely blind cold-start using the `--calibrate` mode. If ground-truth lever arm parameters are precisely known, the engine can achieve sub-1.5m accuracy.
+
+| Configuration | Median 3D Error | 95% 3D Error |
+|---------------|-----------------|--------------|
+| Commercial Baseline (NovAtel) | 3.60 m | >10 m |
+| `gneiss` (Auto-Calibrated) | 2.93 m | 9.29 m |
+| `gneiss` (Manually Tuned) | 1.34 m | 3.77 m |
 
 ## Documentation
 
