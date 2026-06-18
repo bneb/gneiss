@@ -227,8 +227,17 @@ impl PppIteratedEkf {
         }
 
         let q_wl_full = &d_wl_full * &state.covariance * d_wl_full.transpose();
+        // Accept satellites with converged covariance OR sufficient MW samples
         let keep_indices: Vec<usize> = (0..q_wl_full.nrows())
-            .filter(|&i| q_wl_full[(i, i)].sqrt() < 0.15)
+            .filter(|&i| {
+                let cov_ok = q_wl_full[(i, i)].sqrt() < 0.30;
+                if cov_ok { return true; }
+                // MW-based: accept if both rover and reference have >10 MW samples
+                let (c, ref_sat) = &subset[i];
+                let mw_ok = state.mw_sd_counts.get(&c.0).unwrap_or(&0) > &10
+                    && state.mw_sd_counts.get(&ref_sat.0).unwrap_or(&0) > &10;
+                mw_ok
+            })
             .collect();
         if keep_indices.len() < 4 {
             return Err("Insufficient well-converged Widelane ambiguities");
@@ -241,8 +250,22 @@ impl PppIteratedEkf {
             }
         }
 
-        let a_wl = &d_wl * x;
-        let q_wl = &d_wl * &state.covariance * d_wl.transpose();
+        let mut a_wl = &d_wl * x;
+        let mut q_wl = &d_wl * &state.covariance * d_wl.transpose();
+        // Seed WL floats from MW EMA for satellites with sufficient samples
+        for (i, &idx) in keep_indices.iter().enumerate() {
+            let (c, ref_sat) = &subset[idx];
+            let mw_c = state.mw_sd_ema.get(&c.0).copied().unwrap_or(0.0);
+            let mw_ref = state.mw_sd_ema.get(&ref_sat.0).copied().unwrap_or(0.0);
+            let cnt_c = state.mw_sd_counts.get(&c.0).copied().unwrap_or(0);
+            let cnt_ref = state.mw_sd_counts.get(&ref_sat.0).copied().unwrap_or(0);
+            if cnt_c > 10 && cnt_ref > 10 {
+                a_wl[i] = mw_c - mw_ref;
+                // Reduce WL variance for MW-converged pairs
+                let mw_var = 0.01_f64; // 0.1 cycle std for MW estimate
+                q_wl[(i, i)] = q_wl[(i, i)].min(0.25) + mw_var;
+            }
+        }
         let res_wl = crate::ambiguity::lambda::resolve_lambda(&a_wl, &q_wl)
             .map_err(|_| "WL LAMBDA Failed")?;
 

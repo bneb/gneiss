@@ -315,7 +315,7 @@ impl PppInsIteratedEkf {
 
         let q_wl_full = &d_wl_full * &state.covariance * d_wl_full.transpose();
         let keep_indices: Vec<usize> = (0..q_wl_full.nrows())
-            .filter(|&i| q_wl_full[(i, i)].sqrt() < 0.15)
+            .filter(|&i| q_wl_full[(i, i)].sqrt() < 0.30)
             .collect();
         if keep_indices.len() < 4 {
             return Err("Insufficient well-converged Widelane ambiguities");

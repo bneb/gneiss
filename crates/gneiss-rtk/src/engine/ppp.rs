@@ -441,7 +441,14 @@ pub(crate) fn update_phase_ambiguities(
         let expected_base = sat.dist + state.rcv_clk_bias + isb - sat.dt_sat_m
             + sat.tropo_dry
             + state.zwd * sat.map_wet;
+        // Compute Melbourne-Wübbena widelane for ambiguity seeding
         if !sat.is_iono_free && sat.cp2.is_some() && sat.p2.is_some() {
+            let wl = (LIGHT_SPEED / sat.f1) * (LIGHT_SPEED / sat.f2)
+                / ((LIGHT_SPEED / sat.f2) - (LIGHT_SPEED / sat.f1)); // λ_wl = c/(f1-f2)
+            let mw_cycles = (cp1 + wup) - (sat.cp2.unwrap() + wup)
+                - (sat.f1 * sat.p1 + sat.f2 * sat.p2.unwrap())
+                    / (sat.f1 + sat.f2) / wl;
+            state.update_mw(sat.sat_obs.sat, mw_cycles);
             add_uduc_ambiguities(state, sat, cp1, wup, expected_base);
         } else {
             let exp = if sat.is_iono_free && sat.cp2.is_some() {
