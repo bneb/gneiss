@@ -373,8 +373,18 @@ pub(crate) fn update_phase_ambiguities(
             (cp1 + wup) * sat.lam1
         };
         let prev = *state.locktimes.get(&(sat.sat_obs.sat, 1)).unwrap_or(&0);
-        let (slip, new_lk) = crate::engine::ppp_math::detect_cycle_slip(sat.sat_obs, prev as u32);
+        let mut gf_prev = state.gf_prev.get(&sat.sat_obs.sat).copied();
+        let mut mw_prev = state.mw_prev.get(&sat.sat_obs.sat).copied();
+        let (slip, new_lk) = crate::engine::ppp_math::detect_slip_combined(
+            sat.sat_obs, prev as u32,
+            sat.cp1, sat.lam1,
+            sat.cp2, sat.lam2,
+            Some(sat.p1), sat.p2,
+            &mut gf_prev, &mut mw_prev,
+        );
         state.locktimes.insert((sat.sat_obs.sat, 1), new_lk as u16);
+        if let Some(v) = gf_prev { state.gf_prev.insert(sat.sat_obs.sat, v); }
+        if let Some(v) = mw_prev { state.mw_prev.insert(sat.sat_obs.sat, v); }
         if slip {
             for i in 0..4 {
                 state.remove_ambiguity(sat.sat_obs.sat, i);

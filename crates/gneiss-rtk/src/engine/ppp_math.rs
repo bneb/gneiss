@@ -1,5 +1,5 @@
 use gneiss_core::obs::{ObsCode, SatObs};
-use gneiss_core::sat::{Constellation, SatelliteId};
+use gneiss_core::sat::Constellation;
 use gneiss_core::time::GpsTime;
 use nalgebra::Vector3;
 
@@ -105,7 +105,7 @@ pub fn apply_earth_rotation(
         -raw_pos.x * s1 + raw_pos.y * c1,
         raw_pos.z,
     );
-    let v1 = Vector3::new(
+    let _v1 = Vector3::new(
         raw_vel.x * c1 + raw_vel.y * s1,
         -raw_vel.x * s1 + raw_vel.y * c1,
         raw_vel.z,
@@ -162,6 +162,104 @@ pub fn detect_cycle_slip(sat_obs: &SatObs, prev: u32) -> (bool, u32) {
     (slip, lk)
 }
 
+/// Detect cycle slip using geometry-free (L1-L2) combination.
+/// Removes geometry, clock, and troposphere; a jump indicates a slip or ionospheric spike.
+/// Returns true if the GF combination jumps by more than `threshold_m` meters.
+pub fn detect_gf_slip(
+    cp1: f64, lam1: f64,
+    cp2: f64, lam2: f64,
+    prev_gf: f64,
+    has_prev: bool,
+    threshold_m: f64,
+) -> (bool, f64) {
+    let gf = cp1 * lam1 - cp2 * lam2;
+    if !has_prev {
+        return (false, gf);
+    }
+    let jump = (gf - prev_gf).abs();
+    (jump > threshold_m, gf)
+}
+
+/// Detect cycle slip using Melbourne-Wübbena (MW) widelane combination.
+/// The MW combination removes geometry, ionosphere, troposphere, and clock,
+/// isolating widelane ambiguity. A jump indicates a cycle slip.
+/// Returns true if MW jumps by more than `threshold_cycles` cycles.
+pub fn detect_mw_slip(
+    cp1: f64, lam1: f64,
+    cp2: f64, lam2: f64,
+    p1: f64,
+    p2: f64,
+    prev_mw: f64,
+    has_prev: bool,
+    threshold_cycles: f64,
+) -> (bool, f64) {
+    let wl = lam1 * lam2 / (lam2 - lam1); // widelane wavelength
+    let mw = (cp1 - cp2) - (p1 / lam1 + p2 / lam2) * (lam1 * lam2) / (lam1 + lam2);
+    if !has_prev {
+        return (false, mw);
+    }
+    let jump = (mw - prev_mw).abs();
+    (jump > threshold_cycles, mw)
+}
+
+/// Combined cycle slip detection using LLI, lock-time, geometry-free, and MW.
+/// Returns (is_slip, new_lock_time).
+/// `gf_prev` and `mw_prev` are updated in-place with the current values if no slip.
+pub fn detect_slip_combined(
+    sat_obs: &SatObs,
+    prev_lock: u32,
+    cp1: Option<f64>, lam1: f64,
+    cp2: Option<f64>, lam2: f64,
+    p1: Option<f64>,
+    p2: Option<f64>,
+    gf_prev: &mut Option<f64>,
+    mw_prev: &mut Option<f64>,
+) -> (bool, u32) {
+    // LLI and lock-time checks (hardware-reported)
+    let (hw_slip, lk) = detect_cycle_slip(sat_obs, prev_lock);
+    if hw_slip {
+        *gf_prev = None;
+        *mw_prev = None;
+        return (true, lk);
+    }
+
+    // Geometry-free check (requires dual-frequency phase)
+    if let (Some(c1), Some(c2)) = (cp1, cp2) {
+        if let Some(prev) = *gf_prev {
+            let (gf_slip, new_gf) = detect_gf_slip(c1, lam1, c2, lam2, prev, true, 0.05);
+            if gf_slip {
+                *gf_prev = None;
+                *mw_prev = None;
+                return (true, 0);
+            }
+            *gf_prev = Some(new_gf);
+        } else {
+            // Initialize GF
+            let (_, new_gf) = detect_gf_slip(c1, lam1, c2, lam2, 0.0, false, 0.0);
+            *gf_prev = Some(new_gf);
+        }
+    }
+
+    // Melbourne-Wübbena check (requires dual-frequency phase + pseudorange)
+    if let (Some(c1), Some(c2), Some(pr1), Some(pr2)) = (cp1, cp2, p1, p2) {
+        if let Some(prev) = *mw_prev {
+            let (mw_slip, new_mw) = detect_mw_slip(c1, lam1, c2, lam2, pr1, pr2, prev, true, 2.0);
+            if mw_slip {
+                *gf_prev = None;
+                *mw_prev = None;
+                return (true, 0);
+            }
+            *mw_prev = Some(new_mw);
+        } else {
+            // Initialize MW
+            let (_, new_mw) = detect_mw_slip(c1, lam1, c2, lam2, pr1, pr2, 0.0, false, 0.0);
+            *mw_prev = Some(new_mw);
+        }
+    }
+
+    (false, lk)
+}
+
 pub fn compute_tropo_dry(rcv_pos_llh: Vector3<f64>, el: f64, t: GpsTime) -> (f64, f64) {
     if el < 0.0 {
         return (0.0, 0.0);
@@ -195,6 +293,7 @@ pub fn compute_iono_free(f1: f64, f2: f64, v1: f64, v2: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use gneiss_core::sat::SatelliteId;
     use std::str::FromStr;
 
     #[test]
@@ -224,7 +323,7 @@ mod tests {
 
     #[test]
     fn test_apply_earth_rotation_zero() {
-        let (p, v) = apply_earth_rotation(
+        let (p, _v) = apply_earth_rotation(
             Vector3::new(1.0, 0.0, 0.0),
             Vector3::new(0.0, 1.0, 0.0),
             Vector3::new(1.0, 0.0, 0.0),
@@ -416,7 +515,7 @@ mod tests {
             -raw_pos.x * s1 + raw_pos.y * c1,
             raw_pos.z,
         );
-        let v1 = Vector3::new(
+        let _v1 = Vector3::new(
             raw_vel.x * c1 + raw_vel.y * s1,
             -raw_vel.x * s1 + raw_vel.y * c1,
             raw_vel.z,
@@ -453,7 +552,7 @@ mod tests {
     #[test]
     fn test_apply_osb_corrections_cp2_fb() {
         use gneiss_core::obs::{ObsCode, Observation, SatObs};
-        use gneiss_core::sat::{Constellation, SatelliteId};
+        use gneiss_core::sat::Constellation;
         use gneiss_core::time::GpsTime;
         use gneiss_parsers::sinex_bia::{BiasRecord, BiasType, SinexBias};
 
