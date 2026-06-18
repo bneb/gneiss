@@ -5,13 +5,13 @@
 | GSDC (Pixel 4) | SPP | RTKLIB | 2.080 m | 3.311 m | 63.357 m | **Gneiss** |
 | GSDC (Pixel 4) | SPP | Gneiss | 2.037 m | 3.297 m | 60.179 m | |
 | GSDC (Pixel 4) | RTK Kinematic | RTKLIB | 1.176 m | 1.773 m | 63.820 m | RTKLIB |
-| GSDC (Pixel 4) | RTK Kinematic | Gneiss | 293.997 m | 493.410 m | 87.220 m | |
+| GSDC (Pixel 4) | RTK Kinematic | Gneiss | 8.365 m | 127.464 m | 87.220 m | |
 | GSDC (Pixel 4) | RTK Kinematic (combined) | RTKLIB | 1.104 m | 1.831 m | 64.073 m | RTKLIB |
-| GSDC (Pixel 4) | RTK Kinematic (combined) | Gneiss | 293.997 m | 493.410 m | 87.220 m | |
+| GSDC (Pixel 4) | RTK Kinematic (combined) | Gneiss | 8.365 m | 127.464 m | 87.220 m | |
 | GSDC (Pixel 4) | PPP Kinematic (EKF) | RTKLIB | 2.326 m | 4.253 m | 58.704 m | RTKLIB |
 | GSDC (Pixel 4) | PPP Kinematic (EKF) | Gneiss | 147.223 m | 218.761 m | 30.284 m | |
 | GSDC (Pixel 4) | PPP Kinematic (FG) | RTKLIB | 2.326 m | 4.253 m | 58.704 m | RTKLIB |
-| GSDC (Pixel 4) | PPP Kinematic (FG) | Gneiss | 62832.221 m | 81665.386 m | 62723.990 m | |
+| GSDC (Pixel 4) | PPP Kinematic (FG) | Gneiss | 178.824 m | 195.867 m | 30.284 m | |
 | Shinjuku (UrbanNav) | SPP | RTKLIB | Failed |  |  | **Gneiss** (RTKLIB missing) |
 | Shinjuku (UrbanNav) | SPP | Gneiss | 1.849 m | 3.167 m | 2.446 m | |
 | Shinjuku (UrbanNav) | RTK Kinematic | RTKLIB | 2.205 m | 5.730 m | 4.115 m | RTKLIB |
@@ -42,43 +42,43 @@
 | PPP (f9p_ppp) | PPP Kinematic (EKF) | Gneiss | 13.137 m | 16.818 m | 16.127 m | |
 | PPP (f9p_ppp) | PPP Kinematic (FG) | RTKLIB | Failed |  |  | **Gneiss** (RTKLIB missing) |
 | PPP (f9p_ppp) | PPP Kinematic (FG) | Gneiss | 3.516 m | 5.081 m | 1.263 m | |
-| UrbanLoco (Example) | SPP | RTKLIB | Failed |  |  |  |
-| UrbanLoco (Example) | SPP | Gneiss | Failed |  |  | |
-| UrbanLoco (Example) | RTK Kinematic | RTKLIB | Failed |  |  |  |
-| UrbanLoco (Example) | RTK Kinematic | Gneiss | Failed |  |  | |
-| UrbanLoco (Example) | RTK Kinematic (combined) | RTKLIB | Failed |  |  |  |
-| UrbanLoco (Example) | RTK Kinematic (combined) | Gneiss | Failed |  |  | |
-| UrbanLoco (Example) | PPP Kinematic (EKF) | RTKLIB | Failed |  |  |  |
-| UrbanLoco (Example) | PPP Kinematic (EKF) | Gneiss | Failed |  |  | |
-| UrbanLoco (Example) | PPP Kinematic (FG) | RTKLIB | Failed |  |  |  |
-| UrbanLoco (Example) | PPP Kinematic (FG) | Gneiss | Failed |  |  | |
-| TEX-CUP (UT Austin) | SPP | RTKLIB | Failed |  |  |  |
-| TEX-CUP (UT Austin) | SPP | Gneiss | Failed |  |  | |
-| TEX-CUP (UT Austin) | RTK Kinematic | RTKLIB | Failed |  |  |  |
-| TEX-CUP (UT Austin) | RTK Kinematic | Gneiss | Failed |  |  | |
-| TEX-CUP (UT Austin) | RTK Kinematic (combined) | RTKLIB | Failed |  |  |  |
-| TEX-CUP (UT Austin) | RTK Kinematic (combined) | Gneiss | Failed |  |  | |
-| TEX-CUP (UT Austin) | PPP Kinematic (EKF) | RTKLIB | Failed |  |  |  |
-| TEX-CUP (UT Austin) | PPP Kinematic (EKF) | Gneiss | Failed |  |  | |
-| TEX-CUP (UT Austin) | PPP Kinematic (FG) | RTKLIB | Failed |  |  |  |
-| TEX-CUP (UT Austin) | PPP Kinematic (FG) | Gneiss | Failed |  |  | |
-| WHU-Smartphone (Xiaomi) | SPP | RTKLIB | Failed |  |  |  |
-| WHU-Smartphone (Xiaomi) | SPP | Gneiss | Failed |  |  | |
-| WHU-Smartphone (Xiaomi) | RTK Kinematic | RTKLIB | Failed |  |  |  |
-| WHU-Smartphone (Xiaomi) | RTK Kinematic | Gneiss | Failed |  |  | |
-| WHU-Smartphone (Xiaomi) | RTK Kinematic (combined) | RTKLIB | Failed |  |  |  |
-| WHU-Smartphone (Xiaomi) | RTK Kinematic (combined) | Gneiss | Failed |  |  | |
-| WHU-Smartphone (Xiaomi) | PPP Kinematic (EKF) | RTKLIB | Failed |  |  |  |
-| WHU-Smartphone (Xiaomi) | PPP Kinematic (EKF) | Gneiss | Failed |  |  | |
-| WHU-Smartphone (Xiaomi) | PPP Kinematic (FG) | RTKLIB | Failed |  |  |  |
-| WHU-Smartphone (Xiaomi) | PPP Kinematic (FG) | Gneiss | Failed |  |  | |
-| smartLoc (TU Chemnitz) | SPP | RTKLIB | Failed |  |  |  |
-| smartLoc (TU Chemnitz) | SPP | Gneiss | Failed |  |  | |
-| smartLoc (TU Chemnitz) | RTK Kinematic | RTKLIB | Failed |  |  |  |
-| smartLoc (TU Chemnitz) | RTK Kinematic | Gneiss | Failed |  |  | |
-| smartLoc (TU Chemnitz) | RTK Kinematic (combined) | RTKLIB | Failed |  |  |  |
-| smartLoc (TU Chemnitz) | RTK Kinematic (combined) | Gneiss | Failed |  |  | |
-| smartLoc (TU Chemnitz) | PPP Kinematic (EKF) | RTKLIB | Failed |  |  |  |
-| smartLoc (TU Chemnitz) | PPP Kinematic (EKF) | Gneiss | Failed |  |  | |
-| smartLoc (TU Chemnitz) | PPP Kinematic (FG) | RTKLIB | Failed |  |  |  |
-| smartLoc (TU Chemnitz) | PPP Kinematic (FG) | Gneiss | Failed |  |  | |
+| UrbanLoco (Example) | SPP | RTKLIB | No data |  |  |  |
+| UrbanLoco (Example) | SPP | Gneiss | No data |  |  | |
+| UrbanLoco (Example) | RTK Kinematic | RTKLIB | No data |  |  |  |
+| UrbanLoco (Example) | RTK Kinematic | Gneiss | No data |  |  | |
+| UrbanLoco (Example) | RTK Kinematic (combined) | RTKLIB | No data |  |  |  |
+| UrbanLoco (Example) | RTK Kinematic (combined) | Gneiss | No data |  |  | |
+| UrbanLoco (Example) | PPP Kinematic (EKF) | RTKLIB | No data |  |  |  |
+| UrbanLoco (Example) | PPP Kinematic (EKF) | Gneiss | No data |  |  | |
+| UrbanLoco (Example) | PPP Kinematic (FG) | RTKLIB | No data |  |  |  |
+| UrbanLoco (Example) | PPP Kinematic (FG) | Gneiss | No data |  |  | |
+| TEX-CUP (UT Austin) | SPP | RTKLIB | No data |  |  |  |
+| TEX-CUP (UT Austin) | SPP | Gneiss | No data |  |  | |
+| TEX-CUP (UT Austin) | RTK Kinematic | RTKLIB | No data |  |  |  |
+| TEX-CUP (UT Austin) | RTK Kinematic | Gneiss | No data |  |  | |
+| TEX-CUP (UT Austin) | RTK Kinematic (combined) | RTKLIB | No data |  |  |  |
+| TEX-CUP (UT Austin) | RTK Kinematic (combined) | Gneiss | No data |  |  | |
+| TEX-CUP (UT Austin) | PPP Kinematic (EKF) | RTKLIB | No data |  |  |  |
+| TEX-CUP (UT Austin) | PPP Kinematic (EKF) | Gneiss | No data |  |  | |
+| TEX-CUP (UT Austin) | PPP Kinematic (FG) | RTKLIB | No data |  |  |  |
+| TEX-CUP (UT Austin) | PPP Kinematic (FG) | Gneiss | No data |  |  | |
+| WHU-Smartphone (Xiaomi) | SPP | RTKLIB | No data |  |  |  |
+| WHU-Smartphone (Xiaomi) | SPP | Gneiss | No data |  |  | |
+| WHU-Smartphone (Xiaomi) | RTK Kinematic | RTKLIB | No data |  |  |  |
+| WHU-Smartphone (Xiaomi) | RTK Kinematic | Gneiss | No data |  |  | |
+| WHU-Smartphone (Xiaomi) | RTK Kinematic (combined) | RTKLIB | No data |  |  |  |
+| WHU-Smartphone (Xiaomi) | RTK Kinematic (combined) | Gneiss | No data |  |  | |
+| WHU-Smartphone (Xiaomi) | PPP Kinematic (EKF) | RTKLIB | No data |  |  |  |
+| WHU-Smartphone (Xiaomi) | PPP Kinematic (EKF) | Gneiss | No data |  |  | |
+| WHU-Smartphone (Xiaomi) | PPP Kinematic (FG) | RTKLIB | No data |  |  |  |
+| WHU-Smartphone (Xiaomi) | PPP Kinematic (FG) | Gneiss | No data |  |  | |
+| smartLoc (TU Chemnitz) | SPP | RTKLIB | No data |  |  |  |
+| smartLoc (TU Chemnitz) | SPP | Gneiss | No data |  |  | |
+| smartLoc (TU Chemnitz) | RTK Kinematic | RTKLIB | No data |  |  |  |
+| smartLoc (TU Chemnitz) | RTK Kinematic | Gneiss | No data |  |  | |
+| smartLoc (TU Chemnitz) | RTK Kinematic (combined) | RTKLIB | No data |  |  |  |
+| smartLoc (TU Chemnitz) | RTK Kinematic (combined) | Gneiss | No data |  |  | |
+| smartLoc (TU Chemnitz) | PPP Kinematic (EKF) | RTKLIB | No data |  |  |  |
+| smartLoc (TU Chemnitz) | PPP Kinematic (EKF) | Gneiss | No data |  |  | |
+| smartLoc (TU Chemnitz) | PPP Kinematic (FG) | RTKLIB | No data |  |  |  |
+| smartLoc (TU Chemnitz) | PPP Kinematic (FG) | Gneiss | No data |  |  | |

@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests_mutants {
-    use crate::engine::ppp_fg::PppFactorGraph;
+    use crate::engine::ppp_fg::PppIteratedEkf;
     use crate::engine::processed_sat::ProcessedSat;
     use crate::engine::rtk_state::RtkState;
     use gneiss_core::coords::{Coordinate, Datum, Frame};
@@ -20,7 +20,7 @@ mod tests_mutants {
     fn test_find_worst_outlier() {
         let mut state = dummy_rtk_state();
         state.covariance = DMatrix::identity(30, 30);
-        let fg = PppFactorGraph::new();
+        let fg = PppIteratedEkf::new();
         // create a satellite with a high residual that produces ratio = 5.1
         let mut sat = ProcessedSat {
             sat: SatelliteId { constellation: Constellation::Gps, prn: 1 },

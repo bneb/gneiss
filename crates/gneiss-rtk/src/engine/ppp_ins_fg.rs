@@ -38,7 +38,7 @@ pub fn process_ppp_ins_fg<'a>(
     let imu_history = &engine.imu_history;
     
     let lever_arm = nalgebra::Vector3::from_column_slice(&engine.config.imu_to_antenna_lever_arm);
-    PppInsFactorGraph::new().solve(state, &sats, imu_history, last_state, &lever_arm)?;
+    PppInsIteratedEkf::new().solve(state, &sats, imu_history, last_state, &lever_arm)?;
     
     crate::engine::processor::ProcessingEngine::attempt_kinematic_alignment(engine);
     let state = engine.current_state.as_mut().unwrap();
@@ -57,15 +57,21 @@ pub fn process_ppp_ins_fg<'a>(
 }
 
 
-/// Configuration for the Iterated EKF (Factor Graph) solver.
-pub struct PppInsFactorGraph {
+/// Iterated Extended Kalman Filter for tightly-coupled PPP+INS.
+///
+/// Despite the historical "fg" (factor graph) naming, this is an IEKF —
+/// an iterated least-squares solver with IMU pre-integration factors,
+/// Huber robust estimation, and a prior from state propagation.
+/// It does not perform marginalization, variable elimination, or iSAM2-style
+/// incremental smoothing.
+pub struct PppInsIteratedEkf {
     pub max_iterations: usize,
     pub convergence_threshold: f64,
     pub huber_k: f64,
     pub elev_mask: f64,
 }
 
-impl Default for PppInsFactorGraph {
+impl Default for PppInsIteratedEkf {
     fn default() -> Self {
         Self {
             max_iterations: 8,
@@ -95,7 +101,7 @@ struct UducIndices {
     gamma: f64,
 }
 
-impl PppInsFactorGraph {
+impl PppInsIteratedEkf {
     pub fn new() -> Self {
         Self::default()
     }
@@ -919,7 +925,7 @@ fn log_ppp_convergence(
     x_i: &DVector<f64>,
     x_pred: &DVector<f64>,
     p_pred: &DMatrix<f64>,
-    solver: &PppInsFactorGraph,
+    solver: &PppInsIteratedEkf,
     lever_arm: &nalgebra::Vector3<f64>,
     omega_eb_b: &nalgebra::Vector3<f64>,
 ) {
@@ -1198,7 +1204,7 @@ mod tests {
 
     #[test]
     fn test_solve_empty_sats() {
-        let fg = PppInsFactorGraph::new();
+        let fg = PppInsIteratedEkf::new();
         let mut state = dummy_rtk_state();
         state.covariance = DMatrix::identity(CORE_STATE_SIZE, CORE_STATE_SIZE);
         let sats = vec![];
@@ -1209,11 +1215,11 @@ mod tests {
 
     #[test]
     fn test_ppp_factor_graph_default() {
-        let fg = PppInsFactorGraph::default();
+        let fg = PppInsIteratedEkf::default();
         assert_eq!(fg.max_iterations, 8);
         assert_eq!(fg.convergence_threshold, 0.005);
         assert_eq!(fg.huber_k, 10.0);
-        let fg2 = PppInsFactorGraph::new();
+        let fg2 = PppInsIteratedEkf::new();
         assert_eq!(fg2.max_iterations, 8);
     }
 
@@ -1435,7 +1441,7 @@ mod nan_tests {
 
     #[test]
     fn test_solve_matrix_inversion_failure() {
-        let fg = PppInsFactorGraph::new();
+        let fg = PppInsIteratedEkf::new();
         let mut state = dummy_rtk_state();
         state.covariance = DMatrix::from_element(CORE_STATE_SIZE, CORE_STATE_SIZE, f64::NAN);
         let sats = vec![];
@@ -1470,7 +1476,7 @@ mod mutant_killer_tests {
 
     #[test]
     fn test_resolve_widelane_ar_insufficient() {
-        let fg = PppInsFactorGraph::default();
+        let fg = PppInsIteratedEkf::default();
         let mut state = dummy_rtk_state();
         state.covariance = DMatrix::zeros(CORE_STATE_SIZE + 4, CORE_STATE_SIZE + 4);
         for i in 0..4 {
@@ -1557,7 +1563,7 @@ mod mutant_killer_tests {
 
     #[test]
     fn test_push_cp_measurement_iono_free() {
-        let fg = PppInsFactorGraph::default();
+        let fg = PppInsIteratedEkf::default();
         let mut meas = Vec::new();
         let mut state = dummy_rtk_state();
         let sat_id = SatelliteId {
@@ -1616,7 +1622,7 @@ mod mutant_killer_tests {
 
     #[test]
     fn test_push_cp_measurement_not_iono_free() {
-        let fg = PppInsFactorGraph::default();
+        let fg = PppInsIteratedEkf::default();
         let mut meas = Vec::new();
         let mut state = dummy_rtk_state();
         let sat_id = SatelliteId {
@@ -1675,7 +1681,7 @@ mod mutant_killer_tests {
 
     #[test]
     fn test_find_ar_candidates() {
-        let fg = PppInsFactorGraph::default();
+        let fg = PppInsIteratedEkf::default();
         let mut state = dummy_rtk_state();
         let sat_id1 = SatelliteId {
             constellation: Constellation::Gps,
@@ -1748,7 +1754,7 @@ mod mutant_killer_tests {
 
     #[test]
     fn test_resolve_cascade_ar_bounds() {
-        let fg = PppInsFactorGraph::default();
+        let fg = PppInsIteratedEkf::default();
         let mut state = dummy_rtk_state();
         let mut sats: Vec<ProcessedSat> = Vec::new();
 
@@ -1929,7 +1935,7 @@ mod mutant_killer_tests {
             },
         ];
 
-        assert_eq!(PppInsFactorGraph::find_worst_outlier_sat(&meas), Some(sat2));
+        assert_eq!(PppInsIteratedEkf::find_worst_outlier_sat(&meas), Some(sat2));
 
         let meas_no_outlier = vec![FgMeasurement {
             res: 10.0,
@@ -1940,14 +1946,14 @@ mod mutant_killer_tests {
             weight: 1.0,
         }];
         assert_eq!(
-            PppInsFactorGraph::find_worst_outlier_sat(&meas_no_outlier),
+            PppInsIteratedEkf::find_worst_outlier_sat(&meas_no_outlier),
             None
         );
     }
 
     #[test]
     fn test_find_ar_candidates_bounds() {
-        let _fg = PppInsFactorGraph::default();
+        let _fg = PppInsIteratedEkf::default();
         let _state = dummy_rtk_state();
         let _sats: Vec<ProcessedSat> = Vec::new();
         let sat_id = SatelliteId {

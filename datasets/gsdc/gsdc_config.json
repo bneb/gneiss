@@ -30,11 +30,11 @@
     "doppler_slip_threshold_cycles": 10000.0,
     "dynamics_model": "automotive",
     "max_reject_count": 10,
-    "_comment": "base_position is calibrated against ground-truth to remove absolute translation offset.",
+    "_comment": "base_position from RINEX header APPROX POSITION XYZ (P222 CORS station).",
     "base_position": [
-        -2689642.7796,
-        -4290442.0624,
-        3864991.1599
+        -2689639.5060,
+        -4290438.6360,
+        3865050.9560
     ],
     "ar_ffrt_prob": 0.001,
     "min_snr_dbhz": 20.0,
