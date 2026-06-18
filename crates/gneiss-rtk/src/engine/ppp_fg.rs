@@ -475,6 +475,20 @@ impl PppIteratedEkf {
 
         if !sat.is_iono_free && sat.cp1.is_some() && sat.cp2.is_some() && sat.p2.is_some() {
             self.push_uduc_measurements(meas, state, sat, x_i, iter, los, expected_base, dist, isb);
+            // Add ionospheric prior constraint: tie i1 state to Klobuchar prediction
+            if let Some(i1_idx) = find_amb_idx(state, sat.sat_obs.sat, 3) {
+                let i1_est = x_i.get(CORE_STATE_SIZE + i1_idx).copied().unwrap_or(0.0);
+                let res_i1 = sat.iono_delay - i1_est;
+                let var_i1 = 9.0; // 3m std for Klobuchar accuracy
+                meas.push(FgMeasurement {
+                    res: res_i1,
+                    h_row: build_iono_constraint_row(x_i.len(), CORE_STATE_SIZE + i1_idx),
+                    weight: var_i1,
+                    raw_var: var_i1,
+                    is_phase: false,
+                    sat: Some(sat.sat_obs.sat),
+                });
+            }
         } else {
             self.push_pr_measurement(meas, state, sat, x_i, iter, los, expected_base, dist, isb);
             if let Some(cp1) = sat.cp1 {
@@ -866,6 +880,12 @@ fn build_h_row(
     if let Some(idx) = amb_idx {
         h[idx] = 1.0;
     }
+    h
+}
+
+fn build_iono_constraint_row(size: usize, i1_idx: usize) -> DVector<f64> {
+    let mut h = DVector::zeros(size);
+    h[i1_idx] = 1.0;
     h
 }
 

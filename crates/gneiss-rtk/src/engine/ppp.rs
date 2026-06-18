@@ -21,6 +21,16 @@ pub fn process_ppp<'a>(
     let state = engine.current_state.as_mut().unwrap();
     state.time = rover_obs.time;
     state.position.epoch = rover_obs.time;
+    // Reset to SPP position each epoch to prevent IEKF linearization drift.
+    // The IEKF refines clock, tropo, ambiguities but position starts fresh from SPP.
+    if let Ok(spp) = crate::spp::compute_spp(
+        rover_obs, &engine.ephemerides,
+        engine.klobuchar_params.as_ref(),
+        &crate::spp::SppConfig::default(), None,
+    ) {
+        state.position = spp.position;
+        state.rcv_clk_bias = spp.cdt;
+    }
     let sats = build_sats(engine, rover_obs);
     if sats.is_empty() {
         return Err(EngineError::InsufficientSatellites);
