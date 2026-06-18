@@ -13,18 +13,24 @@ pub enum EngineMode {
     Ppp,
     PppIns,
     PppInsLooselyCoupled,
-    PppFg,
-    PppInsFg,
-    RtkInsFactorGraph,
+    PppIekf,
+    PppInsIekf,
+    RtkInsIekf,
 }
 
 impl EngineMode {
     pub fn is_tightly_coupled(&self) -> bool {
-        matches!(self, Self::SppIns | Self::RtkIns | Self::PppIns | Self::PppInsFg | Self::RtkInsFactorGraph)
+        matches!(
+            self,
+            Self::SppIns | Self::RtkIns | Self::PppIns | Self::PppInsIekf | Self::RtkInsIekf
+        )
     }
-    
+
     pub fn is_ppp(&self) -> bool {
-        matches!(self, Self::Ppp | Self::PppIns | Self::PppInsLooselyCoupled | Self::PppFg | Self::PppInsFg)
+        matches!(
+            self,
+            Self::Ppp | Self::PppIns | Self::PppInsLooselyCoupled | Self::PppIekf | Self::PppInsIekf
+        )
     }
 }
 
@@ -54,7 +60,9 @@ impl std::fmt::Display for EngineError {
             EngineError::NoObservations => write!(f, "No observations available"),
             EngineError::InitialSppFailed => write!(f, "Initial SPP failed"),
             EngineError::StateDisappeared => write!(f, "EKF state disappeared mid-execution"),
-            EngineError::InsufficientSatellites => write!(f, "Insufficient satellites for EKF update"),
+            EngineError::InsufficientSatellites => {
+                write!(f, "Insufficient satellites for EKF update")
+            }
             EngineError::MissingBasePosition => write!(f, "Base station position must be provided"),
             EngineError::GeodeticMismatch(msg) => write!(f, "Geodetic Gatekeeper Failed: {}", msg),
         }

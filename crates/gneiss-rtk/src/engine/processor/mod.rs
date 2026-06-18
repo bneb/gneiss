@@ -114,8 +114,8 @@ impl ProcessingEngine {
                 | EngineMode::RtkInsLooselyCoupled
                 | EngineMode::SppInsLooselyCoupled
                 | EngineMode::PppInsLooselyCoupled
-                | EngineMode::PppInsFg
-                | EngineMode::RtkInsFactorGraph
+                | EngineMode::PppInsIekf
+                | EngineMode::RtkInsIekf
         );
         tracing::trace!(
             "apply_nhc_updates: enable_nhc={}, is_ins={}, ins_aligned={}",
@@ -259,7 +259,7 @@ impl ProcessingEngine {
             EngineMode::Rtk | EngineMode::RtkIns => {
                 self.process_rtk(&filtered_rover, filtered_base).err()
             }
-            EngineMode::RtkInsFactorGraph => {
+            EngineMode::RtkInsIekf => {
                 rtk_fg::process_rtk_factor_graph(self, &filtered_rover, filtered_base).err()
             }
             EngineMode::RtkInsLooselyCoupled => self
@@ -268,8 +268,8 @@ impl ProcessingEngine {
             EngineMode::Ppp
             | EngineMode::PppIns
             | EngineMode::PppInsLooselyCoupled
-            | EngineMode::PppFg => crate::engine::ppp::process_ppp(self, &filtered_rover).err(),
-            EngineMode::PppInsFg => crate::engine::ppp_ins_fg::process_ppp_ins_fg(self, &filtered_rover).err(),
+            | EngineMode::PppIekf => crate::engine::ppp::process_ppp(self, &filtered_rover).err(),
+            EngineMode::PppInsIekf => crate::engine::ppp_ins_fg::process_ppp_ins_fg(self, &filtered_rover).err(),
         };
         if let Some(e) = err {
             if let EngineError::StateDisappeared = e {
