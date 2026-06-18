@@ -167,7 +167,7 @@ impl PppIteratedEkf {
         for sat in sats.iter().filter(|s| {
             !s.is_iono_free
                 && s.cp2.is_some()
-                && s.sat_obs.sat.constellation == gneiss_core::sat::Constellation::Gps
+                && s.sat_obs.sat.constellation != gneiss_core::sat::Constellation::Glonass
         }) {
             if let (Some(n1), Some(n2)) = (
                 find_amb_idx(state, sat.sat_obs.sat, 1),
