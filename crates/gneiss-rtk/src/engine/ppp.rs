@@ -110,8 +110,9 @@ fn process_single_sat<'a>(
         f2 = f1;
     }
 
-    let (p1, mut p2, cp1, mut cp2, osb, is_if) =
+    let (p1, mut p2, cp1, mut cp2, osb, is_if, actual_f2) =
         get_obs_and_corrections(engine, sat_obs, r_obs.time, f1, f2);
+    f2 = actual_f2;
     let tau_pr = p1.unwrap_or(0.0) / LIGHT_SPEED;
     let t_nom = gneiss_core::time::GpsTime::new(r_obs.time.week, r_obs.time.tow - tau_pr);
 
@@ -186,8 +187,8 @@ fn get_obs_and_corrections(
     engine: &ProcessingEngine,
     sat_obs: &gneiss_core::obs::SatObs,
     time: gneiss_core::time::GpsTime,
-    f1: f64,
-    f2: f64,
+    _f1: f64,
+    _f2: f64,
 ) -> (
     Option<f64>,
     Option<f64>,
@@ -195,26 +196,33 @@ fn get_obs_and_corrections(
     Option<f64>,
     crate::engine::ppp_math::OsbCorrections,
     bool,
+    f64,  // actual f2 (may differ from satellite_frequencies if L5 fallback)
 ) {
-    let f1_b = if sat_obs.sat.constellation == Constellation::Beidou {
-        2
-    } else {
-        1
-    };
-    let f2_b = match sat_obs.sat.constellation {
+    let f1_b = if sat_obs.sat.constellation == Constellation::Beidou { 2 } else { 1 };
+    let mut f2_b = match sat_obs.sat.constellation {
         Constellation::Galileo | Constellation::Beidou => 7,
         _ => 2,
     };
-
-    let osb = crate::engine::ppp_math::apply_osb_corrections(
-        engine.sinex_bias.as_ref(),
-        sat_obs,
-        time,
-        f1,
-        f2,
-        f1_b,
-        f2_b,
+    // Try standard bands first
+    let mut osb = crate::engine::ppp_math::apply_osb_corrections(
+        engine.sinex_bias.as_ref(), sat_obs, time, _f1, _f2, f1_b, f2_b,
     );
+    // L5 fallback: if no L2 observation (smartphones track L5, not L2),
+    // retry with band 5 (GPS L5 / Galileo E5a / BDS B2a at 1176.45 MHz)
+    let mut actual_f2 = _f2;
+    if osb.p2.is_none() && osb.cp2.is_none() {
+        let l5_band = 5u8;
+        let l5_freq = gneiss_core::signal::get_frequency(sat_obs.sat, l5_band, 0);
+        if l5_freq != _f2 {
+            osb = crate::engine::ppp_math::apply_osb_corrections(
+                engine.sinex_bias.as_ref(), sat_obs, time, _f1, l5_freq, f1_b, l5_band,
+            );
+            if osb.p2.is_some() || osb.cp2.is_some() {
+                f2_b = l5_band;
+                actual_f2 = l5_freq;
+            }
+        }
+    }
 
     let mut p1 = osb.p1;
     let mut p2 = osb.p2;
@@ -237,21 +245,20 @@ fn get_obs_and_corrections(
     let precise = !engine.sp3_epochs.is_empty() || engine.clk_data.is_some();
     if precise && !engine.config.uduc_ar {
         if let (Some(v1), Some(v2)) = (p1, p2) {
-            p1 = Some(crate::engine::ppp_math::compute_iono_free(f1, f2, v1, v2));
+            p1 = Some(crate::engine::ppp_math::compute_iono_free(_f1, actual_f2, v1, v2));
             is_if = true;
         }
         if let (Some(l1), Some(l2)) = (cp1, cp2) {
             cp1 = Some(
                 crate::engine::ppp_math::compute_iono_free(
-                    f1,
-                    f2,
-                    l1 * LIGHT_SPEED / f1,
-                    l2 * LIGHT_SPEED / f2,
-                ) / (LIGHT_SPEED / f1),
+                    _f1, actual_f2,
+                    l1 * LIGHT_SPEED / _f1,
+                    l2 * LIGHT_SPEED / actual_f2,
+                ) / (LIGHT_SPEED / _f1),
             );
         }
     }
-    (p1, p2, cp1, cp2, osb, is_if)
+    (p1, p2, cp1, cp2, osb, is_if, actual_f2)
 }
 
 fn compute_sat_state(
@@ -847,7 +854,7 @@ mod ppp_tests {
             lock_time: None,
         });
 
-        let (p1, p2, cp1, cp2, _, is_if) =
+        let (p1, p2, cp1, cp2, _, is_if, _) =
             get_obs_and_corrections(&engine, &sat_obs, t, 1.5e9, 1.2e9);
         assert_eq!(p1, Some(1000.0));
         assert_eq!(p2, Some(2000.0));
