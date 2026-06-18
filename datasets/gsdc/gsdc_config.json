@@ -6,12 +6,12 @@
     "use_doppler_smoothing": true,
     "hatch_filter_length": 100,
     "min_elevation_deg": 15.0,
-    "min_cn0_dbhz": 20.0,
+    "min_cn0_dbhz": 25.0,
     "disable_glonass": false,
     "disable_l2": true,
-    "chi_square_pr_threshold": 30.0,
-    "chi_square_cp_threshold": 30.0,
-    "raim_pseudorange_outlier_m": 50.0,
+    "chi_square_pr_threshold": 9.0,
+    "chi_square_cp_threshold": 9.0,
+    "raim_pseudorange_outlier_m": 15.0,
     "nominal_snr_dbhz": 35.0,
     "imu_to_antenna_lever_arm": [
         0.0,
@@ -19,7 +19,7 @@
         0.0
     ],
     "max_base_age_s": 31.0,
-    "gnss_process_noise_var": 100.0,
+    "gnss_process_noise_var": 1.0,
     "initial_ambiguity_variance": 900.0,
     "lambda_min_ratio": 1.5,
     "lambda_min_subset": 4,
@@ -28,8 +28,8 @@
     "spp_consistency_threshold_m": 15.0,
     "max_ephemeris_age_s": 1800.0,
     "doppler_slip_threshold_cycles": 10000.0,
-    "dynamics_model": "automotive",
-    "max_reject_count": 10,
+    "dynamics_model": "static",
+    "max_reject_count": 5,
     "_comment": "base_position from RINEX header APPROX POSITION XYZ (P222 CORS station).",
     "base_position": [
         -2689639.5060,
@@ -37,7 +37,7 @@
         3865050.9560
     ],
     "ar_ffrt_prob": 0.001,
-    "min_snr_dbhz": 20.0,
+    "min_snr_dbhz": 25.0,
     "tuning": {
         "snr_a": 2.913449293357578,
         "snr_b": 408.75325641047357,
