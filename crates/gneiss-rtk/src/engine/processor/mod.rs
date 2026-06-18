@@ -35,8 +35,7 @@ pub struct ProcessingEngine {
 impl ProcessingEngine {
     pub fn new(config: EngineConfig) -> Self {
         let gnn_raim = if config.enable_gnn_raim {
-            tracing::info!("Initializing GNN RAIM Model...");
-            // Initialize with dummy VarBuilder for now
+            tracing::warn!("GNN RAIM is experimental. Model initializes with random weights — not suitable for production. Train with: cargo run --bin train_gnn_raim");
             let dev = candle_core::Device::Cpu;
             let vm = candle_nn::VarMap::new();
             let vb = candle_nn::VarBuilder::from_varmap(&vm, candle_core::DType::F32, &dev);

@@ -12,8 +12,8 @@ The engine is designed for robust operation in multi-path environments, utilizin
 
 - **Tightly-Coupled Integration**: Direct fusion of raw GNSS observations and IMU data within the primary state vector.
 - **Adaptive Estimation**: Implements Innovation-based Adaptive Estimation (IAE) and Median Absolute Deviation (MAD) RAIM to scale observation variances dynamically.
-- **Ambiguity Resolution**: Uses the LAMBDA (Least-squares AMBiguity Decorrelation Adjustment) algorithm for carrier-phase integer ambiguity resolution across GPS, Galileo, BeiDou, and GLONASS.
-- **Precise Point Positioning (PPP-AR)**: Supports PPP utilizing RTCM SSR streams with solid earth tides and phase wind-up physical modeling.
+- **Ambiguity Resolution**: LAMBDA integer ambiguity resolution with partial AR (ILS subset selection) for GPS, Galileo, and BeiDou. GLONASS excluded (IFB calibration not yet implemented).
+- **Precise Point Positioning (PPP)**: Iterated EKF solver with cascade wide-lane/narrow-lane ambiguity resolution, solid earth tides, phase wind-up, and receiver antenna PCO correction. UDUC mode available when precise products (SP3/CLK/SINEX) are provided.
 - **Protection Levels & ARAIM**: Employs Solution Separation to rigorously calculate Horizontal and Vertical Protection Levels (HPL/VPL) bounding faults to target integrity risks.
 - **Hardware-Agnostic Calibrations**: Supports injection of custom Temperature-Calibrated IMU misalignments and Antenna Phase Center (APC) models.
 - **Post-Processing (PPK)**: Supports forward-backward Rauch-Tung-Striebel (RTS) smoothing to produce continuous trajectories from static files.
@@ -34,7 +34,7 @@ The engine's architecture provides a mathematical scaffold for multiple GNSS pro
   - Ionosphere-Free Linear Combinations for multi-frequency correction.
   - Zenith Wet Delay (ZWD) tropospheric estimation.
   - Geophysical corrections (Solid Earth Tides, Satellite Phase Wind-Up).
-  - CDDIS SP3 and precise clock (.clk) parsing via 10th-order Lagrange interpolation.
+  - BKG and CDDIS automated downloading for SP3, Clock (.clk), and Phase Bias (.bia) SINEX files via 10th-order Lagrange interpolation.
   - Clock Jump State Preservation algorithms to prevent EKF divergence during TCXO adjustments.
 
 ## Architecture
@@ -46,7 +46,7 @@ graph TD
     subgraph Inputs
     A[Raw Satellite Data]
     C[Raw Inertial Data]
-    S[RTCM SSR Stream]
+    S[RTCM SSR / FTP Fetch]
     end
 
     subgraph "Pass 1: Auto-Calibration"
@@ -125,13 +125,30 @@ cargo run --release -p gneiss-cli -- live \
 - `--chi-square-cp <FLOAT>`: EKF Chi-Square threshold for carrier phase measurement rejection.
 
 ## Accuracy Benchmarks
-In deep urban canyons (e.g., Tokyo Shinjuku), the tight coupling engine produces sub-3m accuracy from an entirely blind cold-start using the `--calibrate` mode. If ground-truth lever arm parameters are precisely known, the engine can achieve sub-1.5m accuracy.
 
-| Configuration | Median 3D Error | 95% 3D Error |
-|---------------|-----------------|--------------|
-| Commercial Baseline (NovAtel) | 3.60 m | >10 m |
-| `gneiss` (Auto-Calibrated) | 2.93 m | 9.29 m |
-| `gneiss` (Manually Tuned) | 1.34 m | 3.77 m |
+All claims below are reproducible against RTKLIB demo5 (2.4.3 b34) on public datasets.
+See [COMPARISON.md](./COMPARISON.md) for the full head-to-head matrix and reproduction commands.
+
+### RTK (Shinjuku UrbanNav, u-blox F9P rover)
+
+| Solver | Median Horizontal | Median Vertical | Source |
+|--------|-------------------|-----------------|--------|
+| **Gneiss** | **1.34 m** | **2.04 m** | `--mode rtk` on Shinjuku u-blox dataset |
+| RTKLIB demo5 | 2.21 m | 4.12 m | Same rover/base/nav files |
+
+Reproduce: `./scripts/reproduce_shinjuku_rtk.sh`
+
+### SPP (all datasets)
+
+Gneiss SPP beats RTKLIB on all 5 tested datasets (GSDC, Shinjuku, Odaiba, f9p_ppp, PPP_f9p). Typical advantage: 1.4× to 6× better horizontal median. See COMPARISON.md.
+
+### PPP-AR (WTZR IGS Static, 24-hour)
+
+| Mode | Ambiguity Fix Rate | Median 3D Error |
+| :--- | :--- | :--- |
+| `ppp-ar` (UDUC, cascade WL/NL) | 79.72% | 0.476 m |
+
+Note: 79.72% fix rate on a static IGS station with known coordinates and open sky is below the >95% achieved by production PPP-AR engines (PRIDE-PPPAR, GipsyX, NRCAN PPP). This is an active area of improvement — see [Phase 2 roadmap](./COMPARISON.md).
 
 ## Documentation
 
