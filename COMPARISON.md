@@ -14,8 +14,8 @@
 | GSDC (Pixel 4) | PPP Kinematic (FG) | Gneiss | 178.824 m | 195.867 m | 30.284 m | |
 | Shinjuku (UrbanNav) | SPP | RTKLIB | Failed |  |  | **Gneiss** (RTKLIB missing) |
 | Shinjuku (UrbanNav) | SPP | Gneiss | 1.849 m | 3.167 m | 2.446 m | |
-| Shinjuku (UrbanNav) | RTK Kinematic | RTKLIB | 2.205 m | 5.730 m | 4.115 m | RTKLIB |
-| Shinjuku (UrbanNav) | RTK Kinematic | Gneiss | 6.036 m | 14.982 m | 8.143 m | |
+| Shinjuku (UrbanNav) | RTK Kinematic | RTKLIB | 2.205 m | 5.730 m | 4.115 m | |
+| Shinjuku (UrbanNav) | RTK Kinematic | Gneiss | 1.214 m | 1.339 m | 2.037 m | **Gneiss** |
 | Shinjuku (UrbanNav) | RTK Kinematic (combined) | RTKLIB | 2.809 m | 5.978 m | 4.700 m | RTKLIB |
 | Shinjuku (UrbanNav) | RTK Kinematic (combined) | Gneiss | 6.036 m | 14.981 m | 8.143 m | |
 | Shinjuku (UrbanNav) | PPP Kinematic (EKF) | RTKLIB | 2.003 m | 3.749 m | 3.235 m | RTKLIB |
