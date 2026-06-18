@@ -185,6 +185,15 @@ pub struct VarianceFactors {
     pub snr_b: f64,
     pub gnn_var_sat: Option<f64>,
     pub gnn_var_ref: Option<f64>,
+    pub baseline_distance_m: f64,
+}
+
+/// Scale factor for ionospheric decorrelation with baseline distance.
+/// Returns a multiplier >= 1.0 that inflates measurement variance for longer baselines.
+fn iono_baseline_scale(distance_m: f64) -> f64 {
+    if distance_m <= 0.0 { return 1.0; }
+    let d_km = distance_m / 1000.0;
+    1.0 + (d_km / 10.0).powi(2) * libm::exp(d_km / 500.0)
 }
 
 pub fn compute_variance_factors(v: &VarianceFactors) -> (f64, f64) {
@@ -202,7 +211,8 @@ pub fn compute_variance_factors(v: &VarianceFactors) -> (f64, f64) {
             + gneiss_core::variance::elevation_variance_scale(v.el_bas_sat)
     };
 
-    (sat_var + ref_var, ref_var)
+    let iono_scale = iono_baseline_scale(v.baseline_distance_m);
+    (iono_scale * (sat_var + ref_var), iono_scale * ref_var)
 }
 
 pub fn compute_zwd_mapping(el_rov_sat: f64, el_rov_ref: f64, zwd: f64) -> (f64, f64) {
@@ -228,9 +238,9 @@ pub fn compute_geometric_dd(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gneiss_core::coords::{Coordinate, Datum, Frame};
-    use gneiss_core::ephemeris::Ephemeris;
-    use gneiss_core::sat::SatelliteId;
+    
+    
+    
     use gneiss_core::time::GpsTime;
     use nalgebra::{Matrix3, Vector3};
 
@@ -299,6 +309,7 @@ mod tests {
             snr_b: 100.0,
             gnn_var_sat: None,
             gnn_var_ref: None,
+            baseline_distance_m: 0.0,
         });
 
         let expected_ref_var =
@@ -518,7 +529,7 @@ fn test_get_sat_state_catches_rotation_mutation() {
     // For vel = 2000, change is 2000 * 5.4e-5 = 0.1 m/s.
     // We will assert with < 1e-9 tolerance to ensure the exact math is used.
     let pr = 3e10; // 100 seconds
-    let (_, vel) = get_sat_state(&eph, pr, time, rx_pos);
+    let (_, _vel) = get_sat_state(&eph, pr, time, rx_pos);
 
     // Actually, let's just make the assertion extremely tight on the normal PR
     let pr_normal = 20000000.0;
