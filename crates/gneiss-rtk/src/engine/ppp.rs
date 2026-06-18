@@ -44,6 +44,33 @@ pub(crate) fn valid_pos(engine: &ProcessingEngine) -> bool {
     }
 }
 
+/// Compute receiver antenna phase center offset in ECEF.
+/// Returns zero vector if ANTEX not loaded or antenna type not found.
+fn compute_receiver_pco(
+    antex: Option<&gneiss_parsers::antex::AntexDatabase>,
+    antenna_type: Option<&str>,
+    freq_code: &str,
+    rcv_llh: Vector3<f64>,
+) -> Vector3<f64> {
+    let db = match antex { Some(d) => d, None => return Vector3::zeros() };
+    let ant_type = match antenna_type { Some(t) => t, None => return Vector3::zeros() };
+    let antenna = match db.antennas.iter().find(|a| a.antenna_type == ant_type) {
+        Some(a) => a, None => return Vector3::zeros(),
+    };
+    let freq = match antenna.frequencies.get(freq_code) {
+        Some(f) => f, None => return Vector3::zeros(),
+    };
+    let pco_neu = &freq.pco;
+    let (lat, lon) = (rcv_llh.x, rcv_llh.y);
+    let (clat, slat) = (lat.cos(), lat.sin());
+    let (clon, slon) = (lon.cos(), lon.sin());
+    Vector3::new(
+        -slat * clon * pco_neu.x - slon * pco_neu.y + clat * clon * pco_neu.z,
+        -slat * slon * pco_neu.x + clon * pco_neu.y + clat * slon * pco_neu.z,
+        clat * pco_neu.x + slat * pco_neu.z,
+    )
+}
+
 pub(crate) fn build_sats<'a>(engine: &ProcessingEngine, r_obs: &'a EpochObs) -> Vec<ProcessedSat<'a>> {
     let state = engine.current_state.as_ref().unwrap();
     let base_rcv_pos = Vector3::new(
@@ -54,6 +81,14 @@ pub(crate) fn build_sats<'a>(engine: &ProcessingEngine, r_obs: &'a EpochObs) -> 
     let rcv_pos =
         base_rcv_pos + gneiss_core::tides::solid_earth_tides_ecef(r_obs.time, base_rcv_pos);
     let rcv_llh = gneiss_core::coords::ecef_to_llh(rcv_pos);
+    // Apply receiver antenna PCO if available, using GPS L1 code as reference
+    let rcv_pco = compute_receiver_pco(
+        engine.antex.as_ref(),
+        engine.config.receiver_antenna_type.as_deref(),
+        "G01",
+        rcv_llh,
+    );
+    let rcv_pos = rcv_pos + rcv_pco;
 
     r_obs
         .satellites

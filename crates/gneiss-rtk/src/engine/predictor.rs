@@ -1,16 +1,20 @@
 use crate::filter::RtkState;
-use nalgebra::{DMatrix, DVector, Vector3, UnitQuaternion, Matrix3};
+use nalgebra::{DMatrix, DVector, Matrix3, UnitQuaternion, Vector3};
 
 use crate::engine::{DynamicsModel, EngineConfig};
 
-pub fn integrate_imu_mechanization(state: &mut RtkState, dt: f64, imu_buffer: &[gneiss_core::imu::ImuMeasurement]) {
+pub fn integrate_imu_mechanization(
+    state: &mut RtkState,
+    dt: f64,
+    imu_buffer: &[gneiss_core::imu::ImuMeasurement],
+) {
     let imu_dt = dt / (imu_buffer.len() as f64);
     let omega_ie = Vector3::new(0.0, 0.0, gneiss_core::constants::EARTH_ROTATION_RATE_RAD_S);
-    
+
     for meas in imu_buffer {
         let f_b = meas.accel - state.accel_bias;
         let omega_b = meas.gyro - state.gyro_bias;
-        
+
         let zeta = (omega_b - state.attitude.inverse() * omega_ie) * imu_dt;
         let angle = zeta.norm();
         let dq = if angle > 1e-12 {
@@ -20,12 +24,15 @@ pub fn integrate_imu_mechanization(state: &mut RtkState, dt: f64, imu_buffer: &[
         };
 
         let dq_mid = if angle > 1e-12 {
-            UnitQuaternion::from_axis_angle(&nalgebra::Unit::new_unchecked(zeta / angle), angle * 0.5)
+            UnitQuaternion::from_axis_angle(
+                &nalgebra::Unit::new_unchecked(zeta / angle),
+                angle * 0.5,
+            )
         } else {
             UnitQuaternion::identity()
         };
         let r_mid = state.attitude * dq_mid;
-        
+
         state.attitude *= dq;
         state.attitude.renormalize();
 
@@ -33,63 +40,103 @@ pub fn integrate_imu_mechanization(state: &mut RtkState, dt: f64, imu_buffer: &[
         let gravity = gravity_wgs84(state.position.vector);
         let coriolis = 2.0 * omega_ie.cross(&state.velocity);
         let centrifugal = omega_ie.cross(&(omega_ie.cross(&state.position.vector)));
-        
+
         let v_dot = f_e + gravity - coriolis - centrifugal;
-        
+
         if state.epoch_count == 60 {
-            tracing::info!("IMU MECHANIZATION: f_b={:.2?} f_e={:.2?} gravity={:.2?} v_dot={:.2?} att={:.3?}", 
-                f_b.as_slice(), f_e.as_slice(), gravity.as_slice(), v_dot.as_slice(), state.attitude.coords.as_slice());
+            tracing::info!(
+                "IMU MECHANIZATION: f_b={:.2?} f_e={:.2?} gravity={:.2?} v_dot={:.2?} att={:.3?}",
+                f_b.as_slice(),
+                f_e.as_slice(),
+                gravity.as_slice(),
+                v_dot.as_slice(),
+                state.attitude.coords.as_slice()
+            );
         }
-        
+
         let v_mid = state.velocity + v_dot * (imu_dt * 0.5);
         state.velocity += v_dot * imu_dt;
         state.position.vector += v_mid * imu_dt;
     }
 }
 
-pub fn compute_transition_matrix(state: &RtkState, dt: f64, imu_buffer: &[gneiss_core::imu::ImuMeasurement]) -> DMatrix<f64> {
+pub fn compute_transition_matrix(
+    state: &RtkState,
+    dt: f64,
+    imu_buffer: &[gneiss_core::imu::ImuMeasurement],
+) -> DMatrix<f64> {
     let n = state.covariance.nrows();
     let mut phi = DMatrix::<f64>::identity(n, n);
     let omega_ie = Vector3::new(0.0, 0.0, gneiss_core::constants::EARTH_ROTATION_RATE_RAD_S);
-    
+
     if imu_buffer.is_empty() {
-        phi[(0, 3)] = dt; phi[(1, 4)] = dt; phi[(2, 5)] = dt;
+        phi[(0, 3)] = dt;
+        phi[(1, 4)] = dt;
+        phi[(2, 5)] = dt;
     } else {
         let r_b_e = state.attitude.to_rotation_matrix();
         let f_e = state.attitude * (imu_buffer.last().unwrap().accel - state.accel_bias);
         let f_e_skew = skew_symmetric(&f_e);
         let omega_ie_skew = skew_symmetric(&omega_ie);
-        
-        for i in 0..3 { phi[(i, 3 + i)] = dt; }
-        
+
+        for i in 0..3 {
+            phi[(i, 3 + i)] = dt;
+        }
+
         let vel_att = -f_e_skew * dt;
-        for r in 0..3 { for c in 0..3 { phi[(3 + r, 6 + c)] = vel_att[(r, c)]; } }
-        
+        for r in 0..3 {
+            for c in 0..3 {
+                phi[(3 + r, 6 + c)] = vel_att[(r, c)];
+            }
+        }
+
         let vel_vel = Matrix3::identity() - 2.0 * omega_ie_skew * dt;
-        for r in 0..3 { for c in 0..3 { phi[(3 + r, 3 + c)] = vel_vel[(r, c)]; } }
-        
+        for r in 0..3 {
+            for c in 0..3 {
+                phi[(3 + r, 3 + c)] = vel_vel[(r, c)];
+            }
+        }
+
         let vel_abias = -r_b_e.matrix() * dt;
-        for r in 0..3 { for c in 0..3 { phi[(3 + r, 9 + c)] = vel_abias[(r, c)]; } }
-        
+        for r in 0..3 {
+            for c in 0..3 {
+                phi[(3 + r, 9 + c)] = vel_abias[(r, c)];
+            }
+        }
+
         let att_att = Matrix3::identity() - omega_ie_skew * dt;
-        for r in 0..3 { for c in 0..3 { phi[(6 + r, 6 + c)] = att_att[(r, c)]; } }
-        
+        for r in 0..3 {
+            for c in 0..3 {
+                phi[(6 + r, 6 + c)] = att_att[(r, c)];
+            }
+        }
+
         let att_gbias = -r_b_e.matrix() * dt;
-        for r in 0..3 { for c in 0..3 { phi[(6 + r, 12 + c)] = att_gbias[(r, c)]; } }
+        for r in 0..3 {
+            for c in 0..3 {
+                phi[(6 + r, 12 + c)] = att_gbias[(r, c)];
+            }
+        }
     }
-    
+
     if crate::filter::CORE_STATE_SIZE > 15 {
         phi[(15, 19)] = dt;
     }
-    
+
     phi
 }
 
-pub fn compute_process_noise(dt: f64, config: &EngineConfig, is_imu_active: bool, is_fixed: bool, ambiguity_keys: &[(gneiss_core::sat::SatelliteId, u8)]) -> DMatrix<f64> {
+pub fn compute_process_noise(
+    dt: f64,
+    config: &EngineConfig,
+    is_imu_active: bool,
+    is_fixed: bool,
+    ambiguity_keys: &[(gneiss_core::sat::SatelliteId, u8)],
+) -> DMatrix<f64> {
     let n = crate::filter::CORE_STATE_SIZE + ambiguity_keys.len();
     let mut q = DMatrix::<f64>::zeros(n, n);
     let dt_abs = dt.abs();
-    
+
     if !is_imu_active {
         let q_acc = match config.dynamics_model {
             DynamicsModel::Static => 0.001,
@@ -101,13 +148,15 @@ pub fn compute_process_noise(dt: f64, config: &EngineConfig, is_imu_active: bool
         let q_pos = q_acc * dt_abs.powi(3) / 3.0;
         let q_vel = q_acc * dt_abs;
         let q_pos_vel = q_acc * dt_abs.powi(2) / 2.0;
-        for i in 0..3 { 
+        for i in 0..3 {
             q[(i, i)] = q_pos;
-            q[(i+3, i+3)] = q_vel; 
-            q[(i, i+3)] = q_pos_vel;
-            q[(i+3, i)] = q_pos_vel;
+            q[(i + 3, i + 3)] = q_vel;
+            q[(i, i + 3)] = q_pos_vel;
+            q[(i + 3, i)] = q_pos_vel;
         }
-        for i in 6..9 { q[(i, i)] = 1e-7 * dt_abs; } 
+        for i in 6..9 {
+            q[(i, i)] = 1e-7 * dt_abs;
+        }
     } else {
         let q_vel = config.tuning.sigma_v * config.tuning.sigma_v * dt_abs;
         let q_att = config.tuning.sigma_phi * config.tuning.sigma_phi * dt_abs;
@@ -116,13 +165,13 @@ pub fn compute_process_noise(dt: f64, config: &EngineConfig, is_imu_active: bool
         let q_pos = q_vel * dt_abs * dt_abs / 3.0; // position uncertainty from velocity noise integration
         for i in 0..3 {
             q[(i, i)] = q_pos;
-            q[(3+i, 3+i)] = q_vel;
-            q[(6+i, 6+i)] = q_att;
-            q[(9+i, 9+i)] = q_ab;
-            q[(12+i, 12+i)] = q_gb;
+            q[(3 + i, 3 + i)] = q_vel;
+            q[(6 + i, 6 + i)] = q_att;
+            q[(9 + i, 9 + i)] = q_ab;
+            q[(12 + i, 12 + i)] = q_gb;
         }
     }
-    
+
     if crate::filter::CORE_STATE_SIZE > 15 {
         q[(15, 15)] = config.process_noise_cb * dt_abs;
         q[(16, 16)] = 0.001 * dt_abs; // isb_glo noise
@@ -137,35 +186,67 @@ pub fn compute_process_noise(dt: f64, config: &EngineConfig, is_imu_active: bool
         if key.1 == 3 {
             q[(idx, idx)] = config.process_noise_iono * dt_abs;
         } else {
-            q[(idx, idx)] = if is_fixed { config.process_noise_amb_fixed * dt_abs } else { config.process_noise_amb_float * dt_abs };
+            q[(idx, idx)] = if is_fixed {
+                config.process_noise_amb_fixed * dt_abs
+            } else {
+                config.process_noise_amb_float * dt_abs
+            };
         }
     }
-    
+
     q
 }
 
-pub fn predict(state: &mut RtkState, dt: f64, config: &EngineConfig, imu_buffer: &[gneiss_core::imu::ImuMeasurement]) {
+pub fn predict(
+    state: &mut RtkState,
+    dt: f64,
+    config: &EngineConfig,
+    imu_buffer: &[gneiss_core::imu::ImuMeasurement],
+) {
     if imu_buffer.is_empty() {
         state.position.vector += state.velocity * dt;
     } else {
         integrate_imu_mechanization(state, dt, imu_buffer);
     }
-    
+
     if crate::filter::CORE_STATE_SIZE > 15 {
         state.rcv_clk_bias += state.rcv_clk_drift * dt;
     }
-    
+
     let phi = compute_transition_matrix(state, dt, imu_buffer);
-    let q = compute_process_noise(dt, config, !imu_buffer.is_empty(), state.is_fixed, &state.ambiguity_keys);
-    
-    state.core_phi = Some(phi.view((0, 0), (crate::filter::CORE_STATE_SIZE, crate::filter::CORE_STATE_SIZE)).into_owned());
-    
+    let q = compute_process_noise(
+        dt,
+        config,
+        !imu_buffer.is_empty(),
+        state.is_fixed,
+        &state.ambiguity_keys,
+    );
+
+    state.core_phi = Some(
+        phi.view(
+            (0, 0),
+            (
+                crate::filter::CORE_STATE_SIZE,
+                crate::filter::CORE_STATE_SIZE,
+            ),
+        )
+        .into_owned(),
+    );
+
     let mut phi_full = DMatrix::identity(state.covariance.nrows(), state.covariance.ncols());
-    phi_full.view_mut((0, 0), (crate::filter::CORE_STATE_SIZE, crate::filter::CORE_STATE_SIZE)).copy_from(state.core_phi.as_ref().unwrap());
-    
+    phi_full
+        .view_mut(
+            (0, 0),
+            (
+                crate::filter::CORE_STATE_SIZE,
+                crate::filter::CORE_STATE_SIZE,
+            ),
+        )
+        .copy_from(state.core_phi.as_ref().unwrap());
+
     state.covariance = &phi_full * &state.covariance * phi_full.transpose() + q;
     state.full_p_predict = Some(state.covariance.clone());
-    
+
     let mut x_pred = DVector::zeros(state.covariance.nrows());
     x_pred.rows_mut(0, 3).copy_from(&state.position.vector);
     x_pred.rows_mut(3, 3).copy_from(&state.velocity);
@@ -185,7 +266,7 @@ pub fn predict(state: &mut RtkState, dt: f64, config: &EngineConfig, imu_buffer:
         x_pred[crate::filter::CORE_STATE_SIZE + i] = state.ambiguities[i];
     }
     state.full_x_predict = Some(x_pred);
-    
+
     state.predicted_position = Some(state.position);
     state.predicted_velocity = Some(state.velocity);
     if state.covariance.nrows() > 6 {
@@ -200,44 +281,51 @@ pub fn gravity_wgs84(pos_ecef: Vector3<f64>) -> Vector3<f64> {
     let y = pos_ecef.y;
     let z = pos_ecef.z;
     let r = pos_ecef.norm();
-    if r < 1.0 { return Vector3::zeros(); }
-    
+    if r < 1.0 {
+        return Vector3::zeros();
+    }
+
     let r2 = r * r;
     let r3 = r2 * r;
     let a = gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M;
     let mu = 3.986005e14;
     let j2 = 1.082627e-3;
-    
+
     let a_r_2 = (a / r) * (a / r);
     let z_r_2 = (z / r) * (z / r);
-    
+
     let g_base = -mu / r3;
     let g_j2_common = 1.5 * j2 * a_r_2;
-    
+
     let gx = g_base * x * (1.0 - g_j2_common * (5.0 * z_r_2 - 1.0));
     let gy = g_base * y * (1.0 - g_j2_common * (5.0 * z_r_2 - 1.0));
     let gz = g_base * z * (1.0 - g_j2_common * (5.0 * z_r_2 - 3.0));
-    
+
     Vector3::new(gx, gy, gz)
 }
 
 fn skew_symmetric(v: &Vector3<f64>) -> Matrix3<f64> {
-    Matrix3::new(
-        0.0, -v.z,  v.y,
-        v.z,  0.0, -v.x,
-       -v.y,  v.x,  0.0
-    )
+    Matrix3::new(0.0, -v.z, v.y, v.z, 0.0, -v.x, -v.y, v.x, 0.0)
 }
 #[cfg(test)]
 mod tests {
+    use crate::engine::{DynamicsModel, EngineConfig};
     use crate::filter::RtkState;
-    use crate::engine::{EngineConfig, DynamicsModel, EngineMode};
-    use nalgebra::{Vector3, DMatrix, DVector};
+    use nalgebra::DMatrix;
 
     #[test]
     fn test_predictor_indices() {
         // Test that process noise and state transition matrix use the correct indices for ISBs and clock drift
-        let mut state = RtkState::new(gneiss_core::time::GpsTime::new(2000, 0.0), gneiss_core::coords::Coordinate::new(nalgebra::Vector3::zeros(), gneiss_core::coords::Datum::WGS84, gneiss_core::coords::Frame::ECEF, gneiss_core::time::GpsTime::new(2000, 0.0)), 10.0);
+        let mut state = RtkState::new(
+            gneiss_core::time::GpsTime::new(2000, 0.0),
+            gneiss_core::coords::Coordinate::new(
+                nalgebra::Vector3::zeros(),
+                gneiss_core::coords::Datum::WGS84,
+                gneiss_core::coords::Frame::ECEF,
+                gneiss_core::time::GpsTime::new(2000, 0.0),
+            ),
+            10.0,
+        );
         state.covariance = DMatrix::zeros(21, 21);
         state.isb_glo = 10.0;
         state.isb_gal = 20.0;
@@ -251,6 +339,7 @@ mod tests {
             initial_position: None,
             base_position: None,
             base_datum_transform: None,
+            receiver_antenna_type: None,
             imu_to_antenna_lever_arm: [0.0, 0.0, 0.0],
             imu_mounting_angles: None,
             imu_to_nhc_lever_arm: [0.0, 0.0, 0.0],
@@ -291,7 +380,7 @@ mod tests {
         assert_eq!(state.rcv_clk_bias, 102.0); // 100.0 + 2.0 * 1.0
 
         let x_pred = state.full_x_predict.as_ref().unwrap();
-        
+
         // Ensure ISBs and zwd are unchanged by predict
         assert_eq!(x_pred[16], 10.0);
         assert_eq!(x_pred[17], 20.0);
