@@ -21,7 +21,7 @@
 | Shinjuku (UrbanNav) | PPP Kinematic (EKF) | RTKLIB | 2.003 m | 3.749 m | 3.235 m | RTKLIB |
 | Shinjuku (UrbanNav) | PPP Kinematic (EKF) | Gneiss | 30.267 m | 54.412 m | 223.067 m | |
 | Shinjuku (UrbanNav) | PPP Kinematic (FG) | RTKLIB | 2.003 m | 3.749 m | 3.235 m | RTKLIB |
-| Shinjuku (UrbanNav) | PPP Kinematic (FG) | Gneiss | 32.933 m | 48.942 m | 92.093 m | |
+| Shinjuku (UrbanNav) | PPP Kinematic (FG) | Gneiss | 4.818 m | 7.208 m | 13.388 m | |
 | Odaiba (UrbanNav) | SPP | RTKLIB | 2.799 m | 7.453 m | 4.885 m | **Gneiss** |
 | Odaiba (UrbanNav) | SPP | Gneiss | 2.099 m | 2.958 m | 2.253 m | |
 | Odaiba (UrbanNav) | RTK Kinematic | RTKLIB | 2.867 m | 4.014 m | 2.490 m | RTKLIB |
@@ -30,8 +30,8 @@
 | Odaiba (UrbanNav) | RTK Kinematic (combined) | Gneiss | 5.664 m | 17.037 m | 3.069 m | |
 | Odaiba (UrbanNav) | PPP Kinematic (EKF) | RTKLIB | 3.965 m | 4.691 m | 6.089 m | RTKLIB |
 | Odaiba (UrbanNav) | PPP Kinematic (EKF) | Gneiss | 16.549 m | 21.594 m | 14.939 m | |
-| Odaiba (UrbanNav) | PPP Kinematic (FG) | RTKLIB | 3.965 m | 4.691 m | 6.089 m | RTKLIB |
-| Odaiba (UrbanNav) | PPP Kinematic (FG) | Gneiss | 24.269 m | 27.558 m | 25.265 m | |
+| Odaiba (UrbanNav) | PPP Kinematic (FG) | RTKLIB | 3.965 m | 4.691 m | 6.089 m | — |
+| Odaiba (UrbanNav) | PPP Kinematic (FG) | Gneiss | 3.299 m | 4.916 m | 6.111 m | **Tied** |
 | PPP (f9p_ppp) | SPP | RTKLIB | Failed |  |  | **Gneiss** (RTKLIB missing) |
 | PPP (f9p_ppp) | SPP | Gneiss | 1.367 m | 2.008 m | 0.934 m | |
 | PPP (f9p_ppp) | RTK Kinematic | RTKLIB | Failed |  |  | **Gneiss** (RTKLIB missing) |
