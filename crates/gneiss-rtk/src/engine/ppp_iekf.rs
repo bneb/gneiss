@@ -198,25 +198,16 @@ impl PppIteratedEkf {
         (gneiss_core::sat::SatelliteId, usize, usize, f64, f64, f64),
     )> {
         let mut subset = Vec::new();
-        // Group by constellation
         let mut const_cands = std::collections::HashMap::new();
         for cand in cands {
             const_cands.entry(cand.0.constellation).or_insert_with(Vec::new).push(cand.clone());
         }
-
         for (_, mut group) in const_cands {
-            if group.len() < 2 {
-                continue;
-            }
-            // Find reference satellite (highest elevation)
+            if group.len() < 2 { continue; }
             group.sort_by(|a, b| b.3.partial_cmp(&a.3).unwrap_or(std::cmp::Ordering::Equal));
             let ref_cand = group[0].clone();
-
-            for cand in group.iter().skip(1) {
-                subset.push((cand.clone(), ref_cand.clone()));
-            }
+            for cand in group.iter().skip(1) { subset.push((cand.clone(), ref_cand.clone())); }
         }
-
         subset
     }
 
@@ -307,11 +298,10 @@ impl PppIteratedEkf {
             "PPP-AR WL: {} pairs, all_mw={}, ratio={:.2}, success_rate={:.3}",
             n, all_mw, res_wl.ratio, res_wl.success_rate
         );
-        // Relaxed thresholds for MW-converged case: with diagonal Q and few pairs,
-        // the ratio test is unreliable (second-best always close). Trust the
-        // bootstrapped success rate instead when all-MW.
+        // MW-converged case: bootstrapped success_rate drops with many pairs
+        // (product of independent probabilities). Trust the LAMBDA ratio instead.
         let wl_ok = if all_mw {
-            res_wl.success_rate >= 0.90 && (res_wl.ratio >= 1.2 || res_wl.success_rate >= 0.94)
+            res_wl.ratio >= 1.3
         } else {
             res_wl.ratio >= 1.5 && res_wl.success_rate >= 0.95
         };
