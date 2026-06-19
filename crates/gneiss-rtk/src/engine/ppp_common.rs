@@ -1,5 +1,4 @@
 // Shared helpers for PPP IEKF solvers (ppp_iekf.rs and ppp_ins_iekf.rs).
-use crate::engine::processed_sat::ProcessedSat;
 use crate::filter::{RtkState, CORE_STATE_SIZE};
 use crate::math::inversion::invert_matrix_robust;
 use nalgebra::{DMatrix, DVector, UnitQuaternion, Vector3};
@@ -94,4 +93,64 @@ pub struct FgMeasurement {
     pub raw_var: f64,
     pub is_phase: bool,
     pub sat: Option<gneiss_core::sat::SatelliteId>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::filter::RtkState;
+    use gneiss_core::coords::{Coordinate, Datum, Frame};
+    use gneiss_core::time::GpsTime;
+    use nalgebra::Vector3;
+
+    fn make_state() -> RtkState {
+        RtkState::new(GpsTime::new(0, 0.0), Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, GpsTime::new(0, 0.0)), 1.0)
+    }
+
+    #[test]
+    fn test_extract_apply_roundtrip() {
+        let mut state = make_state();
+        state.position.vector = Vector3::new(1.0, 2.0, 3.0);
+        state.velocity = Vector3::new(4.0, 5.0, 6.0);
+        state.rcv_clk_bias = 100.0;
+        let x = extract_state_vector(&state);
+        let mut state2 = make_state();
+        apply_state_vector(&mut state2, &x, state.covariance.clone());
+        assert!((state2.position.vector.x - 1.0).abs() < 1e-10);
+        assert!((state2.velocity.y - 5.0).abs() < 1e-10);
+        assert!((state2.rcv_clk_bias - 100.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_snr_scale_values() {
+        assert!((snr_scale(45) - 1.0).abs() < 1e-10);
+        assert!((snr_scale(35) - 10.0).abs() < 1e-10);
+        assert!((snr_scale(55) - 0.1).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_assemble_matrices_empty() {
+        let meas: Vec<FgMeasurement> = vec![];
+        let (h, z, r) = assemble_matrices(&meas, 3);
+        assert_eq!(h.nrows(), 0);
+        assert_eq!(z.len(), 0);
+        assert_eq!(r.nrows(), 0);
+    }
+
+    #[test]
+    fn test_find_amb_idx_not_found() {
+        let state = make_state();
+        let sat = gneiss_core::sat::SatelliteId { constellation: gneiss_core::sat::Constellation::Gps, prn: 99 };
+        assert_eq!(find_amb_idx(&state, sat, 1), None);
+        assert_eq!(find_ambiguity_index(&state, sat), None);
+    }
+
+    #[test]
+    fn test_build_iono_constraint_row_bounds() {
+        let h = build_iono_constraint_row(30, 0);
+        assert_eq!(h[0], 1.0);
+        assert_eq!(h[29], 0.0);
+        let h2 = build_iono_constraint_row(22, 21);
+        assert_eq!(h2[21], 1.0);
+    }
 }

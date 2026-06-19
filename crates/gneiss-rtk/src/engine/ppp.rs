@@ -228,6 +228,7 @@ fn get_obs_and_corrections(
                 engine.sinex_bias.as_ref(), sat_obs, time, _f1, l5_freq, f1_b, l5_band,
             );
             if osb.p2.is_some() || osb.cp2.is_some() {
+                _ = f2_b; // consumed by L5 fallback
                 f2_b = l5_band;
                 actual_f2 = l5_freq;
             }
