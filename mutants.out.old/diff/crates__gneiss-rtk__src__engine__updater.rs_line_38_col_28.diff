@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/engine/updater.rs
++++ replace += with -= in apply_imu_and_clock_correction
+@@ -30,17 +30,17 @@
+     if d_theta.norm() > 1e-10 {
+         let dq = UnitQuaternion::from_axis_angle(&nalgebra::Unit::new_normalize(d_theta), d_theta.norm());
+         state.attitude = dq * state.attitude;
+         state.attitude.renormalize();
+     }
+     state.accel_bias.x += dx[9]; state.accel_bias.y += dx[10]; state.accel_bias.z += dx[11];
+     state.gyro_bias.x += dx[12]; state.gyro_bias.y += dx[13]; state.gyro_bias.z += dx[14];
+     if dx.len() > 15 {
+-        state.rcv_clk_bias += dx[15];
++        state.rcv_clk_bias -= /* ~ changed by cargo-mutants ~ */ dx[15];
+         state.isb_glo += dx[16];
+         state.isb_gal += dx[17];
+         state.isb_bds += dx[18];
+         state.rcv_clk_drift += dx[19];
+         state.zwd = (state.zwd + dx[20]).max(0.0);
+     }
+ }
+ 

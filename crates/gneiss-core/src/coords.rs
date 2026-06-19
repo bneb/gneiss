@@ -1,11 +1,13 @@
-use nalgebra::Vector3;
 use crate::time::GpsTime;
+use nalgebra::Vector3;
 
 pub trait GeodeticModel {
     fn a(&self) -> f64;
     fn f(&self) -> f64;
-    fn b(&self) -> f64 { self.a() * (1.0 - self.f()) }
-    fn e2(&self) -> f64 { 
+    fn b(&self) -> f64 {
+        self.a() * (1.0 - self.f())
+    }
+    fn e2(&self) -> f64 {
         let a = self.a();
         let b = self.b();
         (a * a - b * b) / (a * a)
@@ -14,8 +16,12 @@ pub trait GeodeticModel {
 
 pub struct Wgs84Model;
 impl GeodeticModel for Wgs84Model {
-    fn a(&self) -> f64 { crate::constants::WGS84_SEMI_MAJOR_AXIS_M }
-    fn f(&self) -> f64 { 1.0 / 298.257223563 }
+    fn a(&self) -> f64 {
+        crate::constants::WGS84_SEMI_MAJOR_AXIS_M
+    }
+    fn f(&self) -> f64 {
+        1.0 / 298.257223563
+    }
 }
 
 /// Represents a geodetic reference datum.
@@ -54,7 +60,12 @@ pub struct Coordinate {
 
 impl Coordinate {
     pub fn new(vector: Vector3<f64>, datum: Datum, frame: Frame, epoch: GpsTime) -> Self {
-        Self { vector, datum, frame, epoch }
+        Self {
+            vector,
+            datum,
+            frame,
+            epoch,
+        }
     }
 
     /// Ensures another coordinate matches this one exactly before mathematical operations.
@@ -79,11 +90,15 @@ pub fn ecef_to_llh_with_model<M: GeodeticModel>(model: &M, ecef: Vector3<f64>) -
     let b = model.b();
     let e2 = model.e2();
     let ep2 = (a * a - b * b) / (b * b);
-    
+
     let p = libm::sqrt(ecef.x * ecef.x + ecef.y * ecef.y);
-    
+
     if p < 1e-10 {
-        let lat = if ecef.z > 0.0 { core::f64::consts::FRAC_PI_2 } else { -core::f64::consts::FRAC_PI_2 };
+        let lat = if ecef.z > 0.0 {
+            core::f64::consts::FRAC_PI_2
+        } else {
+            -core::f64::consts::FRAC_PI_2
+        };
         let height = libm::fabs(ecef.z) - b;
         return Vector3::new(lat, 0.0, height);
     }
@@ -179,7 +194,10 @@ pub fn az_el(pos_llh: Vector3<f64>, pos_ecef: Vector3<f64>, sat_ecef: Vector3<f6
     let u = cos_lat * cos_lon * dx + cos_lat * sin_lon * dy + sin_lat * dz;
 
     let horizontal_dist = libm::sqrt(e * e + n * n);
-    let az = libm::fmod(libm::atan2(e, n) + 2.0 * core::f64::consts::PI, 2.0 * core::f64::consts::PI);
+    let az = libm::fmod(
+        libm::atan2(e, n) + 2.0 * core::f64::consts::PI,
+        2.0 * core::f64::consts::PI,
+    );
     let el = libm::atan2(u, horizontal_dist);
 
     (az, el)
@@ -196,9 +214,15 @@ pub fn ecef_to_ned_matrix(llh: Vector3<f64>) -> nalgebra::Matrix3<f64> {
     let cos_lon = libm::cos(lon);
 
     nalgebra::Matrix3::new(
-        -sin_lat * cos_lon, -sin_lat * sin_lon,  cos_lat,
-        -sin_lon,            cos_lon,           0.0,
-        -cos_lat * cos_lon, -cos_lat * sin_lon, -sin_lat,
+        -sin_lat * cos_lon,
+        -sin_lat * sin_lon,
+        cos_lat,
+        -sin_lon,
+        cos_lon,
+        0.0,
+        -cos_lat * cos_lon,
+        -cos_lat * sin_lon,
+        -sin_lat,
     )
 }
 
@@ -213,7 +237,7 @@ mod tests {
         let t3 = GpsTime::new(100, 101.0);
 
         let c1 = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, t1);
-        
+
         // Exact match
         let c2 = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, t2);
         assert!(c1.ensure_aligned(&c2).is_ok());

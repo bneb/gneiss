@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/engine/updater.rs
++++ replace != with == in update
+@@ -130,17 +130,17 @@
+     state: &mut RtkState, 
+     z: &DVector<f64>, 
+     h: &DMatrix<f64>, 
+     r: &DMatrix<f64>, 
+     chi_square_threshold: f64,
+     meas_types: Option<&[(gneiss_core::sat::SatelliteId, u8)]>,
+     tuning: &crate::engine::config::EkfTuningConfig,
+ ) -> Result<(Vec<usize>, DVector<f64>), UpdateError> {
+-    if z.len() != h.nrows() || h.ncols() != state.covariance.nrows() {
++    if z.len() != h.nrows() || h.ncols() == /* ~ changed by cargo-mutants ~ */ state.covariance.nrows() {
+         tracing::warn!("EKF update failed: DimensionMismatch");
+         return Err(UpdateError::DimensionMismatch);
+     }
+     
+     let valid_indices = filter_pre_fit_residuals::<C>(z, h, r, &state.covariance, chi_square_threshold, meas_types);
+ 
+     let pr_valid_count = valid_indices.iter().filter(|&&i| meas_types.is_none_or(|t| t[i].1 == 0)).count();
+     let _cp_valid_count = valid_indices.iter().filter(|&&i| meas_types.is_none_or(|t| t[i].1 == 1 || t[i].1 == 2)).count();

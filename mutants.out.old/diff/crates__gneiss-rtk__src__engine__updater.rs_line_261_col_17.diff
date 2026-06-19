@@ -1,0 +1,18 @@
+--- crates/gneiss-rtk/src/engine/updater.rs
++++ replace * with + in apply_fix_and_hold
+@@ -253,14 +253,14 @@
+     // Dampen (don't zero) attitude and IMU bias gain rows to prevent
+     // aggressive feedback while still allowing gradual coupling
+     const FIX_HOLD_IMU_GAIN_DAMPING: f64 = 0.1;
+     if state.covariance.nrows() > 15 {
+         for i in 6..15 {
+             for j in 0..k.ncols() { k[(i, j)] *= FIX_HOLD_IMU_GAIN_DAMPING; }
+         }
+     }
+-    let dx = &k * &v;
++    let dx = &k + /* ~ changed by cargo-mutants ~ */ &v;
+     apply_state_correction(state, &dx);
+     state.covariance = apply_joseph_covariance_update(&state.covariance, &k, d_full, &r);
+     
+     Ok(())
+ }

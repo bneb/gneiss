@@ -1,8 +1,8 @@
 use candle_core::{Device, Result};
 use candle_nn::{AdamW, Optimizer, ParamsAdamW, VarBuilder, VarMap};
-use gneiss_rtk::engine::ml::gnn_raim::GnnRaimModel;
-use gneiss_rtk::engine::ml::dataset_loader::DatasetLoader;
 use gneiss_rtk::engine::ml::dataset::nll_loss_logvar;
+use gneiss_rtk::engine::ml::dataset_loader::DatasetLoader;
+use gneiss_rtk::engine::ml::gnn_raim::GnnRaimModel;
 
 fn main() -> Result<()> {
     let dataset_path = "shinjuku_gnn_dataset.csv";
@@ -50,7 +50,11 @@ fn main() -> Result<()> {
             batches += 1;
         }
 
-        println!("Epoch {}: Mean Loss = {:.4}", epoch + 1, epoch_loss / (batches as f32));
+        println!(
+            "Epoch {}: Mean Loss = {:.4}",
+            epoch + 1,
+            epoch_loss / (batches as f32)
+        );
     }
 
     varmap.save("gnn_raim_model.safetensors")?;

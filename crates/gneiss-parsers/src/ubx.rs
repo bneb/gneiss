@@ -1,7 +1,6 @@
-use gneiss_core::obs::{EpochObs, SatObs, Observation, ObsCode, ObsType, SignalCode};
+use gneiss_core::obs::{EpochObs, ObsCode, ObsType, Observation, SatObs, SignalCode};
+use gneiss_core::sat::{Constellation, SatelliteId};
 use gneiss_core::time::GpsTime;
-use gneiss_core::sat::{SatelliteId, Constellation};
-
 
 /// A raw UBX frame.
 #[derive(Debug, Clone, PartialEq)]
@@ -119,7 +118,11 @@ pub fn parse_rxm_sfrbx(payload: &[u8]) -> Result<UbxRxmSfrbx, UbxParseError> {
     let mut words = Vec::with_capacity(num_words as usize);
     for i in 0..num_words as usize {
         let offset = 8 + i * 4;
-        let word = u32::from_le_bytes(payload[offset..offset+4].try_into().map_err(|_| UbxParseError::InvalidLength)?);
+        let word = u32::from_le_bytes(
+            payload[offset..offset + 4]
+                .try_into()
+                .map_err(|_| UbxParseError::InvalidLength)?,
+        );
         words.push(word);
     }
 
@@ -176,10 +179,14 @@ impl UbxRxmRawx {
                 observations.push(Observation {
                     code: ObsCode {
                         obs_type: ObsType::Pseudorange,
-                        signal: SignalCode { freq_band, attribute },
+                        signal: SignalCode {
+                            freq_band,
+                            attribute,
+                        },
                     },
                     value: meas.pr_mes,
-                    lock_time: None, lli: None,
+                    lock_time: None,
+                    lli: None,
                 });
             }
 
@@ -188,7 +195,10 @@ impl UbxRxmRawx {
                 observations.push(Observation {
                     code: ObsCode {
                         obs_type: ObsType::CarrierPhase,
-                        signal: SignalCode { freq_band, attribute },
+                        signal: SignalCode {
+                            freq_band,
+                            attribute,
+                        },
                     },
                     value: meas.cp_mes,
                     lock_time: Some(meas.locktime),
@@ -199,65 +209,104 @@ impl UbxRxmRawx {
             observations.push(Observation {
                 code: ObsCode {
                     obs_type: ObsType::Doppler,
-                    signal: SignalCode { freq_band, attribute },
+                    signal: SignalCode {
+                        freq_band,
+                        attribute,
+                    },
                 },
                 value: meas.do_mes as f64,
-                lock_time: None, lli: None,
+                lock_time: None,
+                lli: None,
             });
 
             observations.push(Observation {
                 code: ObsCode {
                     obs_type: ObsType::Snr,
-                    signal: SignalCode { freq_band, attribute },
+                    signal: SignalCode {
+                        freq_band,
+                        attribute,
+                    },
                 },
                 value: meas.cno as f64,
-                lock_time: None, lli: None,
+                lock_time: None,
+                lli: None,
             });
         }
 
         let mut satellites = Vec::new();
         for (sat, observations) in sat_map {
-            satellites.push(SatObs {
-                sat,
-                observations,
-            });
+            satellites.push(SatObs { sat, observations });
         }
 
-        EpochObs {
-            time,
-            satellites,
-        }
+        EpochObs { time, satellites }
     }
 }
 
 /// Parses the payload of a UBX-RXM-RAWX message.
 pub fn parse_rxm_rawx(payload: &[u8]) -> Result<UbxRxmRawx, UbxParseError> {
-    if payload.len() < 16 { return Err(UbxParseError::InvalidLength); }
+    if payload.len() < 16 {
+        return Err(UbxParseError::InvalidLength);
+    }
 
     let num_meas = payload[11];
     let expected_len = 16 + (num_meas as usize) * 32;
-    if payload.len() != expected_len { return Err(UbxParseError::InvalidLength); }
+    if payload.len() != expected_len {
+        return Err(UbxParseError::InvalidLength);
+    }
 
     let mut measurements = Vec::with_capacity(num_meas as usize);
     for i in 0..num_meas as usize {
-        measurements.push(parse_rxm_rawx_block(&payload[16 + i * 32..16 + i * 32 + 32])?);
+        measurements.push(parse_rxm_rawx_block(
+            &payload[16 + i * 32..16 + i * 32 + 32],
+        )?);
     }
 
     Ok(UbxRxmRawx {
-        rcv_tow: f64::from_le_bytes(payload[0..8].try_into().map_err(|_| UbxParseError::InvalidLength)?),
-        week: u16::from_le_bytes(payload[8..10].try_into().map_err(|_| UbxParseError::InvalidLength)?),
-        leap_s: payload[10] as i8, num_meas, rec_stat: payload[12], version: payload[13], measurements,
+        rcv_tow: f64::from_le_bytes(
+            payload[0..8]
+                .try_into()
+                .map_err(|_| UbxParseError::InvalidLength)?,
+        ),
+        week: u16::from_le_bytes(
+            payload[8..10]
+                .try_into()
+                .map_err(|_| UbxParseError::InvalidLength)?,
+        ),
+        leap_s: payload[10] as i8,
+        num_meas,
+        rec_stat: payload[12],
+        version: payload[13],
+        measurements,
     })
 }
 
 fn parse_rxm_rawx_block(block: &[u8]) -> Result<RxmRawxMeas, UbxParseError> {
     let trk_stat = block[30];
     Ok(RxmRawxMeas {
-        pr_mes: f64::from_le_bytes(block[0..8].try_into().map_err(|_| UbxParseError::InvalidLength)?),
-        cp_mes: f64::from_le_bytes(block[8..16].try_into().map_err(|_| UbxParseError::InvalidLength)?),
-        do_mes: f32::from_le_bytes(block[16..20].try_into().map_err(|_| UbxParseError::InvalidLength)?),
-        gnss_id: block[20], sv_id: block[21], sig_id: block[22], freq_id: block[23],
-        locktime: u16::from_le_bytes(block[24..26].try_into().map_err(|_| UbxParseError::InvalidLength)?),
+        pr_mes: f64::from_le_bytes(
+            block[0..8]
+                .try_into()
+                .map_err(|_| UbxParseError::InvalidLength)?,
+        ),
+        cp_mes: f64::from_le_bytes(
+            block[8..16]
+                .try_into()
+                .map_err(|_| UbxParseError::InvalidLength)?,
+        ),
+        do_mes: f32::from_le_bytes(
+            block[16..20]
+                .try_into()
+                .map_err(|_| UbxParseError::InvalidLength)?,
+        ),
+        gnss_id: block[20],
+        sv_id: block[21],
+        sig_id: block[22],
+        freq_id: block[23],
+        locktime: u16::from_le_bytes(
+            block[24..26]
+                .try_into()
+                .map_err(|_| UbxParseError::InvalidLength)?,
+        ),
         cno: block[26],
         pr_stdev: 0.01 * f64::powi(2.0, block[27] as i32),
         cp_stdev: 0.004 * f64::powi(2.0, block[28] as i32),
@@ -287,11 +336,11 @@ impl EsfMeasData {
             5 | 13 | 14 => {
                 // Gyroscope: 2^-12 deg/s -> convert to rad/s
                 val * 2.0f64.powi(-12) * (std::f64::consts::PI / 180.0)
-            },
+            }
             16..=18 => {
                 // Accelerometer: 2^-10 m/s^2
                 val * 2.0f64.powi(-10)
-            },
+            }
             _ => val,
         }
     }
@@ -315,35 +364,51 @@ pub fn parse_esf_meas(payload: &[u8]) -> Result<UbxEsfMeas, UbxParseError> {
     if payload.len() < 8 {
         return Err(UbxParseError::InvalidLength);
     }
-    
-    let time_tag = u32::from_le_bytes(payload[0..4].try_into().map_err(|_| UbxParseError::InvalidLength)?);
-    let flags = u16::from_le_bytes(payload[4..6].try_into().map_err(|_| UbxParseError::InvalidLength)?);
-    let id = u16::from_le_bytes(payload[6..8].try_into().map_err(|_| UbxParseError::InvalidLength)?);
-    
+
+    let time_tag = u32::from_le_bytes(
+        payload[0..4]
+            .try_into()
+            .map_err(|_| UbxParseError::InvalidLength)?,
+    );
+    let flags = u16::from_le_bytes(
+        payload[4..6]
+            .try_into()
+            .map_err(|_| UbxParseError::InvalidLength)?,
+    );
+    let id = u16::from_le_bytes(
+        payload[6..8]
+            .try_into()
+            .map_err(|_| UbxParseError::InvalidLength)?,
+    );
+
     let num_bytes = payload.len() - 8;
     if !num_bytes.is_multiple_of(4) {
         return Err(UbxParseError::InvalidLength);
     }
     let num_meas = num_bytes / 4;
-    
+
     let mut measurements = Vec::with_capacity(num_meas);
     for i in 0..num_meas {
         let offset = 8 + i * 4;
-        let raw = u32::from_le_bytes(payload[offset..offset+4].try_into().map_err(|_| UbxParseError::InvalidLength)?);
-        
+        let raw = u32::from_le_bytes(
+            payload[offset..offset + 4]
+                .try_into()
+                .map_err(|_| UbxParseError::InvalidLength)?,
+        );
+
         let mut data = raw & 0x00FFFFFF;
         if (data & 0x00800000) != 0 {
             data |= 0xFF000000;
         }
         let data_i32 = data as i32;
         let data_type = (raw >> 24) as u8;
-        
+
         measurements.push(EsfMeasData {
             data: data_i32,
             data_type,
         });
     }
-    
+
     Ok(UbxEsfMeas {
         time_tag,
         flags,
@@ -367,11 +432,15 @@ pub fn parse_esf_status(payload: &[u8]) -> Result<UbxEsfStatus, UbxParseError> {
     if payload.len() < 16 {
         return Err(UbxParseError::InvalidLength);
     }
-    
-    let time_tag = u32::from_le_bytes(payload[0..4].try_into().map_err(|_| UbxParseError::InvalidLength)?);
+
+    let time_tag = u32::from_le_bytes(
+        payload[0..4]
+            .try_into()
+            .map_err(|_| UbxParseError::InvalidLength)?,
+    );
     let fusion_mode = payload[5];
     let num_sensors = payload[11];
-    
+
     Ok(UbxEsfStatus {
         time_tag,
         fusion_mode,
@@ -401,15 +470,15 @@ mod tests {
         payload.extend_from_slice(&100000.5f64.to_le_bytes()); // rcv_tow
         payload.extend_from_slice(&2100u16.to_le_bytes()); // week
         payload.push(18); // leapS
-        payload.push(1);  // numMeas = 1
+        payload.push(1); // numMeas = 1
         payload.push(0x01); // recStat
         payload.push(0x01); // version
         payload.extend_from_slice(&[0, 0]); // reserved
 
         // 32 byte measurement block
         payload.extend_from_slice(&20000000.5f64.to_le_bytes()); // prMes
-        payload.extend_from_slice(&1000000.5f64.to_le_bytes());  // cpMes
-        payload.extend_from_slice(&123.4f32.to_le_bytes());      // doMes
+        payload.extend_from_slice(&1000000.5f64.to_le_bytes()); // cpMes
+        payload.extend_from_slice(&123.4f32.to_le_bytes()); // doMes
         payload.push(0); // gnssId (GPS)
         payload.push(12); // svId (PRN 12)
         payload.push(0); // sigId (L1C/A)
@@ -426,7 +495,7 @@ mod tests {
         assert_eq!(rawx.rcv_tow, 100000.5);
         assert_eq!(rawx.week, 2100);
         assert_eq!(rawx.num_meas, 1);
-        
+
         let meas = &rawx.measurements[0];
         assert_eq!(meas.pr_mes, 20000000.5);
         assert_eq!(meas.sv_id, 12);
@@ -483,7 +552,7 @@ mod tests {
         assert_eq!(esf_meas.flags, 1);
         assert_eq!(esf_meas.id, 0);
         assert_eq!(esf_meas.measurements.len(), 1);
-        
+
         let meas = &esf_meas.measurements[0];
         assert_eq!(meas.data_type, 5);
         assert_eq!(meas.data, 0xFFABCDEF_u32 as i32);

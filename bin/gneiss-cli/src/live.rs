@@ -1,12 +1,12 @@
+use gneiss_core::obs::{EpochObs, ObsCode, ObsType, Observation, SatObs, SignalCode};
+use gneiss_core::sat::{Constellation, SatelliteId};
+use gneiss_core::time::GpsTime;
+use gneiss_ntrip::client::{NtripClient, NtripConfig};
+use gneiss_parsers::ubx::UbxRxmRawx;
+use gneiss_rtk::engine::{EngineConfig, ProcessingEngine};
 use tokio::io::AsyncReadExt;
 use tokio_serial::SerialPortBuilderExt;
-use tracing::{info, error};
-use gneiss_rtk::engine::{ProcessingEngine, EngineConfig};
-use gneiss_ntrip::client::{NtripClient, NtripConfig};
-use gneiss_core::time::GpsTime;
-use gneiss_core::obs::{EpochObs, SatObs, Observation, ObsCode, ObsType, SignalCode};
-use gneiss_core::sat::{SatelliteId, Constellation};
-use gneiss_parsers::ubx::UbxRxmRawx;
+use tracing::{error, info};
 
 pub struct LiveConfig {
     pub port: String,
@@ -22,10 +22,13 @@ pub async fn run_live(
     live_cfg: LiveConfig,
     config: EngineConfig,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    info!("Starting Live Real-Time GNSS Engine on port {} @ {}", live_cfg.port, live_cfg.baud);
-    
+    info!(
+        "Starting Live Real-Time GNSS Engine on port {} @ {}",
+        live_cfg.port, live_cfg.baud
+    );
+
     let (rtcm_tx, mut rtcm_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(100);
-    
+
     if let (Some(url), Some(mount)) = (live_cfg.ntrip_url, live_cfg.ntrip_mount) {
         let ntrip_config = NtripConfig {
             server_url: url,
@@ -36,7 +39,7 @@ pub async fn run_live(
         let client = NtripClient::new(ntrip_config);
         info!("Connecting to NTRIP...");
         let mut ntrip_stream = client.connect().await?;
-        
+
         tokio::spawn(async move {
             let mut buffer = Vec::new();
             while let Some(bytes) = ntrip_stream.recv().await {
@@ -65,10 +68,10 @@ pub async fn run_live(
     let mut serial_port = tokio_serial::new(live_cfg.port, live_cfg.baud).open_native_async()?;
     let mut buffer = Vec::new();
     let mut read_buf = [0u8; 4096];
-    
+
     let mut engine = ProcessingEngine::new(config);
     let mut base_meas_cache: Option<EpochObs> = None;
-    
+
     loop {
         tokio::select! {
             Some(rtcm_payload) = rtcm_rx.recv() => {
@@ -95,10 +98,10 @@ pub async fn run_live(
                                         if let Ok(rawx) = gneiss_parsers::ubx::parse_rxm_rawx(frame.payload) {
                                             let rinex = rawx_to_epoch(&rawx);
                                             let _ = engine.process_epoch(&rinex, base_meas_cache.as_ref());
-                                            
+
                                             // Real-time output handling could go here
                                             if let Some(ref state) = engine.current_state {
-                                                info!("Live Pos: {:.4}, {:.4}, {:.4} | Fix: {}", 
+                                                info!("Live Pos: {:.4}, {:.4}, {:.4} | Fix: {}",
                                                       state.position.vector.x, state.position.vector.y, state.position.vector.z, state.is_fixed);
                                             }
                                         }
@@ -124,14 +127,14 @@ pub async fn run_live(
             }
         }
     }
-    
+
     Ok(())
 }
 
 fn rawx_to_epoch(rawx: &UbxRxmRawx) -> EpochObs {
     let time = GpsTime::new(rawx.week.into(), rawx.rcv_tow);
     let mut sats = Vec::new();
-    
+
     for meas in &rawx.measurements {
         let constel = match meas.gnss_id {
             0 => Constellation::Gps,
@@ -140,24 +143,65 @@ fn rawx_to_epoch(rawx: &UbxRxmRawx) -> EpochObs {
             6 => Constellation::Glonass,
             _ => continue, // Unknown/unsupported
         };
-        let sat_id = SatelliteId { constellation: constel, prn: meas.sv_id };
-        
+        let sat_id = SatelliteId {
+            constellation: constel,
+            prn: meas.sv_id,
+        };
+
         // Simple mapping, UBX sigId mapping is complex, assume L1/E1/B1 for now
-        let sig = SignalCode { freq_band: 1, attribute: 'C' };
-        
+        let sig = SignalCode {
+            freq_band: 1,
+            attribute: 'C',
+        };
+
         let mut obs = Vec::new();
         if meas.pr_valid {
-            obs.push(Observation { code: ObsCode { obs_type: ObsType::Pseudorange, signal: sig }, value: meas.pr_mes, lock_time: None, lli: None });
+            obs.push(Observation {
+                code: ObsCode {
+                    obs_type: ObsType::Pseudorange,
+                    signal: sig,
+                },
+                value: meas.pr_mes,
+                lock_time: None,
+                lli: None,
+            });
         }
         if meas.cp_valid {
-            obs.push(Observation { code: ObsCode { obs_type: ObsType::CarrierPhase, signal: sig }, value: meas.cp_mes, lock_time: Some(meas.locktime), lli: None });
+            obs.push(Observation {
+                code: ObsCode {
+                    obs_type: ObsType::CarrierPhase,
+                    signal: sig,
+                },
+                value: meas.cp_mes,
+                lock_time: Some(meas.locktime),
+                lli: None,
+            });
         }
-        obs.push(Observation { code: ObsCode { obs_type: ObsType::Doppler, signal: sig }, value: meas.do_mes as f64, lock_time: None, lli: None });
-        obs.push(Observation { code: ObsCode { obs_type: ObsType::Snr, signal: sig }, value: meas.cno as f64, lock_time: None, lli: None });
-        
-        sats.push(SatObs { sat: sat_id, observations: obs });
+        obs.push(Observation {
+            code: ObsCode {
+                obs_type: ObsType::Doppler,
+                signal: sig,
+            },
+            value: meas.do_mes as f64,
+            lock_time: None,
+            lli: None,
+        });
+        obs.push(Observation {
+            code: ObsCode {
+                obs_type: ObsType::Snr,
+                signal: sig,
+            },
+            value: meas.cno as f64,
+            lock_time: None,
+            lli: None,
+        });
+
+        sats.push(SatObs {
+            sat: sat_id,
+            observations: obs,
+        });
     }
-    
+
     EpochObs {
         time,
         satellites: sats,

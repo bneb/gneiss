@@ -1,7 +1,7 @@
-use std::collections::HashMap;
 use gneiss_core::obs::{EpochObs, ObsType, SignalCode};
 use gneiss_core::sat::SatelliteId;
 use gneiss_core::time::GpsTime;
+use std::collections::HashMap;
 
 /// State for a single satellite/signal in the Hatch filter.
 #[derive(Debug, Clone)]
@@ -64,37 +64,49 @@ impl HatchFilter {
 
             for signal in available_signals {
                 // Try to find both Pseudorange and Carrier Phase for this signal
-                let pr_idx = sat_obs.observations.iter().position(|o| o.code.obs_type == ObsType::Pseudorange && o.code.signal == signal);
-                let cp_idx = sat_obs.observations.iter().position(|o| o.code.obs_type == ObsType::CarrierPhase && o.code.signal == signal);
+                let pr_idx = sat_obs.observations.iter().position(|o| {
+                    o.code.obs_type == ObsType::Pseudorange && o.code.signal == signal
+                });
+                let cp_idx = sat_obs.observations.iter().position(|o| {
+                    o.code.obs_type == ObsType::CarrierPhase && o.code.signal == signal
+                });
 
                 if let (Some(pi), Some(ci)) = (pr_idx, cp_idx) {
                     let pr_val = sat_obs.observations[pi].value;
                     let cp_val = sat_obs.observations[ci].value; // In meters
-                    
-                    let snr_idx = sat_obs.observations.iter().position(|o| o.code.obs_type == ObsType::Snr && o.code.signal == signal);
-                    let snr = snr_idx.map(|i| sat_obs.observations[i].value).unwrap_or(40.0);
-                    
+
+                    let snr_idx = sat_obs
+                        .observations
+                        .iter()
+                        .position(|o| o.code.obs_type == ObsType::Snr && o.code.signal == signal);
+                    let snr = snr_idx
+                        .map(|i| sat_obs.observations[i].value)
+                        .unwrap_or(40.0);
+
                     let adaptive_window = if snr >= 40.0 {
                         self.max_window
                     } else if snr >= 30.0 {
                         self.max_window / 2
                     } else {
                         self.max_window / 5
-                    }.max(5); // Minimum 5 epochs
-                    
+                    }
+                    .max(5); // Minimum 5 epochs
+
                     let key = (sat_obs.sat, signal);
 
                     let smoothed_val = if let Some(state) = self.states.get_mut(&key) {
                         let dt = (current_time - state.last_time).abs();
-                        
+
                         let delta_phase = cp_val - state.last_phase;
-                        
+
                         // IF the receiver's carrier phase is defined opposite to pseudorange (e.g. phase increases when range decreases),
                         // delta_phase must be subtracted. For u-blox, phase increases as distance increases. Wait, let's assume standard sign:
                         let projected_pr = state.smoothed_pr + delta_phase;
 
                         // Check for cycle slip or large time gap
-                        if dt > self.max_time_gap_s || (pr_val - projected_pr).abs() > self.slip_threshold_m {
+                        if dt > self.max_time_gap_s
+                            || (pr_val - projected_pr).abs() > self.slip_threshold_m
+                        {
                             // Reset
                             state.smoothed_pr = pr_val;
                             state.last_phase = cp_val;
@@ -109,23 +121,26 @@ impl HatchFilter {
                                 state.count = adaptive_window;
                             }
                             let w = 1.0 / (state.count as f64);
-                            
+
                             let new_smoothed = w * pr_val + (1.0 - w) * projected_pr;
-                            
+
                             state.smoothed_pr = new_smoothed;
                             state.last_phase = cp_val;
                             state.last_time = current_time;
-                            
+
                             new_smoothed
                         }
                     } else {
                         // Initialize new state
-                        self.states.insert(key, HatchState {
-                            smoothed_pr: pr_val,
-                            last_phase: cp_val,
-                            last_time: current_time,
-                            count: 1,
-                        });
+                        self.states.insert(
+                            key,
+                            HatchState {
+                                smoothed_pr: pr_val,
+                                last_phase: cp_val,
+                                last_time: current_time,
+                                count: 1,
+                            },
+                        );
                         pr_val
                     };
 
@@ -140,17 +155,29 @@ impl HatchFilter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gneiss_core::obs::{ObsCode, SatObs, Observation};
+    use gneiss_core::obs::{ObsCode, Observation, SatObs};
     use gneiss_core::sat::Constellation;
 
     #[test]
     fn test_hatch_filter_smoothing() {
         let mut filter = HatchFilter::default();
-        let sig = SignalCode { freq_band: 1, attribute: 'C' };
-        let sat = SatelliteId { constellation: Constellation::Gps, prn: 1 };
-        
-        let pr_code = ObsCode { obs_type: ObsType::Pseudorange, signal: sig };
-        let cp_code = ObsCode { obs_type: ObsType::CarrierPhase, signal: sig };
+        let sig = SignalCode {
+            freq_band: 1,
+            attribute: 'C',
+        };
+        let sat = SatelliteId {
+            constellation: Constellation::Gps,
+            prn: 1,
+        };
+
+        let pr_code = ObsCode {
+            obs_type: ObsType::Pseudorange,
+            signal: sig,
+        };
+        let cp_code = ObsCode {
+            obs_type: ObsType::CarrierPhase,
+            signal: sig,
+        };
 
         // Epoch 1
         let mut epoch1 = EpochObs {
@@ -158,9 +185,19 @@ mod tests {
             satellites: vec![SatObs {
                 sat,
                 observations: vec![
-                    Observation { code: pr_code, value: 20000000.0, lock_time: None, lli: None },
-                    Observation { code: cp_code, value: 20000000.0, lock_time: None, lli: None },
-                ]
+                    Observation {
+                        code: pr_code,
+                        value: 20000000.0,
+                        lock_time: None,
+                        lli: None,
+                    },
+                    Observation {
+                        code: cp_code,
+                        value: 20000000.0,
+                        lock_time: None,
+                        lli: None,
+                    },
+                ],
             }],
         };
         filter.smooth_epoch(&mut epoch1);
@@ -172,13 +209,23 @@ mod tests {
             satellites: vec![SatObs {
                 sat,
                 observations: vec![
-                    Observation { code: pr_code, value: 20000003.0, lock_time: None, lli: None }, // +3m
-                    Observation { code: cp_code, value: 20000001.0, lock_time: None, lli: None }, // +1m
-                ]
+                    Observation {
+                        code: pr_code,
+                        value: 20000003.0,
+                        lock_time: None,
+                        lli: None,
+                    }, // +3m
+                    Observation {
+                        code: cp_code,
+                        value: 20000001.0,
+                        lock_time: None,
+                        lli: None,
+                    }, // +1m
+                ],
             }],
         };
         filter.smooth_epoch(&mut epoch2);
-        
+
         // Count = 2, w = 0.5
         // projected_pr = 20000000.0 + 1.0 = 20000001.0
         // smoothed_pr = 0.5 * 20000003.0 + 0.5 * 20000001.0 = 20000002.0

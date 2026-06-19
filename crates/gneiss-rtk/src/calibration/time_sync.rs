@@ -26,8 +26,10 @@ pub fn cross_correlate_time_offset(
 
         for i in 0..gnss_time.len() {
             let t_eval = gnss_time[i] - tau;
-            
-            let idx = match imu_time.binary_search_by(|t| t.partial_cmp(&t_eval).unwrap_or(core::cmp::Ordering::Equal)) {
+
+            let idx = match imu_time
+                .binary_search_by(|t| t.partial_cmp(&t_eval).unwrap_or(core::cmp::Ordering::Equal))
+            {
                 Ok(j) => j,
                 Err(j) => j,
             };
@@ -42,10 +44,10 @@ pub fn cross_correlate_time_offset(
                 if dt > 0.0 {
                     let alpha = (t_eval - t0) / dt;
                     let v_interp = v0 + (v1 - v0) * alpha;
-                    
+
                     let x = gnss_vel[i];
                     let y = v_interp;
-                    
+
                     sum_xy += x.dot(&y);
                     sum_xx += x.norm_squared();
                     sum_yy += y.norm_squared();
@@ -54,7 +56,7 @@ pub fn cross_correlate_time_offset(
             }
         }
 
-        if count > 10 && sum_xx > 1e-6 && sum_yy > 1e-6 { 
+        if count > 10 && sum_xx > 1e-6 && sum_yy > 1e-6 {
             let corr = sum_xy / (sum_xx.sqrt() * sum_yy.sqrt());
             if corr > max_corr {
                 max_corr = corr;
@@ -81,7 +83,7 @@ mod tests {
         // Simulate a sine wave velocity profile
         let freq = 0.5; // 0.5 Hz
         let true_offset = 0.098; // 98 ms offset
-        
+
         // IMU runs at 100 Hz
         for i in 0..1000 {
             let t = i as f64 * 0.01;
@@ -99,8 +101,14 @@ mod tests {
             gnss_vel.push(Vector3::new(v, v * 0.5, -v * 0.2));
         }
 
-        let estimated_offset = cross_correlate_time_offset(&gnss_time, &gnss_vel, &imu_time, &imu_vel);
-        
-        assert!((estimated_offset - true_offset).abs() < 0.005, "Expected offset {}, got {}", true_offset, estimated_offset);
+        let estimated_offset =
+            cross_correlate_time_offset(&gnss_time, &gnss_vel, &imu_time, &imu_vel);
+
+        assert!(
+            (estimated_offset - true_offset).abs() < 0.005,
+            "Expected offset {}, got {}",
+            true_offset,
+            estimated_offset
+        );
     }
 }

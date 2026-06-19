@@ -1,4 +1,4 @@
-use crate::sat::{SatelliteId, Constellation};
+use crate::sat::{Constellation, SatelliteId};
 
 pub const FREQ_GPS_L1: f64 = 1575.42e6;
 pub const FREQ_GPS_L2: f64 = 1227.60e6;
@@ -20,35 +20,33 @@ pub fn satellite_frequencies(sat: SatelliteId, freq_num: i8) -> (f64, f64) {
             let f2 = FREQ_GLO_L2_NOMINAL + (freq_num as f64) * FREQ_GLO_L2_DELTA;
             (f1, f2)
         }
-        _ => (FREQ_GPS_L1, FREQ_GPS_L2)
+        _ => (FREQ_GPS_L1, FREQ_GPS_L2),
     }
 }
 
 pub fn get_frequency(sat: SatelliteId, freq_band: u8, freq_num: i8) -> f64 {
     match freq_band {
-        1 => {
-            match sat.constellation {
-                Constellation::Gps | Constellation::Qzss | Constellation::Galileo => FREQ_GPS_L1,
-                Constellation::Beidou => FREQ_BDS_B1I,
-                Constellation::Glonass => FREQ_GLO_L1_NOMINAL + (freq_num as f64) * FREQ_GLO_L1_DELTA,
-                _ => FREQ_GPS_L1,
-            }
+        1 => match sat.constellation {
+            Constellation::Gps | Constellation::Qzss | Constellation::Galileo => FREQ_GPS_L1,
+            Constellation::Beidou => FREQ_BDS_B1I,
+            Constellation::Glonass => FREQ_GLO_L1_NOMINAL + (freq_num as f64) * FREQ_GLO_L1_DELTA,
+            _ => FREQ_GPS_L1,
         },
         2 => {
             match sat.constellation {
                 Constellation::Gps | Constellation::Qzss => FREQ_GPS_L2,
                 Constellation::Galileo => FREQ_GAL_E5B,
                 Constellation::Beidou => FREQ_GAL_E5B, // B2I
-                Constellation::Glonass => FREQ_GLO_L2_NOMINAL + (freq_num as f64) * FREQ_GLO_L2_DELTA,
+                Constellation::Glonass => {
+                    FREQ_GLO_L2_NOMINAL + (freq_num as f64) * FREQ_GLO_L2_DELTA
+                }
                 _ => FREQ_GPS_L2,
             }
-        },
-        5 => {
-            match sat.constellation {
-                Constellation::Gps | Constellation::Qzss | Constellation::Galileo => FREQ_GPS_L5,
-                Constellation::Beidou => FREQ_GPS_L5,
-                _ => FREQ_GPS_L5,
-            }
+        }
+        5 => match sat.constellation {
+            Constellation::Gps | Constellation::Qzss | Constellation::Galileo => FREQ_GPS_L5,
+            Constellation::Beidou => FREQ_GPS_L5,
+            _ => FREQ_GPS_L5,
         },
         _ => FREQ_GPS_L1,
     }
@@ -66,18 +64,24 @@ mod tests {
     #[test]
     fn test_glonass_fdma_wavelengths() {
         // Channel -4 (e.g. GLONASS PRN 6 in our dataset)
-        let sat = SatelliteId { constellation: Constellation::Glonass, prn: 6 };
+        let sat = SatelliteId {
+            constellation: Constellation::Glonass,
+            prn: 6,
+        };
         let (f1, f2) = satellite_frequencies(sat, -4);
         assert_eq!(f1, FREQ_GLO_L1_NOMINAL - 4.0 * FREQ_GLO_L1_DELTA);
         assert_eq!(f2, FREQ_GLO_L2_NOMINAL - 4.0 * FREQ_GLO_L2_DELTA);
-        
+
         let w1 = get_wavelength(sat, 1, -4);
         assert!((w1 - 0.18740019).abs() < 1e-5);
     }
 
     #[test]
     fn test_galileo_frequencies() {
-        let sat = SatelliteId { constellation: Constellation::Galileo, prn: 11 };
+        let sat = SatelliteId {
+            constellation: Constellation::Galileo,
+            prn: 11,
+        };
         let (f1, f2) = satellite_frequencies(sat, 0);
         assert_eq!(f1, FREQ_GPS_L1);
         assert_eq!(f2, FREQ_GAL_E5B);

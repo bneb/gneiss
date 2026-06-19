@@ -1,5 +1,5 @@
 use nalgebra::Vector3;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 /// 14-parameter Helmert Transformation for coordinates between reference frames
 /// taking into account epoch propagation (tectonic motion).
@@ -19,7 +19,7 @@ pub struct HelmertParams {
     pub rz: f64,
     /// Scale factor (parts per billion)
     pub s: f64,
-    
+
     /// Rate of change of tx (meters/year)
     pub dtx: f64,
     /// Rate of change of ty (meters/year)
@@ -34,7 +34,7 @@ pub struct HelmertParams {
     pub drz: f64,
     /// Rate of change of scale (ppb/year)
     pub ds: f64,
-    
+
     /// Reference epoch for the parameters (e.g. 2010.0)
     pub ref_epoch: f64,
 }
@@ -52,7 +52,7 @@ impl GeodeticTransform for HelmertParams {
 
         let obs_epoch = coord.epoch.to_fractional_year();
         let new_vector = self.transform(coord.vector, obs_epoch);
-        
+
         gneiss_core::coords::Coordinate::new(new_vector, coord.datum, coord.frame, coord.epoch)
     }
 }
@@ -104,14 +104,22 @@ mod tests {
         // Provided by IERS
         // tx, ty, tz in mm -> convert to m
         let params = HelmertParams {
-            tx: -0.0014, ty: -0.0012, tz:  0.0012,
-            rx:  0.0,    ry:  0.0,    rz:  0.0,
-            s:   0.0,
-            
-            dtx:  0.0,    dty: -0.0001, dtz:  0.0002,
-            drx:  0.0,    dry:  0.0,    drz:  0.0,
-            ds:   0.0,
-            
+            tx: -0.0014,
+            ty: -0.0012,
+            tz: 0.0012,
+            rx: 0.0,
+            ry: 0.0,
+            rz: 0.0,
+            s: 0.0,
+
+            dtx: 0.0,
+            dty: -0.0001,
+            dtz: 0.0002,
+            drx: 0.0,
+            dry: 0.0,
+            drz: 0.0,
+            ds: 0.0,
+
             ref_epoch: 2015.0,
         };
 
@@ -140,13 +148,20 @@ mod tests {
     #[test]
     fn test_helmert_with_rotations() {
         let params = HelmertParams {
-            tx: 1.0, ty: 2.0, tz: 3.0,
+            tx: 1.0,
+            ty: 2.0,
+            tz: 3.0,
             rx: 1000.0, // 1000 mas = 1 arcsec
             ry: 2000.0, // 2 arcsec
             rz: 3000.0, // 3 arcsec
             s: 10.0,    // 10 ppb
-            dtx: 0.0, dty: 0.0, dtz: 0.0,
-            drx: 0.0, dry: 0.0, drz: 0.0, ds: 0.0,
+            dtx: 0.0,
+            dty: 0.0,
+            dtz: 0.0,
+            drx: 0.0,
+            dry: 0.0,
+            drz: 0.0,
+            ds: 0.0,
             ref_epoch: 2000.0,
         };
 

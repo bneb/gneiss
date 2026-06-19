@@ -1,6 +1,6 @@
+use crate::math::inversion::invert_matrix_robust;
 use crate::math::CovMatrix;
 use nalgebra::DVector;
-use crate::math::inversion::invert_matrix_robust;
 
 pub fn apply_huber(res: f64, var: f64, k: f64) -> f64 {
     let abs_res = res.abs();
@@ -48,7 +48,7 @@ mod tests {
         assert!((apply_huber(1.0, 1.0, 3.0) - 1.0).abs() < 1e-6);
         assert!((apply_huber(4.0, 1.0, 3.0) - 0.75).abs() < 1e-6);
     }
-    
+
     #[test]
     fn test_apply_cauchy() {
         assert!((apply_cauchy(1.0, 1.0, 3.0) - 0.9).abs() < 1e-6); // 1 / (1 + (1/3)^2) = 1 / 1.1111 = 0.9
@@ -61,10 +61,10 @@ mod tests {
         let r = dmatrix![1.0];
         let z = dvector![1.0];
         let scaled = huber_scale_covariance(&p, &r, &z, 9.0).unwrap();
-        assert!((scaled[(0,0)] - 1.0).abs() < 1e-6);
-        
+        assert!((scaled[(0, 0)] - 1.0).abs() < 1e-6);
+
         let z2 = dvector![4.0];
         let scaled2 = huber_scale_covariance(&p, &r, &z2, 2.0).unwrap();
-        assert!((scaled2[(0,0)] - 4.0).abs() < 1e-6);
+        assert!((scaled2[(0, 0)] - 4.0).abs() < 1e-6);
     }
 }

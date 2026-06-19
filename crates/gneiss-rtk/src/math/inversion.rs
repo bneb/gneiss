@@ -6,14 +6,22 @@ const DEFAULT_REGULARIZATION: f64 = 1e-6;
 pub fn invert_matrix_robust(m: &CovMatrix) -> CovMatrix {
     if let Some(chol) = m.clone().cholesky() {
         chol.inverse()
-    } else if let Ok(inv) = m.clone().svd(true, true).pseudo_inverse(DEFAULT_SVD_EPSILON) {
+    } else if let Ok(inv) = m
+        .clone()
+        .svd(true, true)
+        .pseudo_inverse(DEFAULT_SVD_EPSILON)
+    {
         inv
     } else {
         CovMatrix::identity(m.nrows(), m.ncols()) * DEFAULT_REGULARIZATION
     }
 }
 
-pub fn solve_cholesky_svd(h: &CovMatrix, b: &nalgebra::DVector<f64>, svd_eps: f64) -> Result<nalgebra::DVector<f64>, &'static str> {
+pub fn solve_cholesky_svd(
+    h: &CovMatrix,
+    b: &nalgebra::DVector<f64>,
+    svd_eps: f64,
+) -> Result<nalgebra::DVector<f64>, &'static str> {
     if let Some(chol) = h.clone().cholesky() {
         return Ok(chol.solve(b));
     }
@@ -30,14 +38,14 @@ mod tests {
         let m = CovMatrix::identity(3, 3) * 2.0;
         let inv = invert_matrix_robust(&m);
         assert!((inv[(0, 0)] - 0.5).abs() < 1e-6);
-        
+
         let mut m_singular = CovMatrix::zeros(3, 3);
         m_singular[(0, 0)] = 1.0;
         let inv_singular = invert_matrix_robust(&m_singular);
         assert!((inv_singular[(0, 0)] - 1.0).abs() < 1e-6);
         assert!((inv_singular[(1, 1)] - 0.0).abs() < 1e-6);
     }
-    
+
     #[test]
     fn test_solve_cholesky_svd() {
         let h = CovMatrix::identity(2, 2) * 2.0;

@@ -1,8 +1,8 @@
+use gneiss_core::obs::ObsCode;
+use gneiss_core::sat::{Constellation, SatelliteId};
+use gneiss_core::time::GpsTime;
 use std::io::BufRead;
 use std::str::FromStr;
-use gneiss_core::sat::{SatelliteId, Constellation};
-use gneiss_core::time::GpsTime;
-use gneiss_core::obs::ObsCode;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum BiasType {
@@ -42,22 +42,28 @@ pub struct SinexBias {
 
 fn parse_yds(s: &str) -> Option<GpsTime> {
     let parts: Vec<&str> = s.split(':').collect();
-    if parts.len() != 3 { return None; }
+    if parts.len() != 3 {
+        return None;
+    }
     let year = parts[0].parse::<i32>().ok()?;
     let doy = parts[1].parse::<i32>().ok()?;
     let sec = parts[2].parse::<f64>().ok()?;
-    
+
     let y = if year < 100 {
-        if year >= 80 { year + 1900 } else { year + 2000 }
+        if year >= 80 {
+            year + 1900
+        } else {
+            year + 2000
+        }
     } else {
         year
     };
-    
+
     let mut days_in_month = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
     if y % 4 == 0 && (y % 100 != 0 || y % 400 == 0) {
         days_in_month[1] = 29;
     }
-    
+
     let mut d = doy;
     let mut m = 0;
     for i in 0..12 {
@@ -67,9 +73,11 @@ fn parse_yds(s: &str) -> Option<GpsTime> {
         }
         d -= days_in_month[i];
     }
-    
-    if m == 0 { return None; }
-    
+
+    if m == 0 {
+        return None;
+    }
+
     Some(GpsTime::from_calendar(y, m, d, 0, 0, sec))
 }
 
@@ -80,7 +88,9 @@ impl SinexBias {
 
         let mut buf = Vec::new();
         while let Ok(bytes_read) = reader.read_until(b'\n', &mut buf) {
-            if bytes_read == 0 { break; }
+            if bytes_read == 0 {
+                break;
+            }
             let line = String::from_utf8_lossy(&buf).trim_end().to_string();
             buf.clear();
 
@@ -98,13 +108,13 @@ impl SinexBias {
                     Ok(b) => b,
                     Err(_) => continue,
                 };
-                
+
                 let prn_str = &line[11..14];
                 if prn_str.trim().is_empty() {
                     // Could be a station-only bias
                     continue;
                 }
-                
+
                 let constell = match prn_str.chars().next() {
                     Some('G') => Constellation::Gps,
                     Some('R') => Constellation::Glonass,
@@ -113,53 +123,60 @@ impl SinexBias {
                     Some('J') => Constellation::Qzss,
                     _ => continue,
                 };
-                
+
                 let prn = match prn_str[1..3].trim().parse::<u8>() {
                     Ok(p) => p,
                     Err(_) => continue,
                 };
-                let sat = SatelliteId { constellation: constell, prn };
-                
+                let sat = SatelliteId {
+                    constellation: constell,
+                    prn,
+                };
+
                 let station_str = line[15..24].trim();
-                let station = if station_str.is_empty() { None } else { Some(station_str.to_string()) };
-                
+                let station = if station_str.is_empty() {
+                    None
+                } else {
+                    Some(station_str.to_string())
+                };
+
                 let obs1_str = line[25..29].trim();
                 let obs1 = match ObsCode::from_str(obs1_str) {
                     Ok(o) => o,
                     Err(_) => continue,
                 };
-                
+
                 let obs2_str = line[30..34].trim();
                 let obs2 = if obs2_str.is_empty() {
                     None
                 } else {
                     ObsCode::from_str(obs2_str).ok()
                 };
-                
+
                 let start_time_str = line[35..49].trim();
                 let start_time = match parse_yds(start_time_str) {
                     Some(t) => t,
                     None => continue,
                 };
-                
+
                 let end_time_str = line[50..64].trim();
                 let end_time = match parse_yds(end_time_str) {
                     Some(t) => t,
                     None => continue,
                 };
-                
+
                 let unit = line[65..69].trim().to_string();
                 let value = match line[70..91].trim().parse::<f64>() {
                     Ok(v) => v,
                     Err(_) => continue,
                 };
-                
+
                 let std_dev = if line.len() >= 102 {
                     line[92..103].trim().parse::<f64>().unwrap_or(0.0)
                 } else {
                     0.0
                 };
-                
+
                 records.push(BiasRecord {
                     bias_type,
                     sat,
@@ -185,21 +202,33 @@ impl SinexBias {
 
         let fallback = match obs.to_string().as_str() {
             "C1C" => {
-                if sat.constellation == Constellation::Gps { Some("C1W") }
-                else { None }
-            },
+                if sat.constellation == Constellation::Gps {
+                    Some("C1W")
+                } else {
+                    None
+                }
+            }
             "L1C" => {
-                if sat.constellation == Constellation::Gps { Some("L1W") }
-                else { None }
-            },
+                if sat.constellation == Constellation::Gps {
+                    Some("L1W")
+                } else {
+                    None
+                }
+            }
             "C2X" | "C2L" | "C2S" => {
-                if sat.constellation == Constellation::Gps { Some("C2W") }
-                else { Some("C2C") }
-            },
+                if sat.constellation == Constellation::Gps {
+                    Some("C2W")
+                } else {
+                    Some("C2C")
+                }
+            }
             "L2X" | "L2L" | "L2S" => {
-                if sat.constellation == Constellation::Gps { Some("L2W") }
-                else { Some("L2C") }
-            },
+                if sat.constellation == Constellation::Gps {
+                    Some("L2W")
+                } else {
+                    Some("L2C")
+                }
+            }
             _ => None,
         };
 
@@ -238,12 +267,12 @@ mod tests {
  DCB  G002 G02           C1W  C2W  2021:123:00000 2021:123:86400 ns            1.2345678901    0.000000
 -BIAS/SOLUTION
 "#;
-        
+
         let cursor = Cursor::new(content);
         let bias = SinexBias::parse(cursor).unwrap();
-        
+
         assert_eq!(bias.records.len(), 2);
-        
+
         let r1 = &bias.records[0];
         assert_eq!(r1.bias_type, BiasType::Osb);
         assert_eq!(r1.sat.constellation, Constellation::Gps);
@@ -252,24 +281,31 @@ mod tests {
         assert_eq!(r1.obs2, None);
         assert_eq!(r1.unit, "ns");
         assert_eq!(r1.value, -2.5186);
-        
+
         let r2 = &bias.records[1];
         assert_eq!(r2.bias_type, BiasType::Dcb);
         assert_eq!(r2.obs2, Some(ObsCode::from_str("C2W").unwrap()));
         assert_eq!(r2.value, 1.2345678901);
-        
+
         // test get_bias
         let t = parse_yds("2021:123:43200").unwrap();
-        let val = bias.get_bias(SatelliteId { constellation: Constellation::Gps, prn: 2 }, ObsCode::from_str("C1C").unwrap(), t);
+        let val = bias.get_bias(
+            SatelliteId {
+                constellation: Constellation::Gps,
+                prn: 2,
+            },
+            ObsCode::from_str("C1C").unwrap(),
+            t,
+        );
         assert_eq!(val, Some(-2.5186));
     }
 }
 #[cfg(test)]
 mod fallback_tests {
     use super::*;
-    use std::io::Cursor;
     use gneiss_core::sat::{Constellation, SatelliteId};
     use gneiss_core::time::GpsTime;
+    use std::io::Cursor;
     use std::str::FromStr;
 
     #[test]
@@ -288,21 +324,48 @@ mod fallback_tests {
         let cursor = Cursor::new(content);
         let bias = SinexBias::parse(cursor).unwrap();
         let t = GpsTime::new(2156, 129600.0); // 2021:123 at 12:00:00
-        
-        let g02 = SatelliteId { constellation: Constellation::Gps, prn: 2 };
-        let e02 = SatelliteId { constellation: Constellation::Galileo, prn: 2 };
+
+        let g02 = SatelliteId {
+            constellation: Constellation::Gps,
+            prn: 2,
+        };
+        let e02 = SatelliteId {
+            constellation: Constellation::Galileo,
+            prn: 2,
+        };
 
         // Test GPS Fallbacks
-        assert_eq!(bias.get_bias(g02, ObsCode::from_str("C1C").unwrap(), t), Some(1.0));
-        assert_eq!(bias.get_bias(g02, ObsCode::from_str("L1C").unwrap(), t), Some(2.0));
-        assert_eq!(bias.get_bias(g02, ObsCode::from_str("C2L").unwrap(), t), Some(3.0));
-        assert_eq!(bias.get_bias(g02, ObsCode::from_str("L2X").unwrap(), t), Some(4.0));
+        assert_eq!(
+            bias.get_bias(g02, ObsCode::from_str("C1C").unwrap(), t),
+            Some(1.0)
+        );
+        assert_eq!(
+            bias.get_bias(g02, ObsCode::from_str("L1C").unwrap(), t),
+            Some(2.0)
+        );
+        assert_eq!(
+            bias.get_bias(g02, ObsCode::from_str("C2L").unwrap(), t),
+            Some(3.0)
+        );
+        assert_eq!(
+            bias.get_bias(g02, ObsCode::from_str("L2X").unwrap(), t),
+            Some(4.0)
+        );
 
         // Test non-GPS Fallbacks
-        assert_eq!(bias.get_bias(e02, ObsCode::from_str("C2X").unwrap(), t), Some(5.0));
-        assert_eq!(bias.get_bias(e02, ObsCode::from_str("L2S").unwrap(), t), Some(6.0));
-        
+        assert_eq!(
+            bias.get_bias(e02, ObsCode::from_str("C2X").unwrap(), t),
+            Some(5.0)
+        );
+        assert_eq!(
+            bias.get_bias(e02, ObsCode::from_str("L2S").unwrap(), t),
+            Some(6.0)
+        );
+
         // Ensure no fallback if direct is present
-        assert_eq!(bias.get_exact_bias(g02, ObsCode::from_str("C1C").unwrap(), t), None);
+        assert_eq!(
+            bias.get_exact_bias(g02, ObsCode::from_str("C1C").unwrap(), t),
+            None
+        );
     }
 }

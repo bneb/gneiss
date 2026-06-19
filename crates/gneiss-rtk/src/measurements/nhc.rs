@@ -1,5 +1,5 @@
-use crate::filter::RtkState;
 use crate::engine::updater;
+use crate::filter::RtkState;
 use nalgebra::{DMatrix, DVector, Matrix3, Vector3};
 
 /// Assigns a 3x3 matrix block to a 2xN measurement Jacobian matrix
@@ -23,64 +23,76 @@ pub fn apply_nhc(
     sigma_vertical: f64,
     imu_to_nhc_lever_arm: &[f64; 3],
     omega_b: &Vector3<f64>,
-    tuning: &crate::engine::config::EkfTuningConfig
+    tuning: &crate::engine::config::EkfTuningConfig,
 ) -> Result<(), &'static str> {
     let r_e_b = state.attitude.to_rotation_matrix().transpose();
-    
+
     // Convert IMU velocity and NHC lever arm to vehicle frame
     let v_b_imu = r_e_b * state.velocity;
     let l_b = Vector3::from_column_slice(imu_to_nhc_lever_arm);
-    
+
     // Velocity at NHC point in vehicle frame (v_v = v_b_imu + omega x l_b)
     let v_v = v_b_imu + omega_b.cross(&l_b);
     let z = DVector::from_column_slice(&[-v_v.y, -v_v.z]);
-    
+
     let mut h = DMatrix::<f64>::zeros(2, state.covariance.nrows());
-    
+
     // Jacobian w.r.t velocity in ECEF (dr_dv = R_e_b)
     assign_jacobian_block(&mut h, 3, *r_e_b.matrix());
-    
+
     // Jacobian w.r.t attitude (dr_dpsi = [v_b_imu x] * R_e_b)
     let v_b_skew = skew_symmetric(&v_b_imu);
     assign_jacobian_block(&mut h, 6, v_b_skew * r_e_b.matrix());
-    
+
     // Jacobian w.r.t gyro bias (dr_dbg = [l_b x])
     let l_b_skew = skew_symmetric(&l_b);
     assign_jacobian_block(&mut h, 12, l_b_skew);
 
     let r = DMatrix::from_diagonal(&DVector::from_column_slice(&[
         sigma_lateral * sigma_lateral,
-        sigma_vertical * sigma_vertical
+        sigma_vertical * sigma_vertical,
     ]));
 
-    updater::update::<crate::engine::updater_math::TightCoupling>(state, &z, &h, &r, 1e9, None, tuning)
-        .map_err(|_| "NHC update failed")?;
+    updater::update::<crate::engine::updater_math::TightCoupling>(
+        state, &z, &h, &r, 1e9, None, tuning,
+    )
+    .map_err(|_| "NHC update failed")?;
     Ok(())
 }
 
-pub fn apply_zupt(state: &mut RtkState, sigma: f64, tuning: &crate::engine::config::EkfTuningConfig) -> Result<(), &'static str> {
+pub fn apply_zupt(
+    state: &mut RtkState,
+    sigma: f64,
+    tuning: &crate::engine::config::EkfTuningConfig,
+) -> Result<(), &'static str> {
     let z = DVector::from_column_slice(&[-state.velocity.x, -state.velocity.y, -state.velocity.z]);
     let n = state.covariance.nrows();
     let mut h = DMatrix::<f64>::zeros(3, n);
-    for i in 0..3 { h[(i, 3 + i)] = 1.0; }
-    
+    for i in 0..3 {
+        h[(i, 3 + i)] = 1.0;
+    }
+
     let r = DMatrix::from_diagonal(&DVector::from_element(3, sigma * sigma));
-    updater::update::<crate::engine::updater_math::TightCoupling>(state, &z, &h, &r, 1e9, None, tuning).map_err(|_| "ZUPT update failed")?;
-    Ok(())}
+    updater::update::<crate::engine::updater_math::TightCoupling>(
+        state, &z, &h, &r, 1e9, None, tuning,
+    )
+    .map_err(|_| "ZUPT update failed")?;
+    Ok(())
+}
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::filter::RtkState;
     use gneiss_core::time::GpsTime;
-    use nalgebra::{Vector3, UnitQuaternion};
+    use nalgebra::{UnitQuaternion, Vector3};
 
     fn compute_numerical_jacobian_nhc(
         state: &RtkState,
-        imu_mounting_angles: &Option<[f64; 3]>,
+        _imu_mounting_angles: &Option<[f64; 3]>,
         imu_to_nhc_lever_arm: &[f64; 3],
         omega_b: &Vector3<f64>,
-        epsilon: f64
+        epsilon: f64,
     ) -> DMatrix<f64> {
         let n = state.covariance.nrows();
         let mut h_num = DMatrix::zeros(2, n);
@@ -116,7 +128,11 @@ mod tests {
             let get_z = |s: &RtkState, ob: &Vector3<f64>| -> DVector<f64> {
                 let r_e_b = s.attitude.inverse().to_rotation_matrix();
                 let v_b_imu = r_e_b * s.velocity;
-                let l_b = Vector3::new(imu_to_nhc_lever_arm[0], imu_to_nhc_lever_arm[1], imu_to_nhc_lever_arm[2]);
+                let l_b = Vector3::new(
+                    imu_to_nhc_lever_arm[0],
+                    imu_to_nhc_lever_arm[1],
+                    imu_to_nhc_lever_arm[2],
+                );
                 let v_v = v_b_imu + ob.cross(&l_b);
                 DVector::from_column_slice(&[v_v.y, v_v.z])
             };
@@ -131,42 +147,63 @@ mod tests {
 
     #[test]
     fn test_nhc_jacobian() {
-        let mut state = RtkState::new(GpsTime::new(0, 0.0), gneiss_core::coords::Coordinate::new(Vector3::new(1.0, 2.0, 3.0), gneiss_core::coords::Datum::WGS84, gneiss_core::coords::Frame::ECEF, GpsTime::new(0, 0.0)), 1.0);
+        let mut state = RtkState::new(
+            GpsTime::new(0, 0.0),
+            gneiss_core::coords::Coordinate::new(
+                Vector3::new(1.0, 2.0, 3.0),
+                gneiss_core::coords::Datum::WGS84,
+                gneiss_core::coords::Frame::ECEF,
+                GpsTime::new(0, 0.0),
+            ),
+            1.0,
+        );
         state.velocity = Vector3::new(10.0, 20.0, 30.0);
         state.attitude = UnitQuaternion::from_euler_angles(0.1, 0.2, 0.3);
-        
+
         let imu_to_nhc_lever_arm = [1.5, 0.2, -0.5];
         let omega_b = Vector3::new(0.01, -0.02, 0.05);
 
         let r_e_b = state.attitude.to_rotation_matrix().transpose();
         let v_b_imu = r_e_b * state.velocity;
-        
+
         let n = state.covariance.nrows();
         let mut h_ana = DMatrix::<f64>::zeros(2, n);
         let dr_dv = r_e_b.matrix();
-        h_ana[(0, 3)] = dr_dv[(1, 0)]; h_ana[(0, 4)] = dr_dv[(1, 1)]; h_ana[(0, 5)] = dr_dv[(1, 2)];
-        h_ana[(1, 3)] = dr_dv[(2, 0)]; h_ana[(1, 4)] = dr_dv[(2, 1)]; h_ana[(1, 5)] = dr_dv[(2, 2)];
-        
+        h_ana[(0, 3)] = dr_dv[(1, 0)];
+        h_ana[(0, 4)] = dr_dv[(1, 1)];
+        h_ana[(0, 5)] = dr_dv[(1, 2)];
+        h_ana[(1, 3)] = dr_dv[(2, 0)];
+        h_ana[(1, 4)] = dr_dv[(2, 1)];
+        h_ana[(1, 5)] = dr_dv[(2, 2)];
+
         let v_b_skew = nalgebra::Matrix3::new(
-            0.0, -v_b_imu.z,  v_b_imu.y,
-            v_b_imu.z,  0.0, -v_b_imu.x,
-           -v_b_imu.y,  v_b_imu.x,  0.0
+            0.0, -v_b_imu.z, v_b_imu.y, v_b_imu.z, 0.0, -v_b_imu.x, -v_b_imu.y, v_b_imu.x, 0.0,
         );
         let dr_dpsi = v_b_skew * r_e_b.matrix();
-        h_ana[(0, 6)] = dr_dpsi[(1, 0)]; h_ana[(0, 7)] = dr_dpsi[(1, 1)]; h_ana[(0, 8)] = dr_dpsi[(1, 2)];
-        h_ana[(1, 6)] = dr_dpsi[(2, 0)]; h_ana[(1, 7)] = dr_dpsi[(2, 1)]; h_ana[(1, 8)] = dr_dpsi[(2, 2)];
-        
-        let l_b = Vector3::new(imu_to_nhc_lever_arm[0], imu_to_nhc_lever_arm[1], imu_to_nhc_lever_arm[2]);
-        let l_b_skew = nalgebra::Matrix3::new(
-            0.0, -l_b.z,  l_b.y,
-            l_b.z,  0.0, -l_b.x,
-           -l_b.y,  l_b.x,  0.0
-        );
-        let dr_dbg = l_b_skew;
-        h_ana[(0, 12)] = dr_dbg[(1, 0)]; h_ana[(0, 13)] = dr_dbg[(1, 1)]; h_ana[(0, 14)] = dr_dbg[(1, 2)];
-        h_ana[(1, 12)] = dr_dbg[(2, 0)]; h_ana[(1, 13)] = dr_dbg[(2, 1)]; h_ana[(1, 14)] = dr_dbg[(2, 2)];
+        h_ana[(0, 6)] = dr_dpsi[(1, 0)];
+        h_ana[(0, 7)] = dr_dpsi[(1, 1)];
+        h_ana[(0, 8)] = dr_dpsi[(1, 2)];
+        h_ana[(1, 6)] = dr_dpsi[(2, 0)];
+        h_ana[(1, 7)] = dr_dpsi[(2, 1)];
+        h_ana[(1, 8)] = dr_dpsi[(2, 2)];
 
-        let h_num = compute_numerical_jacobian_nhc(&state, &None, &imu_to_nhc_lever_arm, &omega_b, 1e-6);
+        let l_b = Vector3::new(
+            imu_to_nhc_lever_arm[0],
+            imu_to_nhc_lever_arm[1],
+            imu_to_nhc_lever_arm[2],
+        );
+        let l_b_skew =
+            nalgebra::Matrix3::new(0.0, -l_b.z, l_b.y, l_b.z, 0.0, -l_b.x, -l_b.y, l_b.x, 0.0);
+        let dr_dbg = l_b_skew;
+        h_ana[(0, 12)] = dr_dbg[(1, 0)];
+        h_ana[(0, 13)] = dr_dbg[(1, 1)];
+        h_ana[(0, 14)] = dr_dbg[(1, 2)];
+        h_ana[(1, 12)] = dr_dbg[(2, 0)];
+        h_ana[(1, 13)] = dr_dbg[(2, 1)];
+        h_ana[(1, 14)] = dr_dbg[(2, 2)];
+
+        let h_num =
+            compute_numerical_jacobian_nhc(&state, &None, &imu_to_nhc_lever_arm, &omega_b, 1e-6);
 
         let diff = (h_ana.clone() - h_num.clone()).abs().max();
         println!("Max diff: {}", diff);
@@ -175,11 +212,20 @@ mod tests {
 
     #[test]
     fn test_apply_nhc_updates_state() {
-        let mut state = RtkState::new(GpsTime::new(0, 0.0), gneiss_core::coords::Coordinate::new(Vector3::new(1.0, 2.0, 3.0), gneiss_core::coords::Datum::WGS84, gneiss_core::coords::Frame::ECEF, GpsTime::new(0, 0.0)), 1.0);
+        let mut state = RtkState::new(
+            GpsTime::new(0, 0.0),
+            gneiss_core::coords::Coordinate::new(
+                Vector3::new(1.0, 2.0, 3.0),
+                gneiss_core::coords::Datum::WGS84,
+                gneiss_core::coords::Frame::ECEF,
+                GpsTime::new(0, 0.0),
+            ),
+            1.0,
+        );
         state.velocity = Vector3::new(10.0, 5.0, -2.0);
         state.attitude = UnitQuaternion::from_euler_angles(0.1, 0.2, 0.3);
         let tuning = crate::engine::config::EkfTuningConfig::default();
-        
+
         // Use distinct initial covariance values to catch indexing mutants
         for i in 0..state.covariance.nrows() {
             state.covariance[(i, i)] = (i as f64 + 1.0) * 0.1;
@@ -188,9 +234,9 @@ mod tests {
         let initial_cov = state.covariance.clone();
         let imu_to_nhc = [1.0, 2.0, 3.0];
         let omega = Vector3::new(0.01, -0.02, 0.05);
-        
+
         apply_nhc(&mut state, 0.1, 0.1, &imu_to_nhc, &omega, &tuning).unwrap();
-        
+
         assert!(state.covariance[(3, 3)] < initial_cov[(3, 3)]);
         assert!(state.covariance[(4, 4)] < initial_cov[(4, 4)]);
         assert!(state.covariance[(5, 5)] < initial_cov[(5, 5)]);
@@ -200,16 +246,24 @@ mod tests {
 
     #[test]
     fn test_apply_zupt() {
-        let mut state = RtkState::new(GpsTime::new(0, 0.0), gneiss_core::coords::Coordinate::new(Vector3::new(1.0, 2.0, 3.0), gneiss_core::coords::Datum::WGS84, gneiss_core::coords::Frame::ECEF, GpsTime::new(0, 0.0)), 1.0);
+        let mut state = RtkState::new(
+            GpsTime::new(0, 0.0),
+            gneiss_core::coords::Coordinate::new(
+                Vector3::new(1.0, 2.0, 3.0),
+                gneiss_core::coords::Datum::WGS84,
+                gneiss_core::coords::Frame::ECEF,
+                GpsTime::new(0, 0.0),
+            ),
+            1.0,
+        );
         state.velocity = Vector3::new(10.0, 5.0, -2.0);
         let tuning = crate::engine::config::EkfTuningConfig::default();
         let initial_cov = state.covariance.clone();
-        
+
         apply_zupt(&mut state, 0.1, &tuning).unwrap();
-        
+
         assert!(state.covariance[(3, 3)] < initial_cov[(3, 3)]);
         assert!(state.covariance[(4, 4)] < initial_cov[(4, 4)]);
         assert!(state.covariance[(5, 5)] < initial_cov[(5, 5)]);
     }
 }
-

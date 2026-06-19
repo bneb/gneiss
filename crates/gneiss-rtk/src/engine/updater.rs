@@ -84,7 +84,7 @@ fn compute_loose_coupling_innovation(
 
 fn compute_loose_coupling_gain(
     state: &RtkState,
-    z: &DVector<f64>,
+    _z: &DVector<f64>,
     h_mat: &DMatrix<f64>,
     r_6x6: &DMatrix<f64>,
 ) -> Result<DMatrix<f64>, UpdateError> {

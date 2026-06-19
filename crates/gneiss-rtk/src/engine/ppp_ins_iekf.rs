@@ -1,8 +1,8 @@
-use crate::engine::ppp_common::{self, NOMINAL_SNR_DBHZ, SNR_SCALE_DIVISOR, FgMeasurement, snr_scale, invert_matrix, find_ambiguity_index, find_amb_idx, extract_state_vector, apply_state_vector, build_weight_matrix, assemble_matrices};
+use crate::engine::ppp_common::{FgMeasurement, snr_scale, invert_matrix, find_ambiguity_index, find_amb_idx, extract_state_vector, apply_state_vector, build_weight_matrix, assemble_matrices};
 use crate::engine::processed_sat::ProcessedSat;
 use crate::engine::EngineError;
 use crate::filter::{RtkState, CORE_STATE_SIZE};
-use crate::math::{inversion::{invert_matrix_robust, solve_cholesky_svd}, thresholding::apply_huber};
+use crate::math::{inversion::solve_cholesky_svd, thresholding::apply_huber};
 use nalgebra::{DMatrix, DVector, UnitQuaternion, Vector3};
 
 const SPEED_OF_LIGHT: f64 = gneiss_core::constants::SPEED_OF_LIGHT_M_S;

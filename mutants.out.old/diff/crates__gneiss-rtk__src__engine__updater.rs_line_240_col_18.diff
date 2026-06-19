@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/engine/updater.rs
++++ replace - with + in apply_fix_and_hold
+@@ -232,17 +232,17 @@
+     let num_dd = z_dd.len();
+     if num_dd == 0 { return Ok(()); }
+     
+     let mut a_sd_full = DVector::zeros(d_full.ncols());
+     for i in 0..state.ambiguities.len() {
+         a_sd_full[crate::filter::CORE_STATE_SIZE + i] = state.ambiguities[i];
+     }
+     
+-    let v = z_dd - d_full * &a_sd_full;
++    let v = z_dd + /* ~ changed by cargo-mutants ~ */ d_full * &a_sd_full;
+     let mut r = DMatrix::zeros(num_dd, num_dd);
+     for i in 0..num_dd { r[(i, i)] = var; }
+     
+     let h_p = d_full * &state.covariance;
+     let s: DMatrix<f64> = &h_p * d_full.transpose() + &r;
+     
+     let s_inv: DMatrix<f64> = match s.try_inverse() {
+         Some(inv) => inv,

@@ -1,7 +1,7 @@
+use chrono::{DateTime, NaiveDate, TimeZone, Utc};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Error as IoError};
-use chrono::{DateTime, TimeZone, Utc, NaiveDate};
 
 #[derive(Debug, Clone)]
 pub struct AntennaPcv {
@@ -44,21 +44,21 @@ impl AntexDatabase {
     pub fn parse<P: AsRef<std::path::Path>>(path: P) -> Result<Self, AntexError> {
         let file = File::open(path)?;
         let reader = BufReader::new(file);
-        
+
         let mut antennas = Vec::new();
         let mut current_antenna: Option<AntennaPcv> = None;
         let mut current_frequency: Option<FrequencyPcv> = None;
-        
+
         let mut in_antenna = false;
-        
+
         for line_res in reader.lines() {
             let line = line_res?;
             if line.len() < 60 {
                 continue;
             }
-            
+
             let label = line[60..].trim();
-            
+
             if label == "START OF ANTENNA" {
                 in_antenna = true;
                 current_antenna = Some(AntennaPcv {
@@ -140,10 +140,10 @@ impl AntexDatabase {
                 }
             }
         }
-        
+
         Ok(AntexDatabase { antennas })
     }
-    
+
     pub fn find_satellite(&self, prn: &str, time: DateTime<Utc>) -> Option<&AntennaPcv> {
         self.antennas.iter().find(|a| {
             if a.serial_num == prn {
@@ -158,7 +158,10 @@ impl AntexDatabase {
 }
 
 fn parse_antex_date(s: &str) -> Option<DateTime<Utc>> {
-    let parts: Vec<i32> = s.split_whitespace().filter_map(|x| x.parse().ok()).collect();
+    let parts: Vec<i32> = s
+        .split_whitespace()
+        .filter_map(|x| x.parse().ok())
+        .collect();
     if parts.len() >= 6 {
         let date = NaiveDate::from_ymd_opt(parts[0], parts[1] as u32, parts[2] as u32)?;
         let dt = date.and_hms_opt(parts[3] as u32, parts[4] as u32, parts[5] as u32)?;
@@ -179,14 +182,16 @@ mod tests {
         if !path.exists() {
             return; // Skip if dataset not available
         }
-        
+
         let db = AntexDatabase::parse(&path).unwrap();
         assert!(db.antennas.len() > 100);
-        
+
         // Find a specific satellite (e.g., G01)
-        let g01 = db.find_satellite("G01", Utc.with_ymd_and_hms(2010, 1, 1, 0, 0, 0).unwrap()).unwrap();
+        let g01 = db
+            .find_satellite("G01", Utc.with_ymd_and_hms(2010, 1, 1, 0, 0, 0).unwrap())
+            .unwrap();
         assert!(g01.antenna_type.starts_with("BLOCK IIA"));
-        
+
         let freq_g01 = g01.frequencies.get("G01").unwrap();
         assert_eq!(freq_g01.pco.x, 279.0);
         assert_eq!(freq_g01.pco.y, 0.0);

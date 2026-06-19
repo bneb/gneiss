@@ -17,8 +17,8 @@ The engine integrates high-rate inertial measurements with low-rate satellite ob
 graph TD
     A[Inertial Measurement Unit] -->|100Hz| B(Mechanization)
     B -->|Predict| C{Error-State EKF}
-    D[Satellite Constellations] -->|1Hz Raw| E(Double Difference / PPP-AR)
-    S[RTCM SSR Stream] -->|Orbits/Clocks/Biases| E
+    D[Satellite Constellations] -->|1Hz Raw| E(UDUC PPP-AR)
+    S[RTCM SSR Stream / BKG FTP] -->|Orbits/Clocks/Biases| E
     E -->|Innovations| C
     C -->|Correct| F(State Update)
     F -->|Nominal State| B

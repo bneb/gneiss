@@ -16,24 +16,35 @@ impl GpsTime {
     }
 
     /// Creates a new `GpsTime` from UTC calendar date and time.
-    pub fn from_calendar(year: i32, month: i32, day: i32, hour: i32, minute: i32, sec: f64) -> Self {
+    pub fn from_calendar(
+        year: i32,
+        month: i32,
+        day: i32,
+        hour: i32,
+        minute: i32,
+        sec: f64,
+    ) -> Self {
         let mut y = year;
         let mut m = month;
         if m <= 2 {
             y -= 1;
             m += 12;
         }
-        
+
         let d = day as f64 + hour as f64 / 24.0 + minute as f64 / 1440.0 + sec / 86400.0;
-        
+
         let a = libm::floor(y as f64 / 100.0);
         let b = 2.0 - a + libm::floor(a / 4.0);
-        let jd = libm::floor(365.25 * (y as f64 + 4716.0)) + libm::floor(30.6001 * (m as f64 + 1.0)) + d + b - 1524.5;
-        
+        let jd = libm::floor(365.25 * (y as f64 + 4716.0))
+            + libm::floor(30.6001 * (m as f64 + 1.0))
+            + d
+            + b
+            - 1524.5;
+
         let diff = jd - 2444244.5; // JD of Jan 6 1980
         let week = libm::floor(diff / 7.0);
         let tow = (diff - week * 7.0) * 86400.0;
-        
+
         Self::new(week as u32, tow)
     }
 

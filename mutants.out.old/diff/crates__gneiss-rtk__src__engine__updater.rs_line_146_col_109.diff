@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/engine/updater.rs
++++ replace == with != in update
+@@ -138,17 +138,17 @@
+     if z.len() != h.nrows() || h.ncols() != state.covariance.nrows() {
+         tracing::warn!("EKF update failed: DimensionMismatch");
+         return Err(UpdateError::DimensionMismatch);
+     }
+     
+     let valid_indices = filter_pre_fit_residuals::<C>(z, h, r, &state.covariance, chi_square_threshold, meas_types);
+ 
+     let pr_valid_count = valid_indices.iter().filter(|&&i| meas_types.is_none_or(|t| t[i].1 == 0)).count();
+-    let _cp_valid_count = valid_indices.iter().filter(|&&i| meas_types.is_none_or(|t| t[i].1 == 1 || t[i].1 == 2)).count();
++    let _cp_valid_count = valid_indices.iter().filter(|&&i| meas_types.is_none_or(|t| t[i].1 == 1 || t[i].1 != /* ~ changed by cargo-mutants ~ */ 2)).count();
+     
+     if pr_valid_count == 0 {
+         tracing::error!("EKF update lacks any valid PR measurements! Rejecting update to trigger SPP fallback.");
+         return Err(UpdateError::InvalidMeasurement);
+     }
+ 
+     if valid_indices.is_empty() {
+         tracing::warn!("EKF update failed: InvalidMeasurement (valid_indices empty)");

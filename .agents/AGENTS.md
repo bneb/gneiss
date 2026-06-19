@@ -1,0 +1,2 @@
+- Guard against AI slop, AI delusion, AI cringe, and anything else that could be embarrassing.
+- Always keep project documentation up-to-date simultaneously as we build new features or modify existing architectures.

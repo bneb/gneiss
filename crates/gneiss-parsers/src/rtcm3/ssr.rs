@@ -1,5 +1,5 @@
+use super::{sign_extend_i32, RtcmParseError};
 use bitvec::prelude::*;
-use super::{RtcmParseError, sign_extend_i32};
 
 const RES_ORBIT_RADIAL: f64 = 0.0001;
 const RES_ORBIT_TRACK: f64 = 0.0004;
@@ -58,7 +58,9 @@ pub struct SsrSignalBias {
     pub bias: f64,
 }
 
-pub fn parse_ssr_header(bits: &BitSlice<u8, Msb0>) -> Result<(&BitSlice<u8, Msb0>, SsrHeader), RtcmParseError> {
+pub fn parse_ssr_header(
+    bits: &BitSlice<u8, Msb0>,
+) -> Result<(&BitSlice<u8, Msb0>, SsrHeader), RtcmParseError> {
     if bits.len() < 68 {
         return Err(RtcmParseError::Incomplete);
     }
@@ -92,7 +94,9 @@ pub fn parse_ssr_orbit(payload: &[u8]) -> Result<(SsrHeader, Vec<SsrOrbitSat>), 
     Ok((header, sats))
 }
 
-fn parse_orbit_sat(bits: &BitSlice<u8, Msb0>) -> Result<(&BitSlice<u8, Msb0>, SsrOrbitSat), RtcmParseError> {
+fn parse_orbit_sat(
+    bits: &BitSlice<u8, Msb0>,
+) -> Result<(&BitSlice<u8, Msb0>, SsrOrbitSat), RtcmParseError> {
     if bits.len() < 135 {
         return Err(RtcmParseError::Incomplete);
     }
@@ -101,11 +105,16 @@ fn parse_orbit_sat(bits: &BitSlice<u8, Msb0>) -> Result<(&BitSlice<u8, Msb0>, Ss
         sat_id: bits[0..6].load_be::<u8>(),
         iode: bits[6..14].load_be::<u8>(),
         delta_radial: sign_extend_i32(bits[14..36].load_be::<u32>(), 22) as f64 * RES_ORBIT_RADIAL,
-        delta_along_track: sign_extend_i32(bits[36..56].load_be::<u32>(), 20) as f64 * RES_ORBIT_TRACK,
-        delta_cross_track: sign_extend_i32(bits[56..76].load_be::<u32>(), 20) as f64 * RES_ORBIT_TRACK,
-        dot_delta_radial: sign_extend_i32(bits[76..97].load_be::<u32>(), 21) as f64 * RES_ORBIT_DOT_RADIAL,
-        dot_delta_along_track: sign_extend_i32(bits[97..116].load_be::<u32>(), 19) as f64 * RES_ORBIT_DOT_TRACK,
-        dot_delta_cross_track: sign_extend_i32(bits[116..135].load_be::<u32>(), 19) as f64 * RES_ORBIT_DOT_TRACK,
+        delta_along_track: sign_extend_i32(bits[36..56].load_be::<u32>(), 20) as f64
+            * RES_ORBIT_TRACK,
+        delta_cross_track: sign_extend_i32(bits[56..76].load_be::<u32>(), 20) as f64
+            * RES_ORBIT_TRACK,
+        dot_delta_radial: sign_extend_i32(bits[76..97].load_be::<u32>(), 21) as f64
+            * RES_ORBIT_DOT_RADIAL,
+        dot_delta_along_track: sign_extend_i32(bits[97..116].load_be::<u32>(), 19) as f64
+            * RES_ORBIT_DOT_TRACK,
+        dot_delta_cross_track: sign_extend_i32(bits[116..135].load_be::<u32>(), 19) as f64
+            * RES_ORBIT_DOT_TRACK,
     };
 
     Ok((&bits[135..], sat))
@@ -125,7 +134,9 @@ pub fn parse_ssr_clock(payload: &[u8]) -> Result<(SsrHeader, Vec<SsrClockSat>), 
     Ok((header, sats))
 }
 
-fn parse_clock_sat(bits: &BitSlice<u8, Msb0>) -> Result<(&BitSlice<u8, Msb0>, SsrClockSat), RtcmParseError> {
+fn parse_clock_sat(
+    bits: &BitSlice<u8, Msb0>,
+) -> Result<(&BitSlice<u8, Msb0>, SsrClockSat), RtcmParseError> {
     if bits.len() < 76 {
         return Err(RtcmParseError::Incomplete);
     }
@@ -140,7 +151,9 @@ fn parse_clock_sat(bits: &BitSlice<u8, Msb0>) -> Result<(&BitSlice<u8, Msb0>, Ss
     Ok((&bits[76..], sat))
 }
 
-pub fn parse_ssr_code_bias(payload: &[u8]) -> Result<(SsrHeader, Vec<SsrCodeBiasSat>), RtcmParseError> {
+pub fn parse_ssr_code_bias(
+    payload: &[u8],
+) -> Result<(SsrHeader, Vec<SsrCodeBiasSat>), RtcmParseError> {
     let bits = payload.view_bits::<Msb0>();
     let (mut bits, header) = parse_ssr_header(bits)?;
 
@@ -154,7 +167,9 @@ pub fn parse_ssr_code_bias(payload: &[u8]) -> Result<(SsrHeader, Vec<SsrCodeBias
     Ok((header, sats))
 }
 
-fn parse_code_bias_sat(bits: &BitSlice<u8, Msb0>) -> Result<(&BitSlice<u8, Msb0>, SsrCodeBiasSat), RtcmParseError> {
+fn parse_code_bias_sat(
+    bits: &BitSlice<u8, Msb0>,
+) -> Result<(&BitSlice<u8, Msb0>, SsrCodeBiasSat), RtcmParseError> {
     if bits.len() < 11 {
         return Err(RtcmParseError::Incomplete);
     }
@@ -175,5 +190,12 @@ fn parse_code_bias_sat(bits: &BitSlice<u8, Msb0>) -> Result<(&BitSlice<u8, Msb0>
         current_bits = &current_bits[19..];
     }
 
-    Ok((current_bits, SsrCodeBiasSat { sat_id, num_biases, biases }))
+    Ok((
+        current_bits,
+        SsrCodeBiasSat {
+            sat_id,
+            num_biases,
+            biases,
+        },
+    ))
 }

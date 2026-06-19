@@ -28,34 +28,35 @@ impl AntennaModel {
     pub fn interpolate_pcv(&self, freq_code: &str, zenith_rad: f64) -> Option<f64> {
         let freq = self.frequencies.iter().find(|f| f.freq_code == freq_code)?;
         let zenith_deg = zenith_rad * 180.0 / core::f64::consts::PI;
-        
-        if zenith_deg < self.zenith_start || zenith_deg > self.zenith_stop || self.zenith_inc <= 0.0 {
+
+        if zenith_deg < self.zenith_start || zenith_deg > self.zenith_stop || self.zenith_inc <= 0.0
+        {
             // If outside the defined range, use the edge value or None.
             // Often antennas are only defined up to 90 deg.
             if zenith_deg > self.zenith_stop && zenith_deg <= 90.0 && freq.noazi.last().is_some() {
-                 return Some(*freq.noazi.last().unwrap());
+                return Some(*freq.noazi.last().unwrap());
             }
             if zenith_deg < self.zenith_start && !freq.noazi.is_empty() {
-                 return Some(*freq.noazi.first().unwrap());
+                return Some(*freq.noazi.first().unwrap());
             }
             return None;
         }
-        
+
         let index_float = (zenith_deg - self.zenith_start) / self.zenith_inc;
         let idx0 = libm::floor(index_float) as usize;
         let idx1 = libm::ceil(index_float) as usize;
-        
+
         if idx0 >= freq.noazi.len() {
             return None;
         }
-        
+
         if idx0 == idx1 || idx1 >= freq.noazi.len() {
             return Some(freq.noazi[idx0]);
         }
-        
+
         let w1 = index_float - (idx0 as f64);
         let w0 = 1.0 - w1;
-        
+
         Some(w0 * freq.noazi[idx0] + w1 * freq.noazi[idx1])
     }
 }
@@ -96,7 +97,10 @@ fn parse_antex_data_line(
     } else if line.starts_with("   NOAZI") {
         if let (Some(freq), Some(pco)) = (&current_freq, &current_pco) {
             let noazi_parts: Vec<&str> = line.split_whitespace().skip(1).collect();
-            let noazi: Vec<f64> = noazi_parts.iter().map(|s| s.parse().unwrap_or(0.0)).collect();
+            let noazi: Vec<f64> = noazi_parts
+                .iter()
+                .map(|s| s.parse().unwrap_or(0.0))
+                .collect();
             m.frequencies.push(PcvData {
                 freq_code: freq.clone(),
                 pco: *pco,
@@ -115,7 +119,7 @@ pub fn parse_antex(content: &str) -> Result<Vec<AntennaModel>, String> {
     let mut current_model: Option<AntennaModel> = None;
     let mut current_freq: Option<String> = None;
     let mut current_pco: Option<Vector3<f64>> = None;
-    
+
     for line in content.lines() {
         if line.trim().is_empty() {
             continue;
@@ -138,7 +142,7 @@ pub fn parse_antex(content: &str) -> Result<Vec<AntennaModel>, String> {
             parse_antex_data_line(line, m, &mut current_freq, &mut current_pco);
         }
     }
-    
+
     Ok(models)
 }
 
@@ -169,16 +173,16 @@ G02                                                         END OF FREQUENCY
     fn test_parse_antex() {
         let models = parse_antex(MOCK_ANTEX).unwrap();
         assert_eq!(models.len(), 1);
-        
+
         let ant = &models[0];
         assert_eq!(ant.ant_type, "IGS01/0000");
         assert_eq!(ant.serial_num, "NONE");
         assert_eq!(ant.zenith_start, 0.0);
         assert_eq!(ant.zenith_stop, 90.0);
         assert_eq!(ant.zenith_inc, 5.0);
-        
+
         assert_eq!(ant.frequencies.len(), 2);
-        
+
         let g01 = &ant.frequencies[0];
         assert_eq!(g01.freq_code, "G01");
         assert_eq!(g01.pco, Vector3::new(1.0, 2.0, 3.0));
@@ -219,7 +223,11 @@ G02                                                         END OF FREQUENCY
         assert_eq!(ant.interpolate_pcv("G01", 0.0).unwrap(), 0.0);
 
         // 5 degrees -> 5.0 mm
-        assert_eq!(ant.interpolate_pcv("G01", 5.0 * core::f64::consts::PI / 180.0).unwrap(), 5.0);
+        assert_eq!(
+            ant.interpolate_pcv("G01", 5.0 * core::f64::consts::PI / 180.0)
+                .unwrap(),
+            5.0
+        );
 
         // 7.5 degrees (midpoint) -> 7.5 mm
         let mid_rad = 7.5 * core::f64::consts::PI / 180.0;

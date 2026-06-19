@@ -1,7 +1,7 @@
 use async_trait::async_trait;
-use std::path::PathBuf;
 use gneiss_core::coords::Coordinate;
 use gneiss_core::time::GpsTime;
+use std::path::PathBuf;
 
 #[derive(Debug)]
 pub enum FetchError {
@@ -32,10 +32,19 @@ impl std::error::Error for FetchError {}
 pub trait DataSource {
     /// Returns the name of the provider (e.g., "NOAA_CORS", "Proprietary_API")
     fn name(&self) -> &str;
-    
+
     /// Fetches the closest RINEX observation file for a given coordinate and time
-    async fn fetch_base_obs(&self, location: Coordinate, time: GpsTime, out_dir: &std::path::Path) -> Result<PathBuf, FetchError>;
-    
+    async fn fetch_base_obs(
+        &self,
+        location: Coordinate,
+        time: GpsTime,
+        out_dir: &std::path::Path,
+    ) -> Result<PathBuf, FetchError>;
+
     /// Fetches the global broadcast ephemeris for a specific time
-    async fn fetch_ephemeris(&self, time: GpsTime, out_dir: &std::path::Path) -> Result<PathBuf, FetchError>;
+    async fn fetch_ephemeris(
+        &self,
+        time: GpsTime,
+        out_dir: &std::path::Path,
+    ) -> Result<PathBuf, FetchError>;
 }

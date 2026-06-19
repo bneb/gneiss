@@ -193,7 +193,7 @@ pub fn detect_mw_slip(
     has_prev: bool,
     threshold_cycles: f64,
 ) -> (bool, f64) {
-    let wl = lam1 * lam2 / (lam2 - lam1); // widelane wavelength
+    let _wl = lam1 * lam2 / (lam2 - lam1); // widelane wavelength
     let mw = (cp1 - cp2) - (p1 / lam1 + p2 / lam2) * (lam1 * lam2) / (lam1 + lam2);
     if !has_prev {
         return (false, mw);

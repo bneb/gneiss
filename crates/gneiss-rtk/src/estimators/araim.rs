@@ -1,5 +1,5 @@
 use crate::filter::RtkState;
-use gneiss_core::coords::{Coordinate, ecef_to_llh, ecef_to_ned_matrix};
+use gneiss_core::coords::{ecef_to_llh, ecef_to_ned_matrix, Coordinate};
 use statrs::distribution::ContinuousCDF;
 
 const DEFAULT_P_FA: f64 = 1e-5;
@@ -8,9 +8,9 @@ const DEFAULT_P_HMI: f64 = 1e-7;
 
 /// Advanced RAIM (ARAIM) / Solution Separation integrity monitor.
 pub struct AraimMonitor {
-    pub p_fa: f64,   // Probability of False Alert
-    pub p_md: f64,   // Probability of Missed Detection
-    pub p_hmi: f64,  // Target Integrity Risk
+    pub p_fa: f64,  // Probability of False Alert
+    pub p_md: f64,  // Probability of Missed Detection
+    pub p_hmi: f64, // Target Integrity Risk
 }
 
 impl Default for AraimMonitor {
@@ -26,8 +26,8 @@ impl Default for AraimMonitor {
 /// The result of an ARAIM evaluation.
 #[derive(Debug, Clone, PartialEq)]
 pub struct IntegrityStatus {
-    pub hpl: f64, // Horizontal Protection Level (meters)
-    pub vpl: f64, // Vertical Protection Level (meters)
+    pub hpl: f64,    // Horizontal Protection Level (meters)
+    pub vpl: f64,    // Vertical Protection Level (meters)
     pub alert: bool, // True if a fault was detected
 }
 
@@ -37,14 +37,26 @@ impl AraimMonitor {
     }
 
     /// Evaluates the protection levels and detects anomalies using Solution Separation.
-    pub fn evaluate_solution_separation(&self, full: &RtkState, subsets: &[RtkState]) -> IntegrityStatus {
+    pub fn evaluate_solution_separation(
+        &self,
+        full: &RtkState,
+        subsets: &[RtkState],
+    ) -> IntegrityStatus {
         if subsets.is_empty() {
-            return IntegrityStatus { hpl: f64::INFINITY, vpl: f64::INFINITY, alert: false };
+            return IntegrityStatus {
+                hpl: f64::INFINITY,
+                vpl: f64::INFINITY,
+                alert: false,
+            };
         }
 
         let (k_fa, k_md) = compute_thresholds(self.p_fa, self.p_md, subsets.len());
-        
-        let mut status = IntegrityStatus { hpl: 0.0, vpl: 0.0, alert: false };
+
+        let mut status = IntegrityStatus {
+            hpl: 0.0,
+            vpl: 0.0,
+            alert: false,
+        };
 
         for subset in subsets {
             let sub_status = evaluate_single_subset(full, subset, k_fa, k_md);
@@ -64,11 +76,16 @@ fn compute_thresholds(p_fa: f64, p_md: f64, num_subsets: usize) -> (f64, f64) {
     (k_fa, k_md)
 }
 
-fn evaluate_single_subset(full: &RtkState, subset: &RtkState, k_fa: f64, k_md: f64) -> IntegrityStatus {
+fn evaluate_single_subset(
+    full: &RtkState,
+    subset: &RtkState,
+    k_fa: f64,
+    k_md: f64,
+) -> IntegrityStatus {
     let dx = full.position.vector.x - subset.position.vector.x;
     let dy = full.position.vector.y - subset.position.vector.y;
     let dz = full.position.vector.z - subset.position.vector.z;
-    
+
     let (dn, de, du) = ecef_to_enu_diff(full.position.clone(), dx, dy, dz);
     let d_horiz = (dn.powi(2) + de.powi(2)).sqrt();
     let d_vert = du.abs();
@@ -97,7 +114,7 @@ fn project_covariance_diff_to_ned(full: &RtkState, subset: &RtkState) -> (f64, f
     let llh = ecef_to_llh(full.position.vector);
     let rot = ecef_to_ned_matrix(llh);
     let dp_ned = rot * dp * rot.transpose();
-    
+
     let var_diff_h = dp_ned[(0, 0)].max(0.0) + dp_ned[(1, 1)].max(0.0);
     let var_diff_v = dp_ned[(2, 2)].max(0.0);
 
@@ -108,7 +125,7 @@ fn ecef_to_enu_diff(coord: Coordinate, dx: f64, dy: f64, dz: f64) -> (f64, f64, 
     let llh = ecef_to_llh(coord.vector);
     let lat = llh.x;
     let lon = llh.y;
-    
+
     let slon = lon.sin();
     let clon = lon.cos();
     let slat = lat.sin();
@@ -125,9 +142,9 @@ fn ecef_to_enu_diff(coord: Coordinate, dx: f64, dy: f64, dz: f64) -> (f64, f64, 
 mod tests {
     use super::*;
     use crate::filter::RtkState;
-    use nalgebra::{DMatrix, DVector, Vector3};
     use gneiss_core::coords::Coordinate;
     use gneiss_core::time::GpsTime;
+    use nalgebra::{DMatrix, Vector3};
 
     fn mock_state(x: f64, y: f64, z: f64, cov_scale: f64) -> RtkState {
         use gneiss_core::coords::{Datum, Frame};
@@ -135,7 +152,9 @@ mod tests {
         let pos = Coordinate::new(Vector3::new(x, y, z), Datum::WGS84, Frame::ECEF, epoch);
         let mut state = RtkState::new(epoch, pos, 30.0);
         let mut cov = DMatrix::zeros(30, 30);
-        for i in 0..3 { cov[(i, i)] = cov_scale; }
+        for i in 0..3 {
+            cov[(i, i)] = cov_scale;
+        }
         state.covariance = cov;
         state
     }

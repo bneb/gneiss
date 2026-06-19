@@ -1,5 +1,5 @@
-use nalgebra::Vector3;
 use alloc::vec::Vec;
+use nalgebra::Vector3;
 
 /// Statistical summary of a set of error values.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -132,7 +132,11 @@ mod tests {
         let pos = Vector3::new(crate::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 1.0);
         let h_err = horizontal_error(pos, truth);
         // Should be approximately 1m
-        assert!((h_err - 1.0).abs() < 0.01, "Expected ~1m horizontal error, got {}", h_err);
+        assert!(
+            (h_err - 1.0).abs() < 0.01,
+            "Expected ~1m horizontal error, got {}",
+            h_err
+        );
     }
 
     #[test]
@@ -141,7 +145,11 @@ mod tests {
         let truth = Vector3::new(crate::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0);
         let pos = Vector3::new(6378138.0, 0.0, 0.0); // 1m radially outward
         let v_err = vertical_error(pos, truth);
-        assert!((v_err - 1.0).abs() < 0.01, "Expected ~1m vertical error, got {}", v_err);
+        assert!(
+            (v_err - 1.0).abs() < 0.01,
+            "Expected ~1m vertical error, got {}",
+            v_err
+        );
     }
 
     #[test]
@@ -149,8 +157,14 @@ mod tests {
         let truth = Vector3::new(crate::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0);
         let above = Vector3::new(6378138.0, 0.0, 0.0);
         let below = Vector3::new(6378136.0, 0.0, 0.0);
-        assert!(vertical_error(above, truth) > 0.0, "Above should be positive");
-        assert!(vertical_error(below, truth) < 0.0, "Below should be negative");
+        assert!(
+            vertical_error(above, truth) > 0.0,
+            "Above should be positive"
+        );
+        assert!(
+            vertical_error(below, truth) < 0.0,
+            "Below should be negative"
+        );
     }
 
     #[test]
@@ -166,10 +180,18 @@ mod tests {
     fn test_compute_statistics_basic() {
         let errors = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
         let stats = compute_statistics(&errors).unwrap();
-        
+
         assert_eq!(stats.count, 10);
-        assert!((stats.median - 5.5).abs() < 1e-10, "Median should be 5.5, got {}", stats.median);
-        assert!((stats.mean - 5.5).abs() < 1e-10, "Mean should be 5.5, got {}", stats.mean);
+        assert!(
+            (stats.median - 5.5).abs() < 1e-10,
+            "Median should be 5.5, got {}",
+            stats.median
+        );
+        assert!(
+            (stats.mean - 5.5).abs() < 1e-10,
+            "Mean should be 5.5, got {}",
+            stats.mean
+        );
         assert!(stats.p95 >= 9.0, "P95 should be >= 9.0, got {}", stats.p95);
         assert!(stats.p99 >= 9.0, "P99 should be >= 9.0, got {}", stats.p99);
         assert!((stats.max - 10.0).abs() < 1e-10);

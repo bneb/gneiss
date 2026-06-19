@@ -1,6 +1,6 @@
-use std::io::BufRead;
-use std::collections::HashMap;
 use gneiss_core::time::GpsTime;
+use std::collections::HashMap;
+use std::io::BufRead;
 
 #[derive(Debug, Clone)]
 pub struct Sp3Epoch {
@@ -11,7 +11,7 @@ pub struct Sp3Epoch {
 #[derive(Debug, Clone)]
 pub struct Sp3Record {
     pub position: nalgebra::Vector3<f64>, // meters
-    pub clock_offset: f64,      // seconds
+    pub clock_offset: f64,                // seconds
 }
 
 pub fn parse_sp3<R: BufRead>(reader: R) -> Result<Vec<Sp3Epoch>, String> {
@@ -42,7 +42,14 @@ pub fn parse_sp3<R: BufRead>(reader: R) -> Result<Vec<Sp3Epoch>, String> {
                     epochs.push(epoch);
                 }
 
-                let time = GpsTime::from_calendar(year, month as i32, day as i32, hour as i32, minute as i32, sec);
+                let time = GpsTime::from_calendar(
+                    year,
+                    month as i32,
+                    day as i32,
+                    hour as i32,
+                    minute as i32,
+                    sec,
+                );
                 current_epoch = Some(Sp3Epoch {
                     time,
                     records: HashMap::new(),
@@ -69,10 +76,17 @@ pub fn parse_sp3<R: BufRead>(reader: R) -> Result<Vec<Sp3Epoch>, String> {
                             f64::NAN
                         };
 
-                        epoch.records.insert(sat_id, Sp3Record {
-                            position: nalgebra::Vector3::new(x * 1000.0, y * 1000.0, z * 1000.0), // km to meters
-                            clock_offset,
-                        });
+                        epoch.records.insert(
+                            sat_id,
+                            Sp3Record {
+                                position: nalgebra::Vector3::new(
+                                    x * 1000.0,
+                                    y * 1000.0,
+                                    z * 1000.0,
+                                ), // km to meters
+                                clock_offset,
+                            },
+                        );
                     }
                 }
             }

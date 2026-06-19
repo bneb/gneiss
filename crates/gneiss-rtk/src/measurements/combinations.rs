@@ -51,13 +51,13 @@ mod tests {
     fn test_melbourne_wubbena_isolates_wl_ambiguity() {
         // TDD: Prove that the MW combination isolates the Wide-Lane ambiguity,
         // stripping out true geometry, clock errors, and ionosphere.
-        
+
         let true_range = 20_000_000.0;
         let cdt = 300_000.0; // 1 ms clock error
         let iono_l1 = 5.0; // 5 meters iono delay on L1
         let f_ratio = (F1_GPS / F2_GPS).powi(2);
         let iono_l2 = iono_l1 * f_ratio; // Iono is dispersive (1/f^2)
-        
+
         // True ambiguities (in cycles)
         let n1_cycles = 1000.0;
         let n2_cycles = 1000.0 + 5.0; // N_wl = N1 - N2 = -5.0
@@ -78,22 +78,27 @@ mod tests {
         let mw = melbourne_wubbena(l1, l2, p1, p2, F1_GPS, F2_GPS);
         let expected_mw = lambda_wl(F1_GPS, F2_GPS) * n_wl_cycles;
 
-        assert!((mw - expected_mw).abs() < 1e-6, "MW combination failed to isolate WL ambiguity. Got: {}, Expected: {}", mw, expected_mw);
+        assert!(
+            (mw - expected_mw).abs() < 1e-6,
+            "MW combination failed to isolate WL ambiguity. Got: {}, Expected: {}",
+            mw,
+            expected_mw
+        );
     }
-    
+
     #[test]
     fn test_iono_free_combination() {
         let true_range = 20_000_000.0;
-        let cdt = 300_000.0; 
-        let iono_l1 = 5.0; 
+        let cdt = 300_000.0;
+        let iono_l1 = 5.0;
         let f_ratio = (F1_GPS / F2_GPS).powi(2);
         let iono_l2 = iono_l1 * f_ratio;
-        
+
         let p1 = true_range + cdt + iono_l1;
         let p2 = true_range + cdt + iono_l2;
-        
+
         let p_if = iono_free(p1, p2, F1_GPS, F2_GPS);
-        
+
         // IF combination deletes iono completely
         assert!((p_if - (true_range + cdt)).abs() < 1e-6);
     }
@@ -102,15 +107,15 @@ mod tests {
     fn test_narrow_lane_cascade_math() {
         // TDD: Prove that if we know N_wl, we can substitute it into the IF phase combination
         // to isolate N1 multiplied by lambda_nl.
-        
+
         let true_range = 20_000_000.0;
-        let cdt = 300_000.0; 
-        let iono_l1 = 5.0; 
+        let cdt = 300_000.0;
+        let iono_l1 = 5.0;
         let f_ratio = (F1_GPS / F2_GPS).powi(2);
         let iono_l2 = iono_l1 * f_ratio;
-        
+
         let n1_cycles = 1000.0;
-        let n2_cycles = 1005.0; 
+        let n2_cycles = 1005.0;
         let n_wl_cycles = n1_cycles - n2_cycles; // -5.0
 
         let lambda_1 = LIGHT_SPEED / F1_GPS;
@@ -124,11 +129,15 @@ mod tests {
         // Derivation: L_if = rho + cdt + lambda_nl * N1 + (f2 / (f1 - f2)) * lambda_nl * N_wl
         let lambda_nl = lambda_nl(F1_GPS, F2_GPS);
         let wl_correction = (F2_GPS / (F1_GPS - F2_GPS)) * lambda_nl * n_wl_cycles;
-        
+
         let l_if_corrected = l_if - wl_correction;
         let expected_l_if_corrected = true_range + cdt + lambda_nl * n1_cycles;
 
-        assert!((l_if_corrected - expected_l_if_corrected).abs() < 1e-6, 
-            "NL cascade failed. Corrected: {}, Expected: {}", l_if_corrected, expected_l_if_corrected);
+        assert!(
+            (l_if_corrected - expected_l_if_corrected).abs() < 1e-6,
+            "NL cascade failed. Corrected: {}, Expected: {}",
+            l_if_corrected,
+            expected_l_if_corrected
+        );
     }
 }

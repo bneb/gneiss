@@ -6,7 +6,7 @@ use nalgebra::Vector3;
 #[derive(Debug, Clone, PartialEq)]
 pub struct ImuMeasurement {
     /// The timestamp of the measurement (can be system time or GNSS time depending on sync).
-    pub time_tag: u32, 
+    pub time_tag: u32,
     /// 3D Acceleration vector (X, Y, Z) in the vehicle/sensor body frame, typically in m/s^2.
     pub accel: Vector3<f64>,
     /// 3D Angular Velocity (Gyroscope) vector (X, Y, Z) in the vehicle/sensor body frame, typically in rad/s.

@@ -1,5 +1,5 @@
-use bitvec::prelude::*;
 use super::RtcmParseError;
+use bitvec::prelude::*;
 
 /// RTCM Message 1005/1006: Stationary RTK Reference Station ARP
 #[derive(Debug, Clone, PartialEq)]
@@ -45,7 +45,7 @@ pub fn parse_station_arp(payload: &[u8]) -> Result<StationArp, RtcmParseError> {
 
     let ecef_x_bits = bits[cursor..cursor + 38].load_be::<u64>();
     cursor += 38;
-    
+
     // sign extend 38 bits to 64
     let shift = 64 - 38;
     let ecef_x_int = (ecef_x_bits << shift) as i64 >> shift;
@@ -56,7 +56,7 @@ pub fn parse_station_arp(payload: &[u8]) -> Result<StationArp, RtcmParseError> {
 
     let ecef_y_bits = bits[cursor..cursor + 38].load_be::<u64>();
     cursor += 38;
-    
+
     let ecef_y_int = (ecef_y_bits << shift) as i64 >> shift;
     let ecef_y = ecef_y_int as f64 * 0.0001;
 
@@ -65,7 +65,7 @@ pub fn parse_station_arp(payload: &[u8]) -> Result<StationArp, RtcmParseError> {
 
     let ecef_z_bits = bits[cursor..cursor + 38].load_be::<u64>();
     cursor += 38;
-    
+
     let ecef_z_int = (ecef_z_bits << shift) as i64 >> shift;
     let ecef_z = ecef_z_int as f64 * 0.0001;
 
@@ -100,26 +100,26 @@ mod tests {
         // Message 1005 is 19 bytes long (152 bits)
         // Let's create a dummy payload.
         let mut bits = bitvec![u8, Msb0; 0; 152];
-        
+
         // message_number = 1005 (0x3ED)
         bits[0..12].store_be(1005_u16);
         // station_id = 1234
         bits[12..24].store_be(1234_u16);
         // itrf_epoch_year = 20
         bits[24..30].store_be(20_u8);
-        
+
         // ecef_x = -2689639.506 m -> -26,896,395,060 (0.1 mm units)
         let x_int = -26896395060_i64;
         bits[34..72].store_be(x_int as u64); // 38 bits
-        
+
         let y_int = -42904386360_i64;
         bits[74..112].store_be(y_int as u64);
-        
+
         let z_int = 38650509560_i64;
         bits[114..152].store_be(z_int as u64);
 
         let payload = bits.into_vec();
-        
+
         let arp = parse_station_arp(&payload).unwrap();
         assert_eq!(arp.message_number, 1005);
         assert_eq!(arp.station_id, 1234);
@@ -132,21 +132,21 @@ mod tests {
     #[test]
     fn test_parse_1006() {
         let mut bits = bitvec![u8, Msb0; 0; 168];
-        
+
         // message_number = 1006 (0x3EE)
         bits[0..12].store_be(1006_u16);
         // station_id = 1234
         bits[12..24].store_be(1234_u16);
         // itrf_epoch_year = 21
         bits[24..30].store_be(21_u8);
-        
+
         // ecef_x = 1000.0 m -> 10,000,000 (0.1 mm units)
         let x_int = 10000000_i64;
         bits[34..72].store_be(x_int as u64); // 38 bits
-        
+
         let y_int = 20000000_i64;
         bits[74..112].store_be(y_int as u64);
-        
+
         let z_int = 30000000_i64;
         bits[114..152].store_be(z_int as u64);
 
@@ -154,7 +154,7 @@ mod tests {
         bits[152..168].store_be(15240_u16);
 
         let payload = bits.into_vec();
-        
+
         let arp = parse_station_arp(&payload).unwrap();
         assert_eq!(arp.message_number, 1006);
         assert_eq!(arp.station_id, 1234);

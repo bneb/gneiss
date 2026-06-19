@@ -1,8 +1,8 @@
-pub mod time_sync;
 pub mod extrinsics;
-pub mod variance;
+pub mod intrinsics;
 pub mod mounting;
 pub mod provider;
-pub mod intrinsics;
+pub mod time_sync;
+pub mod variance;
 
 pub use provider::*;

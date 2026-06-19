@@ -1,4 +1,3 @@
-
 /// A raw RTCM3 frame containing the verified payload (message type and data).
 #[derive(Debug, Clone, PartialEq)]
 pub struct RtcmFrame<'a> {
@@ -56,9 +55,10 @@ pub fn parse_rtcm3_frame(input: &[u8]) -> Result<(&[u8], RtcmFrame<'_>), RtcmPar
     }
 
     let expected_crc = crc24q(&input[0..(3 + payload_len)]);
-    
+
     let crc_bytes = &input[(3 + payload_len)..frame_len];
-    let actual_crc = ((crc_bytes[0] as u32) << 16) | ((crc_bytes[1] as u32) << 8) | (crc_bytes[2] as u32);
+    let actual_crc =
+        ((crc_bytes[0] as u32) << 16) | ((crc_bytes[1] as u32) << 8) | (crc_bytes[2] as u32);
 
     if expected_crc != actual_crc {
         return Err(RtcmParseError::CrcMismatch);

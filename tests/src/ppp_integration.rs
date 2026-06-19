@@ -1,7 +1,6 @@
-use gneiss_rtk::engine::{ProcessingEngine, EngineConfig, EngineMode};
-use gneiss_core::obs::{EpochObs, SatObs, Observation, ObsCode};
 use core::str::FromStr;
-
+use gneiss_core::obs::{EpochObs, ObsCode, Observation, SatObs};
+use gneiss_rtk::engine::{EngineConfig, EngineMode, ProcessingEngine};
 
 #[test]
 fn test_ppp_skeleton() {
@@ -11,7 +10,7 @@ fn test_ppp_skeleton() {
 
     // Create some dummy observations
     let time = gneiss_core::time::GpsTime::new(2300, 345600.0);
-    
+
     // We need dual frequency observations for Ionosphere-Free
     let obs1 = Observation {
         code: ObsCode::from_str("C1C").unwrap(),
@@ -59,5 +58,8 @@ fn test_ppp_skeleton() {
 
     // Note: Ephemerides are missing, so the engine should gracefully return an error.
     let result = engine.process_epoch(&epoch_obs, None);
-    assert!(result.is_err(), "Expected error due to missing ephemerides and insufficient satellites");
+    assert!(
+        result.is_err(),
+        "Expected error due to missing ephemerides and insufficient satellites"
+    );
 }

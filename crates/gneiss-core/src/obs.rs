@@ -3,10 +3,10 @@ use core::str::FromStr;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ObsType {
-    Pseudorange, // 'C'
+    Pseudorange,  // 'C'
     CarrierPhase, // 'L'
-    Doppler, // 'D'
-    Snr, // 'S'
+    Doppler,      // 'D'
+    Snr,          // 'S'
 }
 
 impl fmt::Display for ObsType {
@@ -77,7 +77,11 @@ impl FromStr for ObsCode {
 
 impl fmt::Display for ObsCode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}{}{}", self.obs_type, self.signal.freq_band, self.signal.attribute)
+        write!(
+            f,
+            "{}{}{}",
+            self.obs_type, self.signal.freq_band, self.signal.attribute
+        )
     }
 }
 
@@ -105,27 +109,53 @@ pub struct SatObs {
 
 impl SatObs {
     pub fn get_observable(&self, freq_band: u8) -> Option<f64> {
-        self.observations.iter().find(|o| o.code.obs_type == ObsType::Pseudorange && o.code.signal.freq_band == freq_band).map(|o| o.value)
+        self.observations
+            .iter()
+            .find(|o| {
+                o.code.obs_type == ObsType::Pseudorange && o.code.signal.freq_band == freq_band
+            })
+            .map(|o| o.value)
     }
 
     pub fn get_observable_phase(&self, freq_band: u8) -> Option<f64> {
-        self.observations.iter().find(|o| o.code.obs_type == ObsType::CarrierPhase && o.code.signal.freq_band == freq_band).map(|o| o.value)
+        self.observations
+            .iter()
+            .find(|o| {
+                o.code.obs_type == ObsType::CarrierPhase && o.code.signal.freq_band == freq_band
+            })
+            .map(|o| o.value)
     }
 
     pub fn get_doppler(&self, freq_band: u8) -> Option<f64> {
-        self.observations.iter().find(|o| o.code.obs_type == ObsType::Doppler && o.code.signal.freq_band == freq_band).map(|o| o.value)
+        self.observations
+            .iter()
+            .find(|o| o.code.obs_type == ObsType::Doppler && o.code.signal.freq_band == freq_band)
+            .map(|o| o.value)
     }
 
     pub fn get_locktime(&self, freq_band: u8) -> Option<u16> {
-        self.observations.iter().find(|o| o.code.obs_type == ObsType::CarrierPhase && o.code.signal.freq_band == freq_band).and_then(|o| o.lock_time)
+        self.observations
+            .iter()
+            .find(|o| {
+                o.code.obs_type == ObsType::CarrierPhase && o.code.signal.freq_band == freq_band
+            })
+            .and_then(|o| o.lock_time)
     }
-    
+
     pub fn get_lli(&self, freq_band: u8) -> Option<u8> {
-        self.observations.iter().find(|o| o.code.obs_type == ObsType::CarrierPhase && o.code.signal.freq_band == freq_band).and_then(|o| o.lli)
+        self.observations
+            .iter()
+            .find(|o| {
+                o.code.obs_type == ObsType::CarrierPhase && o.code.signal.freq_band == freq_band
+            })
+            .and_then(|o| o.lli)
     }
 
     pub fn get_snr(&self, freq_band: u8) -> Option<u8> {
-        self.observations.iter().find(|o| o.code.obs_type == ObsType::Snr && o.code.signal.freq_band == freq_band).map(|o| o.value as u8)
+        self.observations
+            .iter()
+            .find(|o| o.code.obs_type == ObsType::Snr && o.code.signal.freq_band == freq_band)
+            .map(|o| o.value as u8)
     }
 }
 
@@ -172,13 +202,19 @@ mod tests {
     fn test_obs_code_display() {
         let code1 = ObsCode {
             obs_type: ObsType::Pseudorange,
-            signal: SignalCode { freq_band: 1, attribute: 'C' }
+            signal: SignalCode {
+                freq_band: 1,
+                attribute: 'C',
+            },
         };
         assert_eq!(code1.to_string(), "C1C");
 
         let code2 = ObsCode {
             obs_type: ObsType::CarrierPhase,
-            signal: SignalCode { freq_band: 2, attribute: 'W' }
+            signal: SignalCode {
+                freq_band: 2,
+                attribute: 'W',
+            },
         };
         assert_eq!(code2.to_string(), "L2W");
     }

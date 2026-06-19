@@ -5,7 +5,12 @@ use nalgebra::Vector3;
 /// `sun_pos`: Sun ECEF position in meters.
 /// `rcv_pos`: Receiver ECEF position in meters.
 /// `prev_windup`: The windup value from the previous epoch (in cycles) to ensure continuity.
-pub fn phase_windup(sat_pos: Vector3<f64>, sun_pos: Vector3<f64>, rcv_pos: Vector3<f64>, prev_windup: f64) -> f64 {
+pub fn phase_windup(
+    sat_pos: Vector3<f64>,
+    sun_pos: Vector3<f64>,
+    rcv_pos: Vector3<f64>,
+    prev_windup: f64,
+) -> f64 {
     // Unit vector from satellite to receiver
     let k = (rcv_pos - sat_pos).normalize();
 

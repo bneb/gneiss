@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/engine/updater.rs
++++ replace >= with < in update
+@@ -212,17 +212,17 @@
+         for i in 0..weights.len() {
+             let new_r_ii = base_r[(i, i)] / weights[i];
+             if (current_r[(i, i)] - new_r_ii).abs() > base_r[(i, i)] * 0.05 {
+                 weights_changed = true;
+             }
+             current_r[(i, i)] = new_r_ii;
+         }
+ 
+-        if !weights_changed || _iter >= 99 {
++        if !weights_changed || _iter < /* ~ changed by cargo-mutants ~ */ 99 {
+             break;
+         }
+     }
+ 
+     apply_state_correction(state, &dx);
+     state.covariance = apply_joseph_covariance_update(&state.covariance, &k, &current_h, &current_r);
+     
+     Ok((current_valid, dx))

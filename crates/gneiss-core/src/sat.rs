@@ -2,7 +2,9 @@ use core::fmt;
 use core::str::FromStr;
 
 /// Represents a GNSS constellation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum Constellation {
     Gps,
     Glonass,
@@ -78,7 +80,8 @@ impl FromStr for SatelliteId {
             return Err(ParseSatelliteIdError);
         }
         let (const_str, prn_str) = s.split_at(1);
-        let constellation = Constellation::from_str(const_str).map_err(|_| ParseSatelliteIdError)?;
+        let constellation =
+            Constellation::from_str(const_str).map_err(|_| ParseSatelliteIdError)?;
         let prn = u8::from_str(prn_str).map_err(|_| ParseSatelliteIdError)?;
         if prn == 0 {
             return Err(ParseSatelliteIdError);
@@ -101,8 +104,14 @@ mod tests {
     #[test]
     fn test_constellation_parsing() {
         assert_eq!(Constellation::from_str("G").unwrap(), Constellation::Gps);
-        assert_eq!(Constellation::from_str("R").unwrap(), Constellation::Glonass);
-        assert_eq!(Constellation::from_str("E").unwrap(), Constellation::Galileo);
+        assert_eq!(
+            Constellation::from_str("R").unwrap(),
+            Constellation::Glonass
+        );
+        assert_eq!(
+            Constellation::from_str("E").unwrap(),
+            Constellation::Galileo
+        );
         assert_eq!(Constellation::from_str("C").unwrap(), Constellation::Beidou);
         assert_eq!(Constellation::from_str("S").unwrap(), Constellation::Sbas);
         assert_eq!(Constellation::from_str("J").unwrap(), Constellation::Qzss);

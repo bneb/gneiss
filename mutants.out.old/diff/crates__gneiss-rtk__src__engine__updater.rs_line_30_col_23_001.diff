@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/engine/updater.rs
++++ replace > with < in apply_imu_and_clock_correction
+@@ -22,17 +22,17 @@
+     if dx.len() >= crate::filter::CORE_STATE_SIZE { apply_imu_and_clock_correction(state, dx); }
+     if dx.len() > crate::filter::CORE_STATE_SIZE {
+         for i in 0..state.ambiguities.len() { state.ambiguities[i] += dx[crate::filter::CORE_STATE_SIZE + i]; }
+     }
+ }
+ 
+ fn apply_imu_and_clock_correction(state: &mut RtkState, dx: &DVector<f64>) {
+     let d_theta = Vector3::new(dx[6], dx[7], dx[8]);
+-    if d_theta.norm() > 1e-10 {
++    if d_theta.norm() < /* ~ changed by cargo-mutants ~ */ 1e-10 {
+         let dq = UnitQuaternion::from_axis_angle(&nalgebra::Unit::new_normalize(d_theta), d_theta.norm());
+         state.attitude = dq * state.attitude;
+         state.attitude.renormalize();
+     }
+     state.accel_bias.x += dx[9]; state.accel_bias.y += dx[10]; state.accel_bias.z += dx[11];
+     state.gyro_bias.x += dx[12]; state.gyro_bias.y += dx[13]; state.gyro_bias.z += dx[14];
+     if dx.len() > 15 {
+         state.rcv_clk_bias += dx[15];

@@ -1,11 +1,12 @@
-use tracing::{info, error};
-use gneiss_core::time::GpsTime;
 use gneiss_core::coords::{ecef_to_llh, llh_to_ecef};
+use gneiss_core::time::GpsTime;
+use tracing::{error, info};
 
 pub fn evaluate(solution: &str, truth: &str) -> Result<(), String> {
     info!("Evaluating solution against ground truth...");
 
-    let truth_data = std::fs::read_to_string(truth).map_err(|e| format!("Failed to read truth file: {}", e))?;
+    let truth_data =
+        std::fs::read_to_string(truth).map_err(|e| format!("Failed to read truth file: {}", e))?;
     let mut truth_epochs = Vec::new();
 
     let is_llh = truth_data.lines().any(|l| l.contains("latitude(deg)"));
@@ -14,35 +15,49 @@ pub fn evaluate(solution: &str, truth: &str) -> Result<(), String> {
         let mut lines = truth_data.lines();
         if let Some(header) = lines.next() {
             let headers: Vec<&str> = header.split(',').map(|s| s.trim()).collect();
-            
+
             let is_gsdc = headers.contains(&"millisSinceGpsEpoch");
-            
+
             if is_gsdc {
-                let time_idx = headers.iter().position(|h| *h == "millisSinceGpsEpoch").unwrap_or(2);
+                let time_idx = headers
+                    .iter()
+                    .position(|h| *h == "millisSinceGpsEpoch")
+                    .unwrap_or(2);
                 let lat_idx = headers.iter().position(|h| *h == "latDeg").unwrap_or(3);
                 let lon_idx = headers.iter().position(|h| *h == "lngDeg").unwrap_or(4);
-                let hgt_idx = headers.iter().position(|h| *h == "heightAboveWgs84EllipsoidM").unwrap_or(5);
-                
+                let hgt_idx = headers
+                    .iter()
+                    .position(|h| *h == "heightAboveWgs84EllipsoidM")
+                    .unwrap_or(5);
+
                 for line in lines {
-                    if line.trim().is_empty() { continue; }
+                    if line.trim().is_empty() {
+                        continue;
+                    }
                     let parts: Vec<&str> = line.split(',').collect();
                     if parts.len() > hgt_idx {
                         let millis: u64 = parts[time_idx].trim().parse().unwrap_or(0);
                         if millis > 0 {
                             let tow = (millis % 604_800_000) as f64 / 1000.0;
-                            
+
                             let lat: f64 = parts[lat_idx].trim().parse().unwrap_or(0.0);
                             let lon: f64 = parts[lon_idx].trim().parse().unwrap_or(0.0);
                             let hgt: f64 = parts[hgt_idx].trim().parse().unwrap_or(0.0);
-                            
-                            let ecef = llh_to_ecef(nalgebra::Vector3::new(lat.to_radians(), lon.to_radians(), hgt));
+
+                            let ecef = llh_to_ecef(nalgebra::Vector3::new(
+                                lat.to_radians(),
+                                lon.to_radians(),
+                                hgt,
+                            ));
                             truth_epochs.push((tow, ecef));
                         }
                     }
                 }
             } else {
                 for line in lines {
-                    if line.trim().is_empty() { continue; }
+                    if line.trim().is_empty() {
+                        continue;
+                    }
                     let parts: Vec<&str> = line.split(',').collect();
                     if parts.len() >= 8 {
                         let tow: f64 = parts[0].trim().parse().unwrap_or(0.0);
@@ -56,9 +71,13 @@ pub fn evaluate(solution: &str, truth: &str) -> Result<(), String> {
         }
     } else {
         for line in truth_data.lines() {
-            if line.starts_with('%') || line.trim().is_empty() { continue; }
+            if line.starts_with('%') || line.trim().is_empty() {
+                continue;
+            }
             let parts: Vec<&str> = line.split_whitespace().collect();
-            if parts.len() < 5 { continue; }
+            if parts.len() < 5 {
+                continue;
+            }
 
             let date_parts: Vec<&str> = parts[0].split('/').collect();
             let time_parts: Vec<&str> = parts[1].split(':').collect();
@@ -85,23 +104,30 @@ pub fn evaluate(solution: &str, truth: &str) -> Result<(), String> {
             }
         }
     }
-    
+
     info!("Loaded {} epochs from ground truth.", truth_epochs.len());
 
-    let sol_data = std::fs::read_to_string(solution).map_err(|e| format!("Failed to read solution file: {}", e))?;
+    let sol_data = std::fs::read_to_string(solution)
+        .map_err(|e| format!("Failed to read solution file: {}", e))?;
 
     let mut horiz_errors = Vec::new();
     let mut vert_errors = Vec::new();
     let mut err_3d = Vec::new();
     let mut heading_errors = Vec::new();
 
-    let sol_is_llh = sol_data.lines().any(|l| l.contains("latitude(deg) longitude(deg)"));
+    let sol_is_llh = sol_data
+        .lines()
+        .any(|l| l.contains("latitude(deg) longitude(deg)"));
 
     let mut sol_epochs = Vec::new();
     for line in sol_data.lines() {
-        if line.starts_with('%') || line.trim().is_empty() { continue; }
+        if line.starts_with('%') || line.trim().is_empty() {
+            continue;
+        }
         let parts: Vec<&str> = line.split_whitespace().collect();
-        if parts.len() < 5 { continue; }
+        if parts.len() < 5 {
+            continue;
+        }
 
         let mut tow: f64 = 0.0;
         let mut x: f64 = 0.0;
@@ -151,13 +177,12 @@ pub fn evaluate(solution: &str, truth: &str) -> Result<(), String> {
 
         for (true_tow, true_ecef) in &truth_epochs {
             let min_diff = (sol_tow - true_tow).abs();
-            if min_diff < 0.15
-                && min_diff < best_diff {
-                    best_diff = min_diff;
-                    best_true_ecef = Some(true_ecef);
-                }
+            if min_diff < 0.15 && min_diff < best_diff {
+                best_diff = min_diff;
+                best_true_ecef = Some(true_ecef);
+            }
         }
-        
+
         if let Some(true_ecef) = best_true_ecef {
             let diff_ecef = sol_ecef - true_ecef;
 
@@ -184,26 +209,40 @@ pub fn evaluate(solution: &str, truth: &str) -> Result<(), String> {
             horiz_errors.push(h_err);
             vert_errors.push(v_err);
             err_3d.push(d3);
-            
+
             if horiz_errors.len() % 100 == 0 {
-                println!("Epoch {} (tow {:.1}): h_err={:.3}m v_err={:.3}m dx={:.3} dy={:.3} dz={:.3}", horiz_errors.len(), sol_tow, h_err, v_err, dx, dy, dz);
+                println!(
+                    "Epoch {} (tow {:.1}): h_err={:.3}m v_err={:.3}m dx={:.3} dy={:.3} dz={:.3}",
+                    horiz_errors.len(),
+                    sol_tow,
+                    h_err,
+                    v_err,
+                    dx,
+                    dy,
+                    dz
+                );
             }
 
             if let (Some(p_true_ecef), Some(p_sol_ecef)) = (prev_true_ecef, prev_sol_ecef) {
                 let v_true_ecef = true_ecef - p_true_ecef;
                 let v_sol_ecef = sol_ecef - p_sol_ecef;
-                
+
                 let v_true_e = -sin_lon * v_true_ecef.x + cos_lon * v_true_ecef.y;
-                let v_true_n = -sin_lat * cos_lon * v_true_ecef.x - sin_lat * sin_lon * v_true_ecef.y + cos_lat * v_true_ecef.z;
-                
+                let v_true_n = -sin_lat * cos_lon * v_true_ecef.x
+                    - sin_lat * sin_lon * v_true_ecef.y
+                    + cos_lat * v_true_ecef.z;
+
                 let v_sol_e = -sin_lon * v_sol_ecef.x + cos_lon * v_sol_ecef.y;
-                let v_sol_n = -sin_lat * cos_lon * v_sol_ecef.x - sin_lat * sin_lon * v_sol_ecef.y + cos_lat * v_sol_ecef.z;
+                let v_sol_n = -sin_lat * cos_lon * v_sol_ecef.x - sin_lat * sin_lon * v_sol_ecef.y
+                    + cos_lat * v_sol_ecef.z;
 
                 let true_heading = f64::atan2(v_true_e, v_true_n).to_degrees();
                 let sol_heading = f64::atan2(v_sol_e, v_sol_n).to_degrees();
 
                 let mut h_err_deg = (sol_heading - true_heading).abs();
-                if h_err_deg > 180.0 { h_err_deg = 360.0 - h_err_deg; }
+                if h_err_deg > 180.0 {
+                    h_err_deg = 360.0 - h_err_deg;
+                }
 
                 if f64::sqrt(v_true_e * v_true_e + v_true_n * v_true_n) > 0.5 {
                     heading_errors.push(h_err_deg);
@@ -225,7 +264,9 @@ pub fn evaluate(solution: &str, truth: &str) -> Result<(), String> {
     err_3d.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
     heading_errors.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
-    if heading_errors.is_empty() { heading_errors.push(0.0); }
+    if heading_errors.is_empty() {
+        heading_errors.push(0.0);
+    }
 
     let count = err_3d.len() as f64;
     let h_count = heading_errors.len() as f64;
@@ -249,12 +290,43 @@ pub fn evaluate(solution: &str, truth: &str) -> Result<(), String> {
     println!("==========================================================================================");
     println!("Evaluated {} epochs. Moving epochs: {}", count, h_count);
     println!("------------------------------------------------------------------------------------------");
-    println!("| Metric  |   25th %%  |   50th %%  |   75th %%  |   90th %%  |   95th %%  |   99th %%  |");
-    println!("|---------|------------|------------|------------|------------|------------|------------|");
-    println!("| Horiz   | {:>8.3} m | {:>8.3} m | {:>8.3} m | {:>8.3} m | {:>8.3} m | {:>8.3} m |", horiz_errors[p25], horiz_errors[p50], horiz_errors[p75], horiz_errors[p90], horiz_errors[p95], horiz_errors[p99]);
-    println!("| Vert    | {:>8.3} m | {:>8.3} m | {:>8.3} m | {:>8.3} m | {:>8.3} m | {:>8.3} m |", vert_errors[p25], vert_errors[p50], vert_errors[p75], vert_errors[p90], vert_errors[p95], vert_errors[p99]);
-    println!("| 3D      | {:>8.3} m | {:>8.3} m | {:>8.3} m | {:>8.3} m | {:>8.3} m | {:>8.3} m |", err_3d[p25], err_3d[p50], err_3d[p75], err_3d[p90], err_3d[p95], err_3d[p99]);
-    println!("| Heading | {:>8.3}°  | {:>8.3}°  | {:>8.3}°  | {:>8.3}°  | {:>8.3}°  | {:>8.3}°  |", heading_errors[hp25], heading_errors[hp50], heading_errors[hp75], heading_errors[hp90], heading_errors[hp95], heading_errors[hp99]);
+    println!(
+        "| Metric  |   25th %%  |   50th %%  |   75th %%  |   90th %%  |   95th %%  |   99th %%  |"
+    );
+    println!(
+        "|---------|------------|------------|------------|------------|------------|------------|"
+    );
+    println!(
+        "| Horiz   | {:>8.3} m | {:>8.3} m | {:>8.3} m | {:>8.3} m | {:>8.3} m | {:>8.3} m |",
+        horiz_errors[p25],
+        horiz_errors[p50],
+        horiz_errors[p75],
+        horiz_errors[p90],
+        horiz_errors[p95],
+        horiz_errors[p99]
+    );
+    println!(
+        "| Vert    | {:>8.3} m | {:>8.3} m | {:>8.3} m | {:>8.3} m | {:>8.3} m | {:>8.3} m |",
+        vert_errors[p25],
+        vert_errors[p50],
+        vert_errors[p75],
+        vert_errors[p90],
+        vert_errors[p95],
+        vert_errors[p99]
+    );
+    println!(
+        "| 3D      | {:>8.3} m | {:>8.3} m | {:>8.3} m | {:>8.3} m | {:>8.3} m | {:>8.3} m |",
+        err_3d[p25], err_3d[p50], err_3d[p75], err_3d[p90], err_3d[p95], err_3d[p99]
+    );
+    println!(
+        "| Heading | {:>8.3}°  | {:>8.3}°  | {:>8.3}°  | {:>8.3}°  | {:>8.3}°  | {:>8.3}°  |",
+        heading_errors[hp25],
+        heading_errors[hp50],
+        heading_errors[hp75],
+        heading_errors[hp90],
+        heading_errors[hp95],
+        heading_errors[hp99]
+    );
     println!("==================================================");
 
     Ok(())

@@ -1,68 +1,76 @@
-crates/gneiss-rtk/src/engine/measurement.rs:394:5: replace process_single_satellite_pair with ()
-crates/gneiss-rtk/src/engine/ppp.rs:12:8: delete ! in process_ppp
-crates/gneiss-rtk/src/engine/ppp.rs:13:34: replace - with + in process_ppp
-crates/gneiss-rtk/src/engine/ppp.rs:13:34: replace - with / in process_ppp
-crates/gneiss-rtk/src/engine/ppp.rs:53:5: replace process_single_sat -> Option<ProcessedSat<'a>> with None
-crates/gneiss-rtk/src/engine/ppp.rs:53:58: replace == with != in process_single_sat
-crates/gneiss-rtk/src/engine/ppp.rs:55:11: replace == with != in process_single_sat
-crates/gneiss-rtk/src/engine/ppp.rs:58:36: replace / with % in process_single_sat
-crates/gneiss-rtk/src/engine/ppp.rs:59:81: replace - with + in process_single_sat
-crates/gneiss-rtk/src/engine/ppp.rs:59:81: replace - with / in process_single_sat
-crates/gneiss-rtk/src/engine/ppp.rs:64:25: replace - with + in process_single_sat
-crates/gneiss-rtk/src/engine/ppp.rs:66:11: replace < with == in process_single_sat
-crates/gneiss-rtk/src/engine/ppp.rs:66:11: replace < with > in process_single_sat
-crates/gneiss-rtk/src/engine/ppp.rs:79:33: replace * with + in process_single_sat
-crates/gneiss-rtk/src/engine/ppp.rs:81:34: replace / with * in process_single_sat
-crates/gneiss-rtk/src/engine/ppp.rs:81:23: replace - with + in process_single_sat
-crates/gneiss-rtk/src/engine/ppp.rs:81:53: replace - with / in process_single_sat
-crates/gneiss-rtk/src/engine/ppp.rs:82:27: replace / with % in process_single_sat
-crates/gneiss-rtk/src/engine/ppp.rs:82:27: replace / with * in process_single_sat
-crates/gneiss-rtk/src/engine/ppp.rs:82:51: replace / with % in process_single_sat
-crates/gneiss-rtk/src/engine/ppp.rs:82:51: replace / with * in process_single_sat
-crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, None, None, Default::default(), true)
-crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, None, None, Default::default(), false)
-crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, None, Some(0.0), Default::default(), true)
-crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, None, Some(0.0), Default::default(), false)
-crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, None, Some(1.0), Default::default(), true)
-crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, None, Some(1.0), Default::default(), false)
-crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, None, Some(-1.0), Default::default(), true)
-crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, None, Some(-1.0), Default::default(), false)
-crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(0.0), None, Default::default(), true)
-crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(0.0), None, Default::default(), false)
-crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(0.0), Some(0.0), Default::default(), true)
-crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(0.0), Some(0.0), Default::default(), false)
-crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(0.0), Some(1.0), Default::default(), true)
-crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(0.0), Some(1.0), Default::default(), false)
-crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(0.0), Some(-1.0), Default::default(), true)
-crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(0.0), Some(-1.0), Default::default(), false)
-crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(1.0), None, Default::default(), true)
-crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(1.0), None, Default::default(), false)
-crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(1.0), Some(0.0), Default::default(), true)
-crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(1.0), Some(0.0), Default::default(), false)
-crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(1.0), Some(1.0), Default::default(), true)
-crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(1.0), Some(1.0), Default::default(), false)
-crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(1.0), Some(-1.0), Default::default(), true)
-crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(1.0), Some(-1.0), Default::default(), false)
-crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(-1.0), None, Default::default(), true)
-crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(-1.0), None, Default::default(), false)
-crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(-1.0), Some(0.0), Default::default(), true)
-crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(-1.0), Some(0.0), Default::default(), false)
-crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(-1.0), Some(1.0), Default::default(), true)
-crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(-1.0), Some(1.0), Default::default(), false)
-crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(-1.0), Some(-1.0), Default::default(), true)
-crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, None, Some(-1.0), Some(-1.0), Default::default(), false)
-crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, Some(0.0), None, None, Default::default(), true)
-crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, Some(0.0), None, None, Default::default(), false)
-crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, Some(0.0), None, Some(0.0), Default::default(), true)
-crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, Some(0.0), None, Some(0.0), Default::default(), false)
-crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, Some(0.0), None, Some(1.0), Default::default(), true)
-crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, Some(0.0), None, Some(1.0), Default::default(), false)
-crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, Some(0.0), None, Some(-1.0), Default::default(), true)
-crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, Some(0.0), None, Some(-1.0), Default::default(), false)
-crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, Some(0.0), Some(0.0), None, Default::default(), true)
-crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, Some(0.0), Some(0.0), None, Default::default(), false)
-crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, Some(0.0), Some(0.0), Some(0.0), Default::default(), true)
-crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, Some(0.0), Some(0.0), Some(0.0), Default::default(), false)
-crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, Some(0.0), Some(0.0), Some(1.0), Default::default(), true)
-crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, Some(0.0), Some(0.0), Some(1.0), Default::default(), false)
-crates/gneiss-rtk/src/engine/ppp.rs:91:5: replace get_obs_and_corrections -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>, crate::engine::ppp_math::OsbCorrections, bool) with (None, Some(0.0), Some(0.0), Some(-1.0), Default::default(), true)
+crates/gneiss-rtk/src/engine/updater.rs:16:5: replace apply_state_correction with ()
+crates/gneiss-rtk/src/engine/updater.rs:16:29: replace += with -= in apply_state_correction
+crates/gneiss-rtk/src/engine/updater.rs:16:29: replace += with *= in apply_state_correction
+crates/gneiss-rtk/src/engine/updater.rs:17:29: replace += with -= in apply_state_correction
+crates/gneiss-rtk/src/engine/updater.rs:17:29: replace += with *= in apply_state_correction
+crates/gneiss-rtk/src/engine/updater.rs:18:29: replace += with -= in apply_state_correction
+crates/gneiss-rtk/src/engine/updater.rs:18:29: replace += with *= in apply_state_correction
+crates/gneiss-rtk/src/engine/updater.rs:19:22: replace += with -= in apply_state_correction
+crates/gneiss-rtk/src/engine/updater.rs:19:22: replace += with *= in apply_state_correction
+crates/gneiss-rtk/src/engine/updater.rs:20:22: replace += with -= in apply_state_correction
+crates/gneiss-rtk/src/engine/updater.rs:20:22: replace += with *= in apply_state_correction
+crates/gneiss-rtk/src/engine/updater.rs:21:22: replace += with -= in apply_state_correction
+crates/gneiss-rtk/src/engine/updater.rs:21:22: replace += with *= in apply_state_correction
+crates/gneiss-rtk/src/engine/updater.rs:22:17: replace >= with < in apply_state_correction
+crates/gneiss-rtk/src/engine/updater.rs:23:17: replace > with == in apply_state_correction
+crates/gneiss-rtk/src/engine/updater.rs:23:17: replace > with < in apply_state_correction
+crates/gneiss-rtk/src/engine/updater.rs:23:17: replace > with >= in apply_state_correction
+crates/gneiss-rtk/src/engine/updater.rs:24:68: replace += with -= in apply_state_correction
+crates/gneiss-rtk/src/engine/updater.rs:24:68: replace += with *= in apply_state_correction
+crates/gneiss-rtk/src/engine/updater.rs:24:105: replace + with - in apply_state_correction
+crates/gneiss-rtk/src/engine/updater.rs:24:105: replace + with * in apply_state_correction
+crates/gneiss-rtk/src/engine/updater.rs:29:5: replace apply_imu_and_clock_correction with ()
+crates/gneiss-rtk/src/engine/updater.rs:32:29: replace * with / in apply_imu_and_clock_correction
+crates/gneiss-rtk/src/engine/updater.rs:35:24: replace += with -= in apply_imu_and_clock_correction
+crates/gneiss-rtk/src/engine/updater.rs:35:24: replace += with *= in apply_imu_and_clock_correction
+crates/gneiss-rtk/src/engine/updater.rs:35:53: replace += with -= in apply_imu_and_clock_correction
+crates/gneiss-rtk/src/engine/updater.rs:35:53: replace += with *= in apply_imu_and_clock_correction
+crates/gneiss-rtk/src/engine/updater.rs:35:83: replace += with -= in apply_imu_and_clock_correction
+crates/gneiss-rtk/src/engine/updater.rs:35:83: replace += with *= in apply_imu_and_clock_correction
+crates/gneiss-rtk/src/engine/updater.rs:36:23: replace += with -= in apply_imu_and_clock_correction
+crates/gneiss-rtk/src/engine/updater.rs:36:23: replace += with *= in apply_imu_and_clock_correction
+crates/gneiss-rtk/src/engine/updater.rs:36:52: replace += with -= in apply_imu_and_clock_correction
+crates/gneiss-rtk/src/engine/updater.rs:36:52: replace += with *= in apply_imu_and_clock_correction
+crates/gneiss-rtk/src/engine/updater.rs:36:81: replace += with -= in apply_imu_and_clock_correction
+crates/gneiss-rtk/src/engine/updater.rs:36:81: replace += with *= in apply_imu_and_clock_correction
+crates/gneiss-rtk/src/engine/updater.rs:37:17: replace > with == in apply_imu_and_clock_correction
+crates/gneiss-rtk/src/engine/updater.rs:37:17: replace > with < in apply_imu_and_clock_correction
+crates/gneiss-rtk/src/engine/updater.rs:38:28: replace += with -= in apply_imu_and_clock_correction
+crates/gneiss-rtk/src/engine/updater.rs:38:28: replace += with *= in apply_imu_and_clock_correction
+crates/gneiss-rtk/src/engine/updater.rs:39:23: replace += with -= in apply_imu_and_clock_correction
+crates/gneiss-rtk/src/engine/updater.rs:39:23: replace += with *= in apply_imu_and_clock_correction
+crates/gneiss-rtk/src/engine/updater.rs:40:23: replace += with -= in apply_imu_and_clock_correction
+crates/gneiss-rtk/src/engine/updater.rs:40:23: replace += with *= in apply_imu_and_clock_correction
+crates/gneiss-rtk/src/engine/updater.rs:41:23: replace += with -= in apply_imu_and_clock_correction
+crates/gneiss-rtk/src/engine/updater.rs:41:23: replace += with *= in apply_imu_and_clock_correction
+crates/gneiss-rtk/src/engine/updater.rs:42:29: replace += with -= in apply_imu_and_clock_correction
+crates/gneiss-rtk/src/engine/updater.rs:42:29: replace += with *= in apply_imu_and_clock_correction
+crates/gneiss-rtk/src/engine/updater.rs:43:32: replace + with - in apply_imu_and_clock_correction
+crates/gneiss-rtk/src/engine/updater.rs:43:32: replace + with * in apply_imu_and_clock_correction
+crates/gneiss-rtk/src/engine/updater.rs:54:5: replace update_loosely_coupled -> Result<(), UpdateError> with Ok(())
+crates/gneiss-rtk/src/engine/updater.rs:63:20: replace + with - in update_loosely_coupled
+crates/gneiss-rtk/src/engine/updater.rs:73:51: replace * with + in update_loosely_coupled
+crates/gneiss-rtk/src/engine/updater.rs:73:31: replace * with + in update_loosely_coupled
+crates/gneiss-rtk/src/engine/updater.rs:74:17: replace * with + in update_loosely_coupled
+crates/gneiss-rtk/src/engine/updater.rs:105:24: replace * with + in compute_update_iteration
+crates/gneiss-rtk/src/engine/updater.rs:106:55: replace + with * in compute_update_iteration
+crates/gneiss-rtk/src/engine/updater.rs:106:31: replace * with + in compute_update_iteration
+crates/gneiss-rtk/src/engine/updater.rs:107:72: replace > with == in compute_update_iteration
+crates/gneiss-rtk/src/engine/updater.rs:107:72: replace > with < in compute_update_iteration
+crates/gneiss-rtk/src/engine/updater.rs:107:72: replace > with >= in compute_update_iteration
+crates/gneiss-rtk/src/engine/updater.rs:114:47: replace * with + in compute_update_iteration
+crates/gneiss-rtk/src/engine/updater.rs:114:23: replace * with + in compute_update_iteration
+crates/gneiss-rtk/src/engine/updater.rs:115:17: replace * with + in compute_update_iteration
+crates/gneiss-rtk/src/engine/updater.rs:122:35: replace * with + in compute_update_iteration
+crates/gneiss-rtk/src/engine/updater.rs:138:16: replace != with == in update
+crates/gneiss-rtk/src/engine/updater.rs:138:42: replace != with == in update
+crates/gneiss-rtk/src/engine/updater.rs:148:23: replace == with != in update
+crates/gneiss-rtk/src/engine/updater.rs:232:5: replace apply_fix_and_hold -> Result<(), UpdateError> with Ok(())
+crates/gneiss-rtk/src/engine/updater.rs:233:15: replace == with != in apply_fix_and_hold
+crates/gneiss-rtk/src/engine/updater.rs:240:27: replace * with + in apply_fix_and_hold
+crates/gneiss-rtk/src/engine/updater.rs:244:22: replace * with + in apply_fix_and_hold
+crates/gneiss-rtk/src/engine/updater.rs:245:53: replace + with * in apply_fix_and_hold
+crates/gneiss-rtk/src/engine/updater.rs:245:32: replace * with + in apply_fix_and_hold
+crates/gneiss-rtk/src/engine/updater.rs:252:56: replace * with + in apply_fix_and_hold
+crates/gneiss-rtk/src/engine/updater.rs:252:35: replace * with + in apply_fix_and_hold
+crates/gneiss-rtk/src/engine/updater.rs:261:17: replace * with + in apply_fix_and_hold

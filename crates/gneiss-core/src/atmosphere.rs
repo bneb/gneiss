@@ -1,5 +1,5 @@
-use nalgebra::Vector3;
 use crate::time::GpsTime;
+use nalgebra::Vector3;
 
 /// Ionospheric delay model parameters (Klobuchar).
 #[derive(Debug, Clone, Copy)]
@@ -11,8 +11,8 @@ pub struct KlobucharParams {
 impl Default for KlobucharParams {
     fn default() -> Self {
         Self {
-            alpha: [0.1118E-07, -0.7451E-08, -0.5960E-07,  0.1192E-06],
-            beta:  [0.1167E+06, -0.2294E+06, -0.1311E+06,  0.1049E+07],
+            alpha: [0.1118E-07, -0.7451E-08, -0.5960E-07, 0.1192E-06],
+            beta: [0.1167E+06, -0.2294E+06, -0.1311E+06, 0.1049E+07],
         }
     }
 }
@@ -44,23 +44,41 @@ impl AtmosphereModel {
     /// `az`: Satellite azimuth in radians.
     /// `el`: Satellite elevation in radians.
     /// `time`: GPS time of observation.
-    pub fn iono_klobuchar(params: &KlobucharParams, pos_llh: Vector3<f64>, _az: f64, el: f64, time: GpsTime) -> f64 {
+    pub fn iono_klobuchar(
+        params: &KlobucharParams,
+        pos_llh: Vector3<f64>,
+        _az: f64,
+        el: f64,
+        time: GpsTime,
+    ) -> f64 {
         // Implementation based on IS-GPS-200
         let f = 1.0 + 16.0 * libm::pow(0.53 - el / core::f64::consts::PI, 3.0);
         let phi_m = pos_llh.x / core::f64::consts::PI + 0.064 * libm::cos(pos_llh.y - 1.617);
-        
+
         let mut t = 43200.0 * phi_m + time.tow;
         t %= 86400.0;
-        if t < 0.0 { t += 86400.0; }
+        if t < 0.0 {
+            t += 86400.0;
+        }
 
-        let mut a = params.alpha[0] + params.alpha[1] * phi_m + params.alpha[2] * phi_m * phi_m + params.alpha[3] * phi_m * phi_m * phi_m;
-        if a < 0.0 { a = 0.0; }
+        let mut a = params.alpha[0]
+            + params.alpha[1] * phi_m
+            + params.alpha[2] * phi_m * phi_m
+            + params.alpha[3] * phi_m * phi_m * phi_m;
+        if a < 0.0 {
+            a = 0.0;
+        }
 
-        let mut p = params.beta[0] + params.beta[1] * phi_m + params.beta[2] * phi_m * phi_m + params.beta[3] * phi_m * phi_m * phi_m;
-        if p < 72000.0 { p = 72000.0; }
+        let mut p = params.beta[0]
+            + params.beta[1] * phi_m
+            + params.beta[2] * phi_m * phi_m
+            + params.beta[3] * phi_m * phi_m * phi_m;
+        if p < 72000.0 {
+            p = 72000.0;
+        }
 
         let x = 2.0 * core::f64::consts::PI * (t - 50400.0) / p;
-        
+
         let delay = if libm::fabs(x) < 1.57 {
             5e-9 + a * (1.0 - x * x / 2.0 + x * x * x * x / 24.0)
         } else {
@@ -77,7 +95,6 @@ impl AtmosphereModel {
         let t = params.temp_k - 0.0065 * height;
         let e = 6.108 * libm::exp((17.15 * t - 4684.0) / (t - 38.45)) * params.hum_rel;
 
-        
         0.002277 / libm::cos(z) * (p + (1255.0 / t + 0.05) * e - libm::tan(z) * libm::tan(z))
     }
 
@@ -92,9 +109,10 @@ impl AtmosphereModel {
         let t = params.temp_k - 0.0065 * height;
         let e = 6.108 * libm::exp((17.15 * t - 4684.0) / (t - 38.45)) * params.hum_rel;
 
-        let trph = 0.0022768 * p / (1.0 - 0.00266 * libm::cos(2.0 * pos_llh.x) - 0.00028 * height / 1000.0);
+        let trph = 0.0022768 * p
+            / (1.0 - 0.00266 * libm::cos(2.0 * pos_llh.x) - 0.00028 * height / 1000.0);
         let trpw = 0.002277 * (1255.0 / t + 0.05) * e;
-        
+
         (trph + trpw) / libm::cos(z)
     }
 
@@ -120,24 +138,76 @@ impl AtmosphereModel {
         let mut lat = pos_llh.x * 180.0 / core::f64::consts::PI;
 
         let coef = [
-            [ 1.2769934E-3, 1.2683230E-3, 1.2465397E-3, 1.2196049E-3, 1.2045996E-3 ],
-            [ 2.9153695E-3, 2.9152299E-3, 2.9288445E-3, 2.9022565E-3, 2.9024912E-3 ],
-            [ 62.610505E-3, 62.837393E-3, 63.721774E-3, 63.824265E-3, 64.258455E-3 ],
-            
-            [ 0.0000000E-0, 1.2709626E-5, 2.6523662E-5, 3.4000452E-5, 4.1202191E-5 ],
-            [ 0.0000000E-0, 2.1414979E-5, 3.0160779E-5, 7.2562722E-5, 11.723375E-5 ],
-            [ 0.0000000E-0, 9.0128400E-5, 4.3497037E-5, 84.795348E-5, 170.37206E-5 ],
-            
-            [ 5.8021897E-4, 5.6794847E-4, 5.8118019E-4, 5.9727542E-4, 6.1641693E-4 ],
-            [ 1.4275268E-3, 1.5138625E-3, 1.4572752E-3, 1.5007428E-3, 1.7599082E-3 ],
-            [ 4.3472961E-2, 4.6729510E-2, 4.3908931E-2, 4.4626982E-2, 5.4736038E-2 ]
+            [
+                1.2769934E-3,
+                1.2683230E-3,
+                1.2465397E-3,
+                1.2196049E-3,
+                1.2045996E-3,
+            ],
+            [
+                2.9153695E-3,
+                2.9152299E-3,
+                2.9288445E-3,
+                2.9022565E-3,
+                2.9024912E-3,
+            ],
+            [
+                62.610505E-3,
+                62.837393E-3,
+                63.721774E-3,
+                63.824265E-3,
+                64.258455E-3,
+            ],
+            [
+                0.0000000E-0,
+                1.2709626E-5,
+                2.6523662E-5,
+                3.4000452E-5,
+                4.1202191E-5,
+            ],
+            [
+                0.0000000E-0,
+                2.1414979E-5,
+                3.0160779E-5,
+                7.2562722E-5,
+                11.723375E-5,
+            ],
+            [
+                0.0000000E-0,
+                9.0128400E-5,
+                4.3497037E-5,
+                84.795348E-5,
+                170.37206E-5,
+            ],
+            [
+                5.8021897E-4,
+                5.6794847E-4,
+                5.8118019E-4,
+                5.9727542E-4,
+                6.1641693E-4,
+            ],
+            [
+                1.4275268E-3,
+                1.5138625E-3,
+                1.4572752E-3,
+                1.5007428E-3,
+                1.7599082E-3,
+            ],
+            [
+                4.3472961E-2,
+                4.6729510E-2,
+                4.3908931E-2,
+                4.4626982E-2,
+                5.4736038E-2,
+            ],
         ];
-        let aht = [ 2.53E-5, 5.49E-3, 1.14E-3 ];
+        let aht = [2.53E-5, 5.49E-3, 1.14E-3];
 
         let fractional_year = time.to_fractional_year();
         let doy_fraction = fractional_year - libm::floor(fractional_year);
         let y = doy_fraction - (28.0 / 365.25) + if lat < 0.0 { 0.5 } else { 0.0 };
-        
+
         let cosy = libm::cos(2.0 * core::f64::consts::PI * y);
         lat = libm::fabs(lat);
 
@@ -145,8 +215,8 @@ impl AtmosphereModel {
         let mut aw = [0.0; 3];
 
         for i in 0..3 {
-            ah[i] = Self::nmf_interpc(&coef[i], lat) - Self::nmf_interpc(&coef[i+3], lat) * cosy;
-            aw[i] = Self::nmf_interpc(&coef[i+6], lat);
+            ah[i] = Self::nmf_interpc(&coef[i], lat) - Self::nmf_interpc(&coef[i + 3], lat) * cosy;
+            aw[i] = Self::nmf_interpc(&coef[i + 6], lat);
         }
 
         let dm = (1.0 / libm::sin(el) - Self::nmf_mapf(el, aht[0], aht[1], aht[2])) * hgt / 1000.0;
@@ -169,24 +239,79 @@ impl AtmosphereModel {
         let _lat = pos_llh.x * 180.0 / core::f64::consts::PI;
 
         let _coef = [
-            [ 1.2769934E-3, 1.2683230E-3, 1.2465397E-3, 1.2196049E-3, 1.2045996E-3 ],
-            [ 2.9153695E-3, 2.9152299E-3, 2.9288445E-3, 2.9022565E-3, 2.9024912E-3 ],
-            [ 62.610505E-3, 62.837393E-3, 63.721774E-3, 63.824265E-3, 64.258455E-3 ],
-            
-            [ 0.0000000E-0, 1.2709626E-5, 2.6523662E-5, 3.4000452E-5, 4.1202191E-5 ],
-            [ 0.0000000E-0, 2.1414979E-5, 3.0160779E-5, 7.2562722E-5, 11.723375E-5 ],
-            [ 0.0000000E-0, 9.0128400E-5, 4.3497037E-5, 84.795348E-5, 170.37206E-5 ],
-            
-            [ 5.8021897E-4, 5.6794847E-4, 5.8118019E-4, 5.9727542E-4, 6.1641693E-4 ],
-            [ 1.4275268E-3, 1.5138625E-3, 1.4572752E-3, 1.5007428E-3, 1.7599082E-3 ],
-            [ 4.3472961E-2, 4.6729510E-2, 4.3908931E-2, 4.4626982E-2, 5.4736038E-2 ]
+            [
+                1.2769934E-3,
+                1.2683230E-3,
+                1.2465397E-3,
+                1.2196049E-3,
+                1.2045996E-3,
+            ],
+            [
+                2.9153695E-3,
+                2.9152299E-3,
+                2.9288445E-3,
+                2.9022565E-3,
+                2.9024912E-3,
+            ],
+            [
+                62.610505E-3,
+                62.837393E-3,
+                63.721774E-3,
+                63.824265E-3,
+                64.258455E-3,
+            ],
+            [
+                0.0000000E-0,
+                1.2709626E-5,
+                2.6523662E-5,
+                3.4000452E-5,
+                4.1202191E-5,
+            ],
+            [
+                0.0000000E-0,
+                2.1414979E-5,
+                3.0160779E-5,
+                7.2562722E-5,
+                11.723375E-5,
+            ],
+            [
+                0.0000000E-0,
+                9.0128400E-5,
+                4.3497037E-5,
+                84.795348E-5,
+                170.37206E-5,
+            ],
+            [
+                5.8021897E-4,
+                5.6794847E-4,
+                5.8118019E-4,
+                5.9727542E-4,
+                6.1641693E-4,
+            ],
+            [
+                1.4275268E-3,
+                1.5138625E-3,
+                1.4572752E-3,
+                1.5007428E-3,
+                1.7599082E-3,
+            ],
+            [
+                4.3472961E-2,
+                4.6729510E-2,
+                4.3908931E-2,
+                4.4626982E-2,
+                5.4736038E-2,
+            ],
         ];
         let (m_h, m_w) = Self::nmf_mapping_functions(pos_llh, el, time);
 
         // Zenith dry and wet delays (simplified Saastamoinen)
-        let z_dry = 0.0022768 * params.press_hpa / (1.0 - 0.00266 * libm::cos(2.0 * pos_llh.x) - 0.00028 * hgt / 1000.0);
-        
-        let e = 6.108 * libm::exp((17.15 * params.temp_k - 4684.0) / (params.temp_k - 38.45)) * params.hum_rel;
+        let z_dry = 0.0022768 * params.press_hpa
+            / (1.0 - 0.00266 * libm::cos(2.0 * pos_llh.x) - 0.00028 * hgt / 1000.0);
+
+        let e = 6.108
+            * libm::exp((17.15 * params.temp_k - 4684.0) / (params.temp_k - 38.45))
+            * params.hum_rel;
         let z_wet = 0.002277 * (1255.0 / params.temp_k + 0.05) * e;
 
         z_dry * m_h + z_wet * m_w
@@ -196,12 +321,15 @@ impl AtmosphereModel {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
 
     #[test]
     fn test_tropo_delay() {
         let params = TropoParams::default();
         let delay = AtmosphereModel::tropo_saastamoinen(&params, 0.5, 100.0);
-        assert!((delay - 4.94).abs() < 0.05, "Delay should be approximately 4.94m, got {}", delay);
+        assert!(
+            (delay - 4.94).abs() < 0.05,
+            "Delay should be approximately 4.94m, got {}",
+            delay
+        );
     }
 }

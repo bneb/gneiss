@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/engine/updater.rs
++++ replace / with % in update
+@@ -205,17 +205,17 @@
+             } else if max_outlier_ratio == f64::INFINITY || max_outlier_ratio > 3.0 {
+                 tracing::warn!("EKF update failed: InvalidMeasurement (outlier ratio {:.2})", max_outlier_ratio);
+                 return Err(UpdateError::InvalidMeasurement);
+             }
+         }
+ 
+         let mut weights_changed = false;
+         for i in 0..weights.len() {
+-            let new_r_ii = base_r[(i, i)] / weights[i];
++            let new_r_ii = base_r[(i, i)] % /* ~ changed by cargo-mutants ~ */ weights[i];
+             if (current_r[(i, i)] - new_r_ii).abs() > base_r[(i, i)] * 0.05 {
+                 weights_changed = true;
+             }
+             current_r[(i, i)] = new_r_ii;
+         }
+ 
+         if !weights_changed || _iter >= 99 {
+             break;

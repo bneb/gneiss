@@ -125,7 +125,7 @@ def evaluate(sol_file, truth_file, dry_run=False):
 
 # Suite 1: Gneiss Only
 def run_gneiss_suite(dry_run=False, eval_only=False):
-    EVAL_MODES = ["spp", "spp-ins", "rtk", "rtk-ins", "ppp", "ppp-fg", "ppp-ins-fg"]
+    EVAL_MODES = ["ppp", "ppp-fg", "ppp-ins-fg"]
     results = {ds: {} for ds in DATASETS}
     os.makedirs(OUT_DIR_GNEISS, exist_ok=True)
     

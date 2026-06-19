@@ -1,5 +1,5 @@
-use gneiss_rtk::engine::{ProcessingEngine, EngineConfig};
 use gneiss_parsers::ubx::parse_ubx_frame;
+use gneiss_rtk::engine::{EngineConfig, ProcessingEngine};
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
@@ -8,11 +8,17 @@ use std::path::Path;
 fn test_urbannav_tst_replay_skeleton() {
     // This test is a placeholder for replaying the UrbanNav TST-1 dataset.
     // It verifies that the engine can handle a stream of real UBX/IMU data.
-    
-    let dataset_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../datasets/urbannav/TST1/rover.ubx");
-    
+
+    let dataset_path =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../datasets/urbannav/TST1/rover.ubx");
+
     // Skip if dataset is not present or empty (it's large and not committed)
-    if !dataset_path.exists() || std::fs::metadata(&dataset_path).map(|m| m.len()).unwrap_or(0) == 0 {
+    if !dataset_path.exists()
+        || std::fs::metadata(&dataset_path)
+            .map(|m| m.len())
+            .unwrap_or(0)
+            == 0
+    {
         return;
     }
 
@@ -37,7 +43,10 @@ fn test_urbannav_tst_replay_skeleton() {
             pos += 1;
         }
     }
-    
+
     println!("Parsed {} UBX frames from the dataset.", parsed_count);
-    assert!(parsed_count > 0, "Expected to parse at least one UBX frame from the dataset");
+    assert!(
+        parsed_count > 0,
+        "Expected to parse at least one UBX frame from the dataset"
+    );
 }

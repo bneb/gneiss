@@ -5,19 +5,13 @@ import shutil
 
 os.makedirs("datasets/wtzr_ppp_1224", exist_ok=True)
 
-# 1. Download WTZR from CDDIS
-url_obs = "https://cddis.nasa.gov/archive/gnss/data/daily/2020/359/20d/WTZR00DEU_R_20203590000_01D_30S_MO.crx.gz"
+# 1. Download WTZR from BKG (avoids CDDIS Earthdata auth)
+url_obs = "https://igs.bkg.bund.de/root_ftp/IGS/obs/2020/359/WTZR00DEU_R_20203590000_01D_30S_MO.crx.gz"
 dest_obs = "datasets/wtzr_ppp_1224/WTZR00DEU_R_20203590000_01D_30S_MO.crx.gz"
 
-token = os.environ.get("EARTHDATA_TOKEN", "eyJ0...")
-
 print("Downloading WTZR observation...")
-req = urllib.request.Request(url_obs)
-req.add_header("Authorization", f"Bearer {token}")
 try:
-    with urllib.request.urlopen(req) as response:
-        with open(dest_obs, 'wb') as f_out:
-            shutil.copyfileobj(response, f_out)
+    urllib.request.urlretrieve(url_obs, dest_obs)
     print("Done")
 except Exception as e:
     print(f"Failed to download OBS: {e}")

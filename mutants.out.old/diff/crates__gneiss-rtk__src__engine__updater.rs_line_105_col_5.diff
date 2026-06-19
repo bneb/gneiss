@@ -1,0 +1,41 @@
+--- crates/gneiss-rtk/src/engine/updater.rs
++++ replace compute_update_iteration -> Result<EkfUpdateResult, UpdateError> with Ok(Default::default())
+@@ -97,37 +97,17 @@
+     current_z: &DVector<f64>,
+     current_h: &DMatrix<f64>,
+     current_r: &DMatrix<f64>,
+     current_valid: &[usize],
+     meas_types: Option<&[(gneiss_core::sat::SatelliteId, u8)]>,
+     max_innovation: f64,
+     tuning: &crate::engine::config::EkfTuningConfig,
+ ) -> Result<EkfUpdateResult, UpdateError> {
+-    let hp = current_h * state_cov;
+-    let s: DMatrix<f64> = &hp * current_h.transpose() + current_r;
+-    if s.iter().any(|x: &f64| x.is_nan() || x.is_infinite() || x.abs() > 1e15) {
+-        tracing::warn!("EKF update failed: SingularMatrix (NaN/Inf in S)");
+-        return Err(UpdateError::SingularMatrix);
+-    }
+-    
+-    let s_inv = invert_matrix_robust(&s);
+-    
+-    let k = state_cov * current_h.transpose() * &s_inv;
+-    let dx = &k * current_z;
+-    
+-    if dx.iter().any(|x: &f64| x.is_nan()) {
+-        tracing::warn!("EKF update failed: SingularMatrix (NaN in dx)");
+-        return Err(UpdateError::SingularMatrix);
+-    }
+-
+-    let v = current_z - current_h * &dx;
+-    let (worst_idx, max_outlier_ratio, weights) = evaluate_post_fit_outliers::<C>(&v, &s, current_z, current_valid, meas_types, max_innovation, tuning);
+-    
+-    Ok(EkfUpdateResult { dx, k, worst_idx, max_outlier_ratio, weights })
++    Ok(Default::default()) /* ~ changed by cargo-mutants ~ */
+ }
+ 
+ #[allow(clippy::too_many_arguments)]
+ pub fn update<C: CouplingStrategy>(
+     state: &mut RtkState, 
+     z: &DVector<f64>, 
+     h: &DMatrix<f64>, 
+     r: &DMatrix<f64>, 

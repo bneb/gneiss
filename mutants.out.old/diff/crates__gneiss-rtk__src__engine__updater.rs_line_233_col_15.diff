@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/engine/updater.rs
++++ replace == with != in apply_fix_and_hold
+@@ -225,17 +225,17 @@
+     apply_state_correction(state, &dx);
+     state.covariance = apply_joseph_covariance_update(&state.covariance, &k, &current_h, &current_r);
+     
+     Ok((current_valid, dx))
+ }
+ 
+ pub fn apply_fix_and_hold(state: &mut RtkState, z_dd: &DVector<f64>, d_full: &DMatrix<f64>, var: f64) -> Result<(), UpdateError> {
+     let num_dd = z_dd.len();
+-    if num_dd == 0 { return Ok(()); }
++    if num_dd != /* ~ changed by cargo-mutants ~ */ 0 { return Ok(()); }
+     
+     let mut a_sd_full = DVector::zeros(d_full.ncols());
+     for i in 0..state.ambiguities.len() {
+         a_sd_full[crate::filter::CORE_STATE_SIZE + i] = state.ambiguities[i];
+     }
+     
+     let v = z_dd - d_full * &a_sd_full;
+     let mut r = DMatrix::zeros(num_dd, num_dd);

@@ -1,0 +1,21 @@
+--- crates/gneiss-rtk/src/engine/updater.rs
++++ replace * with + in update_loosely_coupled
+@@ -65,17 +65,17 @@
+     
+     let mut h_mat = DMatrix::zeros(6, state.covariance.ncols());
+     h_mat.view_mut((0, 0), (6, 6)).fill_diagonal(1.0);
+ 
+     if state.covariance.nrows() >= crate::filter::CORE_STATE_SIZE {
+         populate_loosely_coupled_jacobian(&mut h_mat, &state.attitude, &lever_arm, &omega_b);
+     }
+     
+-    let k = &state.covariance * h_mat.transpose() * s_inv;
++    let k = &state.covariance + /* ~ changed by cargo-mutants ~ */ h_mat.transpose() * s_inv;
+     let dx = &k * &z;
+     
+     if dx.iter().any(|x: &f64| x.is_nan()) {
+         return Err(UpdateError::SingularMatrix);
+     }
+     
+     apply_state_correction(state, &dx);
+     state.covariance = apply_joseph_covariance_update(&state.covariance, &k, &h_mat, &r_6x6);

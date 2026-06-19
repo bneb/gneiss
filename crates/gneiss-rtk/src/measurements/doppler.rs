@@ -1,3 +1,5 @@
+use crate::filter::RtkState;
+use gneiss_core::ephemeris::Ephemeris;
 /// Doppler-based velocity estimation for EKF update.
 ///
 /// Doppler measurements provide instantaneous velocity information by measuring
@@ -6,10 +8,7 @@
 ///
 /// This module computes the Doppler velocity EKF update matrices (z, H, R)
 /// for use in the SPP and RTK engines.
-
 use nalgebra::{DMatrix, DVector};
-use gneiss_core::ephemeris::Ephemeris;
-use crate::filter::RtkState;
 
 const LIGHT_SPEED: f64 = gneiss_core::constants::SPEED_OF_LIGHT_M_S;
 
@@ -41,7 +40,6 @@ pub fn compute_doppler_update(
     ephemerides: &[Ephemeris],
     dop_base_var: f64,
 ) -> Option<(DVector<f64>, DMatrix<f64>, DMatrix<f64>)> {
-
     let state_size = state.covariance.ncols();
     let mut z_vals = Vec::new();
     let mut h_rows = Vec::new();
@@ -89,7 +87,8 @@ pub fn compute_doppler_update(
         }
 
         // Variance: scaled by elevation and SNR
-        let var = dop_base_var * gneiss_core::variance::observation_variance(meas.snr, meas.elevation, 10.0, 10.0);
+        let var = dop_base_var
+            * gneiss_core::variance::observation_variance(meas.snr, meas.elevation, 10.0, 10.0);
 
         z_vals.push(z_i);
         h_rows.push(h_row);
@@ -120,21 +119,41 @@ pub fn compute_doppler_update(
 mod tests {
     use super::*;
     use gneiss_core::coords::{Coordinate, Datum, Frame};
-    use gneiss_core::sat::{SatelliteId, Constellation};
     use gneiss_core::ephemeris::{Ephemeris, GpsEphemeris};
+    use gneiss_core::sat::{Constellation, SatelliteId};
     use gneiss_core::time::GpsTime;
     use nalgebra::Vector3;
 
     fn make_test_ephemeris(prn: u8, m0: f64, omega0: f64) -> Ephemeris {
         let time = GpsTime::new(2137, 422922.0);
         Ephemeris::Gps(GpsEphemeris {
-            sat: SatelliteId { constellation: Constellation::Gps, prn },
-            toe: time, toc: time,
-            af0: 0.0, af1: 0.0, af2: 0.0,
-            crs: 0.0, crc: 0.0, cuc: 0.0, cus: 0.0, cic: 0.0, cis: 0.0,
-            m0, e: 0.01, sqrt_a: 5153.6, delta_n: 0.0,
-            omega0, omega_dot: 0.0, i0: 1.0, idot: 0.0, omega: 0.0, tgd: 0.0,
-            iode: 0, iodc: 0,
+            sat: SatelliteId {
+                constellation: Constellation::Gps,
+                prn,
+            },
+            toe: time,
+            toc: time,
+            af0: 0.0,
+            af1: 0.0,
+            af2: 0.0,
+            crs: 0.0,
+            crc: 0.0,
+            cuc: 0.0,
+            cus: 0.0,
+            cic: 0.0,
+            cis: 0.0,
+            m0,
+            e: 0.01,
+            sqrt_a: 5153.6,
+            delta_n: 0.0,
+            omega0,
+            omega_dot: 0.0,
+            i0: 1.0,
+            idot: 0.0,
+            omega: 0.0,
+            tgd: 0.0,
+            iode: 0,
+            iodc: 0,
         })
     }
 
@@ -143,7 +162,9 @@ mod tests {
         let time = GpsTime::new(2137, 422922.0);
         let pos = Coordinate::new(
             Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0),
-            Datum::WGS84, Frame::ECEF, time,
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
         );
         let state = RtkState::new(time, pos, 1.0);
 
@@ -182,18 +203,50 @@ mod tests {
         }
 
         let result = compute_doppler_update(&state, &measurements, &ephemerides, 0.0004);
-        assert!(result.is_some(), "Should compute Doppler update with 5 sats");
+        assert!(
+            result.is_some(),
+            "Should compute Doppler update with 5 sats"
+        );
         let (z, h, r) = result.unwrap();
-        assert_eq!(z.len(), measurements.len(), "Innovation vector size should match measurements");
-        assert_eq!(r.nrows(), measurements.len(), "R matrix size should match measurements");
-        assert_eq!(h.nrows(), measurements.len(), "H matrix rows should match measurements");
-        assert_eq!(h.ncols(), state.covariance.ncols(), "H matrix cols should match state size");
+        assert_eq!(
+            z.len(),
+            measurements.len(),
+            "Innovation vector size should match measurements"
+        );
+        assert_eq!(
+            r.nrows(),
+            measurements.len(),
+            "R matrix size should match measurements"
+        );
+        assert_eq!(
+            h.nrows(),
+            measurements.len(),
+            "H matrix rows should match measurements"
+        );
+        assert_eq!(
+            h.ncols(),
+            state.covariance.ncols(),
+            "H matrix cols should match state size"
+        );
         // For a consistent stationary scenario, innovations should be near zero
         for i in 0..z.len() {
-            assert!(z[i].abs() < 0.1,
-                "Doppler innovation[{}] should be near zero for stationary, got {}", i, z[i]);
-            let expected_var = 0.0004 * gneiss_core::variance::observation_variance(45.0, measurements[i].elevation, 10.0, 10.0);
-            assert!((r[(i, i)] - expected_var).abs() < 1e-6, "r matrix should have correct variance");
+            assert!(
+                z[i].abs() < 0.1,
+                "Doppler innovation[{}] should be near zero for stationary, got {}",
+                i,
+                z[i]
+            );
+            let expected_var = 0.0004
+                * gneiss_core::variance::observation_variance(
+                    45.0,
+                    measurements[i].elevation,
+                    10.0,
+                    10.0,
+                );
+            assert!(
+                (r[(i, i)] - expected_var).abs() < 1e-6,
+                "r matrix should have correct variance"
+            );
         }
     }
 
@@ -202,7 +255,9 @@ mod tests {
         let time = GpsTime::new(2137, 422922.0);
         let pos = Coordinate::new(
             Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0),
-            Datum::WGS84, Frame::ECEF, time,
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
         );
         let mut state = RtkState::new(time, pos, 1.0);
         // State thinks receiver is moving! This catches the relative velocity mutant.
@@ -248,10 +303,26 @@ mod tests {
         assert!(result.is_some());
 
         let (z, h, r) = result.unwrap();
-        assert_eq!(z.len(), measurements.len(), "Innovation vector size should match measurements");
-        assert_eq!(r.nrows(), measurements.len(), "R matrix size should match measurements");
-        assert_eq!(h.nrows(), measurements.len(), "H matrix rows should match measurements");
-        assert_eq!(h.ncols(), state.covariance.ncols(), "H matrix cols should match state size");
+        assert_eq!(
+            z.len(),
+            measurements.len(),
+            "Innovation vector size should match measurements"
+        );
+        assert_eq!(
+            r.nrows(),
+            measurements.len(),
+            "R matrix size should match measurements"
+        );
+        assert_eq!(
+            h.nrows(),
+            measurements.len(),
+            "H matrix rows should match measurements"
+        );
+        assert_eq!(
+            h.ncols(),
+            state.covariance.ncols(),
+            "H matrix cols should match state size"
+        );
 
         // Apply the Kalman update manually to verify velocity correction
         let h_t = h.transpose();
@@ -266,10 +337,17 @@ mod tests {
         let corrected_vel = state.velocity + dv;
         let error_before = (state.velocity - true_velocity).norm();
         let error_after = (corrected_vel - true_velocity).norm();
-        assert!(error_after < error_before,
+        assert!(
+            error_after < error_before,
             "Doppler should improve velocity estimate: before={:.3}, after={:.3}",
-            error_before, error_after);
-        assert!(error_after < 0.1, "Velocity error should be very small, got {}", error_after);
+            error_before,
+            error_after
+        );
+        assert!(
+            error_after < 0.1,
+            "Velocity error should be very small, got {}",
+            error_after
+        );
     }
 
     #[test]
@@ -277,21 +355,29 @@ mod tests {
         let time = GpsTime::new(2137, 422922.0);
         let pos = Coordinate::new(
             Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0),
-            Datum::WGS84, Frame::ECEF, time,
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
         );
         let state = RtkState::new(time, pos, 1.0);
 
         // Only 2 measurements — should return None
         let measurements = vec![
             DopplerMeasurement {
-                sat: SatelliteId { constellation: Constellation::Gps, prn: 1 },
+                sat: SatelliteId {
+                    constellation: Constellation::Gps,
+                    prn: 1,
+                },
                 doppler_hz: 1000.0,
                 frequency: 1575.42e6,
                 elevation: 0.5,
                 snr: 45.0,
             },
             DopplerMeasurement {
-                sat: SatelliteId { constellation: Constellation::Gps, prn: 2 },
+                sat: SatelliteId {
+                    constellation: Constellation::Gps,
+                    prn: 2,
+                },
                 doppler_hz: -500.0,
                 frequency: 1575.42e6,
                 elevation: 0.8,
@@ -313,7 +399,9 @@ mod tests {
         let time = GpsTime::new(2137, 422922.0);
         let pos = Coordinate::new(
             Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0),
-            Datum::WGS84, Frame::ECEF, time,
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
         );
         let state = RtkState::new(time, pos, 1.0);
 
@@ -349,16 +437,37 @@ mod tests {
 
             for j in 0..h.ncols() {
                 if j == 3 {
-                    assert!((h[(i, j)] - (-e_los.x)).abs() < 1e-6, "H[{},3] should be -e_los.x", i);
+                    assert!(
+                        (h[(i, j)] - (-e_los.x)).abs() < 1e-6,
+                        "H[{},3] should be -e_los.x",
+                        i
+                    );
                 } else if j == 4 {
-                    assert!((h[(i, j)] - (-e_los.y)).abs() < 1e-6, "H[{},4] should be -e_los.y", i);
+                    assert!(
+                        (h[(i, j)] - (-e_los.y)).abs() < 1e-6,
+                        "H[{},4] should be -e_los.y",
+                        i
+                    );
                 } else if j == 5 {
-                    assert!((h[(i, j)] - (-e_los.z)).abs() < 1e-6, "H[{},5] should be -e_los.z", i);
+                    assert!(
+                        (h[(i, j)] - (-e_los.z)).abs() < 1e-6,
+                        "H[{},5] should be -e_los.z",
+                        i
+                    );
                 } else if j == 19 {
-                    assert!((h[(i, j)] - 1.0).abs() < 1e-6, "H[{},19] should be 1.0 for clock drift", i);
+                    assert!(
+                        (h[(i, j)] - 1.0).abs() < 1e-6,
+                        "H[{},19] should be 1.0 for clock drift",
+                        i
+                    );
                 } else {
-                    assert!(h[(i, j)].abs() < 1e-12,
-                        "H[{},{}] should be zero for Doppler velocity, got {}", i, j, h[(i, j)]);
+                    assert!(
+                        h[(i, j)].abs() < 1e-12,
+                        "H[{},{}] should be zero for Doppler velocity, got {}",
+                        i,
+                        j,
+                        h[(i, j)]
+                    );
                 }
             }
         }
@@ -369,7 +478,9 @@ mod tests {
         let time = GpsTime::new(2137, 422922.0);
         let pos = Coordinate::new(
             Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0),
-            Datum::WGS84, Frame::ECEF, time,
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
         );
         let mut state = RtkState::new(time, pos, 1.0);
         state.velocity = Vector3::zeros();
@@ -386,7 +497,10 @@ mod tests {
 
         let mut measurements = Vec::new();
         for prn in 1..=4 {
-            let sat = SatelliteId { constellation: Constellation::Gps, prn };
+            let sat = SatelliteId {
+                constellation: Constellation::Gps,
+                prn,
+            };
             measurements.push(DopplerMeasurement {
                 sat,
                 doppler_hz: 0.0,
@@ -407,7 +521,9 @@ mod tests {
         let time = GpsTime::new(2137, 422922.0);
         let pos = Coordinate::new(
             Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0),
-            Datum::WGS84, Frame::ECEF, time,
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
         );
         let mut state = RtkState::new(time, pos, 1.0);
         state.velocity = Vector3::zeros();
@@ -426,7 +542,10 @@ mod tests {
 
         let mut measurements = Vec::new();
         for prn in 1..=5 {
-            let sat = SatelliteId { constellation: Constellation::Gps, prn };
+            let sat = SatelliteId {
+                constellation: Constellation::Gps,
+                prn,
+            };
             measurements.push(DopplerMeasurement {
                 sat,
                 doppler_hz: 0.0,
@@ -439,8 +558,15 @@ mod tests {
         let result = compute_doppler_update(&state, &measurements, &ephemerides, 1.0);
         // It should SKIP the 1st one (continue), but process the remaining 4.
         // So it should return Some with 4 measurements!
-        assert!(result.is_some(), "Should not break; should process remaining 4 sats");
-        assert_eq!(result.unwrap().0.len(), 4, "Should have exactly 4 measurements processed");
+        assert!(
+            result.is_some(),
+            "Should not break; should process remaining 4 sats"
+        );
+        assert_eq!(
+            result.unwrap().0.len(),
+            4,
+            "Should have exactly 4 measurements processed"
+        );
     }
 
     #[test]
@@ -448,7 +574,9 @@ mod tests {
         let time = GpsTime::new(2137, 422922.0);
         let pos = Coordinate::new(
             Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0),
-            Datum::WGS84, Frame::ECEF, time,
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
         );
         let mut state = RtkState::new(time, pos, 1.0);
         state.velocity = Vector3::zeros();
@@ -462,7 +590,10 @@ mod tests {
 
         let mut measurements = Vec::new();
         for prn in 1..=5 {
-            let sat = SatelliteId { constellation: Constellation::Gps, prn };
+            let sat = SatelliteId {
+                constellation: Constellation::Gps,
+                prn,
+            };
             measurements.push(DopplerMeasurement {
                 sat,
                 doppler_hz: 0.0,
@@ -474,8 +605,14 @@ mod tests {
 
         let result = compute_doppler_update(&state, &measurements, &ephemerides, 1.0);
         // PRN 1 is missing, but 2,3,4,5 are present. It should continue on 1.
-        assert!(result.is_some(), "Should not break on first missing ephemeris");
-        assert_eq!(result.unwrap().0.len(), 4, "Should process the 4 valid ones");
+        assert!(
+            result.is_some(),
+            "Should not break on first missing ephemeris"
+        );
+        assert_eq!(
+            result.unwrap().0.len(),
+            4,
+            "Should process the 4 valid ones"
+        );
     }
 }
-

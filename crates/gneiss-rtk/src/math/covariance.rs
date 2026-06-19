@@ -37,7 +37,7 @@ pub fn apply_joseph_scalar(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nalgebra::{dmatrix, dvector};
+    use nalgebra::dmatrix;
 
     #[test]
     fn test_apply_joseph_covariance_update() {
@@ -45,9 +45,9 @@ mod tests {
         let k = dmatrix![0.5; 0.0];
         let h = dmatrix![1.0, 0.0];
         let r = dmatrix![1.0];
-        
+
         let p_new = apply_joseph_covariance_update(&p, &k, &h, &r);
-        assert!((p_new[(0,0)] - 0.75).abs() < 1e-6);
-        assert!((p_new[(1,1)] - 2.0).abs() < 1e-6);
+        assert!((p_new[(0, 0)] - 0.75).abs() < 1e-6);
+        assert!((p_new[(1, 1)] - 2.0).abs() < 1e-6);
     }
 }
