@@ -140,11 +140,11 @@ impl PppIteratedEkf {
         sats: &[ProcessedSat],
     ) -> Result<(), &'static str> {
         let cands = self.find_ar_candidates(state, sats);
-        if cands.len() < 5 {
+        if cands.len() < 4 {
             return Err("Insufficient dual-frequency satellites for AR");
         }
         let subset = self.build_ar_subset(&cands);
-        if subset.len() < 4 {
+        if subset.len() < 3 {
             return Err("Insufficient satellites after single differencing");
         }
 
@@ -239,7 +239,7 @@ impl PppIteratedEkf {
                 mw_ok
             })
             .collect();
-        if keep_indices.len() < 4 {
+        if keep_indices.len() < 3 {
             return Err("Insufficient well-converged Widelane ambiguities");
         }
 
@@ -251,25 +251,36 @@ impl PppIteratedEkf {
         }
 
         let mut a_wl = &d_wl * x;
-        let mut q_wl = &d_wl * &state.covariance * d_wl.transpose();
-        // Seed WL floats from MW EMA for satellites with sufficient samples
+        let q_wl_from_state = &d_wl * &state.covariance * d_wl.transpose();
+        // Build clean Q: use state covariance for cov-converged pairs,
+        // use diagonal MW variance for MW-converged pairs (independent measurements)
+        let n = keep_indices.len();
+        let mut q_wl = DMatrix::zeros(n, n);
+        let mut use_mw = vec![false; n];
         for (i, &idx) in keep_indices.iter().enumerate() {
             let (c, ref_sat) = &subset[idx];
-            let mw_c = state.mw_sd_ema.get(&c.0).copied().unwrap_or(0.0);
-            let mw_ref = state.mw_sd_ema.get(&ref_sat.0).copied().unwrap_or(0.0);
             let cnt_c = state.mw_sd_counts.get(&c.0).copied().unwrap_or(0);
             let cnt_ref = state.mw_sd_counts.get(&ref_sat.0).copied().unwrap_or(0);
             if cnt_c > 10 && cnt_ref > 10 {
+                let mw_c = state.mw_sd_ema.get(&c.0).copied().unwrap_or(0.0);
+                let mw_ref = state.mw_sd_ema.get(&ref_sat.0).copied().unwrap_or(0.0);
                 a_wl[i] = mw_c - mw_ref;
-                // Reduce WL variance for MW-converged pairs
-                let mw_var = 0.01_f64; // 0.1 cycle std for MW estimate
-                q_wl[(i, i)] = q_wl[(i, i)].min(0.25) + mw_var;
+                q_wl[(i, i)] = 0.04; // 0.2 cycle std → 0.04 cycles²
+                use_mw[i] = true;
+            }
+        }
+        // Copy state-covariance entries for non-MW pairs, preserving correlations
+        for i in 0..n {
+            if use_mw[i] { continue; }
+            for j in 0..n {
+                if use_mw[j] { continue; }
+                q_wl[(i, j)] = q_wl_from_state[(i, j)];
             }
         }
         let res_wl = crate::ambiguity::lambda::resolve_lambda(&a_wl, &q_wl)
             .map_err(|_| "WL LAMBDA Failed")?;
 
-        if res_wl.ratio < 2.0 || res_wl.success_rate < 0.99 {
+        if res_wl.ratio < 1.5 || res_wl.success_rate < 0.95 {
             return Err("WL ratio test failed");
         }
 
@@ -1631,17 +1642,16 @@ mod mutant_killer_tests {
             add_sat(obs1_ref);
             add_sat(obs2_ref);
             add_sat(obs3_ref);
-            add_sat(obs4_ref);
         }
         assert_eq!(
             fg.resolve_cascade_ar(&mut state, &sats),
             Err("Insufficient dual-frequency satellites for AR")
         );
 
-        state.add_ambiguity(obs5_ref.sat, 1, 0.0, 1.0);
-        state.add_ambiguity(obs5_ref.sat, 2, 0.0, 1.0);
+        state.add_ambiguity(obs4_ref.sat, 1, 0.0, 1.0);
+        state.add_ambiguity(obs4_ref.sat, 2, 0.0, 1.0);
         sats.push(ProcessedSat {
-            sat_obs: obs5_ref,
+            sat_obs: obs4_ref,
             dt_sat_m: 0.0,
             p1: 0.0,
             p2: None,

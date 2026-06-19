@@ -227,11 +227,11 @@ impl PppInsIteratedEkf {
         sats: &[ProcessedSat],
     ) -> Result<(), &'static str> {
         let cands = self.find_ar_candidates(state, sats);
-        if cands.len() < 5 {
+        if cands.len() < 4 {
             return Err("Insufficient dual-frequency satellites for AR");
         }
         let subset = self.build_ar_subset(&cands);
-        if subset.len() < 4 {
+        if subset.len() < 3 {
             return Err("Insufficient satellites after single differencing");
         }
 
@@ -317,7 +317,7 @@ impl PppInsIteratedEkf {
         let keep_indices: Vec<usize> = (0..q_wl_full.nrows())
             .filter(|&i| q_wl_full[(i, i)].sqrt() < 0.30)
             .collect();
-        if keep_indices.len() < 4 {
+        if keep_indices.len() < 3 {
             return Err("Insufficient well-converged Widelane ambiguities");
         }
 
@@ -333,7 +333,7 @@ impl PppInsIteratedEkf {
         let res_wl = crate::ambiguity::lambda::resolve_lambda(&a_wl, &q_wl)
             .map_err(|_| "WL LAMBDA Failed")?;
 
-        if res_wl.ratio < 2.0 || res_wl.success_rate < 0.99 {
+        if res_wl.ratio < 1.5 || res_wl.success_rate < 0.95 {
             return Err("WL ratio test failed");
         }
 
@@ -1840,17 +1840,16 @@ mod mutant_killer_tests {
             add_sat(obs1_ref);
             add_sat(obs2_ref);
             add_sat(obs3_ref);
-            add_sat(obs4_ref);
         }
         assert_eq!(
             fg.resolve_cascade_ar(&mut state, &sats),
             Err("Insufficient dual-frequency satellites for AR")
         );
 
-        state.add_ambiguity(obs5_ref.sat, 1, 0.0, 1.0);
-        state.add_ambiguity(obs5_ref.sat, 2, 0.0, 1.0);
+        state.add_ambiguity(obs4_ref.sat, 1, 0.0, 1.0);
+        state.add_ambiguity(obs4_ref.sat, 2, 0.0, 1.0);
         sats.push(ProcessedSat {
-            sat_obs: obs5_ref,
+            sat_obs: obs4_ref,
             dt_sat_m: 0.0,
             p1: 0.0,
             p2: None,

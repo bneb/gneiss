@@ -452,12 +452,19 @@ pub(crate) fn update_phase_ambiguities(
             + sat.tropo_dry
             + state.zwd * sat.map_wet;
         // Compute Melbourne-Wübbena widelane for ambiguity seeding
+        // MW = (f1*L1 - f2*L2)/(f1-f2) - (f1*P1 + f2*P2)/(f1+f2)  [meters]
+        // Uses residuals (observed - geometric) so geometric range cancels
         if !sat.is_iono_free && sat.cp2.is_some() && sat.p2.is_some() {
-            let wl = (LIGHT_SPEED / sat.f1) * (LIGHT_SPEED / sat.f2)
-                / ((LIGHT_SPEED / sat.f2) - (LIGHT_SPEED / sat.f1)); // λ_wl = c/(f1-f2)
-            let mw_cycles = (cp1 + wup) - (sat.cp2.unwrap() + wup)
-                - (sat.f1 * sat.p1 + sat.f2 * sat.p2.unwrap())
-                    / (sat.f1 + sat.f2) / wl;
+            let l1_m = (cp1 + wup) * sat.lam1;
+            let l2_m = (sat.cp2.unwrap() + wup) * sat.lam2;
+            let geo = sat.dist; // geometric range from ProcessedSat
+            let l1_res = l1_m - geo;
+            let l2_res = l2_m - geo;
+            let p1_res = sat.p1 - geo;
+            let p2_res = sat.p2.unwrap() - geo;
+            let mw_m = (sat.f1 * l1_res - sat.f2 * l2_res) / (sat.f1 - sat.f2)
+                - (sat.f1 * p1_res + sat.f2 * p2_res) / (sat.f1 + sat.f2);
+            let mw_cycles = mw_m * (sat.f1 - sat.f2) / LIGHT_SPEED;
             state.update_mw(sat.sat_obs.sat, mw_cycles);
             add_uduc_ambiguities(state, sat, cp1, wup, expected_base);
         } else {
@@ -494,24 +501,17 @@ fn add_uduc_ambiguities(
     let l1_meas = (cp1 + wup) * sat.lam1;
     let l2_meas = (sat.cp2.unwrap() + wup) * sat.lam2;
 
+    // Use MW widelane to reduce initial ambiguity variance when available
+    let mw_confident = state.mw_sd_counts.get(&sat.sat_obs.sat).copied().unwrap_or(0) > 10;
+    let init_var = if mw_confident { 0.04 } else { 10000.0 }; // 0.2 cycle or 100m std
     if !state.ambiguity_keys.contains(&(sat.sat_obs.sat, 3)) {
         state.add_ambiguity(sat.sat_obs.sat, 3, i1_est, 100.0);
     }
     if !state.ambiguity_keys.contains(&(sat.sat_obs.sat, 1)) {
-        state.add_ambiguity(
-            sat.sat_obs.sat,
-            1,
-            l1_meas - (expected_base - i1_est),
-            10000.0,
-        );
+        state.add_ambiguity(sat.sat_obs.sat, 1, l1_meas - (expected_base - i1_est), init_var);
     }
     if !state.ambiguity_keys.contains(&(sat.sat_obs.sat, 2)) {
-        state.add_ambiguity(
-            sat.sat_obs.sat,
-            2,
-            l2_meas - (expected_base - gamma * i1_est),
-            10000.0,
-        );
+        state.add_ambiguity(sat.sat_obs.sat, 2, l2_meas - (expected_base - gamma * i1_est), init_var);
     }
 
     for i in 1..4 {
