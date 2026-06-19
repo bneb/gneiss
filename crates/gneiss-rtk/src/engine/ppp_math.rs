@@ -632,4 +632,30 @@ mod tests {
             panic!("cp2 is None for L2C");
         }
     }
+
+    #[test]
+    fn test_gf_slip_detection() {
+        // L1=1000 cycles, L2=800 cycles, λ1=0.19, λ2=0.24
+        // GF = 1000*0.19 - 800*0.24 = 190 - 192 = -2.0m
+        let (_, gf) = detect_gf_slip(1000.0, 0.19, 800.0, 0.24, 0.0, false, 0.05);
+        assert!((gf - (-2.0)).abs() < 0.01);
+        // No slip when values are the same as previous
+        let (slip, _) = detect_gf_slip(1000.0, 0.19, 800.0, 0.24, gf, true, 0.05);
+        assert!(!slip);
+        // Slip: changing L2 by 1 cycle (0.24m) exceeds 0.05m threshold
+        let (slip2, _) = detect_gf_slip(1000.0, 0.19, 801.0, 0.24, gf, true, 0.05);
+        assert!(slip2);
+    }
+
+    #[test]
+    fn test_mw_slip_detection() {
+        // MW with identical values → no slip
+        let (_, mw) = detect_mw_slip(1000.0, 0.19, 800.0, 0.24, 20000000.0, 20000000.0, 0.0, false, 2.0);
+        // First epoch: no previous → no slip
+        let (slip, _) = detect_mw_slip(1000.0, 0.19, 800.0, 0.24, 20000000.0, 20000000.0, mw, true, 2.0);
+        assert!(!slip);
+        // Large MW jump of 5 cycles → slip
+        let (slip2, _) = detect_mw_slip(1000.0, 0.19, 805.0, 0.24, 20000000.0, 20000000.0, mw, true, 2.0);
+        assert!(slip2);
+    }
 }

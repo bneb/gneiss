@@ -606,8 +606,10 @@ mod osb_tests {
 #[cfg(test)]
 mod ppp_tests {
     use super::*;
-    use crate::engine::{EngineConfig, ProcessingEngine};
+    use crate::engine::{EngineConfig, EngineMode, ProcessingEngine};
+    use crate::filter::RtkState;
     use gneiss_core::coords::{Coordinate, Datum, Frame};
+    use gneiss_core::time::GpsTime;
 
     #[test]
     fn test_valid_pos() {
@@ -878,5 +880,42 @@ mod ppp_tests {
         assert_eq!(cp1, Some(3000.0));
         assert_eq!(cp2, Some(4000.0));
         assert!(!is_if);
+    }
+
+    #[test]
+    fn test_process_ppp_falls_back_to_spp_when_no_state() {
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        engine.config.mode = EngineMode::Ppp;
+        let obs = EpochObs { time: GpsTime::new(2156, 129600.0), satellites: vec![] };
+        // No valid position → should fall back to SPP
+        let res = process_ppp(&mut engine, &obs);
+        assert!(res.is_err()); // SPP fails with no satellites and no ephemerides
+    }
+
+    #[test]
+    fn test_compute_receiver_pco_returns_zero_without_antex() {
+        let rcv_llh = Vector3::new(0.8, 0.1, 100.0);
+        let pco = compute_receiver_pco(None, None, "G01", rcv_llh);
+        assert_eq!(pco, Vector3::zeros());
+        let pco2 = compute_receiver_pco(None, Some("TRM59800.00"), "G01", rcv_llh);
+        assert_eq!(pco2, Vector3::zeros());
+    }
+
+    #[test]
+    fn test_spp_anchoring_resets_position() {
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        engine.config.mode = EngineMode::Ppp;
+        // Set a valid but wrong position
+        let mut state = RtkState::new(
+            GpsTime::new(2156, 129000.0),
+            Coordinate::new(Vector3::new(2000.0, 2000.0, 2000.0), Datum::WGS84, Frame::ECEF, GpsTime::new(2156, 129000.0)),
+            1.0,
+        );
+        state.covariance[(0, 0)] = 10.0;
+        engine.current_state = Some(state);
+        let obs = EpochObs { time: GpsTime::new(2156, 129600.0), satellites: vec![] };
+        // SPP-anchoring triggers inside process_ppp — should return error since no sats
+        let res = process_ppp(&mut engine, &obs);
+        assert!(matches!(res, Err(EngineError::InsufficientSatellites)));
     }
 }

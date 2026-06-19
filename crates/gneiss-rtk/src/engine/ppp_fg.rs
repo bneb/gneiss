@@ -894,7 +894,7 @@ fn build_h_row(
     h
 }
 
-fn build_iono_constraint_row(size: usize, i1_idx: usize) -> DVector<f64> {
+pub(crate) fn build_iono_constraint_row(size: usize, i1_idx: usize) -> DVector<f64> {
     let mut h = DVector::zeros(size);
     h[i1_idx] = 1.0;
     h
@@ -1797,5 +1797,22 @@ mod mutant_killer_tests {
         };
         // It requires state.ambiguity_keys to contain (sat, 0) and (sat, 1) and (sat, 2) etc depending on `is_iono_free`.
         // We'll skip adding a full state test and rely on smaller integration tests or direct tests.
+    }
+
+    #[test]
+    fn test_build_iono_constraint_row() {
+        let h = build_iono_constraint_row(25, 21);
+        assert_eq!(h.len(), 25);
+        assert_eq!(h[21], 1.0);
+        assert_eq!(h[0], 0.0);
+        assert_eq!(h[24], 0.0);
+    }
+
+    #[test]
+    fn test_iono_constraint_row_middle_index() {
+        let h = build_iono_constraint_row(30, 15);
+        assert_eq!(h.len(), 30);
+        assert_eq!(h[15], 1.0);
+        for i in 0..30 { if i != 15 { assert_eq!(h[i], 0.0); } }
     }
 }
