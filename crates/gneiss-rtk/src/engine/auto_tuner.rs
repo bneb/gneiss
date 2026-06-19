@@ -1,5 +1,5 @@
-use crate::filter::RtkState;
 use crate::engine::config::EkfTuningConfig;
+use crate::filter::RtkState;
 use nalgebra::Vector3;
 
 /// Evaluates a preliminary processing pass and returns a dynamically tuned EkfTuningConfig.
@@ -14,22 +14,28 @@ pub fn tune_ekf_parameters(
 
     // 1. Extract IMU Bias Instabilities
     let (sigma_ab, sigma_gb) = extract_imu_statistics(state_history, imu_history);
-    
+
     // 2. Extract GNSS Multipath/Noise Scaling
     // let pr_scale = extract_gnss_statistics(state_history);
     // We will just do a simple multipath estimation based on residual norms if we had them.
     // For now, we focus on IMU since it dictates the INS drift during outages.
-    
+
     let bounds = &base_config.auto_tune;
-    
+
     if let Some(ab) = sigma_ab {
         base_config.sigma_ab = ab.clamp(bounds.min_sigma_ab, bounds.max_sigma_ab);
-        tracing::info!("AutoTuner: Configured sigma_ab to {:.3e}", base_config.sigma_ab);
+        tracing::info!(
+            "AutoTuner: Configured sigma_ab to {:.3e}",
+            base_config.sigma_ab
+        );
     }
-    
+
     if let Some(gb) = sigma_gb {
         base_config.sigma_gb = gb.clamp(bounds.min_sigma_gb, bounds.max_sigma_gb);
-        tracing::info!("AutoTuner: Configured sigma_gb to {:.3e}", base_config.sigma_gb);
+        tracing::info!(
+            "AutoTuner: Configured sigma_gb to {:.3e}",
+            base_config.sigma_gb
+        );
     }
 
     base_config
@@ -39,7 +45,7 @@ pub fn tune_ekf_parameters(
 /// and gyroscope bias instabilities (random walk).
 pub fn extract_imu_statistics(
     state_history: &[RtkState],
-    imu_history: &[Vec<gneiss_core::imu::ImuMeasurement>]
+    imu_history: &[Vec<gneiss_core::imu::ImuMeasurement>],
 ) -> (Option<f64>, Option<f64>) {
     if state_history.len() < 100 || imu_history.len() < 100 {
         return (None, None);
@@ -51,7 +57,7 @@ pub fn extract_imu_statistics(
     for (k, state) in state_history.iter().enumerate() {
         // Find epochs where the vehicle is clearly stationary
         // Velocity < 0.05 m/s, and SPP/RTK is locked (position var is relatively low)
-        let is_stationary = state.velocity.norm() < 0.05 && state.covariance[(0,0)] < 5.0;
+        let is_stationary = state.velocity.norm() < 0.05 && state.covariance[(0, 0)] < 5.0;
 
         if is_stationary && k < imu_history.len() {
             let imu_buf: &Vec<gneiss_core::imu::ImuMeasurement> = &imu_history[k];
@@ -85,7 +91,8 @@ pub fn extract_imu_statistics(
     }
 
     // Use median variance during stationary periods to estimate bias instability
-    stationary_accel_variances.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    stationary_accel_variances
+        .sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
     stationary_gyro_variances.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
     let median_var_a: f64 = stationary_accel_variances[stationary_accel_variances.len() / 2];
@@ -106,10 +113,10 @@ pub fn extract_gnss_statistics(_state_history: &[RtkState]) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gneiss_core::time::GpsTime;
     use gneiss_core::coords::{Coordinate, Datum, Frame};
-    use nalgebra::Vector3;
     use gneiss_core::imu::ImuMeasurement;
+    use gneiss_core::time::GpsTime;
+    use nalgebra::Vector3;
 
     #[test]
     fn test_auto_tuner_extracts_imu_bias() {
@@ -122,7 +129,7 @@ mod tests {
         for _i in 0..150 {
             let mut state = RtkState::new(t0, pos, 1.0);
             state.velocity = Vector3::new(0.01, 0.01, 0.0); // Stationary
-            state.covariance[(0,0)] = 1.0;
+            state.covariance[(0, 0)] = 1.0;
             state_history.push(state);
 
             let mut imu_buf = Vec::new();
@@ -149,7 +156,7 @@ mod tests {
 
         let ab_val = ab.unwrap();
         let gb_val = gb.unwrap();
-        
+
         assert!(ab_val > 1e-6);
         assert!(gb_val > 1e-6);
     }

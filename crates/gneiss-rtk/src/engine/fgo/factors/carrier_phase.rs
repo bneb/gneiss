@@ -10,19 +10,15 @@ impl CarrierPhaseFactor {
         lambda: f64,
     ) -> DMatrix<f64> {
         let mut h = DMatrix::zeros(1, 18);
-        let skew_l = Matrix3::new(
-            0.0, -l_b.z, l_b.y,
-            l_b.z, 0.0, -l_b.x,
-            -l_b.y, l_b.x, 0.0,
-        );
+        let skew_l = Matrix3::new(0.0, -l_b.z, l_b.y, l_b.z, 0.0, -l_b.x, -l_b.y, l_b.x, 0.0);
         let theta_term = -u.transpose() * r_b_e * skew_l;
 
         // p^e
         h.fixed_view_mut::<1, 3>(0, 0).copy_from(&u.transpose());
-        
+
         // theta
         h.fixed_view_mut::<1, 3>(0, 6).copy_from(&theta_term);
-        
+
         // cb_m
         h[(0, 15)] = 1.0;
 
@@ -39,11 +35,7 @@ mod tests {
     use nalgebra::{Matrix3, Vector3};
 
     fn skew_symmetric(v: &Vector3<f64>) -> Matrix3<f64> {
-        Matrix3::new(
-            0.0, -v.z, v.y,
-            v.z, 0.0, -v.x,
-            -v.y, v.x, 0.0,
-        )
+        Matrix3::new(0.0, -v.z, v.y, v.z, 0.0, -v.x, -v.y, v.x, 0.0)
     }
 
     #[test]

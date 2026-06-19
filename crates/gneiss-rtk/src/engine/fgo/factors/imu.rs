@@ -23,11 +23,7 @@ pub struct JacobianInputs {
 }
 
 pub fn skew_symmetric(v: &Vector3<f64>) -> Matrix3<f64> {
-    Matrix3::new(
-        0.0, -v.z, v.y,
-        v.z, 0.0, -v.x,
-        -v.y, v.x, 0.0,
-    )
+    Matrix3::new(0.0, -v.z, v.y, v.z, 0.0, -v.x, -v.y, v.x, 0.0)
 }
 
 impl ImuFactor {
@@ -40,21 +36,32 @@ impl ImuFactor {
         let r_i_t = inputs.r_i.transpose();
 
         // H_i blocks
-        h_i.fixed_view_mut::<3, 3>(POS_IDX, POS_IDX).copy_from(&-r_i_t);
-        h_i.fixed_view_mut::<3, 3>(POS_IDX, VEL_IDX).copy_from(&(r_i_t * (-i_mat * inputs.dt + omega_skew * inputs.dt.powi(2))));
-        h_i.fixed_view_mut::<3, 3>(POS_IDX, BA_IDX).copy_from(&-inputs.dp_dba);
-        h_i.fixed_view_mut::<3, 3>(POS_IDX, BG_IDX).copy_from(&-inputs.dp_dbg);
+        h_i.fixed_view_mut::<3, 3>(POS_IDX, POS_IDX)
+            .copy_from(&-r_i_t);
+        h_i.fixed_view_mut::<3, 3>(POS_IDX, VEL_IDX)
+            .copy_from(&(r_i_t * (-i_mat * inputs.dt + omega_skew * inputs.dt.powi(2))));
+        h_i.fixed_view_mut::<3, 3>(POS_IDX, BA_IDX)
+            .copy_from(&-inputs.dp_dba);
+        h_i.fixed_view_mut::<3, 3>(POS_IDX, BG_IDX)
+            .copy_from(&-inputs.dp_dbg);
 
         // dv_dpi is 0
-        h_i.fixed_view_mut::<3, 3>(VEL_IDX, VEL_IDX).copy_from(&(r_i_t * (-i_mat + omega_skew * 2.0 * inputs.dt)));
+        h_i.fixed_view_mut::<3, 3>(VEL_IDX, VEL_IDX)
+            .copy_from(&(r_i_t * (-i_mat + omega_skew * 2.0 * inputs.dt)));
 
-        h_i.fixed_view_mut::<3, 3>(ROT_IDX, ROT_IDX).copy_from(&(-inputs.jr_inv_er * inputs.r_j.transpose() * inputs.exp_omega_dt * inputs.r_i));
-        h_i.fixed_view_mut::<3, 3>(ROT_IDX, BG_IDX).copy_from(&(-inputs.jl_inv_er * inputs.dr_dbg));
+        h_i.fixed_view_mut::<3, 3>(ROT_IDX, ROT_IDX).copy_from(
+            &(-inputs.jr_inv_er * inputs.r_j.transpose() * inputs.exp_omega_dt * inputs.r_i),
+        );
+        h_i.fixed_view_mut::<3, 3>(ROT_IDX, BG_IDX)
+            .copy_from(&(-inputs.jl_inv_er * inputs.dr_dbg));
 
         // H_j blocks
-        h_j.fixed_view_mut::<3, 3>(POS_IDX, POS_IDX).copy_from(&r_i_t);
-        h_j.fixed_view_mut::<3, 3>(VEL_IDX, VEL_IDX).copy_from(&r_i_t);
-        h_j.fixed_view_mut::<3, 3>(ROT_IDX, ROT_IDX).copy_from(&inputs.jr_inv_er);
+        h_j.fixed_view_mut::<3, 3>(POS_IDX, POS_IDX)
+            .copy_from(&r_i_t);
+        h_j.fixed_view_mut::<3, 3>(VEL_IDX, VEL_IDX)
+            .copy_from(&r_i_t);
+        h_j.fixed_view_mut::<3, 3>(ROT_IDX, ROT_IDX)
+            .copy_from(&inputs.jr_inv_er);
         h_j.fixed_view_mut::<3, 3>(BA_IDX, BA_IDX).copy_from(&i_mat);
         h_j.fixed_view_mut::<3, 3>(BG_IDX, BG_IDX).copy_from(&i_mat);
 
@@ -119,7 +126,8 @@ mod tests {
         assert!((dv_dvi - expected_dv_dvi).norm() < 1e-10);
 
         let dr_dthetai = h_i.fixed_view::<3, 3>(ROT_IDX, ROT_IDX);
-        let expected_dr_dthetai = -inputs.jr_inv_er * inputs.r_j.transpose() * inputs.exp_omega_dt * inputs.r_i;
+        let expected_dr_dthetai =
+            -inputs.jr_inv_er * inputs.r_j.transpose() * inputs.exp_omega_dt * inputs.r_i;
         assert!((dr_dthetai - expected_dr_dthetai).norm() < 1e-10);
 
         let dr_dbgi = h_i.fixed_view::<3, 3>(ROT_IDX, BG_IDX);

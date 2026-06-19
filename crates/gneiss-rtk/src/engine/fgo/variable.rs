@@ -34,20 +34,35 @@ impl Manifold for VariableType {
     }
 
     /// Retracts the manifold by the local error state `delta`.
-    /// 
+    ///
     /// For the $SO(3)$ Attitude Manifold, we employ right-perturbation mathematics:
     /// $$ q_{new} = q_{old} \otimes \exp\left(\Delta \theta\right) $$
-    /// 
+    ///
     /// If the norm of $\Delta \theta$ is small, we use a first-order Taylor expansion
     /// to avoid numerical instability in the quaternion exponential:
     /// $$ \Delta q \approx \begin{bmatrix} 1 \\ \frac{\Delta \theta}{2} \end{bmatrix} $$
     fn retract(&mut self, delta: &[f64]) {
         match self {
-            VariableType::Pos(p) => { p.x += delta[0]; p.y += delta[1]; p.z += delta[2]; }
-            VariableType::Vel(v) => { v.x += delta[0]; v.y += delta[1]; v.z += delta[2]; }
+            VariableType::Pos(p) => {
+                p.x += delta[0];
+                p.y += delta[1];
+                p.z += delta[2];
+            }
+            VariableType::Vel(v) => {
+                v.x += delta[0];
+                v.y += delta[1];
+                v.z += delta[2];
+            }
             VariableType::Att(q) => Self::retract_att(q, delta),
-            VariableType::Biases(b) => { for i in 0..6 { b[i] += delta[i]; } }
-            VariableType::Clock(c) => { c[0] += delta[0]; c[1] += delta[1]; }
+            VariableType::Biases(b) => {
+                for i in 0..6 {
+                    b[i] += delta[i];
+                }
+            }
+            VariableType::Clock(c) => {
+                c[0] += delta[0];
+                c[1] += delta[1];
+            }
             VariableType::Ambiguity(a) => *a += delta[0],
         }
     }
@@ -139,29 +154,39 @@ mod tests {
     fn test_manifold_other_retracts() {
         let mut p = VariableType::Pos(Vector3::zeros());
         p.retract(&[1.0, 2.0, 3.0]);
-        if let VariableType::Pos(vec) = p { 
-            assert_eq!(vec.x, 1.0); 
-            assert_eq!(vec.y, 2.0); 
-            assert_eq!(vec.z, 3.0); 
-        } else { panic!(); }
+        if let VariableType::Pos(vec) = p {
+            assert_eq!(vec.x, 1.0);
+            assert_eq!(vec.y, 2.0);
+            assert_eq!(vec.z, 3.0);
+        } else {
+            panic!();
+        }
 
         let mut v = VariableType::Vel(Vector3::zeros());
         v.retract(&[1.0, 2.0, 3.0]);
-        if let VariableType::Vel(vec) = v { 
-            assert_eq!(vec.x, 1.0); 
-            assert_eq!(vec.y, 2.0); 
-            assert_eq!(vec.z, 3.0); 
-        } else { panic!(); }
-        
+        if let VariableType::Vel(vec) = v {
+            assert_eq!(vec.x, 1.0);
+            assert_eq!(vec.y, 2.0);
+            assert_eq!(vec.z, 3.0);
+        } else {
+            panic!();
+        }
+
         let mut c = VariableType::Clock(Vector2::zeros());
         c.retract(&[1.0, 2.0]);
-        if let VariableType::Clock(vec) = c { 
-            assert_eq!(vec[0], 1.0); 
-            assert_eq!(vec[1], 2.0); 
-        } else { panic!(); }
-        
+        if let VariableType::Clock(vec) = c {
+            assert_eq!(vec[0], 1.0);
+            assert_eq!(vec[1], 2.0);
+        } else {
+            panic!();
+        }
+
         let mut a = VariableType::Ambiguity(1.0);
         a.retract(&[2.0]);
-        if let VariableType::Ambiguity(val) = a { assert_eq!(val, 3.0); } else { panic!(); }
+        if let VariableType::Ambiguity(val) = a {
+            assert_eq!(val, 3.0);
+        } else {
+            panic!();
+        }
     }
 }

@@ -2,8 +2,8 @@
 //! Uses central finite differences to compute numerical Jacobians and compare against
 //! the analytically derived Phi and H matrices.
 
-use nalgebra::{DMatrix, DVector, Vector3, Matrix3};
 use crate::engine::predictor::gravity_wgs84;
+use nalgebra::{DMatrix, DVector, Matrix3, Vector3};
 
 /// Computes the numerical Jacobian of a vector-valued function using central differences.
 ///
@@ -48,9 +48,15 @@ pub fn numerical_gravity_jacobian(pos_ecef: Vector3<f64>, eps: f64) -> Matrix3<f
     let jac = numerical_jacobian(&f, &x0, eps);
 
     Matrix3::new(
-        jac[(0, 0)], jac[(0, 1)], jac[(0, 2)],
-        jac[(1, 0)], jac[(1, 1)], jac[(1, 2)],
-        jac[(2, 0)], jac[(2, 1)], jac[(2, 2)],
+        jac[(0, 0)],
+        jac[(0, 1)],
+        jac[(0, 2)],
+        jac[(1, 0)],
+        jac[(1, 1)],
+        jac[(1, 2)],
+        jac[(2, 0)],
+        jac[(2, 1)],
+        jac[(2, 2)],
     )
 }
 
@@ -89,7 +95,7 @@ pub fn analytic_gravity_jacobian(pos_ecef: Vector3<f64>) -> Matrix3<f64> {
 pub fn max_element_error(a: &DMatrix<f64>, b: &DMatrix<f64>) -> f64 {
     assert_eq!(a.nrows(), b.nrows());
     assert_eq!(a.ncols(), b.ncols());
-    
+
     let mut max_err = 0.0_f64;
     for r in 0..a.nrows() {
         for c in 0..a.ncols() {
@@ -107,7 +113,7 @@ pub fn max_element_error(a: &DMatrix<f64>, b: &DMatrix<f64>) -> f64 {
 pub fn max_relative_error(a: &DMatrix<f64>, b: &DMatrix<f64>) -> f64 {
     assert_eq!(a.nrows(), b.nrows());
     assert_eq!(a.ncols(), b.ncols());
-    
+
     let mut max_rel = 0.0_f64;
     for r in 0..a.nrows() {
         for c in 0..a.ncols() {
@@ -131,36 +137,53 @@ mod tests {
     #[test]
     fn test_updater_jacobian() {
         use crate::filter::RtkState;
-        use gneiss_core::time::GpsTime;
         use gneiss_core::coords::{Coordinate, Datum, Frame};
-        use nalgebra::{UnitQuaternion, Vector3, DVector, DMatrix};
+        use gneiss_core::time::GpsTime;
+        use nalgebra::{DMatrix, DVector, UnitQuaternion, Vector3};
 
         let time = GpsTime::new(2000, 0.0);
-        let pos = Coordinate::new(Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0), Datum::WGS84, Frame::ECEF, time);
+        let pos = Coordinate::new(
+            Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
         let mut state0 = RtkState::new(time, pos, 1.0);
         state0.velocity = Vector3::new(10.0, 20.0, 30.0);
         state0.attitude = UnitQuaternion::from_euler_angles(0.1, -0.2, 0.3);
         state0.accel_bias = Vector3::new(0.01, -0.02, 0.03);
         state0.gyro_bias = Vector3::new(0.001, -0.002, 0.003);
-        
+
         let lever_arm = Vector3::new(1.0, 0.5, 0.2);
         let omega_b = Vector3::new(0.1, 0.2, 0.3);
-        
+
         let r_b_e = state0.attitude.to_rotation_matrix();
         let l_e = r_b_e * lever_arm;
-        
+
         let mut h_analytic = DMatrix::zeros(6, 15);
         h_analytic.view_mut((0, 0), (6, 6)).fill_diagonal(1.0);
         let h_pos_att = -l_e.cross_matrix();
-        for i in 0..3 { for j in 0..3 { h_analytic[(i, 6 + j)] = h_pos_att[(i, j)]; } }
-        
+        for i in 0..3 {
+            for j in 0..3 {
+                h_analytic[(i, 6 + j)] = h_pos_att[(i, j)];
+            }
+        }
+
         let a_b = omega_b.cross(&lever_arm);
         let a_e = r_b_e * a_b;
         let h_vel_att = -a_e.cross_matrix();
-        for i in 0..3 { for j in 0..3 { h_analytic[(3 + i, 6 + j)] = h_vel_att[(i, j)]; } }
-        
+        for i in 0..3 {
+            for j in 0..3 {
+                h_analytic[(3 + i, 6 + j)] = h_vel_att[(i, j)];
+            }
+        }
+
         let h_vel_bg = r_b_e.matrix() * lever_arm.cross_matrix();
-        for i in 0..3 { for j in 0..3 { h_analytic[(3 + i, 12 + j)] = h_vel_bg[(i, j)]; } }
+        for i in 0..3 {
+            for j in 0..3 {
+                h_analytic[(3 + i, 12 + j)] = h_vel_bg[(i, j)];
+            }
+        }
 
         let f = |x: &DVector<f64>| -> DVector<f64> {
             let mut s = state0.clone();
@@ -170,62 +193,74 @@ mod tests {
             s.velocity.x += x[3];
             s.velocity.y += x[4];
             s.velocity.z += x[5];
-            
+
             let d_psi = Vector3::new(x[6], x[7], x[8]);
             let angle = d_psi.norm();
             if angle > 1e-12 {
-                let dq = UnitQuaternion::from_axis_angle(&nalgebra::Unit::new_unchecked(d_psi / angle), angle);
+                let dq = UnitQuaternion::from_axis_angle(
+                    &nalgebra::Unit::new_unchecked(d_psi / angle),
+                    angle,
+                );
                 s.attitude = dq * s.attitude;
             }
-            
+
             s.gyro_bias.x += x[12];
             s.gyro_bias.y += x[13];
             s.gyro_bias.z += x[14];
-            
+
             let r_b_e_new = s.attitude.to_rotation_matrix();
             let l_e_new = r_b_e_new * lever_arm;
             let pos_apc = s.position.vector + l_e_new;
-            
+
             let omega_b_true = omega_b - Vector3::new(x[12], x[13], x[14]);
             let v_apc = s.velocity + r_b_e_new * omega_b_true.cross(&lever_arm);
-            
+
             let mut res = DVector::zeros(6);
             res.rows_mut(0, 3).copy_from(&pos_apc);
             res.rows_mut(3, 3).copy_from(&v_apc);
             res
         };
-        
+
         let mut h_num = DMatrix::zeros(6, 15);
         let eps = [
-            1.0, 1.0, 1.0,       // pos
-            1e-3, 1e-3, 1e-3,    // vel
-            1e-5, 1e-5, 1e-5,    // att
-            1e-5, 1e-5, 1e-5,    // abias
-            1e-5, 1e-5, 1e-5     // gbias
+            1.0, 1.0, 1.0, // pos
+            1e-3, 1e-3, 1e-3, // vel
+            1e-5, 1e-5, 1e-5, // att
+            1e-5, 1e-5, 1e-5, // abias
+            1e-5, 1e-5, 1e-5, // gbias
         ];
-        
+
         for j in 0..15 {
             let mut x_plus = DVector::zeros(15);
             let mut x_minus = DVector::zeros(15);
             x_plus[j] = eps[j];
             x_minus[j] = -eps[j];
-            
+
             let f_plus = f(&x_plus);
             let f_minus = f(&x_minus);
-            
+
             for i in 0..6 {
                 h_num[(i, j)] = (f_plus[i] - f_minus[i]) / (2.0 * eps[j]);
             }
         }
-        
+
         let mut max_diff = 0.0;
         for r in 0..6 {
             for c in 0..15 {
                 let diff = (h_analytic[(r, c)] - h_num[(r, c)]).abs();
                 if diff > 1e-4 {
-                    println!("Mismatch at [{},{}]: analytic={}, num={}, diff={}", r, c, h_analytic[(r, c)], h_num[(r, c)], diff);
+                    println!(
+                        "Mismatch at [{},{}]: analytic={}, num={}, diff={}",
+                        r,
+                        c,
+                        h_analytic[(r, c)],
+                        h_num[(r, c)],
+                        diff
+                    );
                 }
-                if diff > max_diff { max_diff = diff; }
+                if diff > max_diff {
+                    max_diff = diff;
+                }
             }
         }
         assert!(max_diff < 1e-4, "Max diff: {}", max_diff);
@@ -238,15 +273,15 @@ mod tests {
     fn test_gravity_jacobian_matches_numerical() {
         // Test at several points on and near Earth's surface
         let test_positions = [
-            Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0),              // Equator, prime meridian
-            Vector3::new(0.0, gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0),              // Equator, 90°E
-            Vector3::new(0.0, 0.0, 6356752.0),              // North pole
-            Vector3::new(4500000.0, 4500000.0, 3000000.0),   // Mid-latitude
+            Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0), // Equator, prime meridian
+            Vector3::new(0.0, gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0), // Equator, 90°E
+            Vector3::new(0.0, 0.0, 6356752.0),                                       // North pole
+            Vector3::new(4500000.0, 4500000.0, 3000000.0),                           // Mid-latitude
         ];
 
         for pos in &test_positions {
             let num_jac = numerical_gravity_jacobian(*pos, 1.0); // 1m perturbation
-            
+
             // Verify the Jacobian is symmetric (gravitational potential is conservative)
             // ∂g_i/∂r_j = ∂g_j/∂r_i for a potential field
             for i in 0..3 {
@@ -263,7 +298,10 @@ mod tests {
             // (Poisson/Laplace equation in free space)
             let trace = num_jac[(0, 0)] + num_jac[(1, 1)] + num_jac[(2, 2)];
             // The J2 term makes it not exactly 0, but should be small relative to diagonal
-            let diag_scale = num_jac[(0, 0)].abs().max(num_jac[(1, 1)].abs()).max(num_jac[(2, 2)].abs());
+            let diag_scale = num_jac[(0, 0)]
+                .abs()
+                .max(num_jac[(1, 1)].abs())
+                .max(num_jac[(2, 2)].abs());
             assert!(trace.abs() / diag_scale < 0.1,
                 "Laplacian of gravity should be small outside Earth at {:?}: trace={:.6e}, scale={:.6e}",
                 pos, trace, diag_scale);
@@ -274,11 +312,16 @@ mod tests {
     fn test_phi_jacobian_velocity_block() {
         // The velocity-to-position block of Φ should be dt*I for GNSS-only prediction
         use crate::filter::RtkState;
-        use gneiss_core::time::GpsTime;
         use gneiss_core::coords::{Coordinate, Datum, Frame};
+        use gneiss_core::time::GpsTime;
 
         let time = GpsTime::new(2000, 0.0);
-        let pos = Coordinate::new(Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0), Datum::WGS84, Frame::ECEF, time);
+        let pos = Coordinate::new(
+            Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
         let dt = 1.0;
 
         // Numerical check: perturb velocity, measure position change
@@ -300,11 +343,21 @@ mod tests {
                     state_plus.velocity.z = eps;
                     state_minus.velocity.z = -eps;
                 }
-                _ => unreachable!()
+                _ => unreachable!(),
             }
 
-            crate::engine::predictor::predict(&mut state_plus, dt, &crate::engine::EngineConfig::default(), &[]);
-            crate::engine::predictor::predict(&mut state_minus, dt, &crate::engine::EngineConfig::default(), &[]);
+            crate::engine::predictor::predict(
+                &mut state_plus,
+                dt,
+                &crate::engine::EngineConfig::default(),
+                &[],
+            );
+            crate::engine::predictor::predict(
+                &mut state_minus,
+                dt,
+                &crate::engine::EngineConfig::default(),
+                &[],
+            );
 
             let d_pos = state_plus.position.vector - state_minus.position.vector;
             let numerical_dphi = d_pos / (2.0 * eps);
@@ -314,9 +367,15 @@ mod tests {
             for pos_axis in 0..3 {
                 let expected = if pos_axis == vel_axis { dt } else { 0.0 };
                 let err = (numerical_dphi[pos_axis] - expected).abs();
-                assert!(err < 0.01,
+                assert!(
+                    err < 0.01,
                     "Phi vel→pos block [{},{}]: numerical={:.6}, expected={:.6}, error={:.6e}",
-                    pos_axis, vel_axis, numerical_dphi[pos_axis], expected, err);
+                    pos_axis,
+                    vel_axis,
+                    numerical_dphi[pos_axis],
+                    expected,
+                    err
+                );
             }
         }
     }
@@ -332,13 +391,17 @@ mod tests {
 
         let a_dyn = DMatrix::from_row_slice(2, 3, &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
         let err = max_element_error(&jac, &a_dyn);
-        assert!(err < 1e-6, "Numerical Jacobian of linear function should match A exactly, error: {:.2e}", err);
+        assert!(
+            err < 1e-6,
+            "Numerical Jacobian of linear function should match A exactly, error: {:.2e}",
+            err
+        );
     }
 
     #[test]
     fn test_gnss_lever_arm_jacobian() {
         use nalgebra::UnitQuaternion;
-        
+
         let lever_arm = Vector3::new(1.0, 2.0, 3.0);
         let state_pos = Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0);
         let sat_pos = state_pos + Vector3::new(100.0, 100.0, 100.0);
@@ -346,10 +409,12 @@ mod tests {
         let r_b_e = q.to_rotation_matrix();
         let pos_apc = state_pos + r_b_e * lever_arm;
         let e_los = (sat_pos - pos_apc).normalize();
-        
+
         let f = |x: &DVector<f64>| -> DVector<f64> {
             let mut dq = Vector3::zeros();
-            dq[0] = x[0]; dq[1] = x[1]; dq[2] = x[2];
+            dq[0] = x[0];
+            dq[1] = x[1];
+            dq[2] = x[2];
             let q_pert = UnitQuaternion::from_scaled_axis(dq);
             let q_new = q_pert * q;
             let r_new = q_new.to_rotation_matrix();
@@ -357,88 +422,116 @@ mod tests {
             let rho = (sat_pos - pos_new).norm();
             DVector::from_column_slice(&[-rho]) // h(x) is -rho because innov = obs - rho
         };
-        
+
         let x0 = DVector::zeros(3);
         let num_jac = numerical_jacobian(&f, &x0, 1e-6);
-        
+
         let lever_ecef = r_b_e * lever_arm;
         let h_att = lever_ecef.cross(&e_los);
-        
-        let diff = (num_jac[(0, 0)] - h_att.x).abs().max((num_jac[(0, 1)] - h_att.y).abs()).max((num_jac[(0, 2)] - h_att.z).abs());
-        assert!(diff < 1e-3, "GNSS Lever Arm Jacobian verification failed: diff={}", diff);
+
+        let diff = (num_jac[(0, 0)] - h_att.x)
+            .abs()
+            .max((num_jac[(0, 1)] - h_att.y).abs())
+            .max((num_jac[(0, 2)] - h_att.z).abs());
+        assert!(
+            diff < 1e-3,
+            "GNSS Lever Arm Jacobian verification failed: diff={}",
+            diff
+        );
     }
 
     #[test]
     fn test_doppler_lever_arm_jacobian() {
         use nalgebra::UnitQuaternion;
-        
+
         let lever_arm = Vector3::new(1.0, 2.0, 3.0);
         let omega_b = Vector3::new(0.01, -0.02, 0.05);
         let state_pos = Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0);
         let state_vel = Vector3::new(10.0, 20.0, 30.0);
         let sat_pos = Vector3::new(20000000.0, 0.0, 0.0);
         let sat_vel = Vector3::new(100.0, 200.0, 300.0);
-        
+
         let q = UnitQuaternion::from_euler_angles(0.1, -0.2, 0.3);
         let r_b_e = q.to_rotation_matrix();
         let pos_apc = state_pos + r_b_e * lever_arm;
         let e_los = (sat_pos - pos_apc).normalize();
-        
+
         let f = |x: &DVector<f64>| -> DVector<f64> {
             let mut dq = Vector3::zeros();
-            dq[0] = x[0]; dq[1] = x[1]; dq[2] = x[2];
+            dq[0] = x[0];
+            dq[1] = x[1];
+            dq[2] = x[2];
             let q_pert = UnitQuaternion::from_scaled_axis(dq);
             let q_new = q_pert * q;
             let r_new = q_new.to_rotation_matrix();
-            
+
             let bg_pert = Vector3::new(x[3], x[4], x[5]);
             let omega_new = omega_b - bg_pert;
-            
+
             let v_ant = state_vel + r_new * omega_new.cross(&lever_arm);
             let rr = e_los.dot(&(sat_vel - v_ant));
-            
+
             DVector::from_column_slice(&[-rr])
         };
-        
+
         let x0 = DVector::zeros(6);
         let num_jac = numerical_jacobian(&f, &x0, 1e-6);
-        
+
         let a = r_b_e * omega_b.cross(&lever_arm);
         let h_att = a.cross(&e_los);
-        
+
         let h_bg = r_b_e.matrix() * lever_arm.cross_matrix();
         let h_bg = e_los.transpose() * h_bg;
-        
-        let diff_att = (num_jac[(0, 0)] - h_att.x).abs().max((num_jac[(0, 1)] - h_att.y).abs()).max((num_jac[(0, 2)] - h_att.z).abs());
-        assert!(diff_att < 1e-5, "Doppler Attitude Lever Arm Jacobian verification failed: diff={}", diff_att);
-        
-        let diff_bg = (num_jac[(0, 3)] - h_bg[0]).abs().max((num_jac[(0, 4)] - h_bg[1]).abs()).max((num_jac[(0, 5)] - h_bg[2]).abs());
-        assert!(diff_bg < 1e-5, "Doppler Gyro Bias Lever Arm Jacobian verification failed: diff={}", diff_bg);
+
+        let diff_att = (num_jac[(0, 0)] - h_att.x)
+            .abs()
+            .max((num_jac[(0, 1)] - h_att.y).abs())
+            .max((num_jac[(0, 2)] - h_att.z).abs());
+        assert!(
+            diff_att < 1e-5,
+            "Doppler Attitude Lever Arm Jacobian verification failed: diff={}",
+            diff_att
+        );
+
+        let diff_bg = (num_jac[(0, 3)] - h_bg[0])
+            .abs()
+            .max((num_jac[(0, 4)] - h_bg[1]).abs())
+            .max((num_jac[(0, 5)] - h_bg[2]).abs());
+        assert!(
+            diff_bg < 1e-5,
+            "Doppler Gyro Bias Lever Arm Jacobian verification failed: diff={}",
+            diff_bg
+        );
     }
 
     #[test]
     fn test_ppp_uduc_jacobian() {
         use crate::filter::RtkState;
-        use gneiss_core::time::GpsTime;
         use gneiss_core::coords::{Coordinate, Datum, Frame};
-        use nalgebra::{UnitQuaternion, Vector3, DVector, DMatrix};
+        use gneiss_core::time::GpsTime;
+        use nalgebra::{DMatrix, DVector, Vector3};
 
         let time = GpsTime::new(2000, 0.0);
-        let pos = Coordinate::new(Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0), Datum::WGS84, Frame::ECEF, time);
+        let pos = Coordinate::new(
+            Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
         let mut state0 = RtkState::new(time, pos, 1.0);
-        
+
         let i_idx = state0.ambiguities.len();
         state0.ambiguities.push(0.5); // Iono delay parameter (I1)
-        
+
         let n1_idx = state0.ambiguities.len();
         state0.ambiguities.push(10.0); // N1 ambiguity
 
         let n2_idx = state0.ambiguities.len();
         state0.ambiguities.push(8.0); // N2 ambiguity
-        
+
         let size = crate::filter::CORE_STATE_SIZE + 3;
 
-        let los = Vector3::new(0.5, 0.5, 0.707);
+        let _los = Vector3::new(0.5, 0.5, 0.707);
         let gamma = (1575.42 * 1575.42) / (1227.60 * 1227.60); // L1 / L2
 
         let expected_base = 0.0;
@@ -453,7 +546,7 @@ mod tests {
             let p2 = expected_base + gamma * i1;
             let l1 = expected_base - i1 + n1;
             let l2 = expected_base - gamma * i1 + n2;
-            
+
             DVector::from_vec(vec![p1, p2, l1, l2])
         };
 
@@ -473,14 +566,14 @@ mod tests {
         // res = meas - exp. So d(res)/dx = - d(exp)/dx.
         // The H row represents d(res)/dx, which means the signs are opposite of d(exp)/dx.
         // Wait, h_row is built such that res_p1 = sat.p1 - exp_p1
-        // exp_p1 = base + i1 => d(res)/d(i1) = -1. 
+        // exp_p1 = base + i1 => d(res)/d(i1) = -1.
         // But build_h_row_uduc sets H[i_idx] = 1.0 (Wait! Let me double check)
         // If H[i_idx] = 1.0, then it's modeling the expected value?
         // Actually the factor graph solves for state correction dx. The equation is H dx = res.
-        // If exp_p1 = base + i1, then d(exp)/d(i1) = 1.0. 
+        // If exp_p1 = base + i1, then d(exp)/d(i1) = 1.0.
         // In the factor graph, we want H = d(exp)/dx. Let's check analytic.
         let mut jac_ana = DMatrix::zeros(4, size);
-        
+
         // P1: i_coef = 1.0
         jac_ana[(0, crate::filter::CORE_STATE_SIZE + i_idx)] = 1.0;
         // P2: i_coef = gamma
@@ -493,6 +586,10 @@ mod tests {
         jac_ana[(3, crate::filter::CORE_STATE_SIZE + n2_idx)] = 1.0;
 
         let max_err = super::max_element_error(&jac_num, &jac_ana);
-        assert!(max_err < 1e-5, "UDUC numerical vs analytic jacobian mismatch: max_err = {}", max_err);
+        assert!(
+            max_err < 1e-5,
+            "UDUC numerical vs analytic jacobian mismatch: max_err = {}",
+            max_err
+        );
     }
 }

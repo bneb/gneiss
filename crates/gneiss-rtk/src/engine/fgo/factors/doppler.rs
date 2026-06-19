@@ -13,13 +13,13 @@ impl DopplerFactor {
         omega_ie_e: &Vector3<f64>,
     ) -> DMatrix<f64> {
         use super::skew_symmetric as skew;
-        
+
         let mut h = DMatrix::zeros(1, 18);
         let skew_l_b = skew(l_b);
         let r_e_b = r_b_e.transpose();
 
         let h_p = (1.0 / d) * v_rel.transpose() * (Matrix3::identity() - u * u.transpose());
-        let h_theta = -h_p * r_b_e * skew_l_b 
+        let h_theta = -h_p * r_b_e * skew_l_b
             + u.transpose() * r_b_e * (-skew(v_lev_body) + skew_l_b * skew(&(r_e_b * omega_ie_e)));
         let h_bg = u.transpose() * r_b_e * skew_l_b;
 
@@ -59,21 +59,23 @@ mod tests {
         let v_lev_body = Vector3::new(0.0, 0.0, 0.0);
         let omega = Vector3::new(0.0, 0.0, 7.292115e-5);
         let d = 2.0;
-        
+
         let jac = DopplerFactor::jacobian(d, &u, &v_rel, &r_b_e, &l_b, &v_lev_body, &omega);
         assert_eq!((jac.nrows(), jac.ncols()), (1, 18));
-        
+
         let h_p = (1.0 / d) * v_rel.transpose() * (Matrix3::identity() - u * u.transpose());
         let skew_l_b = skew(&l_b);
-        let h_theta = -h_p * r_b_e * skew_l_b 
-            + u.transpose() * r_b_e * (-skew(&v_lev_body) + skew_l_b * skew(&(r_b_e.transpose() * omega)));
-        
+        let h_theta = -h_p * r_b_e * skew_l_b
+            + u.transpose()
+                * r_b_e
+                * (-skew(&v_lev_body) + skew_l_b * skew(&(r_b_e.transpose() * omega)));
+
         check_block!(jac, 0, h_p);
         check_block!(jac, 3, u.transpose());
         check_block!(jac, 6, h_theta);
         check_block!(jac, 9, RowVector3::<f64>::zeros());
         check_block!(jac, 12, u.transpose() * r_b_e * skew_l_b);
-        
+
         for (i, v) in [(15, 0.0), (16, 1.0), (17, 0.0)] {
             assert!((jac[(0, i)] - v).abs() < 1e-10);
         }

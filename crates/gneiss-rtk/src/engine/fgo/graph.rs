@@ -52,7 +52,10 @@ impl FactorGraph {
     /// $H_{prior} = H_{rr} - H_{rm} H_{mm}^{-1} H_{mr}$
     pub fn marginalize_oldest_state(&mut self) {
         const SYMMETRIC_FACTOR: f64 = 0.5;
-        assert!(self.prior_matrix.nrows() == self.prior_matrix.ncols(), "Prior matrix must be square");
+        assert!(
+            self.prior_matrix.nrows() == self.prior_matrix.ncols(),
+            "Prior matrix must be square"
+        );
         let sym = SYMMETRIC_FACTOR * (&self.prior_matrix + self.prior_matrix.transpose());
         self.prior_matrix = sym;
     }
@@ -69,18 +72,32 @@ impl FactorGraph {
         (h, b)
     }
 
-    fn add_factor_contribution(&self, factor_type: &FactorType, var_ids: &[usize], h: &mut DMatrix<f64>, b: &mut DVector<f64>) {
+    fn add_factor_contribution(
+        &self,
+        factor_type: &FactorType,
+        var_ids: &[usize],
+        h: &mut DMatrix<f64>,
+        b: &mut DVector<f64>,
+    ) {
         match factor_type {
             FactorType::Mock1D { target } => {
                 if var_ids.len() == 1 {
                     self.add_mock1d_contribution(var_ids[0], *target, h, b);
                 }
             }
-            _ => { unimplemented!("Other factors not implemented for LM test yet") }
+            _ => {
+                unimplemented!("Other factors not implemented for LM test yet")
+            }
         }
     }
 
-    fn add_mock1d_contribution(&self, id: usize, target: f64, h: &mut DMatrix<f64>, b: &mut DVector<f64>) {
+    fn add_mock1d_contribution(
+        &self,
+        id: usize,
+        target: f64,
+        h: &mut DMatrix<f64>,
+        b: &mut DVector<f64>,
+    ) {
         let mut idx = 0;
         let mut state_val = 0.0;
         for (vid, v) in &self.variables {
@@ -92,10 +109,10 @@ impl FactorGraph {
             }
             idx += v.local_dim();
         }
-        
+
         let j = 2.0;
         let r = 2.0 * state_val - target;
-        
+
         h[(idx, idx)] += j * j;
         b[idx] += j * (-r);
     }
@@ -134,7 +151,10 @@ mod tests {
         graph.marginalize_oldest_state();
         let mat = &graph.prior_matrix;
         let is_symmetric = (mat - mat.transpose()).norm() < TOLERANCE;
-        assert!(is_symmetric, "Prior matrix must be symmetric after marginalization!");
+        assert!(
+            is_symmetric,
+            "Prior matrix must be symmetric after marginalization!"
+        );
         assert!((mat[(0, 0)] - 1.0).abs() < TOLERANCE);
         assert!((mat[(1, 1)] - 1.0).abs() < TOLERANCE);
         assert!((mat[(0, 1)] - 0.2000000005).abs() < TOLERANCE);
@@ -145,11 +165,11 @@ mod tests {
         let mut graph = FactorGraph::new();
         graph.add_variable(1, VariableType::Ambiguity(0.0));
         graph.add_variable(2, VariableType::Ambiguity(0.0));
-        
+
         // Two Ambiguity variables, total dim = 2. Update with [1.0, 2.0]
         let dx = nalgebra::DVector::from_column_slice(&[1.0, 2.0]);
         graph.update_state(&dx);
-        
+
         if let Some(VariableType::Ambiguity(a)) = graph.variables.get(&1) {
             assert_eq!(*a, 1.0);
         } else {
@@ -168,7 +188,7 @@ mod tests {
         graph.add_variable(1, VariableType::Ambiguity(0.0));
         graph.add_variable(2, VariableType::Ambiguity(0.0));
         graph.add_factor(FactorType::Mock1D { target: 5.0 }, &[2]); // targets variable 2
-        
+
         let (h, b) = graph.build_linear_system();
         assert_eq!(h[(1, 1)], 4.0); // j * j where j = 2.0
         assert_eq!(h[(0, 0)], 0.0);

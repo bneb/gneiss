@@ -41,6 +41,6 @@
 //! - **Dataset (`dataset.rs`)**: Log-variance mapping and Heteroscedastic NLL loss.
 //! - **Dataset Loader (`dataset_loader.rs`)**: Parsing and batching of CSV training data.
 
-pub mod gnn_raim;
 pub mod dataset;
 pub mod dataset_loader;
+pub mod gnn_raim;

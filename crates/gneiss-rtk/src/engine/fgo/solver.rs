@@ -1,5 +1,5 @@
-use nalgebra::DMatrix;
 use crate::engine::fgo::graph::FactorGraph;
+use nalgebra::DMatrix;
 
 /// Configuration for the Levenberg-Marquardt solver.
 #[derive(Debug, Clone)]
@@ -41,8 +41,6 @@ pub struct LevenbergMarquardt {
     pub config: SolverConfig,
 }
 
-
-
 impl LevenbergMarquardt {
     pub fn new(config: SolverConfig) -> Self {
         Self { config }
@@ -57,7 +55,7 @@ impl LevenbergMarquardt {
             report.iterations = i + 1;
             let (h, b) = graph.build_linear_system();
             let mut lambda_mat = h;
-            
+
             Self::apply_damping(&mut lambda_mat, self.config.lambda);
 
             let dx = match lambda_mat.cholesky() {
@@ -75,7 +73,7 @@ impl LevenbergMarquardt {
 
             graph.update_state(&dx);
         }
-        
+
         report.success = false;
         report
     }
@@ -95,9 +93,9 @@ mod tests {
 
     #[test]
     fn test_lm_optimize() {
-        let mut lm = LevenbergMarquardt::default();
+        let lm = LevenbergMarquardt::default();
         let mut graph = FactorGraph::new();
-        
+
         graph.add_variable(1, VariableType::Ambiguity(0.0));
         graph.add_factor(FactorType::Mock1D { target: 5.0 }, &[1]);
 
@@ -105,7 +103,7 @@ mod tests {
         let report = lm.optimize(&mut graph);
         assert!(report.success);
         assert_eq!(report.iterations, 3);
-        
+
         // With J = 2.0, r = 2x - target. For target = 5.0, optimal x = 2.5.
         if let Some(VariableType::Ambiguity(a)) = graph.variables.get(&1) {
             assert!((a - 2.5).abs() < 1e-3, "State did not converge, got {}", a);
@@ -116,12 +114,12 @@ mod tests {
 
     #[test]
     fn test_lm_optimize_no_factors_tests_damping() {
-        let mut lm = LevenbergMarquardt::default();
+        let lm = LevenbergMarquardt::default();
         let mut graph = FactorGraph::new();
         // Add a variable but no factors. The H matrix will be all zeros.
         // Without LM damping, Cholesky would fail!
         graph.add_variable(1, VariableType::Ambiguity(0.0));
-        
+
         let report = lm.optimize(&mut graph);
         // It should succeed immediately in 1 iteration because dx = 0 < tolerance
         assert!(report.success);

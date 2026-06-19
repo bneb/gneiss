@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use gneiss_core::sat::SatelliteId;
+use std::collections::HashMap;
 
 /// Exponential smoothing constant for NIS and SNR tracking.
 const SMOOTHING_ALPHA: f64 = 0.95;
@@ -27,7 +27,7 @@ pub struct InnovationTracker {
 
 impl InnovationTracker {
     pub fn new() -> Self {
-        Self { 
+        Self {
             nis_avg: HashMap::new(),
             snr_avg: HashMap::new(),
             snr_var: HashMap::new(),
@@ -42,25 +42,28 @@ impl InnovationTracker {
     ///
     /// Returns a scale factor >= 1.0 to multiply into the static R value.
     pub fn update_and_scale(
-        &mut self, sat: SatelliteId, freq: u8,
-        innovation: f64, predicted_var: f64,
+        &mut self,
+        sat: SatelliteId,
+        freq: u8,
+        innovation: f64,
+        predicted_var: f64,
         snr: Option<f64>,
     ) -> f64 {
         let nis = compute_nis(innovation, predicted_var);
         let key = (sat, freq);
-        
+
         let avg = self.nis_avg.entry(key).or_insert(1.0);
         *avg = SMOOTHING_ALPHA * *avg + (1.0 - SMOOTHING_ALPHA) * nis;
-        
+
         let mut snr_penalty = 1.0;
         if let Some(snr_val) = snr {
             let s_avg = self.snr_avg.entry(key).or_insert(snr_val);
             let s_var = self.snr_var.entry(key).or_insert(0.0);
-            
+
             let diff = snr_val - *s_avg;
             *s_avg = SMOOTHING_ALPHA * *s_avg + (1.0 - SMOOTHING_ALPHA) * snr_val;
             *s_var = SMOOTHING_ALPHA * *s_var + (1.0 - SMOOTHING_ALPHA) * (diff * diff);
-            
+
             if *s_var > SNR_VAR_THRESHOLD {
                 snr_penalty = 1.0 + (*s_var - SNR_VAR_THRESHOLD) * 0.2;
             }
@@ -71,7 +74,11 @@ impl InnovationTracker {
 
     /// Query current scale factor without updating.
     pub fn current_scale(&self, sat: SatelliteId, freq: u8) -> f64 {
-        self.nis_avg.get(&(sat, freq)).copied().unwrap_or(1.0).clamp(MIN_SCALE, MAX_SCALE)
+        self.nis_avg
+            .get(&(sat, freq))
+            .copied()
+            .unwrap_or(1.0)
+            .clamp(MIN_SCALE, MAX_SCALE)
     }
 
     /// Return the maximum SNR variance across all tracked satellites.
@@ -84,7 +91,7 @@ impl InnovationTracker {
         let avg_scale = self.nis_avg.values().sum::<f64>() / self.nis_avg.len().max(1) as f64;
         avg_scale > 10.0
     }
-    
+
     pub fn get_total_nis(&self) -> f64 {
         self.nis_avg.values().sum::<f64>()
     }
@@ -98,12 +105,16 @@ impl InnovationTracker {
 }
 
 impl Default for InnovationTracker {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 /// Compute normalized innovation squared: v² / S
 fn compute_nis(innovation: f64, predicted_var: f64) -> f64 {
-    if predicted_var <= 0.0 { return 1.0; }
+    if predicted_var <= 0.0 {
+        return 1.0;
+    }
     (innovation * innovation) / predicted_var
 }
 
@@ -113,7 +124,10 @@ mod tests {
     use gneiss_core::sat::Constellation;
 
     fn test_sat() -> SatelliteId {
-        SatelliteId { constellation: Constellation::Gps, prn: 1 }
+        SatelliteId {
+            constellation: Constellation::Gps,
+            prn: 1,
+        }
     }
 
     #[test]
@@ -145,7 +159,7 @@ mod tests {
         for _ in 0..50 {
             scale1 = tracker.update_and_scale(sat, 1, 1.0, 1.0, Some(40.0));
         }
-        
+
         let mut tracker_var = InnovationTracker::new();
         // High variance SNR (fading/multipath)
         let mut scale2 = 1.0;
@@ -153,8 +167,13 @@ mod tests {
             let snr = if i % 2 == 0 { 40.0 } else { 20.0 };
             scale2 = tracker_var.update_and_scale(sat, 1, 1.0, 1.0, Some(snr));
         }
-        
-        assert!(scale2 > scale1 * 2.0, "High SNR variance should heavily penalize scale: scale2={}, scale1={}", scale2, scale1);
+
+        assert!(
+            scale2 > scale1 * 2.0,
+            "High SNR variance should heavily penalize scale: scale2={}, scale1={}",
+            scale2,
+            scale1
+        );
         assert!(tracker_var.max_snr_variance() > 15.0);
     }
 }

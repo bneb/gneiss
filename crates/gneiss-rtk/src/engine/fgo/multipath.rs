@@ -61,7 +61,7 @@ impl MultipathEvaluator {
         let start_idx = hist.len() - self.config.eval_window;
         let mut recent_window = hist[start_idx..].to_vec();
         recent_window.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-        
+
         recent_window[self.config.eval_window / 2] > self.config.threshold
     }
 }
@@ -82,12 +82,12 @@ mod tests {
     fn test_single_outlier_not_rejected() {
         let mut evaluator = MultipathEvaluator::new(test_config());
         let sat_id = 1;
-        
+
         assert!(!evaluator.evaluate_and_reject(sat_id, 1.0));
         assert!(!evaluator.evaluate_and_reject(sat_id, 1.5));
         assert!(!evaluator.evaluate_and_reject(sat_id, 1.2));
         assert!(!evaluator.evaluate_and_reject(sat_id, 1.1));
-        
+
         // Outlier
         assert!(!evaluator.evaluate_and_reject(sat_id, 10.0));
     }
@@ -96,12 +96,12 @@ mod tests {
     fn test_sustained_multipath_rejected() {
         let mut evaluator = MultipathEvaluator::new(test_config());
         let sat_id = 2;
-        
+
         assert!(!evaluator.evaluate_and_reject(sat_id, 4.0));
         assert!(!evaluator.evaluate_and_reject(sat_id, 4.5));
         assert!(!evaluator.evaluate_and_reject(sat_id, 3.8));
         assert!(!evaluator.evaluate_and_reject(sat_id, 4.1));
-        
+
         // 5th consecutive high residual -> rejection
         assert!(evaluator.evaluate_and_reject(sat_id, 5.0));
     }
@@ -110,11 +110,11 @@ mod tests {
     fn test_history_limit() {
         let mut evaluator = MultipathEvaluator::new(test_config());
         let sat_id = 3;
-        
+
         for _ in 0..15 {
             let _ = evaluator.evaluate_and_reject(sat_id, 1.0);
         }
-        
+
         if let Some(hist) = evaluator.history.get(&sat_id) {
             // Must be exactly max_history, not max_history + 1
             assert_eq!(hist.len(), evaluator.config.max_history);
@@ -125,7 +125,7 @@ mod tests {
     fn test_history_less_than_eval_window() {
         let mut evaluator = MultipathEvaluator::new(test_config());
         let sat_id = 4;
-        
+
         // Even if residuals are very high, not rejected if we don't have enough history
         assert!(!evaluator.evaluate_and_reject(sat_id, 10.0));
         assert!(!evaluator.evaluate_and_reject(sat_id, 10.0));
@@ -137,27 +137,27 @@ mod tests {
     fn test_nan_values_handled() {
         let mut evaluator = MultipathEvaluator::new(test_config());
         let sat_id = 5;
-        
+
         assert!(!evaluator.evaluate_and_reject(sat_id, f64::NAN));
         assert!(!evaluator.evaluate_and_reject(sat_id, f64::NAN));
         assert!(!evaluator.evaluate_and_reject(sat_id, f64::NAN));
         assert!(!evaluator.evaluate_and_reject(sat_id, f64::NAN));
         // Median might be NaN, comparison with threshold > 3.0 returns false
-        assert!(!evaluator.evaluate_and_reject(sat_id, f64::NAN)); 
+        assert!(!evaluator.evaluate_and_reject(sat_id, f64::NAN));
     }
 
     #[test]
     fn test_boundary_conditions() {
         let mut evaluator = MultipathEvaluator::new(test_config());
         let sat_id = 6;
-        
+
         // Exact threshold should NOT trigger rejection (it is strictly > threshold)
         assert!(!evaluator.evaluate_and_reject(sat_id, 3.0));
         assert!(!evaluator.evaluate_and_reject(sat_id, 3.0));
         assert!(!evaluator.evaluate_and_reject(sat_id, 3.0));
         assert!(!evaluator.evaluate_and_reject(sat_id, 3.0));
 
-        // Slightly above threshold should trigger it, but we need at least 3 values 
+        // Slightly above threshold should trigger it, but we need at least 3 values
         // to change the median of a window of 5!
         assert!(!evaluator.evaluate_and_reject(sat_id, 3.000001));
         assert!(!evaluator.evaluate_and_reject(sat_id, 3.000001));
@@ -168,13 +168,13 @@ mod tests {
     fn test_max_history_boundary() {
         let mut evaluator = MultipathEvaluator::new(test_config());
         let sat_id = 7;
-        
+
         // Push max_history elements
         for i in 0..10 {
             evaluator.evaluate_and_reject(sat_id, i as f64);
             assert_eq!(evaluator.history.get(&sat_id).unwrap().len(), i + 1);
         }
-        
+
         // Push 11th element, length should remain 10
         evaluator.evaluate_and_reject(sat_id, 10.0);
         assert_eq!(evaluator.history.get(&sat_id).unwrap().len(), 10);
@@ -186,17 +186,17 @@ mod tests {
     fn test_catch_minus_to_div_mutant() {
         let mut evaluator = MultipathEvaluator::new(test_config());
         let sat_id = 8;
-        
+
         // Push 7 elements to make hist.len() = 7.
         evaluator.evaluate_and_reject(sat_id, 1.0); // hist[0]
         evaluator.evaluate_and_reject(sat_id, 1.0); // hist[1]
-        
+
         evaluator.evaluate_and_reject(sat_id, 10.0); // hist[2]
         evaluator.evaluate_and_reject(sat_id, 10.0); // hist[3]
         evaluator.evaluate_and_reject(sat_id, 10.0); // hist[4]
-        evaluator.evaluate_and_reject(sat_id, 1.0);  // hist[5]
-        let rejected = evaluator.evaluate_and_reject(sat_id, 1.0);  // hist[6]
-        
+        evaluator.evaluate_and_reject(sat_id, 1.0); // hist[5]
+        let rejected = evaluator.evaluate_and_reject(sat_id, 1.0); // hist[6]
+
         assert!(rejected);
     }
 
@@ -204,13 +204,13 @@ mod tests {
     fn test_catch_div_to_mod_mutant() {
         let mut evaluator = MultipathEvaluator::new(test_config());
         let sat_id = 9;
-        
+
         evaluator.evaluate_and_reject(sat_id, 1.0);
         evaluator.evaluate_and_reject(sat_id, 2.0);
         evaluator.evaluate_and_reject(sat_id, 4.0);
         evaluator.evaluate_and_reject(sat_id, 5.0);
         let rejected = evaluator.evaluate_and_reject(sat_id, 6.0);
-        
+
         assert!(rejected);
     }
 }

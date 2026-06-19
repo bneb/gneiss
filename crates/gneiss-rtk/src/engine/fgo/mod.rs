@@ -38,10 +38,10 @@
 //! - **Loss (`loss.rs`)**: Robust loss functions (Huber, Cauchy) for outlier rejection.
 //! - **Multipath (`multipath.rs`)**: Retroactive GNSS multipath mitigation.
 
+pub mod factors;
 pub mod graph;
 pub mod loss;
-pub mod schur;
 pub mod multipath;
+pub mod schur;
 pub mod solver;
-pub mod factors;
 pub mod variable;

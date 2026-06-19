@@ -1,17 +1,17 @@
 use nalgebra::{DMatrix, DVector};
 
 /// Computes the Schur Complement marginalization algebra.
-/// 
+///
 /// We eliminate the marginalized states $x_m$ from the linear system:
 /// $$ \begin{bmatrix} H_{rr} & H_{rm} \\ H_{mr} & H_{mm} \end{bmatrix} \begin{bmatrix} \Delta x_r \\ \Delta x_m \end{bmatrix} = \begin{bmatrix} b_r \\ b_m \end{bmatrix} $$
-/// 
+///
 /// Solving for $\Delta x_m$ yields:
 /// $$ \Delta x_m = H_{mm}^{-1} (b_m - H_{mr} \Delta x_r) $$
-/// 
+///
 /// Substituting this into the first equation, we get the marginalized prior:
 /// $$ H_{prior} = H_{rr} - H_{rm} H_{mm}^{-1} H_{mr} $$
 /// $$ b_{prior} = b_r - H_{rm} H_{mm}^{-1} b_m $$
-/// 
+///
 /// Returns `Ok((h_prior, b_prior))` on success, or an error if $H_{mm}$ is not SPD.
 pub fn schur_complement(
     h_rr: &DMatrix<f64>,
@@ -45,7 +45,7 @@ mod tests {
         let h_rm = DMatrix::from_element(2, 2, 1.0);
         let h_mm = DMatrix::from_diagonal_element(2, 2, 2.0);
         let h_mr = DMatrix::from_element(2, 2, 1.0);
-        
+
         let b_r = DVector::from_element(2, 2.0);
         let b_m = DVector::from_element(2, 4.0);
 
@@ -98,7 +98,7 @@ mod tests {
     fn test_schur_complement_symmetrization() {
         let h_rr = DMatrix::from_diagonal_element(2, 2, 4.0);
         let mut h_rm = DMatrix::from_element(2, 2, 1.0);
-        h_rm[(0, 1)] = 2.0; 
+        h_rm[(0, 1)] = 2.0;
         let h_mm = DMatrix::from_diagonal_element(2, 2, 2.0);
         let mut h_mr = h_rm.transpose();
         h_mr[(1, 0)] += 1e-12; // Introduce asymmetry
@@ -106,6 +106,10 @@ mod tests {
         let b_m = DVector::from_element(2, 4.0);
 
         let (h_prior, _) = schur_complement(&h_rr, &h_rm, &h_mm, &h_mr, &b_r, &b_m).unwrap();
-        assert_eq!(h_prior[(0, 1)], h_prior[(1, 0)], "H_prior must be strictly symmetrized");
+        assert_eq!(
+            h_prior[(0, 1)],
+            h_prior[(1, 0)],
+            "H_prior must be strictly symmetrized"
+        );
     }
 }

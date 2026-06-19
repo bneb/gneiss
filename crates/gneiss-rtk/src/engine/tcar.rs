@@ -1,6 +1,6 @@
-use nalgebra::Vector3;
 use gneiss_core::obs::SatObs;
 use gneiss_core::sat::SatelliteId;
+use nalgebra::Vector3;
 
 const C: f64 = gneiss_core::constants::SPEED_OF_LIGHT_M_S;
 
@@ -30,7 +30,7 @@ pub fn resolve_ewl(sat_obs: &SatObs) -> Option<i64> {
     let pr5 = sat_obs.get_observable(5)?;
 
     let cp_ewl = cp2 - cp5; // in cycles
-    // Narrow-lane pseudorange
+                            // Narrow-lane pseudorange
     let pr_nl = (F2 * pr2 + F5 * pr5) / (F2 + F5); // in meters
 
     // N_EWL = \phi_EWL - P_NL / \lambda_EWL
@@ -71,13 +71,20 @@ pub fn resolve_wl_mw(sat_obs: &SatObs) -> Option<i64> {
 
 /// Computes the Narrow-Lane (L1) ambiguity using the fixed WL ambiguity.
 /// This typically requires geometry (a prior position) or very low ionosphere.
-pub fn resolve_nl(sat_obs: &SatObs, _n_wl_fixed: i64, rover_pos: &Vector3<f64>, sat_pos: &Vector3<f64>, rcv_clk: f64, sat_clk: f64) -> Option<i64> {
+pub fn resolve_nl(
+    sat_obs: &SatObs,
+    _n_wl_fixed: i64,
+    rover_pos: &Vector3<f64>,
+    sat_pos: &Vector3<f64>,
+    rcv_clk: f64,
+    sat_clk: f64,
+) -> Option<i64> {
     let cp1 = sat_obs.get_observable_phase(1)?;
     let _pr1 = sat_obs.get_observable(1)?;
-    
+
     // Geometric range
     let geo_range = (sat_pos - rover_pos).norm() + rcv_clk - sat_clk;
-    
+
     // N1 = cp1 - geo_range / LAMBDA_L1
     let float_amb = cp1 - (geo_range / LAMBDA_L1);
     Some(float_amb.round() as i64)
@@ -89,10 +96,10 @@ pub fn process_tcar_epoch(
     _base_obs: Option<&gneiss_core::obs::EpochObs>,
     rover_pos: &Vector3<f64>,
     rcv_clk: f64,
-    ephemerides: &[gneiss_core::ephemeris::Ephemeris]
+    ephemerides: &[gneiss_core::ephemeris::Ephemeris],
 ) -> Vec<TcarResult> {
     let mut results = Vec::new();
-    
+
     for r_sat in &rover_obs.satellites {
         // Attempt EWL
         let n_ewl = resolve_ewl(r_sat);
@@ -114,11 +121,7 @@ pub fn process_tcar_epoch(
                 if pr1 > 0.0 {
                     let tx_time = rover_obs.time - (pr1 / C);
                     let (sat_pos, _sat_vel, sat_clk, _sat_drift) = eph.position(tx_time);
-                    n_nl = resolve_nl(
-                        r_sat, wl, rover_pos, 
-                        &sat_pos,
-                        rcv_clk, sat_clk * C
-                    );
+                    n_nl = resolve_nl(r_sat, wl, rover_pos, &sat_pos, rcv_clk, sat_clk * C);
                 }
             }
         }
@@ -137,7 +140,7 @@ pub fn process_tcar_epoch(
             n_wl,
             n_nl,
             n1,
-            n2
+            n2,
         });
     }
 

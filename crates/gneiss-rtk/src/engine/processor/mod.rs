@@ -8,7 +8,7 @@ use gneiss_core::sat::SatelliteId;
 mod ins;
 mod ppk;
 mod rtk;
-pub mod rtk_fg;
+pub mod rtk_iekf;
 mod spp;
 
 pub struct ProcessingEngine {
@@ -259,7 +259,7 @@ impl ProcessingEngine {
                 self.process_rtk(&filtered_rover, filtered_base).err()
             }
             EngineMode::RtkInsIekf => {
-                rtk_fg::process_rtk_factor_graph(self, &filtered_rover, filtered_base).err()
+                rtk_iekf::process_rtk_factor_graph(self, &filtered_rover, filtered_base).err()
             }
             EngineMode::RtkInsLooselyCoupled => self
                 .process_rtk_loosely_coupled(&filtered_rover, filtered_base)
@@ -268,7 +268,7 @@ impl ProcessingEngine {
             | EngineMode::PppIns
             | EngineMode::PppInsLooselyCoupled
             | EngineMode::PppIekf => crate::engine::ppp::process_ppp(self, &filtered_rover).err(),
-            EngineMode::PppInsIekf => crate::engine::ppp_ins_fg::process_ppp_ins_fg(self, &filtered_rover).err(),
+            EngineMode::PppInsIekf => crate::engine::ppp_ins_iekf::process_ppp_ins_fg(self, &filtered_rover).err(),
         };
         if let Some(e) = err {
             if let EngineError::StateDisappeared = e {

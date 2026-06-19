@@ -1,6 +1,6 @@
-use nalgebra::Vector3;
-use gneiss_core::time::GpsTime;
 use gneiss_core::sat::SatelliteId;
+use gneiss_core::time::GpsTime;
+use nalgebra::Vector3;
 
 pub fn format_sp3_id(sat: SatelliteId) -> String {
     let c = match sat.constellation {
@@ -16,7 +16,10 @@ pub fn format_sp3_id(sat: SatelliteId) -> String {
 
 /// Interpolates precise orbit using an N-point Lagrange polynomial.
 /// SP3 epochs should be provided as a slice of (time, Vector3) sorted by time.
-pub fn interpolate_orbit_lagrange(points: &[(GpsTime, Vector3<f64>)], target: GpsTime) -> Option<Vector3<f64>> {
+pub fn interpolate_orbit_lagrange(
+    points: &[(GpsTime, Vector3<f64>)],
+    target: GpsTime,
+) -> Option<Vector3<f64>> {
     let n = points.len();
     if n == 0 {
         return None;
@@ -62,7 +65,7 @@ pub fn get_precise_orbit(
     for epoch in sp3_epochs {
         if let Some(record) = epoch.records.get(&sat_id) {
             valid_points.push((epoch.time, record.position));
-            
+
             // For clock bias from SP3 (if RINEX CLK is unavailable), just use nearest neighbor or linear.
             // But usually we just take the nearest if it's within a threshold.
             let dt = (epoch.time - t).abs();
@@ -105,11 +108,14 @@ pub fn get_precise_orbit(
 
     let subset = &valid_points[start_idx..end_idx];
     let pos = interpolate_orbit_lagrange(subset, t);
-    
+
     // Compute velocity via central difference (dt = 1.0 second is small enough for orbit, large enough for float precision)
-    for p in subset { tracing::debug!("SP3 point: time={}, pos={:?}", p.0.tow, p.1); } let pos_plus = interpolate_orbit_lagrange(subset, t + 0.5);
+    for p in subset {
+        tracing::debug!("SP3 point: time={}, pos={:?}", p.0.tow, p.1);
+    }
+    let pos_plus = interpolate_orbit_lagrange(subset, t + 0.5);
     let pos_minus = interpolate_orbit_lagrange(subset, t - 0.5);
-    
+
     if let (Some(p), Some(p_plus), Some(p_minus)) = (pos, pos_plus, pos_minus) {
         let vel = (p_plus - p_minus) / 1.0;
         Some((p, vel, clock_bias.unwrap_or(0.0)))
@@ -127,7 +133,10 @@ mod tests {
         let mut points = Vec::new();
         // y = x^2
         for i in -5..=5 {
-            let t = GpsTime { week: 0, tow: i as f64 };
+            let t = GpsTime {
+                week: 0,
+                tow: i as f64,
+            };
             let v = Vector3::new((i * i) as f64, 0.0, 0.0);
             points.push((t, v));
         }

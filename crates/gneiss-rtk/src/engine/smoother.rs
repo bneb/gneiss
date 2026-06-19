@@ -1,37 +1,42 @@
-use crate::engine::{ProcessingEngine, EngineMode, EngineError};
+use crate::engine::{EngineError, EngineMode, ProcessingEngine};
 use crate::filter::RtkState;
 use nalgebra::{DMatrix, DVector};
 
 const MAX_STATE_VARIANCE: f64 = 1e10;
 const MIN_ACTIVE_STATE_VARIANCE: f64 = 1e-12;
-const MATRIX_INVERSION_REGULARIZATION: f64 = 1e-9;
 const MIN_ATTITUDE_ROTATION: f64 = 1e-10;
 
 pub fn run_combined_ppk(engine: &mut ProcessingEngine) -> Result<Vec<RtkState>, EngineError> {
     let n_epochs = engine.state_history.len();
-    if n_epochs == 0 { return Err(EngineError::NoObservations); }
-    
+    if n_epochs == 0 {
+        return Err(EngineError::NoObservations);
+    }
+
     let mut smoothed_states = engine.state_history.clone();
 
     if matches!(engine.config.mode, EngineMode::Spp) {
         return Ok(smoothed_states);
     }
-    
+
     for k in (0..n_epochs - 1).rev() {
-        if smoothed_states[k+1].is_reset {
-            tracing::debug!("Epoch {} was reset. Breaking smoothing chain at k={}", k+1, k);
+        if smoothed_states[k + 1].is_reset {
+            tracing::debug!(
+                "Epoch {} was reset. Breaking smoothing chain at k={}",
+                k + 1,
+                k
+            );
             continue;
         }
-        
-        let phi_k: DMatrix<f64> = match &smoothed_states[k+1].core_phi {
+
+        let phi_k: DMatrix<f64> = match &smoothed_states[k + 1].core_phi {
             Some(p) => DMatrix::<f64>::clone(p),
             None => continue,
         };
-        let p_pred_k1: DMatrix<f64> = match &smoothed_states[k+1].full_p_predict {
+        let p_pred_k1: DMatrix<f64> = match &smoothed_states[k + 1].full_p_predict {
             Some(p) => DMatrix::<f64>::clone(p),
             None => continue,
         };
-        let x_pred_k1: DVector<f64> = match &smoothed_states[k+1].full_x_predict {
+        let x_pred_k1: DVector<f64> = match &smoothed_states[k + 1].full_x_predict {
             Some(x) => DVector::<f64>::clone(x),
             None => continue,
         };
@@ -51,7 +56,10 @@ pub fn run_combined_ppk(engine: &mut ProcessingEngine) -> Result<Vec<RtkState>, 
             let ephemerides = &engine.ephemerides;
             if let Ok(res) = smoothed_states[k].resolve_ambiguities(ephemerides, &engine.config) {
                 let fixed_state = res.fixed_state;
-                tracing::debug!("Integer ambiguities resolved during smoothing at epoch {}", k);
+                tracing::debug!(
+                    "Integer ambiguities resolved during smoothing at epoch {}",
+                    k
+                );
                 smoothed_states[k].fixed_state = Some(Box::new(fixed_state));
             }
         }
@@ -60,21 +68,21 @@ pub fn run_combined_ppk(engine: &mut ProcessingEngine) -> Result<Vec<RtkState>, 
 }
 
 fn smooth_epoch(
-    state_k: &mut RtkState, 
-    state_k1: &RtkState, 
-    phi_k: &DMatrix<f64>, 
-    p_pred_k1: &DMatrix<f64>, 
+    state_k: &mut RtkState,
+    state_k1: &RtkState,
+    phi_k: &DMatrix<f64>,
+    p_pred_k1: &DMatrix<f64>,
     x_pred_k1: &DVector<f64>,
-    _k_idx: usize
+    _k_idx: usize,
 ) -> Result<(), &'static str> {
     let core_size = crate::filter::CORE_STATE_SIZE;
-    
+
     let (matched_k_indices, matched_k1_indices) = find_matched_ambiguities(state_k, state_k1);
     let smooth_len = core_size + matched_k_indices.len();
-    
+
     let mut idx_k = (0..core_size).collect::<Vec<_>>();
     idx_k.extend(matched_k_indices.iter().copied());
-    
+
     let mut idx_k1 = (0..core_size).collect::<Vec<_>>();
     idx_k1.extend(&matched_k1_indices);
 
@@ -84,7 +92,13 @@ fn smooth_epoch(
     let p_pred_k1_sub = extract_submatrix(p_pred_k1, &idx_k1, &idx_k1);
     let phi_k_sub = build_phi_submatrix(phi_k, core_size, smooth_len);
 
-    if p_pred_k1_sub.iter().any(|&x| !x.is_finite() || x.abs() > MAX_STATE_VARIANCE) || p_k.iter().any(|&x| !x.is_finite() || x.abs() > MAX_STATE_VARIANCE) {
+    if p_pred_k1_sub
+        .iter()
+        .any(|&x| !x.is_finite() || x.abs() > MAX_STATE_VARIANCE)
+        || p_k
+            .iter()
+            .any(|&x| !x.is_finite() || x.abs() > MAX_STATE_VARIANCE)
+    {
         return Err("non-finite covariance");
     }
 
@@ -92,38 +106,45 @@ fn smooth_epoch(
 
     let x_pred_k1_sub = extract_subvector(x_pred_k1, &idx_k1);
     let c_k = &p_k * phi_k_sub.transpose() * &p_pred_inv;
-    
+
     let x_k = build_x_vector(state_k, core_size, smooth_len, &matched_k_indices);
     let mut delta_x = &x_k1_n - &x_pred_k1_sub;
-    
+
     if core_size > 6 {
         if let Some(predicted_attitude) = state_k1.predicted_attitude {
-            let predicted_attitude: nalgebra::UnitQuaternion<f64> = predicted_attitude; let dq = state_k1.attitude * predicted_attitude.inverse();
+            let predicted_attitude: nalgebra::UnitQuaternion<f64> = predicted_attitude;
+            let dq = state_k1.attitude * predicted_attitude.inverse();
             let mut d_theta = dq.scaled_axis();
-            if dq.w < 0.0 { d_theta = -d_theta; }
+            if dq.w < 0.0 {
+                d_theta = -d_theta;
+            }
             delta_x.rows_mut(6, 3).copy_from(&d_theta);
         }
     }
-    
+
     if core_size > 15 {
         delta_x[15] = 0.0; // rcv_clk_bias is white noise
     }
-    
+
     let mut correction = &c_k * &delta_x;
-    
+
     if core_size > 15 {
         correction[15] = 0.0; // rcv_clk_bias is white noise
     }
-    
-
 
     let x_k_n = x_k + correction;
 
-
-
     let p_k_n = p_k + &c_k * (p_k1_n - p_pred_k1_sub) * c_k.transpose();
 
-    update_smoothed_state(state_k, &x_k_n, &p_k_n, core_size, smooth_len, &matched_k_indices, &idx_k);
+    update_smoothed_state(
+        state_k,
+        &x_k_n,
+        &p_k_n,
+        core_size,
+        smooth_len,
+        &matched_k_indices,
+        &idx_k,
+    );
     Ok(())
 }
 
@@ -144,7 +165,12 @@ fn find_matched_ambiguities(state_k: &RtkState, state_k1: &RtkState) -> (Vec<usi
     (matched_k, matched_k1)
 }
 
-fn build_x_vector(state: &RtkState, core_size: usize, len: usize, matched_indices: &[usize]) -> DVector<f64> {
+fn build_x_vector(
+    state: &RtkState,
+    core_size: usize,
+    len: usize,
+    matched_indices: &[usize],
+) -> DVector<f64> {
     let mut x = DVector::zeros(len);
     x.rows_mut(0, 3).copy_from(&state.position.vector);
     x.rows_mut(3, 3).copy_from(&state.velocity);
@@ -198,11 +224,13 @@ fn build_phi_submatrix(phi: &DMatrix<f64>, core_size: usize, len: usize) -> DMat
 }
 
 fn invert_p_pred(p_pred: &DMatrix<f64>, len: usize) -> Result<DMatrix<f64>, &'static str> {
-    let active: Vec<usize> = (0..len).filter(|&i| {
-        // Exclude white-noise clock bias (15) to prevent instability
-        let is_white_noise = i == 15;
-        !is_white_noise && p_pred[(i, i)] > MIN_ACTIVE_STATE_VARIANCE
-    }).collect();
+    let active: Vec<usize> = (0..len)
+        .filter(|&i| {
+            // Exclude white-noise clock bias (15) to prevent instability
+            let is_white_noise = i == 15;
+            !is_white_noise && p_pred[(i, i)] > MIN_ACTIVE_STATE_VARIANCE
+        })
+        .collect();
     let m = active.len();
     if m == len {
         Ok(crate::math::inversion::invert_matrix_robust(p_pred))
@@ -222,20 +250,23 @@ fn invert_p_pred(p_pred: &DMatrix<f64>, len: usize) -> Result<DMatrix<f64>, &'st
 }
 
 fn update_smoothed_state(
-    state: &mut RtkState, 
-    x_k_n: &DVector<f64>, 
-    p_k_n: &DMatrix<f64>, 
-    core_size: usize, 
+    state: &mut RtkState,
+    x_k_n: &DVector<f64>,
+    p_k_n: &DMatrix<f64>,
+    core_size: usize,
     smooth_len: usize,
     matched_indices: &[usize],
-    idx_k: &[usize]
+    idx_k: &[usize],
 ) {
     state.position.vector = x_k_n.fixed_rows::<3>(0).into_owned();
     state.velocity = x_k_n.fixed_rows::<3>(3).into_owned();
     if core_size > 6 {
         let d_theta = x_k_n.fixed_rows::<3>(6).into_owned();
         if d_theta.norm() > MIN_ATTITUDE_ROTATION {
-            let dq = nalgebra::UnitQuaternion::from_axis_angle(&nalgebra::Unit::new_normalize(d_theta), d_theta.norm());
+            let dq = nalgebra::UnitQuaternion::from_axis_angle(
+                &nalgebra::Unit::new_normalize(d_theta),
+                d_theta.norm(),
+            );
             state.attitude = dq * state.attitude;
             state.attitude.renormalize();
         }

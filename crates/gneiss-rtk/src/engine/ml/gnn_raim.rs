@@ -1,5 +1,5 @@
 use candle_core::{Result, Tensor, D};
-use candle_nn::{linear, Linear, Module, VarBuilder, ops};
+use candle_nn::{linear, ops, Linear, Module, VarBuilder};
 
 /// Multi-Layer Perceptron used for node embeddings and the output head
 pub struct Mlp {
@@ -56,18 +56,36 @@ impl SelfAttention {
         let att = (att / ((self.embed_dim / self.num_heads) as f64).sqrt())?;
         let att = ops::softmax(&att, D::Minus1)?;
 
-        let out = att.matmul(&v)?
+        let out = att
+            .matmul(&v)?
             .transpose(1, 2)?
             .reshape((b_sz, seq_len, self.embed_dim))?;
 
         self.out_proj.forward(&out)
     }
 
-    fn project_qkv(&self, xs: &Tensor, b_sz: usize, seq_len: usize) -> Result<(Tensor, Tensor, Tensor)> {
+    fn project_qkv(
+        &self,
+        xs: &Tensor,
+        b_sz: usize,
+        seq_len: usize,
+    ) -> Result<(Tensor, Tensor, Tensor)> {
         let head_dim = self.embed_dim / self.num_heads;
-        let q = self.q_proj.forward(xs)?.reshape((b_sz, seq_len, self.num_heads, head_dim))?.transpose(1, 2)?;
-        let k = self.k_proj.forward(xs)?.reshape((b_sz, seq_len, self.num_heads, head_dim))?.transpose(1, 2)?;
-        let v = self.v_proj.forward(xs)?.reshape((b_sz, seq_len, self.num_heads, head_dim))?.transpose(1, 2)?;
+        let q = self
+            .q_proj
+            .forward(xs)?
+            .reshape((b_sz, seq_len, self.num_heads, head_dim))?
+            .transpose(1, 2)?;
+        let k = self
+            .k_proj
+            .forward(xs)?
+            .reshape((b_sz, seq_len, self.num_heads, head_dim))?
+            .transpose(1, 2)?;
+        let v = self
+            .v_proj
+            .forward(xs)?
+            .reshape((b_sz, seq_len, self.num_heads, head_dim))?
+            .transpose(1, 2)?;
         Ok((q, k, v))
     }
 }
@@ -88,12 +106,11 @@ const OUT_DIM: usize = 1;
 impl GnnRaimModel {
     /// Initializes the model structure (can be mocked with random weights via VarBuilder)
     pub fn new(vb: VarBuilder) -> Result<Self> {
-        
         let embedding = Mlp::new(FEATURE_DIM, HIDDEN_DIM, HIDDEN_DIM, vb.pp("embedding"))?;
         // We use self-attention as the graph convolution mechanism
         let attention = SelfAttention::new(HIDDEN_DIM, NUM_HEADS, vb.pp("attention"))?;
         let output_head = Mlp::new(HIDDEN_DIM, HEAD_DIM, OUT_DIM, vb.pp("output_head"))?;
-        
+
         Ok(Self {
             embedding,
             attention,
@@ -106,18 +123,18 @@ impl GnnRaimModel {
     pub fn forward(&self, node_features: &Tensor) -> Result<Tensor> {
         // 1. Independent node embedding
         let h = self.embedding.forward(node_features)?;
-        
+
         // 2. Message passing (Self-Attention over the graph of satellites)
         let attn_out = self.attention.forward(&h)?;
-        
+
         // Residual connection + non-linearity
         let h = (h + attn_out)?;
         let h = h.relu()?;
-        
+
         // 3. Independent output projection for each node
         // logits shape: (batch_size, num_satellites, 1)
         let logits = self.output_head.forward(&h)?;
-        
+
         // Output log-variance directly for numerical stability
         Ok(logits)
     }
@@ -135,13 +152,22 @@ pub fn evaluate_gnn_raim(
 ) -> std::collections::HashMap<gneiss_core::sat::SatelliteId, f64> {
     let mut map = std::collections::HashMap::new();
     let num_sats = matched_obs.len();
-    if num_sats == 0 { return map; }
+    if num_sats == 0 {
+        return map;
+    }
 
     let mut features = Vec::with_capacity(num_sats * FEATURE_DIM);
     let mut sats = Vec::with_capacity(num_sats);
 
     for (rov, _) in matched_obs {
-        extract_and_push_features(rov, rov_llh, pos_apc, ephemerides, state_time, &mut features);
+        extract_and_push_features(
+            rov,
+            rov_llh,
+            pos_apc,
+            ephemerides,
+            state_time,
+            &mut features,
+        );
         sats.push(rov.sat);
     }
 
@@ -159,7 +185,7 @@ pub fn evaluate_gnn_raim(
             }
         }
     }
-    
+
     map
 }
 
@@ -175,17 +201,18 @@ fn extract_and_push_features(
     let mut el = 0.0;
     let mut az = 0.0;
     if let Some(eph) = ephemerides.iter().find(|e| e.sat() == rov.sat) {
-        let (sat_pos, _) = crate::engine::measurement_math::get_sat_state(eph, rov.pr_l1, state_time, pos_apc);
+        let (sat_pos, _) =
+            crate::engine::measurement_math::get_sat_state(eph, rov.pr_l1, state_time, pos_apc);
         let (a, e) = gneiss_core::coords::az_el(rov_llh, pos_apc, sat_pos);
         az = a.to_degrees();
         el = e.to_degrees();
     }
     let normalized = crate::engine::ml::dataset::normalize_features(
-        rov.snr as f32, 
-        el as f32, 
-        az as f32, 
-        rov.doppler as f32, 
-        rov.locktime.unwrap_or(0) as f32
+        rov.snr as f32,
+        el as f32,
+        az as f32,
+        rov.doppler as f32,
+        rov.locktime.unwrap_or(0) as f32,
     );
 
     features.extend_from_slice(&normalized);
@@ -194,7 +221,7 @@ fn extract_and_push_features(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use candle_core::{Device, DType, Tensor};
+    use candle_core::{DType, Device, Tensor};
     use candle_nn::{VarBuilder, VarMap};
 
     #[test]
@@ -206,8 +233,13 @@ mod tests {
 
         let batch_size = 1;
         let num_satellites = 10;
-        
-        let input = Tensor::randn(0f32, 1f32, (batch_size, num_satellites, FEATURE_DIM), &device)?;
+
+        let input = Tensor::randn(
+            0f32,
+            1f32,
+            (batch_size, num_satellites, FEATURE_DIM),
+            &device,
+        )?;
         let output = model.forward(&input)?;
 
         assert_eq!(output.dims(), &[batch_size, num_satellites, OUT_DIM]);

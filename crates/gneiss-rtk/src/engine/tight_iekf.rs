@@ -1,8 +1,6 @@
-use nalgebra::{DMatrix, DVector, Vector3};
-use gneiss_core::obs::EpochObs;
 use crate::filter::CORE_STATE_SIZE;
-
-
+use gneiss_core::obs::EpochObs;
+use nalgebra::{DMatrix, DVector, Vector3};
 
 /// Tight-Coupled Factor Graph for INS + GNSS.
 /// State vector: [X, Y, Z, cdt, vx, vy, vz, roll, pitch, yaw, ba_x, ba_y, ba_z, bg_x, bg_y, bg_z, ...ambiguities]
@@ -25,22 +23,31 @@ impl TightFactorGraph {
         Self::default()
     }
 
-    pub fn solve(&self, engine: &mut crate::engine::ProcessingEngine, _rover_obs: &EpochObs, _spp_cdt: Option<f64>) {
-        // Implementation of Tight FG. 
+    pub fn solve(
+        &self,
+        engine: &mut crate::engine::ProcessingEngine,
+        _rover_obs: &EpochObs,
+        _spp_cdt: Option<f64>,
+    ) {
+        // Implementation of Tight FG.
         // This leverages the predictor state as a strong prior (unary factors on the state nodes),
         // and adds pseudorange/doppler constraints.
-        
+
         if engine.current_state.is_none() {
             return;
         }
 
         let state = engine.current_state.as_mut().unwrap();
-        let _rcv_pos = Vector3::new(state.position.vector.x, state.position.vector.y, state.position.vector.z);
+        let _rcv_pos = Vector3::new(
+            state.position.vector.x,
+            state.position.vector.y,
+            state.position.vector.z,
+        );
         let _rcv_clk = state.rcv_clk_bias;
 
         // Ensure state vectors match
         let num_states = CORE_STATE_SIZE + state.ambiguities.len();
-        
+
         let mut x = DVector::zeros(num_states);
         x[0] = state.position.vector.x;
         x[1] = state.position.vector.y;
@@ -75,14 +82,14 @@ impl TightFactorGraph {
         for _iter in 0..self.max_iterations {
             let _h_mat: DMatrix<f64> = DMatrix::zeros(0, num_states);
             let _r_vec: DVector<f64> = DVector::zeros(0);
-            
+
             // Add prior factors (IMU preintegration/predictor)
             // The EKF inherently handles this, so this factor graph can either replace the updater
             // or act as a batch smoother over a window. Here we act as an Iterated EKF (IEKF).
-            
-            // ... Detailed Factor Graph assembly omitted for brevity, 
+
+            // ... Detailed Factor Graph assembly omitted for brevity,
             // the core logic resolves the matrix updates matching the structure in patch_tight_fg.diff
-            
+
             // If delta is small
             let opt_delta = DVector::zeros(num_states); // Placeholder
             if opt_delta.norm() < self.convergence_threshold {
@@ -91,10 +98,10 @@ impl TightFactorGraph {
 
             // Apply updates
             x += opt_delta;
-            
+
             // Re-sync ambiguities
             for i in 0..state.ambiguities.len() {
-                 state.ambiguities[i] = x[CORE_STATE_SIZE + i];
+                state.ambiguities[i] = x[CORE_STATE_SIZE + i];
             }
         }
 

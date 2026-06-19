@@ -36,9 +36,7 @@ impl LossFunction {
                     (*k2 / squared_mahalanobis).sqrt()
                 }
             }
-            LossFunction::Cauchy(k2) => {
-                1.0 / (1.0 + squared_mahalanobis / *k2)
-            }
+            LossFunction::Cauchy(k2) => 1.0 / (1.0 + squared_mahalanobis / *k2),
         }
     }
 }
@@ -76,7 +74,7 @@ mod tests {
     fn test_edge_cases() {
         let huber = LossFunction::Huber(1.0);
         let cauchy = LossFunction::Cauchy(1.0);
-        
+
         assert!(huber.weight(1e10) < 1e-4);
         assert!(cauchy.weight(1e10) < 1e-9);
     }
@@ -85,7 +83,7 @@ mod tests {
     fn test_negative_distance() {
         let huber = LossFunction::Huber(1.0);
         let cauchy = LossFunction::Cauchy(1.0);
-        
+
         assert_eq!(huber.weight(-1.0), 1.0);
         assert_eq!(cauchy.weight(-5.0), 1.0);
         // Test strict boundary < 0.0
@@ -97,7 +95,7 @@ mod tests {
     fn test_nan_distance() {
         let huber = LossFunction::Huber(1.0);
         let cauchy = LossFunction::Cauchy(1.0);
-        
+
         assert_eq!(huber.weight(f64::NAN), 1.0);
         assert_eq!(cauchy.weight(f64::NAN), 1.0);
     }
@@ -106,7 +104,7 @@ mod tests {
     fn test_infinity_distance() {
         let huber = LossFunction::Huber(1.0);
         let cauchy = LossFunction::Cauchy(1.0);
-        
+
         assert_eq!(huber.weight(f64::INFINITY), 0.0);
         assert_eq!(cauchy.weight(f64::INFINITY), 0.0);
     }
