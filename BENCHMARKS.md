@@ -21,9 +21,17 @@ See [COMPARISON.md](./COMPARISON.md) for the full per-dataset, per-mode head-to-
 | Dataset | Gneiss SPP | RTKLIB SPP | Gneiss RTK | RTKLIB RTK | Winner |
 |---------|-----------|-----------|-----------|-----------|--------|
 | GSDC (Pixel 4) | 3.30 m | 3.31 m | 8.37 m | 1.77 m | RTKLIB |
-| Shinjuku (UrbanNav) | 1.85 m | Failed | **1.34 m** | 2.21 m | **Gneiss** |
-| Odaiba (UrbanNav) | 2.10 m | 2.80 m | 5.66 m | 2.87 m | Split |
+| Shinjuku (UrbanNav) | 1.85 m | Failed | **2.60 m** | 5.73 m | **Gneiss** |
+| Odaiba (UrbanNav) | 2.10 m | 2.80 m | **1.92 m** | 4.01 m | **Gneiss** |
 | f9p_ppp | 1.37 m | Failed | **0.25 m** | Failed | **Gneiss** |
+
+### PPP Summary (fresh 2026-06-19)
+
+| Dataset | Gneiss PPP-FG | RTKLIB PPP | Winner |
+|---------|---------------|-----------|--------|
+| Shinjuku | 7.40 m | 3.75 m | RTKLIB |
+| Odaiba | **4.96 m** | 4.69 m | **Tied** |
+| GSDC | 178.82 m | 4.25 m | RTKLIB |
 
 ### Datasets pending data acquisition
 
