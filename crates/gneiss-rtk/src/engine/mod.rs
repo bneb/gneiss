@@ -8,6 +8,7 @@ pub mod measurement;
 pub mod measurement_math;
 pub mod ml;
 pub mod ppp;
+pub mod ppp_common;
 pub mod ppp_iekf;
 pub mod ppp_ins_iekf;
 pub mod ppp_math;
