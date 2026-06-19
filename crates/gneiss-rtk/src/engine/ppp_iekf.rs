@@ -197,6 +197,19 @@ impl PppIteratedEkf {
         (gneiss_core::sat::SatelliteId, usize, usize, f64, f64, f64),
         (gneiss_core::sat::SatelliteId, usize, usize, f64, f64, f64),
     )> {
+        // Inter-constellation: single highest-elevation GPS as universal reference.
+        // Fall back to per-constellation if no GPS available.
+        if let Some(ref_cand) = cands.iter()
+            .filter(|c| c.0.constellation == gneiss_core::sat::Constellation::Gps)
+            .max_by(|a, b| a.3.partial_cmp(&b.3).unwrap_or(std::cmp::Ordering::Equal))
+        {
+            let ref_cand = ref_cand.clone();
+            return cands.iter()
+                .filter(|c| c.0 != ref_cand.0)
+                .map(|c| (c.clone(), ref_cand.clone()))
+                .collect();
+        }
+        // Fallback: per-constellation
         let mut subset = Vec::new();
         let mut const_cands = std::collections::HashMap::new();
         for cand in cands {
@@ -253,11 +266,10 @@ impl PppIteratedEkf {
         }
 
         let mut a_wl = &d_wl * x;
-        let q_wl_from_state = &d_wl * &state.covariance * d_wl.transpose();
         let n = keep_indices.len();
-        let mut q_wl = DMatrix::zeros(n, n);
-        let mut use_mw = vec![false; n];
-        let mut all_mw = true;
+        // Seed WL floats from MW EMA where available, but use state covariance Q
+        // with diagonal floor. Correlations in state covariance help LAMBDA
+        // distinguish integer sets when DD values are tightly clustered.
         for (i, &idx) in keep_indices.iter().enumerate() {
             let (c, ref_sat) = &subset[idx];
             let cnt_c = state.mw_sd_counts.get(&c.0).copied().unwrap_or(0);
@@ -266,45 +278,18 @@ impl PppIteratedEkf {
                 let mw_c = state.mw_sd_ema.get(&c.0).copied().unwrap_or(0.0);
                 let mw_ref = state.mw_sd_ema.get(&ref_sat.0).copied().unwrap_or(0.0);
                 a_wl[i] = mw_c - mw_ref;
-                q_wl[(i, i)] = 0.04;
-                use_mw[i] = true;
-            } else {
-                all_mw = false;
             }
         }
-        // If ALL pairs are MW-converged, use pure diagonal Q (avoids condition number
-        // explosion from mixing tiny MW variances with large state covariances).
-        // If mixed, copy state-covariance for non-MW pairs with zero cross-terms.
-        if all_mw {
-            // Pure diagonal: add tiny off-diagonal correlation to keep Q full-rank for LAMBDA
-            for i in 0..n {
-                for j in 0..n {
-                    if i != j { q_wl[(i, j)] = 0.001; }
-                }
-            }
-        } else {
-            for i in 0..n {
-                if use_mw[i] { continue; }
-                for j in 0..n {
-                    if use_mw[j] { continue; }
-                    q_wl[(i, j)] = q_wl_from_state[(i, j)];
-                }
-            }
-        }
+        let mut q_wl = &d_wl * &state.covariance * d_wl.transpose();
+        for i in 0..q_wl.nrows() { q_wl[(i, i)] = q_wl[(i, i)].max(0.01); }
         let res_wl = crate::ambiguity::lambda::resolve_lambda(&a_wl, &q_wl)
             .map_err(|_| "WL LAMBDA Failed")?;
 
         tracing::info!(
-            "PPP-AR WL: {} pairs, all_mw={}, ratio={:.2}, success_rate={:.3}",
-            n, all_mw, res_wl.ratio, res_wl.success_rate
+            "PPP-AR WL: {} pairs, ratio={:.2}, success_rate={:.3}",
+            n, res_wl.ratio, res_wl.success_rate
         );
-        // MW-converged case: bootstrapped success_rate drops with many pairs
-        // (product of independent probabilities). Trust the LAMBDA ratio instead.
-        let wl_ok = if all_mw {
-            res_wl.ratio >= 1.3
-        } else {
-            res_wl.ratio >= 1.5 && res_wl.success_rate >= 0.95
-        };
+        let wl_ok = res_wl.ratio >= 1.3;
         if !wl_ok {
             return Err("WL ratio test failed");
         }
@@ -353,7 +338,7 @@ impl PppIteratedEkf {
         let res_nl = crate::ambiguity::lambda::resolve_lambda(&a_nl, &q_nl)
             .map_err(|_| "NL LAMBDA Failed")?;
 
-        tracing::trace!("PPP-AR NL: {} pairs, ratio={:.2}, success_rate={:.3}", keep_indices.len(), res_nl.ratio, res_nl.success_rate);
+        tracing::info!("PPP-AR NL: {} pairs, ratio={:.2}, success_rate={:.3}", keep_indices.len(), res_nl.ratio, res_nl.success_rate);
         // NL uses state covariance which has large initial variance (10000 m²).
         // When WL has fixed correctly (all_mw), accept lower NL confidence.
         let nl_ok = res_nl.ratio >= 1.5;
