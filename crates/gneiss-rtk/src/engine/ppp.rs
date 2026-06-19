@@ -209,7 +209,7 @@ fn get_obs_and_corrections(
     f64,  // actual f2 (may differ from satellite_frequencies if L5 fallback)
 ) {
     let f1_b = if sat_obs.sat.constellation == Constellation::Beidou { 2 } else { 1 };
-    let mut f2_b = match sat_obs.sat.constellation {
+    let f2_b = match sat_obs.sat.constellation {
         Constellation::Galileo | Constellation::Beidou => 7,
         _ => 2,
     };
@@ -228,8 +228,6 @@ fn get_obs_and_corrections(
                 engine.sinex_bias.as_ref(), sat_obs, time, _f1, l5_freq, f1_b, l5_band,
             );
             if osb.p2.is_some() || osb.cp2.is_some() {
-                _ = f2_b; // consumed by L5 fallback
-                f2_b = l5_band;
                 actual_f2 = l5_freq;
             }
         }

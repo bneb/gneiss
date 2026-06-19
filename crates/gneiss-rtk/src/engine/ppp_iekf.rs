@@ -1459,20 +1459,11 @@ mod mutant_killer_tests {
             },
             observations: vec![],
         };
-        let obs5 = SatObs {
-            sat: SatelliteId {
-                constellation: Constellation::Gps,
-                prn: 5,
-            },
-            observations: vec![],
-        };
-
         // Static references to avoid lifetime issues in closure
         let obs1_ref = Box::leak(Box::new(obs1));
         let obs2_ref = Box::leak(Box::new(obs2));
         let obs3_ref = Box::leak(Box::new(obs3));
         let obs4_ref = Box::leak(Box::new(obs4));
-        let obs5_ref = Box::leak(Box::new(obs5));
 
         {
             let mut add_sat = |obs: &'static SatObs| {
