@@ -31,6 +31,18 @@ pub fn process_ppp<'a>(
         state.position = spp.position;
         state.rcv_clk_bias = spp.cdt;
     }
+    // Auto-enable UDUC AR when precise products are available.
+    // Ionosphere-free combination (default without uduc_ar) hides raw
+    // L1/L2 observations needed for ambiguity resolution.
+    let has_precise = !engine.sp3_epochs.is_empty() || engine.clk_data.is_some();
+    if has_precise && !engine.config.uduc_ar {
+        tracing::info!("SP3/CLK loaded — enabling uduc_ar for ambiguity resolution");
+        engine.config.uduc_ar = true;
+    }
+    if has_precise && engine.config.uduc_ar {
+        // already explicitly set — no warning needed
+    }
+
     let sats = build_sats(engine, rover_obs);
     if sats.is_empty() {
         return Err(EngineError::InsufficientSatellites);

@@ -143,7 +143,7 @@ impl PppIteratedEkf {
             return Err("Insufficient dual-frequency satellites for AR");
         }
         let subset = self.build_ar_subset(&cands);
-        tracing::info!("PPP-AR diag: subset pairs={}", subset.len());
+        tracing::trace!("PPP-AR diag: subset pairs={}", subset.len());
         if subset.len() < 3 {
             return Err("Insufficient satellites after single differencing");
         }
@@ -151,7 +151,7 @@ impl PppIteratedEkf {
         let x = extract_state_vector(state);
         let (x_wl, p_wl, keep_indices) = self.resolve_widelane_ar(state, &subset, &x)?;
 
-        tracing::info!("PPP-AR diag: WL keep={}/{} — attempting NL", keep_indices.len(), subset.len());
+        tracing::trace!("PPP-AR diag: WL keep={}/{} — attempting NL", keep_indices.len(), subset.len());
         let (x_fixed, p_fixed) = self.resolve_narrowlane_ar(state, &subset, &keep_indices, &x_wl, &p_wl)?;
 
         // Position validation: reject if 3D jump > 5m from float
@@ -353,7 +353,7 @@ impl PppIteratedEkf {
         let res_nl = crate::ambiguity::lambda::resolve_lambda(&a_nl, &q_nl)
             .map_err(|_| "NL LAMBDA Failed")?;
 
-        tracing::info!("PPP-AR NL: {} pairs, ratio={:.2}, success_rate={:.3}", keep_indices.len(), res_nl.ratio, res_nl.success_rate);
+        tracing::trace!("PPP-AR NL: {} pairs, ratio={:.2}, success_rate={:.3}", keep_indices.len(), res_nl.ratio, res_nl.success_rate);
         // NL uses state covariance which has large initial variance (10000 m²).
         // When WL has fixed correctly (all_mw), accept lower NL confidence.
         let nl_ok = res_nl.ratio >= 1.5;
@@ -371,9 +371,9 @@ impl PppIteratedEkf {
 
         let dx_nl = &k_nl * (res_nl.best_integers - a_nl);
 
-        tracing::info!("p_wl dims: {}x{}", p_wl.nrows(), p_wl.ncols());
-        tracing::info!("k_nl dims: {}x{}", k_nl.nrows(), k_nl.ncols());
-        tracing::info!("d_nl dims: {}x{}", d_nl.nrows(), d_nl.ncols());
+        tracing::trace!("p_wl dims: {}x{}", p_wl.nrows(), p_wl.ncols());
+        tracing::trace!("k_nl dims: {}x{}", k_nl.nrows(), k_nl.ncols());
+        tracing::trace!("d_nl dims: {}x{}", d_nl.nrows(), d_nl.ncols());
         tracing::info!("r dims: {}x{}", keep_indices.len(), keep_indices.len());
 
         let p_fixed = crate::math::covariance::apply_joseph_covariance_update(

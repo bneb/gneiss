@@ -75,3 +75,19 @@ cargo run --release -p gneiss-cli -- process \
 - **AR needs >30 min convergence** for widelane covariance to drop below 0.15 cycle threshold.
 - **GLONASS AR not supported** — inter-frequency bias calibration required.
 - **INS tightly-coupled modes** (SPP-ins, RTK-ins) produce degraded results on some datasets.
+
+## PPP-AR Prerequisites
+
+Ambiguity resolution requires raw dual-frequency observations. The following conditions must be met:
+
+1. **Precise products (SP3/CLK)**: Broadcast ephemeris orbit errors (2-5m) prevent narrow-lane ambiguity convergence to <0.1 cycle accuracy. SP3/CLK files reduce orbit error to ~0.02m.
+2. **uduc_ar=true**: When SP3/CLK is loaded, this is auto-enabled (see `ppp.rs:process_ppp`). Without it, the ionosphere-free combination hides raw L1/L2 needed for AR.
+3. **5+ dual-frequency satellites per constellation**: The per-constellation DD approach needs ≥2 satellites per constellation group for a reference + pairs.
+4. **30+ minute convergence window**: MW widelane converges in ~12 epochs, but narrow-lane ambiguity needs longer. Static datasets (WTZR, f9p_ppp) are ideal.
+
+### Known AR Limitations
+
+- **Broadcast-only PPP-AR does not fix**: Shinjuku 2000-epoch run produced zero fixes. NL ambiguity jumps >20m from float. Root cause: orbit/clock errors alias into NL estimates.
+- **f9p_ppp with SP3/CLK untested**: The dataset has precise products but needs `uduc_ar=true` + fresh benchmark run.
+- **Inter-constellation ISB correction**: Attempted and reverted. Removing constellation-dependent MW bias destroyed LAMBDA ratio (1.36→1.02). The bias IS the signal.
+- **Per-constellation WL works**: With 4-5 GPS pairs + 2-4 Galileo pairs, WL LAMBDA achieves ratios up to 35.5. The bottleneck is NL.
