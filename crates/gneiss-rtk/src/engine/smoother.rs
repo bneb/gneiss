@@ -50,19 +50,11 @@ pub fn run_combined_ppk(engine: &mut ProcessingEngine) -> Result<Vec<RtkState>, 
             continue;
         }
 
-        smoothed_states[k].is_fixed = false;
-        smoothed_states[k].fixed_state = None;
-        if !matches!(engine.config.mode, EngineMode::Spp | EngineMode::SppIns) {
-            let ephemerides = &engine.ephemerides;
-            if let Ok(res) = smoothed_states[k].resolve_ambiguities(ephemerides, &engine.config) {
-                let fixed_state = res.fixed_state;
-                tracing::debug!(
-                    "Integer ambiguities resolved during smoothing at epoch {}",
-                    k
-                );
-                smoothed_states[k].fixed_state = Some(Box::new(fixed_state));
-            }
-        }
+        // Preserve forward-pass AR fix state — re-resolving on smoothed
+        // states can pick different integers, creating inconsistencies
+        // that propagate and amplify through the backward recursion.
+        // The smoothed covariance already reflects the forward AR fix
+        // through the RTS update.
     }
     Ok(smoothed_states)
 }
@@ -134,7 +126,19 @@ fn smooth_epoch(
 
     let x_k_n = x_k + correction;
 
-    let p_k_n = p_k + &c_k * (p_k1_n - p_pred_k1_sub) * c_k.transpose();
+    // Guard: if the smoothed state has diverged, skip this epoch
+    if x_k_n.iter().any(|v| !v.is_finite()) || x_k_n.iter().any(|v| v.abs() > 1e15) {
+        return Err("smoothed state diverged");
+    }
+
+    let p_k_n_raw = p_k + &c_k * (p_k1_n - p_pred_k1_sub) * c_k.transpose();
+    // Enforce symmetry — numerical drift can break it across many epochs
+    let p_k_n = 0.5 * (&p_k_n_raw + p_k_n_raw.transpose());
+
+    // Guard: reject non-finite or pathologically large covariance
+    if p_k_n.iter().any(|v| !v.is_finite() || v.abs() > MAX_STATE_VARIANCE) {
+        return Err("smoothed covariance diverged");
+    }
 
     update_smoothed_state(
         state_k,
