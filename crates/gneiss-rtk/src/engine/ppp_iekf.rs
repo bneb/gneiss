@@ -289,7 +289,9 @@ impl PppIteratedEkf {
             "PPP-AR WL: {} pairs, ratio={:.2}, success_rate={:.3}",
             n, res_wl.ratio, res_wl.success_rate
         );
-        let wl_ok = res_wl.ratio >= 1.3;
+        // NL fixes are all sub-cycle when WL passes — lower threshold to
+        // recover more epochs. Bootstrapping success_rate provides secondary gating.
+        let wl_ok = res_wl.ratio >= 1.1 && res_wl.success_rate >= 0.05;
         if !wl_ok {
             return Err("WL ratio test failed");
         }
@@ -341,9 +343,25 @@ impl PppIteratedEkf {
         tracing::info!("PPP-AR NL: {} pairs, ratio={:.2}, success_rate={:.3}", keep_indices.len(), res_nl.ratio, res_nl.success_rate);
         // NL uses state covariance which has large initial variance (10000 m²).
         // When WL has fixed correctly (all_mw), accept lower NL confidence.
-        let nl_ok = res_nl.ratio >= 1.5;
-        if !nl_ok {
-            return Err("NL ratio test failed");
+        // Skip NL ratio test — WL fix constrains the solution enough that
+        // position validation (>20m jump) is the effective NL gate.
+
+        // --- Diagnostic: per-pair NL fix quality (before q_nl is consumed) ---
+        let mut diag_parts: Vec<String> = Vec::new();
+        for i in 0..keep_indices.len() {
+            let float_val = a_nl[i];
+            let fixed_val = res_nl.best_integers[i];
+            let residual = fixed_val - float_val;
+            let q_sqrt = q_nl[(i, i)].sqrt();
+            let nsigma = if q_sqrt > 1e-9 { residual / q_sqrt } else { 0.0 };
+            let (sat, ref_sat) = &subset[keep_indices[i]];
+            let float_s = format!("{:.3}", float_val);
+            let fix_s = format!("{:.0}", fixed_val);
+            let res_s = format!("{:.3}", residual);
+            diag_parts.push(format!(
+                "{}/{}: float={} fix={} res={}cy ({:.1}σ)",
+                sat.0, ref_sat.0, float_s, fix_s, res_s, nsigma
+            ));
         }
 
         let s_nl_inv = q_nl.try_inverse().ok_or("NL Cov Inversion failed")?;
@@ -355,11 +373,12 @@ impl PppIteratedEkf {
         }
 
         let dx_nl = &k_nl * (res_nl.best_integers - a_nl);
-
-        tracing::trace!("p_wl dims: {}x{}", p_wl.nrows(), p_wl.ncols());
-        tracing::trace!("k_nl dims: {}x{}", k_nl.nrows(), k_nl.ncols());
-        tracing::trace!("d_nl dims: {}x{}", d_nl.nrows(), d_nl.ncols());
-        tracing::info!("r dims: {}x{}", keep_indices.len(), keep_indices.len());
+        let pos_correction_norm = (dx_nl[0].powi(2) + dx_nl[1].powi(2) + dx_nl[2].powi(2)).sqrt();
+        let pos_corr_str = format!("{:.3}", pos_correction_norm);
+        tracing::info!(
+            "PPP-AR NL diag: pos_corr={}m | {}",
+            pos_corr_str, diag_parts.join(" | ")
+        );
 
         let p_fixed = crate::math::covariance::apply_joseph_covariance_update(
             p_wl,
@@ -368,7 +387,8 @@ impl PppIteratedEkf {
             &DMatrix::zeros(keep_indices.len(), keep_indices.len()),
         );
 
-        tracing::info!("PPP Cascade AR Fixed! N_Sats: {}", keep_indices.len() + 1);
+        let pos_corr_str2 = format!("{:.3}", pos_correction_norm);
+        tracing::info!("PPP Cascade AR Fixed! N_Sats: {} pos_corr={}m", keep_indices.len() + 1, pos_corr_str2);
         Ok((x_wl + dx_nl, p_fixed))
     }
 
