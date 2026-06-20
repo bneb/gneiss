@@ -21,8 +21,12 @@ pub fn process_ppp<'a>(
     let state = engine.current_state.as_mut().unwrap();
     state.time = rover_obs.time;
     state.position.epoch = rover_obs.time;
-    // Reset to SPP position each epoch to prevent IEKF linearization drift.
-    // The IEKF refines clock, tropo, ambiguities but position starts fresh from SPP.
+    // SPP seed: reset receiver clock and (on cold start) position.
+    // The IEKF refines clock, tropo, ambiguities across iterations.
+    // Position is re-anchored to SPP each epoch because the single-epoch
+    // IEKF cannot improve absolute position beyond the code measurement
+    // quality (~5m with broadcast ephemeris). The carrier phase provides
+    // relative smoothness but needs the absolute SPP anchor.
     if let Ok(spp) = crate::spp::compute_spp(
         rover_obs, &engine.ephemerides,
         engine.klobuchar_params.as_ref(),
