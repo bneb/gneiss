@@ -260,7 +260,12 @@ pub fn detect_slip_combined(
     (false, lk)
 }
 
-pub fn compute_tropo_dry(rcv_pos_llh: Vector3<f64>, el: f64, t: GpsTime) -> (f64, f64) {
+pub fn compute_tropo_dry(
+    rcv_pos_llh: Vector3<f64>,
+    el: f64,
+    t: GpsTime,
+    mapper: &dyn gneiss_core::atmosphere::TropoMapper,
+) -> (f64, f64) {
     if el < 0.0 {
         return (0.0, 0.0);
     }
@@ -277,8 +282,7 @@ pub fn compute_tropo_dry(rcv_pos_llh: Vector3<f64>, el: f64, t: GpsTime) -> (f64
     let z_dry_scale = 1.0 - 0.00266 * libm::cos(2.0 * lat_rad) - 0.00028 * alt_m / 1000.0;
     let z_dry = (0.0022768 * p_z) / z_dry_scale;
 
-    let (mh, mw) =
-        gneiss_core::atmosphere::AtmosphereModel::nmf_mapping_functions(rcv_pos_llh, el, t);
+    let (mh, mw) = mapper.mapping_functions(rcv_pos_llh, el, t);
     (z_dry * mh, mw)
 }
 
@@ -454,21 +458,24 @@ mod tests {
 
     #[test]
     fn test_compute_tropo_dry_negative_el() {
-        let (d, w) = compute_tropo_dry(Vector3::zeros(), -0.1, GpsTime::new(0, 0.0));
+        let mapper = gneiss_core::atmosphere::NmfMapper;
+        let (d, w) = compute_tropo_dry(Vector3::zeros(), -0.1, GpsTime::new(0, 0.0), &mapper);
         assert_eq!(d, 0.0);
         assert_eq!(w, 0.0);
     }
 
     #[test]
     fn test_compute_tropo_dry_high_alt() {
-        let (d, w) = compute_tropo_dry(Vector3::new(0.0, 0.0, 20001.0), 1.0, GpsTime::new(0, 0.0));
+        let mapper = gneiss_core::atmosphere::NmfMapper;
+        let (d, w) = compute_tropo_dry(Vector3::new(0.0, 0.0, 20001.0), 1.0, GpsTime::new(0, 0.0), &mapper);
         assert_eq!(d, 0.0);
         assert_eq!(w, 0.0);
     }
 
     #[test]
     fn test_compute_tropo_dry_valid() {
-        let (d, w) = compute_tropo_dry(Vector3::new(0.5, 0.0, 100.0), 0.5, GpsTime::new(0, 0.0));
+        let mapper = gneiss_core::atmosphere::NmfMapper;
+        let (d, w) = compute_tropo_dry(Vector3::new(0.5, 0.0, 100.0), 0.5, GpsTime::new(0, 0.0), &mapper);
         assert_eq!(d, 4.742703419689178);
         assert_eq!(w, 2.081891197333091);
     }

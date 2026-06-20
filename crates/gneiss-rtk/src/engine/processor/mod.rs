@@ -24,6 +24,7 @@ pub struct ProcessingEngine {
     pub ref_sat: Option<SatelliteId>,
     pub hatch_filter: crate::hatch::HatchFilter,
     pub innovation_tracker: crate::engine::adaptive::InnovationTracker,
+    pub tropo_mapper: Box<dyn gneiss_core::atmosphere::TropoMapper>,
     pub sp3_epochs: Vec<gneiss_parsers::sp3::Sp3Epoch>,
     pub clk_data: Option<gneiss_parsers::rinex_clk::RinexClock>,
     pub antex: Option<gneiss_parsers::antex::AntexDatabase>,
@@ -44,6 +45,8 @@ impl ProcessingEngine {
             None
         };
 
+        let tropo_mapping = config.tropo_mapping;
+
         Self {
             config,
             klobuchar_params: None,
@@ -55,6 +58,7 @@ impl ProcessingEngine {
             imu_buffer: Vec::new(),
             imu_history: Vec::new(),
             ref_sat: None,
+            tropo_mapper: gneiss_core::atmosphere::create_tropo_mapper(tropo_mapping, None),
             hatch_filter: crate::hatch::HatchFilter::default(),
             innovation_tracker: crate::engine::adaptive::InnovationTracker::default(),
             sp3_epochs: Vec::new(),

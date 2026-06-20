@@ -146,6 +146,9 @@ pub struct EngineConfig {
 
     pub uduc_ar: bool,
 
+    /// Tropospheric mapping function selection.
+    pub tropo_mapping: gneiss_core::atmosphere::TropoMapping,
+
     // GNN RAIM
     pub enable_gnn_raim: bool,
     pub export_gnn_dataset_path: Option<String>,
@@ -192,6 +195,7 @@ impl Default for EngineConfig {
             process_noise_amb_fixed: 1e-12,
             tuning: Default::default(),
             uduc_ar: false,
+            tropo_mapping: gneiss_core::atmosphere::TropoMapping::default(),
             enable_gnn_raim: false,
             export_gnn_dataset_path: None,
         }

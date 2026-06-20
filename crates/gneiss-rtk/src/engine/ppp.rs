@@ -148,7 +148,9 @@ fn process_single_sat<'a>(
         return None;
     }
 
-    let (tropo_dry, map_wet) = crate::engine::ppp_math::compute_tropo_dry(rcv_llh, el, r_obs.time);
+    let (tropo_dry, map_wet) = crate::engine::ppp_math::compute_tropo_dry(
+        rcv_llh, el, r_obs.time, engine.tropo_mapper.as_ref(),
+    );
     let klobuchar = engine.klobuchar_params.unwrap_or_default();
     let iono_delay = if is_if {
         0.0
