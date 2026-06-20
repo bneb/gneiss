@@ -21,10 +21,10 @@ Last updated: 2026-06-19. Rows marked [stale] > 1 week old.
 | Shinjuku (UrbanNav) | RTK Kinematic (combined) | RTKLIB | 2.809 m | 5.978 m | 4.700 m | RTKLIB | 🟢 2026-06-19 |
 | Shinjuku (UrbanNav) | RTK Kinematic (combined) | Gneiss | 6.036 m | 14.981 m | 8.143 m | | 🟢 2026-06-19 |
 | Shinjuku (UrbanNav) | PPP Kinematic (EKF) | RTKLIB | 2.003 m | 3.749 m | 3.235 m | RTKLIB | 🟢 2026-06-19 |
-| Shinjuku (UrbanNav) | PPP Kinematic (EKF) | Gneiss | 30.267 m | 54.412 m | 223.067 m | | 🟢 2026-06-19 |
-| Shinjuku (UrbanNav) | PPP Kinematic (FG) | RTKLIB | 2.003 m | 3.749 m | 3.235 m | RTKLIB | 🟢 2026-06-19 |
-| Shinjuku (UrbanNav) | PPP Kinematic (FG) | Gneiss | 5.015 m | 7.402 m | 13.725 m | | 🟢 2026-06-19 |
-| Shinjuku (UrbanNav) | PPP Kinematic (FG) fwd | Gneiss | 7.542 m | 41.576 m | 13.891 m | — | 🟢 2026-06-20 |
+| Shinjuku (UrbanNav) | PPP Kinematic (EKF) | Gneiss | 30.267 m | 54.412 m | 223.067 m | [deprecated] | 🔴 2026-06-20 |
+| Shinjuku (UrbanNav) | PPP Kinematic (IEKF) | RTKLIB | 2.003 m | 3.749 m | 3.235 m | RTKLIB | 🟢 2026-06-19 |
+| Shinjuku (UrbanNav) | PPP Kinematic (IEKF) | Gneiss | 5.015 m | 7.402 m | 13.725 m | | 🟢 2026-06-19 |
+| Shinjuku (UrbanNav) | PPP Kinematic (IEKF) fwd | Gneiss | 7.542 m | 41.576 m | 13.891 m | — | 🟢 2026-06-20 |
 | Odaiba (UrbanNav) | SPP | RTKLIB | 2.799 m | 7.453 m | 4.885 m | **Gneiss** | 🟡 [stale] |
 | Odaiba (UrbanNav) | SPP | Gneiss | 2.099 m | 2.958 m | 2.253 m | | 🟡 [stale] |
 | Odaiba (UrbanNav) | RTK Kinematic | RTKLIB | 2.867 m | 4.014 m | 2.490 m | | 🟡 [stale] |
@@ -32,11 +32,11 @@ Last updated: 2026-06-19. Rows marked [stale] > 1 week old.
 | Odaiba (UrbanNav) | RTK Kinematic (combined) | RTKLIB | 3.031 m | 3.886 m | 4.168 m | RTKLIB | 🟡 [stale] |
 | Odaiba (UrbanNav) | RTK Kinematic (combined) | Gneiss | 5.664 m | 17.037 m | 3.069 m | | 🟡 [stale] |
 | Odaiba (UrbanNav) | PPP Kinematic (EKF) | RTKLIB | 3.965 m | 4.691 m | 6.089 m | RTKLIB | 🟡 [stale] |
-| Odaiba (UrbanNav) | PPP Kinematic (EKF) | Gneiss | 16.549 m | 21.594 m | 14.939 m | | 🟡 [stale] |
-| Odaiba (UrbanNav) | PPP Kinematic (FG) | RTKLIB | 3.965 m | 4.691 m | 6.089 m | — | 🟢 2026-06-19 |
-| Odaiba (UrbanNav) | PPP Kinematic (FG) | Gneiss | 3.404 m | 4.961 m | 5.902 m | **Tied** | 🟢 2026-06-19 |
-| Odaiba (UrbanNav) | PPP Kinematic (FG) fwd | Gneiss | 5.288 m | 20.668 m | 5.833 m | — | 🟢 2026-06-20 |
-| Odaiba (UrbanNav) | PPP Kinematic (FG) smooth | Gneiss | 5.221 m | 35.823 m | 17.526 m | — | 🟢 2026-06-20 |
+| Odaiba (UrbanNav) | PPP Kinematic (EKF) | Gneiss | 16.549 m | 21.594 m | 14.939 m | [deprecated] | 🔴 2026-06-20 |
+| Odaiba (UrbanNav) | PPP Kinematic (IEKF) | RTKLIB | 3.965 m | 4.691 m | 6.089 m | — | 🟢 2026-06-19 |
+| Odaiba (UrbanNav) | PPP Kinematic (IEKF) | Gneiss | 3.404 m | 4.961 m | 5.902 m | **Tied** | 🟢 2026-06-19 |
+| Odaiba (UrbanNav) | PPP Kinematic (IEKF) fwd | Gneiss | 5.288 m | 20.668 m | 5.833 m | — | 🟢 2026-06-20 |
+| Odaiba (UrbanNav) | PPP Kinematic (IEKF) smooth | Gneiss | 5.221 m | 35.823 m | 17.526 m | — | 🟢 2026-06-20 |
 | PPP (f9p_ppp) | SPP | RTKLIB | Failed |  |  | **Gneiss** (RTKLIB missing) | 🟡 [stale] |
 | PPP (f9p_ppp) | SPP | Gneiss | 1.367 m | 2.008 m | 0.934 m | | 🟡 [stale] |
 | PPP (f9p_ppp) | RTK Kinematic | RTKLIB | Failed |  |  | **Gneiss** (RTKLIB missing) | 🟡 [stale] |

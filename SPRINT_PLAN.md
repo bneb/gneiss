@@ -7,7 +7,7 @@
 | 1: Fix Smoother | 🟡 Partial | Catastrophic blowups (10⁶m) eliminated. AR re-resolution removed, symmetry enforced, NaN guards added. Median vertical degraded (5.8→17.5m). |
 | 2: Precise Products | 🔴 Blocked | IGS BKG doesn't archive 2018 (Week 2032). Needs CDDIS authentication. |
 | 3: Per-Constellation AR | 🟢 Done | Implemented with inter-const fallback. Galileo fixes consistently (4 sats → 3 pairs). Accuracy unchanged — NL barely moves float solution. |
-| 4: PPP-EKF Investigation | ⬜ Todo | 10-15× gap vs RTKLIB remains. |
+| 4: PPP-EKF Investigation | 🟢 Resolved | EKF path **no longer exists** — replaced by IEKF. `--mode ppp` and `--mode ppp-fg` produce identical accuracy (verified: 5.259m Hz 50th for both). COMPARISON.md EKF entries marked [deprecated]. |
 | 5: Code Quality | ⬜ Todo | Quick wins: fix comments, rename types, MW filter. |
 
 **Key finding:** AR is NOT the PPP accuracy bottleneck. NL fixes have sub-cycle residuals and move the position <0.05m. Float solution quality — limited by broadcast ephemeris (~2-5m orbit+clock error) — determines accuracy. The 2m gap vs RTKLIB PPP-FG is from the float solution, not AR.
