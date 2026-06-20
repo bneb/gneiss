@@ -21,19 +21,28 @@ pub fn process_ppp<'a>(
     let state = engine.current_state.as_mut().unwrap();
     state.time = rover_obs.time;
     state.position.epoch = rover_obs.time;
-    // SPP seed: reset receiver clock and (on cold start) position.
-    // The IEKF refines clock, tropo, ambiguities across iterations.
-    // Position is re-anchored to SPP each epoch because the single-epoch
-    // IEKF cannot improve absolute position beyond the code measurement
-    // quality (~5m with broadcast ephemeris). The carrier phase provides
-    // relative smoothness but needs the absolute SPP anchor.
+    // SPP seed: compute position and use as soft prior in the IEKF.
+    // Cold start (epoch 0): hard-reset position to SPP.
+    // Subsequent epochs: inject SPP as a prior measurement with
+    // variance that decreases as the filter converges. This allows
+    // multi-epoch carrier-phase convergence while staying anchored.
+    let mut position_prior: Option<(Vector3<f64>, f64)> = None;
     if let Ok(spp) = crate::spp::compute_spp(
         rover_obs, &engine.ephemerides,
         engine.klobuchar_params.as_ref(),
         &crate::spp::SppConfig::default(), None,
     ) {
-        state.position = spp.position;
-        state.rcv_clk_bias = spp.cdt;
+        let is_cold_start = state.epoch_count < 2;
+        if is_cold_start {
+            state.position = spp.position;
+            state.rcv_clk_bias = spp.cdt;
+        } else {
+            // Prior variance: start at 25 m² (5m std), decrease with
+            // state covariance convergence (min 1 m²).
+            let pos_cov = state.covariance[(0, 0)].min(state.covariance[(1, 1)]).min(state.covariance[(2, 2)]);
+            let prior_var = (pos_cov.min(25.0)).max(1.0);
+            position_prior = Some((spp.position.vector, prior_var));
+        }
     }
     // Auto-enable UDUC AR when precise products are available.
     // Ionosphere-free combination (default without uduc_ar) hides raw
@@ -54,7 +63,7 @@ pub fn process_ppp<'a>(
     let state = engine.current_state.as_mut().unwrap();
     update_phase_ambiguities(state, &sats, rover_obs.time);
     state.prune_stale_ambiguities(state.epoch_count as u32, 10);
-    PppIteratedEkf::new().solve(state, &sats)?;
+    PppIteratedEkf::new().solve(state, &sats, position_prior)?;
     state.epoch_count = state.epoch_count.saturating_add(1);
     let final_state = engine.current_state.as_ref().unwrap().clone();
     engine.state_history.push(final_state);

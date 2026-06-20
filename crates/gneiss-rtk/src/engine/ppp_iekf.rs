@@ -36,9 +36,14 @@ impl PppIteratedEkf {
         Self::default()
     }
 
-    pub fn solve(&self, state: &mut RtkState, sats: &[ProcessedSat]) -> Result<(), EngineError> {
+    pub fn solve(
+        &self,
+        state: &mut RtkState,
+        sats: &[ProcessedSat],
+        position_prior: Option<(Vector3<f64>, f64)>, // (ecef_m, variance_m2)
+    ) -> Result<(), EngineError> {
         for outer_iter in 0..4 {
-            let done = self.solve_inner(state, sats)?;
+            let done = self.solve_inner(state, sats, position_prior)?;
             if done || outer_iter == 3 {
                 if !done {
                     tracing::warn!("Max outlier rejection iterations reached.");
@@ -58,6 +63,7 @@ impl PppIteratedEkf {
         &self,
         state: &mut RtkState,
         sats: &[ProcessedSat],
+        position_prior: Option<(Vector3<f64>, f64)>,
     ) -> Result<bool, EngineError> {
         let x_pred = extract_state_vector(state);
         let p_pred = state.covariance.clone();
@@ -68,7 +74,7 @@ impl PppIteratedEkf {
 
         for _iter in 0..self.max_iterations {
             if let Some(dx) =
-                self.compute_iteration_dx(state, sats, &x_i, &x_pred, &p_inv, _iter)?
+                self.compute_iteration_dx(state, sats, &x_i, &x_pred, &p_inv, _iter, position_prior)?
             {
                 x_i = &x_i + &dx;
                 if dx.norm() < self.convergence_threshold {
@@ -509,6 +515,7 @@ impl PppIteratedEkf {
         x_pred: &DVector<f64>,
         p_inv: &DMatrix<f64>,
         iter: usize,
+        position_prior: Option<(Vector3<f64>, f64)>,
     ) -> Result<Option<DVector<f64>>, EngineError> {
         let meas = self.build_measurements(state, sats, x_i, iter);
         if meas.is_empty() {
@@ -520,8 +527,20 @@ impl PppIteratedEkf {
 
         let h_t = h_mat.transpose();
         let htw = &h_t * &w_mat;
-        let htwh = &htw * &h_mat;
-        let htwr = &htw * &res_vec;
+        let mut htwh = &htw * &h_mat;
+        let mut htwr = &htw * &res_vec;
+
+        // Add SPP position prior as soft pseudo-measurements on X, Y, Z.
+        // This replaces the hard position reset in process_ppp, allowing
+        // the IEKF to accumulate carrier-phase information across epochs
+        // while staying loosely anchored to the SPP solution.
+        if let Some((spp_pos, var)) = position_prior {
+            let w = 1.0 / var;
+            for i in 0..3 {
+                htwh[(i, i)] += w;
+                htwr[i] += w * (spp_pos[i] - x_i[i]);
+            }
+        }
 
         let htwh_damped = &htwh + p_inv;
         let innov = &htwr + p_inv * (x_pred - x_i);
@@ -1052,7 +1071,7 @@ mod tests {
         let mut state = dummy_rtk_state();
         state.covariance = DMatrix::identity(CORE_STATE_SIZE, CORE_STATE_SIZE);
         let sats = vec![];
-        let res = fg.solve(&mut state, &sats);
+        let res = fg.solve(&mut state, &sats, None);
         assert!(matches!(res, Err(EngineError::InsufficientSatellites)));
     }
 
@@ -1283,7 +1302,7 @@ mod nan_tests {
         let mut state = dummy_rtk_state();
         state.covariance = DMatrix::from_element(CORE_STATE_SIZE, CORE_STATE_SIZE, f64::NAN);
         let sats = vec![];
-        let res = fg.solve(&mut state, &sats);
+        let res = fg.solve(&mut state, &sats, None);
         assert!(matches!(res, Err(EngineError::StateDisappeared)));
     }
 }
