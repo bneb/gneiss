@@ -47,6 +47,8 @@ Last updated: 2026-06-19. Rows marked [stale] > 1 week old.
 | PPP (f9p_ppp) | PPP Kinematic (EKF) | Gneiss | 13.137 m | 16.818 m | 16.127 m | | 🟡 [stale] |
 | PPP (f9p_ppp) | PPP Kinematic (FG) | RTKLIB | Failed |  |  | **Gneiss** (RTKLIB missing) | 🟡 [stale] |
 | PPP (f9p_ppp) | PPP Kinematic (FG) | Gneiss | 3.516 m | 5.081 m | 1.263 m | | 🟡 [stale] |
+| PPP (f9p_ppp) | PPP Kinematic (IEKF) bcast | Gneiss | 1.930 m | 3.881 m | 7.275 m | — | 🟢 2026-06-20 |
+| PPP (f9p_ppp) | PPP Kinematic (IEKF) precise | Gneiss | 1.492 m | 2.611 m | 5.877 m | — | 🟢 2026-06-20 |
 | UrbanLoco (Example) | SPP | RTKLIB | No data |  |  |  | 🟡 [stale] |
 | UrbanLoco (Example) | SPP | Gneiss | No data |  |  | | 🟡 [stale] |
 | UrbanLoco (Example) | RTK Kinematic | RTKLIB | No data |  |  |  | 🟡 [stale] |
