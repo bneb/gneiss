@@ -142,29 +142,138 @@ impl PppIteratedEkf {
         if cands.len() < 4 {
             return Err("Insufficient dual-frequency satellites for AR");
         }
-        let subset = self.build_ar_subset(&cands);
-        tracing::trace!("PPP-AR diag: subset pairs={}", subset.len());
-        if subset.len() < 3 {
-            return Err("Insufficient satellites after single differencing");
+
+        // Per-constellation AR: group candidates by constellation, run WL+NL
+        // separately per group. This avoids inter-constellation ISB mixing that
+        // destroys the WL LAMBDA ratio (was 1.0-1.1 for mixed constellations).
+        let mut const_groups: std::collections::HashMap<
+            gneiss_core::sat::Constellation,
+            Vec<(gneiss_core::sat::SatelliteId, usize, usize, f64, f64, f64)>,
+        > = std::collections::HashMap::new();
+        for cand in &cands {
+            const_groups.entry(cand.0.constellation).or_default().push(cand.clone());
         }
 
         let x = extract_state_vector(state);
-        let (x_wl, p_wl, keep_indices) = self.resolve_widelane_ar(state, &subset, &x)?;
+        let mut x_current = x.clone();
+        let mut p_current = state.covariance.clone();
+        let mut any_fixed = false;
+        let mut total_fixed_sats = 0usize;
 
-        tracing::trace!("PPP-AR diag: WL keep={}/{} — attempting NL", keep_indices.len(), subset.len());
-        let (x_fixed, p_fixed) = self.resolve_narrowlane_ar(state, &subset, &keep_indices, &x_wl, &p_wl)?;
+        for (constellation, group_cands) in &const_groups {
+            if group_cands.len() < 2 {
+                continue; // need at least 2 sats per constellation for DD
+            }
+            // Build per-constellation subset: highest-el as reference
+            let mut sorted = group_cands.clone();
+            sorted.sort_by(|a, b| b.3.partial_cmp(&a.3).unwrap_or(std::cmp::Ordering::Equal));
+            let ref_cand = &sorted[0];
+            let subset: Vec<_> = sorted.iter().skip(1)
+                .map(|c| (c.clone(), ref_cand.clone()))
+                .collect();
 
-        // Position validation: reject if 3D jump > 5m from float
+            if subset.len() < 1 {
+                continue;
+            }
+
+            tracing::info!(
+                "PPP-AR per-const {:?}: {} pairs ({} sats)",
+                constellation, subset.len(), group_cands.len()
+            );
+
+            // WL for this constellation
+            let wl_result = self.resolve_widelane_ar(state, &subset, &x_current);
+            let (x_wl, p_wl, keep_indices) = match wl_result {
+                Ok(r) => r,
+                Err(e) => {
+                    tracing::info!("PPP-AR {:?} WL failed: {}", constellation, e);
+                    continue;
+                }
+            };
+
+            if keep_indices.len() < 1 {
+                continue;
+            }
+
+            // NL for this constellation
+            let nl_result = self.resolve_narrowlane_ar(state, &subset, &keep_indices, &x_wl, &p_wl);
+            let (x_fixed, p_fixed) = match nl_result {
+                Ok(r) => r,
+                Err(e) => {
+                    tracing::info!("PPP-AR {:?} NL failed: {}", constellation, e);
+                    continue;
+                }
+            };
+
+            // Per-constellation position validation
+            let float_pos = Vector3::new(x_current[0], x_current[1], x_current[2]);
+            let fixed_pos = Vector3::new(x_fixed[0], x_fixed[1], x_fixed[2]);
+            let jump = (fixed_pos - float_pos).norm();
+            if jump > 10.0 {
+                tracing::warn!(
+                    "PPP-AR {:?} rejected: position jump {:.2}m > 10m",
+                    constellation, jump
+                );
+                continue;
+            }
+
+            tracing::info!(
+                "PPP-AR {:?} Fixed! N_Sats={} jump={:.2}m",
+                constellation, keep_indices.len() + 1, jump
+            );
+            x_current = x_fixed;
+            p_current = p_fixed;
+            // Update state in-place so subsequent constellations use
+            // the constrained covariance from this fix
+            apply_state_vector(state, &x_current, p_current.clone());
+            any_fixed = true;
+            total_fixed_sats += keep_indices.len() + 1;
+        }
+
+        if !any_fixed {
+            // Per-constellation failed — fall back to inter-constellation pooling.
+            // This handles datasets with few sats per constellation where per-const
+            // DD pairs are insufficient. ISB mixing degrades WL ratio but provides
+            // enough pairs for LAMBDA to find candidate integer sets.
+            tracing::info!("PPP-AR: per-constellation failed, trying inter-constellation fallback");
+            let subset = self.build_ar_subset(&cands);
+            if subset.len() >= 3 {
+                let wl_result = self.resolve_widelane_ar(state, &subset, &x_current);
+                if let Ok((x_wl, p_wl, keep_indices)) = wl_result {
+                    if keep_indices.len() >= 1 {
+                        if let Ok((x_fixed, p_fixed)) = self.resolve_narrowlane_ar(
+                            state, &subset, &keep_indices, &x_wl, &p_wl,
+                        ) {
+                            let float_pos = Vector3::new(x_current[0], x_current[1], x_current[2]);
+                            let fixed_pos = Vector3::new(x_fixed[0], x_fixed[1], x_fixed[2]);
+                            let jump = (fixed_pos - float_pos).norm();
+                            if jump <= 20.0 {
+                                x_current = x_fixed;
+                                p_current = p_fixed;
+                                any_fixed = true;
+                                total_fixed_sats = keep_indices.len() + 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if !any_fixed {
+            return Err("No constellation could fix ambiguities");
+        }
+
+        // Global position validation against original float
         let float_pos = Vector3::new(x[0], x[1], x[2]);
-        let fixed_pos = Vector3::new(x_fixed[0], x_fixed[1], x_fixed[2]);
+        let fixed_pos = Vector3::new(x_current[0], x_current[1], x_current[2]);
         let jump = (fixed_pos - float_pos).norm();
         if jump > 20.0 {
             tracing::warn!("PPP-AR rejected: 3D position jump {:.2}m > 20m", jump);
             return Err("Position jump too large after AR fix");
         }
 
-        tracing::info!("PPP Cascade AR Fixed! N_Sats: {} jump={:.2}m", keep_indices.len() + 1, jump);
-        apply_state_vector(state, &x_fixed, p_fixed);
+        tracing::info!("PPP Cascade AR Fixed! N_Sats: {} jump={:.2}m", total_fixed_sats, jump);
+        apply_state_vector(state, &x_current, p_current);
         state.is_fixed = true;
         Ok(())
     }
