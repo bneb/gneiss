@@ -579,7 +579,7 @@ impl PppIteratedEkf {
         })
     }
 
-    fn build_measurements(
+    pub(crate) fn build_measurements(
         &self,
         state: &RtkState,
         sats: &[ProcessedSat],

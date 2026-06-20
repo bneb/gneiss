@@ -60,10 +60,19 @@ pub fn process_ppp<'a>(
     if sats.is_empty() {
         return Err(EngineError::InsufficientSatellites);
     }
+    let use_factor_graph = engine.ppp_factor_opt.is_some();
     let state = engine.current_state.as_mut().unwrap();
     update_phase_ambiguities(state, &sats, rover_obs.time);
     state.prune_stale_ambiguities(state.epoch_count as u32, 10);
-    PppIteratedEkf::new().solve(state, &sats, position_prior)?;
+
+    // Temporarily take ownership of the optimizer to avoid borrow conflict
+    let mut opt = engine.ppp_factor_opt.take();
+    if let Some(ref mut solver) = opt {
+        solver.solve(state, &sats, position_prior)?;
+    } else {
+        PppIteratedEkf::new().solve(state, &sats, position_prior)?;
+    }
+    engine.ppp_factor_opt = opt; // return ownership
     state.epoch_count = state.epoch_count.saturating_add(1);
     let final_state = engine.current_state.as_ref().unwrap().clone();
     engine.state_history.push(final_state);
