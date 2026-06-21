@@ -47,7 +47,7 @@ pub fn apply_kinematic_constraints(
 
     if is_stationary {
         let zupt_var = (accel_var * 0.1).clamp(0.001, 0.1).sqrt();
-        let _ = crate::nhc::apply_zupt(state, zupt_var);
+        let _ = crate::nhc::apply_zupt(state, zupt_var, &config.tuning);
     } else {
         let r_b_e = state.attitude.to_rotation_matrix();
         let omega_ie_e = nalgebra::Vector3::new(0.0, 0.0, gneiss_core::constants::EARTH_ROTATION_RATE_RAD_S);

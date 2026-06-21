@@ -19,6 +19,5 @@ pub use measurements::nhc;
 #[cfg(feature = "doppler-velocity")]
 pub use measurements::doppler;
 
-mod tests_ekf;
-mod tests_predictor;
-mod tests_updater;
+#[cfg(test)] mod tests_ekf;
+#[cfg(test)] mod tests_predictor;

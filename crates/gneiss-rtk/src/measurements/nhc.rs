@@ -1,6 +1,7 @@
+use crate::engine::fgo::factors::skew_symmetric;
 use crate::engine::updater;
 use crate::filter::RtkState;
-use nalgebra::{DMatrix, DVector, Matrix3, Vector3};
+use nalgebra::{DMatrix, DVector, Vector3};
 
 /// Assigns a 3x3 matrix block to a 2xN measurement Jacobian matrix
 fn assign_jacobian_block(h: &mut DMatrix<f64>, col: usize, m: nalgebra::Matrix3<f64>) {
@@ -8,11 +9,6 @@ fn assign_jacobian_block(h: &mut DMatrix<f64>, col: usize, m: nalgebra::Matrix3<
         h[(0, col + i)] = m[(1, i)];
         h[(1, col + i)] = m[(2, i)];
     }
-}
-
-/// Helper to generate a skew-symmetric matrix from a 3D vector
-fn skew_symmetric(v: &Vector3<f64>) -> Matrix3<f64> {
-    Matrix3::new(0.0, -v.z, v.y, v.z, 0.0, -v.x, -v.y, v.x, 0.0)
 }
 
 /// Applies Non-Holonomic Constraints (NHC) to the EKF state.
