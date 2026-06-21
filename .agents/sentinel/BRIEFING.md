@@ -1,4 +1,4 @@
-# BRIEFING — 2026-06-21T03:13:25Z
+# BRIEFING — 2026-06-21T09:56:00Z
 
 ## Mission
 Fix 25 mathematically-identified bugs in the gneiss GNSS/PPP navigation engine.
@@ -6,7 +6,7 @@ Fix 25 mathematically-identified bugs in the gneiss GNSS/PPP navigation engine.
 ## 🔒 My Identity
 - Archetype: sentinel
 - Working directory: /Users/kevin/projects/gneiss/.agents/sentinel
-- Orchestrator: e2b4cf86-7ee9-4f3c-990c-2c79b1094647
+- Orchestrator: 2fa793b7-d67e-47b9-8b06-31cfa02fc26b
 - Victory Auditor: TBD
 
 ## 🔒 Key Constraints

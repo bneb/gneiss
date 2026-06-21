@@ -1,23 +1,22 @@
 # Handoff Report
 
 ## Observation
-The user requested to fix 25 mathematically-identified bugs in the gneiss GNSS/PPP engine and write corresponding regression tests. The bugs are documented in `/Users/kevin/.gemini/antigravity/brain/3e07e73a-4b87-4801-b363-5d6f67bdb076/analysis_results.md` and ranked into 4 tiers.
+The Project Orchestrator subagent (`e2b4cf86-7ee9-4f3c-990c-2c79b1094647`) encountered a `RESOURCE_EXHAUSTED (code 429)` error and stopped execution. The liveness check cron detected that progress files had not been updated for 4 hours and 55 minutes, exceeding the 20-minute staleness threshold.
 
 ## Logic Chain
-To address this request, the Sentinel performed the following steps:
-1. Appended the verbatim user request to `.agents/ORIGINAL_REQUEST.md`.
-2. Created a dedicated coordination folder for the orchestrator: `/Users/kevin/projects/gneiss/.agents/teamwork_preview_orchestrator_fix_bugs/` and wrote `ORIGINAL_REQUEST.md` there.
-3. Updated the Sentinel's `BRIEFING.md` with the new mission, setting phase to "in progress".
-4. Spawned the `teamwork_preview_orchestrator` subagent (`e2b4cf86-7ee9-4f3c-990c-2c79b1094647`) to drive the implementation.
-5. Scheduled two recurring background crons:
-   - Cron 1: Progress reporting every 8 minutes.
-   - Cron 2: Liveness checking every 10 minutes.
+To recover from the failure, the Sentinel took the following steps:
+1. Confirmed the old subagent had stopped due to Gemni quota exhaustion.
+2. Verified that the Gemini quota reset period had completed (reset occurred).
+3. Spawned a fresh Project Orchestrator subagent (`2fa793b7-d67e-47b9-8b06-31cfa02fc26b`) to resume orchestration.
+4. Pointed the new orchestrator to the same coordination folder (`/Users/kevin/projects/gneiss/.agents/teamwork_preview_orchestrator_fix_bugs/`) to preserve progress.
+5. Instructed the new orchestrator to resume starting with Bug 18 (Opposite Sign in Phase Wind-Up Correction).
+6. Updated `BRIEFING.md` with the new orchestrator ID.
 
 ## Caveats
-The implementation is handled asynchronously by the orchestrator and its delegated workers. The Sentinel does not write any code or make technical decisions.
+Progress was paused during the 4-hour quota lock. The codebase remains at the state left by the previous orchestrator run, with Bugs 17, 1, 9, and 2 verified and integrated.
 
 ## Conclusion
-The orchestrator is currently active. The Sentinel is waiting for progress updates or a completion/victory claim from the orchestrator.
+The new orchestrator has been successfully launched and is actively resuming the sequential bug fixes starting with Bug 18.
 
 ## Verification Method
-The Sentinel will monitor `progress.md` and recently modified files via the crons. Once the orchestrator claims victory, the Sentinel will spawn the `teamwork_preview_victory_auditor` to perform a mandatory independent verification before confirming project completion.
+The Sentinel will continue monitoring progress via the progress and liveness crons. Once the orchestrator reports completion, the Sentinel will trigger the independent Victory Auditor.

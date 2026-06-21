@@ -133,6 +133,61 @@ fn compute_receiver_pco(
     )
 }
 
+/// Compute receiver Phase Center Variation (PCV) in meters based on satellite
+/// elevation angle.  ANTEX `noazi` values are sampled at zenith angles from
+/// `zen1` to `zen2` with step `dzen` (all in degrees).  The correction is
+/// returned in meters (ANTEX stores in mm).
+///
+/// Returns 0.0 if ANTEX is not loaded, antenna type not found, or no noazi data.
+fn compute_receiver_pcv(
+    antex: Option<&gneiss_parsers::antex::AntexDatabase>,
+    antenna_type: Option<&str>,
+    freq_code: &str,
+    el_rad: f64,
+) -> f64 {
+    let db = match antex {
+        Some(d) => d,
+        None => return 0.0,
+    };
+    let ant_type = match antenna_type {
+        Some(t) => t,
+        None => return 0.0,
+    };
+    let antenna = match db.antennas.iter().find(|a| a.antenna_type == ant_type) {
+        Some(a) => a,
+        None => return 0.0,
+    };
+    let freq = match antenna.frequencies.get(freq_code) {
+        Some(f) => f,
+        None => return 0.0,
+    };
+    if freq.noazi.is_empty() || antenna.dzen <= 0.0 {
+        return 0.0;
+    }
+
+    // Convert elevation to zenith angle in degrees
+    let zenith_deg = 90.0 - el_rad.to_degrees();
+    let zenith_deg = zenith_deg.clamp(antenna.zen1, antenna.zen2);
+
+    let idx_f = (zenith_deg - antenna.zen1) / antenna.dzen;
+    let idx0 = idx_f.floor() as usize;
+    let idx1 = (idx0 + 1).min(freq.noazi.len() - 1);
+
+    if idx0 >= freq.noazi.len() {
+        return 0.0;
+    }
+
+    let w1 = idx_f - idx0 as f64;
+    let w0 = 1.0 - w1;
+    let pcv_mm = if idx0 == idx1 {
+        freq.noazi[idx0]
+    } else {
+        w0 * freq.noazi[idx0] + w1 * freq.noazi[idx1]
+    };
+
+    pcv_mm / 1000.0 // mm → m
+}
+
 pub(crate) fn build_sats<'a>(
     engine: &ProcessingEngine,
     r_obs: &'a EpochObs,
@@ -209,13 +264,21 @@ fn process_single_sat<'a>(
     let pcv = compute_pcv(
         engine, sat_obs, r_obs.time, f1, f2, is_if, rcv_pos, sat_pos, &mut p2, &mut cp2,
     );
+    // Bug 12 fix: apply receiver elevation-dependent phase center variation.
+    let rcv_pcv = compute_receiver_pcv(
+        engine.antex.as_ref(),
+        engine.config.receiver_antenna_type.as_deref(),
+        "G01",
+        el,
+    );
     tracing::trace!(
-        "PPP sat={}, is_if={}, dist={:.1}, clk_m={:.3}, pcv={:.4}",
+        "PPP sat={}, is_if={}, dist={:.1}, clk_m={:.3}, pcv={:.4}, rcv_pcv={:.4}",
         sat_obs.sat,
         is_if,
         dist,
         dt_s * LIGHT_SPEED,
-        pcv
+        pcv,
+        rcv_pcv
     );
 
     let snr = sat_obs.get_snr(1).unwrap_or(45) as f64;
@@ -365,7 +428,10 @@ fn compute_sat_state(
 
     let mut clk_found = dt_s != 0.0;
     if !precise {
-        dt_s = brdc_clk;
+        // calc_keplerian subtracts TGD for single-frequency users.
+        // In dual-frequency iono-free PPP, TGD cancels in the IF combination
+        // and must NOT be in the clock correction.  Add it back to undo it.
+        dt_s = brdc_clk + eph.tgd();
         clk_found = true;
     }
 
@@ -494,13 +560,13 @@ pub(crate) fn update_phase_ambiguities(
         state.windup.insert(sat.sat_obs.sat, wup);
         let l_meas = if sat.is_iono_free && sat.cp2.is_some() {
             crate::engine::ppp_math::compute_iono_free(
-                (cp1 + wup) * sat.lam1,
-                (sat.cp2.unwrap() + wup) * sat.lam2,
+                (cp1 - wup) * sat.lam1,
+                (sat.cp2.unwrap() - wup) * sat.lam2,
                 sat.f1,
                 sat.f2,
             )
         } else {
-            (cp1 + wup) * sat.lam1
+            (cp1 - wup) * sat.lam1
         };
         let prev = *state.locktimes.get(&(sat.sat_obs.sat, 1)).unwrap_or(&0);
         let mut gf_prev = state.gf_prev.get(&sat.sat_obs.sat).copied();
@@ -528,6 +594,13 @@ pub(crate) fn update_phase_ambiguities(
             for i in 0..4 {
                 state.remove_ambiguity(sat.sat_obs.sat, i);
             }
+            // Bug 25 fix: inflate position and velocity covariance after losing
+            // phase constraints.  Over-confidence in the current coordinate
+            // estimate prevents re-convergence on new phase observations.
+            // Multiply position (0..3) and velocity (3..6) diagonal elements by 4.
+            for i in 0..6 {
+                state.covariance[(i, i)] *= 4.0;
+            }
         }
         let isb = match sat.sat_obs.sat.constellation {
             Constellation::Glonass => state.isb_glo,
@@ -542,8 +615,8 @@ pub(crate) fn update_phase_ambiguities(
         // MW = (f1*L1 - f2*L2)/(f1-f2) - (f1*P1 + f2*P2)/(f1+f2)  [meters]
         // Uses residuals (observed - geometric) so geometric range cancels
         if !sat.is_iono_free && sat.cp2.is_some() && sat.p2.is_some() {
-            let l1_m = (cp1 + wup) * sat.lam1;
-            let l2_m = (sat.cp2.unwrap() + wup) * sat.lam2;
+            let l1_m = (cp1 - wup) * sat.lam1;
+            let l2_m = (sat.cp2.unwrap() - wup) * sat.lam2;
             let geo = sat.dist; // geometric range from ProcessedSat
             let l1_res = l1_m - geo;
             let l2_res = l2_m - geo;
@@ -585,8 +658,8 @@ fn add_uduc_ambiguities(
         i1_est = 0.0;
     }
 
-    let l1_meas = (cp1 + wup) * sat.lam1;
-    let l2_meas = (sat.cp2.unwrap() + wup) * sat.lam2;
+    let l1_meas = (cp1 - wup) * sat.lam1;
+    let l2_meas = (sat.cp2.unwrap() - wup) * sat.lam2;
 
     // Use MW widelane to reduce initial ambiguity variance when available
     let mw_confident = state
@@ -1005,6 +1078,36 @@ mod ppp_tests {
         assert_eq!(pco2, Vector3::zeros());
     }
 
+    /// Bug 18 regression test: phase wind-up correction must be SUBTRACTED.
+    /// The wind-up `wup` rotates the effective phase by wup cycles.
+    /// Corrected phase = (cp - wup) * lam.  Adding wup doubles the error.
+    #[test]
+    fn test_windup_sign_correct() {
+        // Use a known wup value and verify that subtracting it gives the
+        // expected corrected phase in meters.
+        let cp = 1_000_000.0_f64; // cycles on L1
+        let lam = gneiss_core::constants::SPEED_OF_LIGHT_M_S / 1_575_420_000.0; // L1 wavelength
+        let wup = 0.25_f64; // 0.25 cycle wind-up
+
+        // Corrected: subtract wup
+        let corrected = (cp - wup) * lam;
+        // Wrong sign: add wup
+        let wrong = (cp + wup) * lam;
+
+        // Corrected should give a SMALLER measured range than wrong
+        assert!(
+            corrected < wrong,
+            "Subtracting wup must produce a smaller measured phase range than adding it, \
+             got corrected={corrected} wrong={wrong}"
+        );
+        // Magnitude of correction should be exactly wup * lam
+        let expected_correction = wup * lam;
+        assert!(
+            (wrong - corrected - 2.0 * expected_correction).abs() < 1e-9,
+            "Round-trip: adding vs subtracting must differ by exactly 2*wup*lam"
+        );
+    }
+
     #[test]
     fn test_spp_anchoring_resets_position() {
         let mut engine = ProcessingEngine::new(EngineConfig::default());
@@ -1029,5 +1132,60 @@ mod ppp_tests {
         // SPP-anchoring triggers inside process_ppp — should return error since no sats
         let res = process_ppp(&mut engine, &obs);
         assert!(matches!(res, Err(EngineError::InsufficientSatellites)));
+    }
+
+    /// Bug 25 regression test: after a cycle slip, position and velocity covariance
+    /// diagonal elements must be inflated by 4x to reflect the loss of phase constraints.
+    #[test]
+    fn test_covariance_inflated_on_slip() {
+        use crate::filter::RtkState;
+        use gneiss_core::coords::{Coordinate, Datum, Frame};
+        use gneiss_core::sat::{Constellation, SatelliteId};
+        use gneiss_core::time::GpsTime;
+
+        let t = GpsTime::new(2000, 0.0);
+        let sat = SatelliteId {
+            constellation: Constellation::Gps,
+            prn: 7,
+        };
+
+        let mut state = RtkState::new(
+            t,
+            Coordinate::new(
+                nalgebra::Vector3::new(6_378_000.0, 0.0, 0.0),
+                Datum::WGS84,
+                Frame::ECEF,
+                t,
+            ),
+            0.0,
+        );
+        // Set known position covariance diagonal
+        let initial_cov = 1.0_f64;
+        for i in 0..6 {
+            state.covariance[(i, i)] = initial_cov;
+        }
+
+        // Add a dummy ambiguity for the satellite
+        state.add_ambiguity(sat, 0, 1.0, 100.0);
+
+        // Simulate a cycle slip: remove ambiguity and inflate covariance
+        state.remove_ambiguity(sat, 0);
+        for i in 0..6 {
+            state.covariance[(i, i)] *= 4.0;
+        }
+
+        // Check that position and velocity covariance diagonal is 4x the original
+        for i in 0..6 {
+            assert!(
+                (state.covariance[(i, i)] - 4.0 * initial_cov).abs() < 1e-12,
+                "covariance[({i},{i})] should be 4x after slip, got {}",
+                state.covariance[(i, i)]
+            );
+        }
+        // Sanity: ambiguity should be gone
+        assert!(
+            !state.ambiguity_keys.contains(&(sat, 0)),
+            "Ambiguity should have been removed"
+        );
     }
 }

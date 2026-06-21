@@ -662,4 +662,80 @@ mod tests {
             delay
         );
     }
+
+    /// Bug 6 regression test: the GMF mapping function uses fully normalized
+    /// associated Legendre functions.  Verify a few known values.
+    ///
+    /// For P̄_{0,0}(x) the normalization gives sqrt(1) * 1 = 1.
+    /// For P̄_{1,0}(x) the norm is sqrt(3) and P_{1,0}(x) = x → P̄_{1,0}(x) = sqrt(3)*x.
+    /// For P̄_{1,1}(x) the norm is sqrt(3) and P_{1,1}(x) = sqrt(1-x²) → P̄_{1,1}(x) = sqrt(3*(1-x²)).
+    /// For P̄_{2,0}(x) the norm is sqrt(5) and P_{2,0}(x) = (3x²-1)/2 → P̄_{2,0} = sqrt(5)*(3x²-1)/2.
+    #[test]
+    fn test_legendre_normalization() {
+        let x = 0.5_f64; // sin(lat) for lat = 30°
+
+        // P̄_{0,0}(x) = 1
+        let p00 = _legendre_norm(0, 0, x);
+        assert!((p00 - 1.0).abs() < 1e-12, "P̄_00 = 1, got {p00}");
+
+        // P̄_{1,0}(x) = sqrt(3) * x
+        let p10 = _legendre_norm(1, 0, x);
+        let expected_p10 = (3.0_f64).sqrt() * x;
+        assert!(
+            (p10 - expected_p10).abs() < 1e-12,
+            "P̄_10 = sqrt(3)*x = {expected_p10}, got {p10}"
+        );
+
+        // P̄_{1,1}(x) = sqrt(3) * sqrt(1-x²)
+        let p11 = _legendre_norm(1, 1, x);
+        let expected_p11 = (3.0_f64).sqrt() * (1.0 - x * x).sqrt();
+        assert!(
+            (p11 - expected_p11).abs() < 1e-12,
+            "P̄_11 = sqrt(3*(1-x²)) = {expected_p11}, got {p11}"
+        );
+
+        // P̄_{2,0}(x) = sqrt(5) * (3x²-1)/2
+        let p20 = _legendre_norm(2, 0, x);
+        let expected_p20 = (5.0_f64).sqrt() * (3.0 * x * x - 1.0) / 2.0;
+        assert!(
+            (p20 - expected_p20).abs() < 1e-12,
+            "P̄_20 = sqrt(5)*(3x²-1)/2 = {expected_p20}, got {p20}"
+        );
+    }
+
+    /// Bug 5 regression test: GMF must produce different mapping factors for
+    /// different longitudes (confirming the cos(m*lon) term is active).
+    #[test]
+    fn test_gmf_longitude_variation() {
+        let t = GpsTime::new(2000, 100000.0);
+        let lat = 0.6_f64; // ~34°N
+        let el = 0.3_f64; // ~17° elevation
+        let h = 100.0_f64;
+
+        // Same position but different longitudes
+        let pos_lon0 = Vector3::new(lat, 0.0, h);
+        let pos_lon90 = Vector3::new(lat, core::f64::consts::FRAC_PI_2, h);
+        let pos_lon180 = Vector3::new(lat, core::f64::consts::PI, h);
+
+        let (mh0, mw0) = gmf_impl(pos_lon0, el, t);
+        let (mh90, mw90) = gmf_impl(pos_lon90, el, t);
+        let (mh180, mw180) = gmf_impl(pos_lon180, el, t);
+
+        // The mapping factors must vary with longitude (spherical harmonic terms include cos(m*lon))
+        // m=0 terms are longitude-independent but m≥1 terms are not.
+        let h_range = (mh0 - mh90).abs().max((mh0 - mh180).abs());
+        let w_range = (mw0 - mw90).abs().max((mw0 - mw180).abs());
+        assert!(
+            h_range > 1e-6,
+            "GMF dry mapping factor must vary with longitude (h_range={h_range})"
+        );
+        assert!(
+            w_range > 1e-8,
+            "GMF wet mapping factor must vary with longitude (w_range={w_range})"
+        );
+
+        // All values must be > 1 (mapping factors are always ≥ 1 in the valid range)
+        assert!(mh0 > 1.0, "GMF m_h must be > 1, got {mh0}");
+        assert!(mw0 > 1.0, "GMF m_w must be > 1, got {mw0}");
+    }
 }

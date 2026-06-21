@@ -533,6 +533,7 @@ fn build_galileo_ephemeris(
             omega_dot: vals[15],
             idot: vals[16],
             bgd_e1_e5a: vals[22],
+            bgd_e1_e5b: vals[23],
         },
     ))
 }

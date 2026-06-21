@@ -60,6 +60,28 @@ impl Ephemeris {
             _ => 0,
         }
     }
+
+    /// Returns the group delay (TGD/BGD) baked into the broadcast clock error
+    /// by `position()`. For dual-frequency iono-free PPP this must be added
+    /// back to undo the correction that only applies to single-frequency users.
+    pub fn tgd(&self) -> f64 {
+        match self {
+            Ephemeris::Gps(e) => e.tgd,
+            Ephemeris::Galileo(e) => e.bgd_e1_e5a,
+            Ephemeris::Beidou(e) => e.tgd1,
+            Ephemeris::Qzss(e) => e.tgd,
+            Ephemeris::Glonass(_) => 0.0, // GLONASS has no TGD
+        }
+    }
+
+    /// Returns the Galileo BGD for E5b (band 7). For other constellations
+    /// returns the same as `tgd()`.
+    pub fn bgd_e5b(&self) -> f64 {
+        match self {
+            Ephemeris::Galileo(e) => e.bgd_e1_e5b,
+            other => other.tgd(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -114,6 +136,8 @@ pub struct GalileoEphemeris {
     pub idot: f64,
     pub omega: f64,
     pub bgd_e1_e5a: f64,
+    /// BGD(E1,E5b) — used when tracking E1/E5b (band 7). Parsed from RINEX vals[23].
+    pub bgd_e1_e5b: f64,
     pub iod_nav: u32,
 }
 
@@ -687,6 +711,7 @@ mod tests {
             idot: 0.0,
             omega: 0.0,
             bgd_e1_e5a: 0.0,
+            bgd_e1_e5b: 0.0,
             iod_nav: 1,
         };
 
@@ -755,6 +780,7 @@ mod tests {
             idot: 0.01,
             omega: 0.3,
             bgd_e1_e5a: 0.02,
+            bgd_e1_e5b: 0.01,
             iod_nav: 1,
         };
         let bds_geo_eph = BeidouEphemeris {
@@ -1114,5 +1140,111 @@ mod tests {
         assert!((p.0.x - expected_x).abs() < 1e-4);
         assert!((p.0.y - expected_y).abs() < 1e-4);
         assert!((p.0.z - expected_z).abs() < 1e-4);
+    }
+
+    /// Bug 15 regression test: In dual-frequency iono-free PPP, TGD must NOT be
+    /// applied (it cancels in the IF combination).  The Ephemeris::tgd() method
+    /// must return the exact value that calc_keplerian subtracted so the PPP code
+    /// can add it back.
+    #[test]
+    fn test_tgd_not_applied_dual_frequency() {
+        let tgd_val = 1.5e-8_f64; // ~4.5 m in seconds
+        let gps_eph = GpsEphemeris {
+            sat: SatelliteId {
+                constellation: Constellation::Gps,
+                prn: 5,
+            },
+            toe: GpsTime::new(2000, 100000.0),
+            toc: GpsTime::new(2000, 100000.0),
+            af0: 0.0,
+            af1: 0.0,
+            af2: 0.0,
+            crs: 0.0,
+            crc: 0.0,
+            cuc: 0.0,
+            cus: 0.0,
+            cic: 0.0,
+            cis: 0.0,
+            m0: 0.0,
+            e: 0.0,
+            sqrt_a: 5153.6,
+            delta_n: 0.0,
+            omega0: 0.0,
+            omega_dot: 0.0,
+            i0: 0.0,
+            idot: 0.0,
+            omega: 0.0,
+            tgd: tgd_val,
+            iode: 1,
+            iodc: 1,
+        };
+        let t = GpsTime::new(2000, 100000.0);
+        let eph = Ephemeris::Gps(gps_eph);
+        let (_, _, clk_with_tgd, _) = eph.position(t);
+        // calc_keplerian subtracts tgd: clk = af0 + ... - tgd
+        // When af0=0 and relativistic correction=0: clk = -tgd_val
+        assert!(
+            (clk_with_tgd - (-tgd_val)).abs() < 1e-15,
+            "calc_keplerian should produce clk = -tgd when af0=0, got {clk_with_tgd}"
+        );
+        // Dual-frequency PPP path must undo TGD by adding it back:
+        let clk_if = clk_with_tgd + eph.tgd();
+        // After adding back TGD, the IF-corrected clock should be ≈ 0 (af0=0)
+        assert!(
+            clk_if.abs() < 1e-15,
+            "Dual-freq IF clock (after TGD undo) must be ≈ 0, got {clk_if}"
+        );
+    }
+
+    /// Bug 16 regression test: Galileo should use BGD(E1,E5b) for E5b observations
+    /// (band 7) and BGD(E1,E5a) for E5a observations (band 5).
+    #[test]
+    fn test_galileo_bgd_e5b() {
+        let gal_eph = GalileoEphemeris {
+            sat: SatelliteId {
+                constellation: Constellation::Galileo,
+                prn: 3,
+            },
+            toe: GpsTime::new(2000, 100000.0),
+            toc: GpsTime::new(2000, 100000.0),
+            af0: 0.0,
+            af1: 0.0,
+            af2: 0.0,
+            crs: 0.0,
+            crc: 0.0,
+            cuc: 0.0,
+            cus: 0.0,
+            cic: 0.0,
+            cis: 0.0,
+            m0: 0.0,
+            e: 0.0,
+            sqrt_a: 5440.6,
+            delta_n: 0.0,
+            omega0: 0.0,
+            omega_dot: 0.0,
+            i0: 0.0,
+            idot: 0.0,
+            omega: 0.0,
+            bgd_e1_e5a: 1.0e-9,
+            bgd_e1_e5b: 2.0e-9,
+            iod_nav: 1,
+        };
+        let eph = Ephemeris::Galileo(gal_eph);
+        // tgd() returns bgd_e1_e5a (used by position())
+        assert!(
+            (eph.tgd() - 1.0e-9).abs() < 1e-18,
+            "tgd() must return bgd_e1_e5a"
+        );
+        // bgd_e5b() returns bgd_e1_e5b for E5b tracking
+        assert!(
+            (eph.bgd_e5b() - 2.0e-9).abs() < 1e-18,
+            "bgd_e5b() must return bgd_e1_e5b, got {}",
+            eph.bgd_e5b()
+        );
+        // The two should differ
+        assert!(
+            (eph.tgd() - eph.bgd_e5b()).abs() > 0.5e-9,
+            "bgd_e1_e5a and bgd_e1_e5b must differ in this test"
+        );
     }
 }

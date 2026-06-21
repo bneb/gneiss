@@ -1,4 +1,4 @@
-# BRIEFING — 2026-06-21T03:15:00Z
+# BRIEFING — 2026-06-21T03:00:00Z
 
 ## Mission
 Fix 25 mathematically-identified bugs in the gneiss navigation engine, and guard each fix with a regression test that would fail if the buggy formula were restored.
@@ -13,29 +13,26 @@ Fix 25 mathematically-identified bugs in the gneiss navigation engine, and guard
 ## 🔒 My Workflow
 - **Pattern**: Project Pattern (Implementation Track only, focused on unit/regression tests)
 - **Scope document**: /Users/kevin/projects/gneiss/.agents/teamwork_preview_orchestrator_fix_bugs/PROJECT.md
-1. **Decompose**: Split the 25 bugs into 3 sequential milestones based on Tiers and priority.
-2. **Dispatch & Execute**:
-   - For each Milestone, spawn a sub-orchestrator to coordinate the fixes and testing.
-   - The sub-orchestrators will spawn Explorers, Workers, and Reviewers.
-3. **On failure**:
-   - Retry: nudge stuck agent or re-send task.
-   - Replace: spawn fresh agent with partial progress.
-   - Skip: proceed without (only if non-critical).
-   - Redistribute: split stuck agent's remaining work.
-   - Redesign: re-partition decomposition.
-   - Escalate: report to parent.
+1. **Decompose**: Split the remaining bugs into 3 sequential milestones based on Tiers and priority.
+2. **Dispatch & Execute** (pick ONE):
+   - **Delegate (sub-orchestrator)**: Spawn a sub-orchestrator for each milestone to coordinate fixes, testing, and reviews.
+3. **On failure** (in this order):
+   - Retry: nudge stuck agent or re-send task
+   - Replace: spawn fresh agent with partial progress
+   - Skip: proceed without (only if non-critical)
+   - Redistribute: split stuck agent's remaining work
+   - Redesign: re-partition decomposition
+   - Escalate: report to parent (sub-orchestrators only, last resort)
 4. **Succession**: Self-succeed at 16 spawns. Write handoff.md, spawn successor.
 - **Work items**:
-  - Milestone 1: Fix Tier 1 Bugs (Ranks 1-8) [pending]
-  - Milestone 2: Fix Tier 2 & 3 Bugs (Ranks 9-18) [pending]
+  - Milestone 1: Fix remaining Tier 1 Bugs (Bugs 15, 24) [in-progress]
+  - Milestone 2: Fix remaining Tier 2 & 3 Bugs (Bugs 10, 23, 16, 5, 11, 8, 22, 3) [pending]
   - Milestone 3: Implement Tier 4 Features (Ranks 19-25) [pending]
 - **Current phase**: 1
-- **Current focus**: Milestone 1 Initialization
+- **Current focus**: Milestone 1 (Remaining Tier 1 Bugs)
 
 ## 🔒 Key Constraints
-- Fix all 8 Tier 1 bugs first.
-- Fix all 10 Tier 2 and 3 bugs in priority order.
-- Implement all 7 Tier 4 features (or stubs/ignored tests if infeasible).
+- Fix remaining Tier 1 bugs first, then Tier 2 and 3 in priority order, then Tier 4.
 - Guard each fix with a regression test that passes but would have failed with the buggy code.
 - Ensure `cargo test --workspace` and `cargo build --workspace` succeed cleanly.
 - Never write, modify, or create source code files directly.
@@ -47,22 +44,22 @@ Fix 25 mathematically-identified bugs in the gneiss navigation engine, and guard
 - Updated: not yet
 
 ## Key Decisions Made
-- Decomposed work into 3 milestone-specific sub-orchestrators to avoid spawn threshold limits and context bloat.
+- Decomposed remaining work into sequential sub-orchestrations to avoid spawn threshold limits and context bloat.
 
 ## Team Roster
 | Agent | Type | Work Item | Status | Conv ID |
 |-------|------|-----------|--------|---------|
-| sub_orch_m1 | self | Milestone 1 Sub-Orchestrator | in-progress | f16afb25-c177-42fe-985d-6840e173046f |
+| sub_orch_m1_part2 | self | Milestone 1b (Bugs 18, 15, 24, 6) | in-progress | df999d12-6411-4f6a-bf1a-36a92f258c2f |
 
 ## Succession Status
 - Succession required: no
-- Spawn count: 1 / 16
-- Pending subagents: f16afb25-c177-42fe-985d-6840e173046f
+- Spawn count: 2 / 16
+- Pending subagents: df999d12-6411-4f6a-bf1a-36a92f258c2f
 - Predecessor: none
 - Successor: not yet spawned
 
 ## Active Timers
-- Heartbeat cron: e2b4cf86-7ee9-4f3c-990c-2c79b1094647/task-25
+- Heartbeat cron: 2fa793b7-d67e-47b9-8b06-31cfa02fc26b/task-47
 - Safety timer: none
 
 ## Artifact Index

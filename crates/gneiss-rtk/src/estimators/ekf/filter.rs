@@ -703,6 +703,7 @@ mod tests {
                 idot: 0.0,
                 omega: 0.0,
                 bgd_e1_e5a: 0.0,
+                bgd_e1_e5b: 0.0,
                 iod_nav: 0,
             }),
             Ephemeris::Galileo(GalileoEphemeris {
@@ -728,6 +729,7 @@ mod tests {
                 idot: 0.0,
                 omega: 0.0,
                 bgd_e1_e5a: 0.0,
+                bgd_e1_e5b: 0.0,
                 iod_nav: 0,
             }),
         ];

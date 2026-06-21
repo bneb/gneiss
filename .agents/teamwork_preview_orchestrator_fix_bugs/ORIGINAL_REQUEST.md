@@ -77,3 +77,28 @@ Requirements:
 5. Ensure `cargo test --workspace` and `cargo build --workspace` succeed cleanly.
 
 Please write your plan to plan.md, start spawning worker/explorer agents as needed, update progress.md continuously, and report back when all milestones are complete.
+
+## Follow-up — 2026-06-21T09:57:18Z
+
+**IMPORTANT STATUS UPDATE — Before starting any work, read this.**
+
+The following bugs have ALREADY been fixed in the working tree (uncommitted) since the quota reset. Do NOT re-implement them — check the code first and verify they are present:
+
+**Already fixed (verify, don't redo):**
+- Bug 18 (Phase Wind-Up Sign): `ppp.rs` — `(cp1 - wup)` in all 4 call sites. Test `test_windup_sign_correct` added.
+- Bug 6 (GMF Legendre Normalization): `atmosphere.rs` — `_legendre_norm` function added. Tests `test_legendre_normalization` and `test_gmf_longitude_variation` added.
+- Bug 12 (Receiver PCV): `ppp.rs` — `compute_receiver_pcv` function added and called in `build_sats`.
+- Bug 25 (Covariance Inflation on Slip): `ppp.rs` — `covariance[(i,i)] *= 4.0` after ambiguity removal. Test `test_covariance_inflated_on_slip` added.
+- Galileo BGD struct: `filter.rs` — `bgd_e1_e5b: 0.0` field added.
+
+**NOT yet fixed — please continue with these in priority order:**
+1. Bug 15: TGD not applied for dual-frequency (ephemeris.rs / calc_keplerian)
+2. Bug 24: Stale clock gap returns None (rinex_clk.rs)
+3. Bug 16: Galileo BGD band selection (E5a vs E5b)
+4. Bug 23: Klobuchar IPP at 350km altitude (atmosphere.rs)
+5. Bug 5: GMF longitude term in _sh_eval_annual (atmosphere.rs)
+6. Remaining Tier 3/4 bugs
+
+**Constraint:** `vel_att = f_e_skew * dt` in predictor.rs must remain POSITIVE. Do not change it.
+
+Run `cargo test --workspace` before starting to confirm current state. All tests should pass.
