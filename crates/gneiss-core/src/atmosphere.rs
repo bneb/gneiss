@@ -460,15 +460,35 @@ impl AtmosphereModel {
     pub fn iono_klobuchar(
         params: &KlobucharParams,
         pos_llh: Vector3<f64>,
-        _az: f64,
+        az: f64,
         el: f64,
         time: GpsTime,
     ) -> f64 {
-        // Implementation based on IS-GPS-200
-        let f = 1.0 + 16.0 * libm::pow(0.53 - el / core::f64::consts::PI, 3.0);
-        let phi_m = pos_llh.x / core::f64::consts::PI + 0.064 * libm::cos(pos_llh.y - 1.617);
+        // IS-GPS-200 Section 20.3.3.5.2.5 — evaluate at the Ionospheric Pierce
+        // Point (IPP) at ~350 km altitude, not at the receiver position.
+        //
+        // All angular quantities in semi-circles unless noted.
+        let pi = core::f64::consts::PI;
 
-        let mut t = 43200.0 * phi_m + time.tow;
+        // Obliquity factor
+        let f = 1.0 + 16.0 * libm::pow(0.53 - el / pi, 3.0);
+
+        // Earth's central angle to the IPP (semi-circles)
+        let psi = 0.0137 / (el / pi + 0.11) - 0.022;
+
+        // IPP geodetic latitude (semi-circles), clamped to ±0.416
+        let phi_u = pos_llh.x / pi; // receiver lat in semi-circles
+        let phi_i = (phi_u + psi * libm::cos(az)).clamp(-0.416, 0.416);
+
+        // IPP geodetic longitude (semi-circles)
+        let lambda_u = pos_llh.y / pi; // receiver lon in semi-circles
+        let lambda_i = lambda_u + psi * libm::sin(az) / libm::cos(phi_i * pi);
+
+        // Geomagnetic latitude of IPP (semi-circles)
+        let phi_m = phi_i + 0.064 * libm::cos(lambda_i * pi - 1.617);
+
+        // Local solar time at the IPP (seconds)
+        let mut t = 43200.0 * lambda_i + time.tow;
         t %= 86400.0;
         if t < 0.0 {
             t += 86400.0;
@@ -490,7 +510,7 @@ impl AtmosphereModel {
             p = 72000.0;
         }
 
-        let x = 2.0 * core::f64::consts::PI * (t - 50400.0) / p;
+        let x = 2.0 * pi * (t - 50400.0) / p;
 
         let delay = if libm::fabs(x) < 1.57 {
             5e-9 + a * (1.0 - x * x / 2.0 + x * x * x * x / 24.0)
@@ -737,5 +757,41 @@ mod tests {
         // All values must be > 1 (mapping factors are always ≥ 1 in the valid range)
         assert!(mh0 > 1.0, "GMF m_h must be > 1, got {mh0}");
         assert!(mw0 > 1.0, "GMF m_w must be > 1, got {mw0}");
+    }
+
+    /// Bug 23 regression test: Klobuchar model must be evaluated at the IPP,
+    /// not at the receiver position.  The fix activates the azimuth parameter,
+    /// so delays at different azimuths (but same elevation) must differ.
+    #[test]
+    fn test_klobuchar_ipp_uses_azimuth() {
+        use crate::atmosphere::{AtmosphereModel, KlobucharParams};
+        let params = KlobucharParams {
+            alpha: [3.82e-8, 1.49e-8, -1.79e-7, 0.0],
+            beta: [1.43e5, 0.0, -3.28e5, 1.13e5],
+        };
+        let pos_llh = Vector3::new(0.6, 0.3, 100.0); // ~34°N, ~17°E
+        let el = 0.4_f64; // ~23° elevation
+        let t = GpsTime::new(2000, 50000.0);
+
+        // Azimuth north vs. south — IPP moves in opposite latitude directions,
+        // so the Klobuchar geomagnetic latitude and hence the delay differ.
+        let delay_north = AtmosphereModel::iono_klobuchar(&params, pos_llh, 0.0, el, t);
+        let delay_south = AtmosphereModel::iono_klobuchar(
+            &params,
+            pos_llh,
+            core::f64::consts::PI,
+            el,
+            t,
+        );
+
+        // The delays must differ because the IPP geomagnetic latitude differs.
+        assert!(
+            (delay_north - delay_south).abs() > 1e-4,
+            "Klobuchar delay must differ for opposite azimuths (north={delay_north:.6}, south={delay_south:.6})"
+        );
+
+        // Both delays must be non-negative (Klobuchar is always ≥ 0)
+        assert!(delay_north >= 0.0, "Klobuchar delay must be ≥ 0, got {delay_north}");
+        assert!(delay_south >= 0.0, "Klobuchar delay must be ≥ 0, got {delay_south}");
     }
 }

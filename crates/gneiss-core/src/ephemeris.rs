@@ -605,6 +605,39 @@ impl GalileoEphemeris {
             false,
         )
     }
+
+    /// Bug 16 fix: position for single-frequency E5b (band 7) users.
+    /// Uses `bgd_e1_e5b` instead of `bgd_e1_e5a` to correct the satellite
+    /// clock for the E1/E5b group delay (OS-SIS-ICD, Table 5).
+    pub fn position_e5b(&self, t: GpsTime) -> (Vector3<f64>, Vector3<f64>, f64, f64) {
+        calc_keplerian(
+            t,
+            self.toe,
+            self.toc,
+            self.af0,
+            self.af1,
+            self.af2,
+            self.crs,
+            self.crc,
+            self.cuc,
+            self.cus,
+            self.cic,
+            self.cis,
+            self.m0,
+            self.e,
+            self.sqrt_a,
+            self.delta_n,
+            self.omega0,
+            self.omega_dot,
+            self.i0,
+            self.idot,
+            self.omega,
+            self.bgd_e1_e5b, // Bug 16: use E5b BGD, not E5a
+            MU_GAL,
+            OMEGA_E_GAL,
+            false,
+        )
+    }
 }
 
 impl BeidouEphemeris {
