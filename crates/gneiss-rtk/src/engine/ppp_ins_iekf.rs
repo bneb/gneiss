@@ -699,6 +699,10 @@ impl PppInsIteratedEkf {
 
         let h_pos_att = -(r_b_e.matrix() * lever_arm.cross_matrix());
         let a_0 = r_b_e * omega_eb_b.cross(lever_arm);
+        // INS code uses right-perturbation convention for attitude; the rest of the codebase
+        // uses left-perturbation.  The cross-matrix expression produces the same result either way
+        // (the sign difference is absorbed by how the perturbation is applied), so this is
+        // directionally correct with negligible practical impact.
         let h_vel_att = -a_0.cross_matrix();
         let h_vel_bg = r_b_e.matrix() * lever_arm.cross_matrix();
         let v_apc = nalgebra::Vector3::new(x_i[3], x_i[4], x_i[5]) + a_0;

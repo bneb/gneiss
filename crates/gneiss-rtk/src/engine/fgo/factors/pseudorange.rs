@@ -5,7 +5,7 @@ pub struct PseudorangeFactor;
 impl PseudorangeFactor {
     pub fn jacobian(u: &Vector3<f64>, r_b_e: &Matrix3<f64>, l_b: &Vector3<f64>) -> DMatrix<f64> {
         let mut h = DMatrix::zeros(1, 17);
-        let skew_l = Matrix3::new(0.0, -l_b.z, l_b.y, l_b.z, 0.0, -l_b.x, -l_b.y, l_b.x, 0.0);
+        let skew_l = super::skew_symmetric(l_b);
         let theta_term = -u.transpose() * r_b_e * skew_l;
 
         // p^e
