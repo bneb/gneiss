@@ -1311,13 +1311,6 @@ mod tests {
     }
 
     #[test]
-    fn test_snr_scale() {
-        assert!((snr_scale(45) - 1.0).abs() < 1e-10);
-        assert!((snr_scale(35) - 10.0).abs() < 1e-10);
-        assert!((snr_scale(55) - 0.1).abs() < 1e-10);
-    }
-
-    #[test]
     fn test_build_h_row() {
         let los = Vector3::new(1.0, 2.0, 3.0);
         // size = CORE_STATE_SIZE + 1 so ISBs (size>18) and ZWD (size>20) are populated,

@@ -7,7 +7,7 @@ pub mod constants;
 pub mod coords;
 pub mod dop;
 pub mod ephemeris;
-mod geodetic_tests;
+#[cfg(test)] mod geodetic_tests;
 pub mod imu;
 pub mod metrics;
 pub mod obs;

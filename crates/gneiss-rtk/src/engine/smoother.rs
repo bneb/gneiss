@@ -119,7 +119,11 @@ fn smooth_epoch(
         // re-estimated from scratch each epoch. Clock bias (15) and
         // inter-system biases (16=GLO, 17=GAL, 18=BDS) change by
         // km-equivalents between epochs; blending them corrupts the
-        // vertical solution.
+        // vertical solution. Clock drift (19) and ZWD (20) are NOT
+        // zeroed because they carry physically meaningful temporal
+        // correlation: clock drift evolves as a random walk driven
+        // by Allan-variance process noise, and ZWD varies slowly
+        // with tropospheric turbulence — both benefit from smoothing.
         for idx in [15, 16, 17, 18] {
             delta_x[idx] = 0.0;
         }
@@ -257,6 +261,10 @@ fn invert_p_pred(p_pred: &DMatrix<f64>, len: usize) -> Result<DMatrix<f64>, &'st
         .filter(|&i| {
             // Exclude white-noise states from inversion: clock bias (15)
             // and inter-system biases (16=GLO, 17=GAL, 18=BDS).
+            // Clock drift (19) and ZWD (20) are included because they
+            // have physically meaningful temporal correlation (Allan
+            // variance and tropospheric turbulence, respectively),
+            // making them safe to invert and smooth.
             let is_white_noise = matches!(i, 15 | 16 | 17 | 18);
             !is_white_noise && p_pred[(i, i)] > MIN_ACTIVE_STATE_VARIANCE
         })

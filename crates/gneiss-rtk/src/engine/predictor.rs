@@ -1,3 +1,4 @@
+use crate::engine::fgo::factors::skew_symmetric;
 use crate::filter::RtkState;
 use nalgebra::{DMatrix, DVector, Matrix3, UnitQuaternion, Vector3};
 
@@ -83,11 +84,12 @@ pub fn compute_transition_matrix(
             phi[(i, 3 + i)] = dt;
         }
 
-        // Sign convention: this codebase uses a left-multiplied global-frame
-        // attitude error R_true = (I - [ψ×]) R_est. The perturbation on f_e
-        // is δf_e = -[ψ×] f_e = +[f_e×] ψ in theory, but the correlator
-        // sign here is coupled to the measurement Jacobian sign convention.
-        // Empirically, the negative sign produces stable multi-epoch convergence.
+        // Sign convention: the error state stored at indices 6-8 is d_theta
+        // (the correction axis-angle) such that R_true = (I + [d_theta×]) R_est.
+        // This d_theta = -ψ where ψ is the conventional attitude error vector.
+        // Under this convention the velocity-attitude coupling IS
+        // -[f_e×]*dt = -f_e_skew * dt (since δv = -[f_e×] dt d_theta derives
+        // from δf_e = -[d_theta×] f_e = +[f_e×] d_theta integrated over dt).
         let vel_att = -f_e_skew * dt;
         for r in 0..3 {
             for c in 0..3 {
@@ -256,6 +258,10 @@ pub fn predict(
     x_pred.rows_mut(0, 3).copy_from(&state.position.vector);
     x_pred.rows_mut(3, 3).copy_from(&state.velocity);
     if state.covariance.nrows() > 6 {
+        // Attitude indices 6-8 are intentionally omitted (left as zero).
+        // After injection the error-state attitude is expected to be zero,
+        // and the smoother handles attitude separately via the quaternion
+        // predicted_attitude field rather than through x_pred.
         x_pred.rows_mut(9, 3).copy_from(&state.accel_bias);
         x_pred.rows_mut(12, 3).copy_from(&state.gyro_bias);
     }
@@ -307,10 +313,6 @@ pub fn gravity_wgs84(pos_ecef: Vector3<f64>) -> Vector3<f64> {
     let gz = g_base * z * (1.0 - g_j2_common * (5.0 * z_r_2 - 3.0));
 
     Vector3::new(gx, gy, gz)
-}
-
-fn skew_symmetric(v: &Vector3<f64>) -> Matrix3<f64> {
-    Matrix3::new(0.0, -v.z, v.y, v.z, 0.0, -v.x, -v.y, v.x, 0.0)
 }
 #[cfg(test)]
 mod tests {

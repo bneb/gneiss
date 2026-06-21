@@ -22,17 +22,13 @@ pub struct JacobianInputs {
     pub exp_omega_dt: Matrix3<f64>,
 }
 
-pub fn skew_symmetric(v: &Vector3<f64>) -> Matrix3<f64> {
-    Matrix3::new(0.0, -v.z, v.y, v.z, 0.0, -v.x, -v.y, v.x, 0.0)
-}
-
 impl ImuFactor {
     pub fn jacobians(inputs: &JacobianInputs) -> (DMatrix<f64>, DMatrix<f64>) {
         let mut h_i = DMatrix::zeros(STATE_SIZE, STATE_SIZE);
         let mut h_j = DMatrix::zeros(STATE_SIZE, STATE_SIZE);
 
         let i_mat = Matrix3::identity();
-        let omega_skew = skew_symmetric(&inputs.omega_ie);
+        let omega_skew = super::skew_symmetric(&inputs.omega_ie);
         let r_i_t = inputs.r_i.transpose();
 
         // H_i blocks
@@ -92,7 +88,7 @@ mod tests {
     fn test_imu_factor_jacobians_hi_pos() {
         let inputs = create_mock_inputs();
         let (h_i, _) = ImuFactor::jacobians(&inputs);
-        let omega_skew = skew_symmetric(&inputs.omega_ie);
+        let omega_skew = super::super::skew_symmetric(&inputs.omega_ie);
         let r_i_t = inputs.r_i.transpose();
         let i_mat = Matrix3::identity();
 
@@ -114,7 +110,7 @@ mod tests {
     fn test_imu_factor_jacobians_hi_vel_rot() {
         let inputs = create_mock_inputs();
         let (h_i, _) = ImuFactor::jacobians(&inputs);
-        let omega_skew = skew_symmetric(&inputs.omega_ie);
+        let omega_skew = super::super::skew_symmetric(&inputs.omega_ie);
         let r_i_t = inputs.r_i.transpose();
         let i_mat = Matrix3::identity();
 
