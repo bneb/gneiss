@@ -1,2 +1,8 @@
 [build]
 rustflags = ["-C", "target-cpu=native"]
+
+[alias]
+coverage = "tarpaulin --out Html --output-dir target/tarpaulin"
+lint = "clippy --workspace --all-targets -- -D warnings -D clippy::all -W clippy::pedantic"
+check-all = "test --workspace && clippy --workspace --all-targets"
+
