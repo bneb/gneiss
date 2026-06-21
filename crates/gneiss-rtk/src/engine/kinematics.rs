@@ -49,9 +49,11 @@ pub fn apply_kinematic_constraints(
         let zupt_var = (accel_var * 0.1).clamp(0.001, 0.1).sqrt();
         let _ = crate::nhc::apply_zupt(state, zupt_var);
     } else {
+        let r_b_e = state.attitude.to_rotation_matrix();
+        let omega_ie_e = nalgebra::Vector3::new(0.0, 0.0, gneiss_core::constants::EARTH_ROTATION_RATE_RAD_S);
         let omega_b = if let Some(imu_buf) = imu_history.last() {
             if let Some(last_imu) = imu_buf.last() {
-                last_imu.gyro - state.gyro_bias
+                last_imu.gyro - state.gyro_bias - r_b_e.transpose() * omega_ie_e
             } else {
                 nalgebra::Vector3::zeros()
             }

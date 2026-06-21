@@ -338,11 +338,7 @@ fn compute_fix_hold_gain(
     let h_p = d_full * &state.covariance;
     let s: DMatrix<f64> = &h_p * d_full.transpose() + r;
     let s_inv = s.try_inverse().ok_or(UpdateError::SingularMatrix)?;
-    const DAMPING: f64 = 0.1;
-    let mut k = &state.covariance * d_full.transpose() * s_inv;
-    for i in 6..15 {
-        for j in 0..k.ncols() { k[(i, j)] *= DAMPING; }
-    }
+    let k = &state.covariance * d_full.transpose() * s_inv;
     Ok(k)
 }
 

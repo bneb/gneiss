@@ -230,19 +230,9 @@ pub fn manage_ambiguities_and_slips(
                                 );
 
                                 let (ar_sat_vec, _) =
-                                    crate::engine::measurement_math::get_sat_state(
-                                        anchor_eph,
-                                        anchor_r.pr_l1,
-                                        rover_time,
-                                        state.position.vector,
-                                    );
+                                    crate::engine::measurement_math::get_sat_state(anchor_eph, anchor_r.pr_l1, state.rcv_clk_bias, rover_time, state.position.vector);
                                 let (ab_sat_vec, _) =
-                                    crate::engine::measurement_math::get_sat_state(
-                                        anchor_eph,
-                                        anchor_b.pr_l1,
-                                        base_time,
-                                        base_coord.vector,
-                                    );
+                                    crate::engine::measurement_math::get_sat_state(anchor_eph, anchor_b.pr_l1, 0.0, base_time, base_coord.vector);
                                 let ar_dist_rov = (state.position.vector - ar_sat_vec).norm();
                                 let ar_dist_base = (base_coord.vector - ab_sat_vec).norm();
 
@@ -255,18 +245,8 @@ pub fn manage_ambiguities_and_slips(
                                 let b_clock_base = a_cp_base - ar_dist_base; // Base has no ambiguity in SD, assuming SD = rov - base
 
                                 let r_eph = ephemerides.iter().find(|e| e.sat() == r.sat).unwrap();
-                                let (r_sat_vec, _) = crate::engine::measurement_math::get_sat_state(
-                                    r_eph,
-                                    r.pr_l1,
-                                    rover_time,
-                                    state.position.vector,
-                                );
-                                let (b_sat_vec, _) = crate::engine::measurement_math::get_sat_state(
-                                    r_eph,
-                                    b.pr_l1,
-                                    base_time,
-                                    base_coord.vector,
-                                );
+                                let (r_sat_vec, _) = crate::engine::measurement_math::get_sat_state(r_eph, r.pr_l1, state.rcv_clk_bias, rover_time, state.position.vector);
+                                let (b_sat_vec, _) = crate::engine::measurement_math::get_sat_state(r_eph, b.pr_l1, 0.0, base_time, base_coord.vector);
                                 let dist_rov = (state.position.vector - r_sat_vec).norm();
                                 let dist_base = (base_coord.vector - b_sat_vec).norm();
 
@@ -330,19 +310,9 @@ pub fn manage_ambiguities_and_slips(
                                 );
 
                                 let (ar_sat_vec, _) =
-                                    crate::engine::measurement_math::get_sat_state(
-                                        anchor_eph,
-                                        anchor_r.pr_l1,
-                                        rover_time,
-                                        state.position.vector,
-                                    );
+                                    crate::engine::measurement_math::get_sat_state(anchor_eph, anchor_r.pr_l1, state.rcv_clk_bias, rover_time, state.position.vector);
                                 let (ab_sat_vec, _) =
-                                    crate::engine::measurement_math::get_sat_state(
-                                        anchor_eph,
-                                        anchor_b.pr_l1,
-                                        base_time,
-                                        base_coord.vector,
-                                    );
+                                    crate::engine::measurement_math::get_sat_state(anchor_eph, anchor_b.pr_l1, 0.0, base_time, base_coord.vector);
                                 let ar_dist_rov = (state.position.vector - ar_sat_vec).norm();
                                 let ar_dist_base = (base_coord.vector - ab_sat_vec).norm();
 
@@ -355,18 +325,8 @@ pub fn manage_ambiguities_and_slips(
                                 let b_clock_base = a_cp_base - ar_dist_base;
 
                                 let r_eph = ephemerides.iter().find(|e| e.sat() == r.sat).unwrap();
-                                let (r_sat_vec, _) = crate::engine::measurement_math::get_sat_state(
-                                    r_eph,
-                                    r.pr_l1,
-                                    rover_time,
-                                    state.position.vector,
-                                );
-                                let (b_sat_vec, _) = crate::engine::measurement_math::get_sat_state(
-                                    r_eph,
-                                    b.pr_l1,
-                                    base_time,
-                                    base_coord.vector,
-                                );
+                                let (r_sat_vec, _) = crate::engine::measurement_math::get_sat_state(r_eph, r.pr_l1, state.rcv_clk_bias, rover_time, state.position.vector);
+                                let (b_sat_vec, _) = crate::engine::measurement_math::get_sat_state(r_eph, b.pr_l1, 0.0, base_time, base_coord.vector);
                                 let dist_rov = (state.position.vector - r_sat_vec).norm();
                                 let dist_base = (base_coord.vector - b_sat_vec).norm();
 

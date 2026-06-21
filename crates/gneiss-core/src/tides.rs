@@ -49,7 +49,7 @@ fn compute_tide_contribution(
     let dot = r_celestial_hat.dot(&r_hat);
 
     // Scale coefficient
-    let coeff = (gm / GM_EARTH) * libm::pow(R_EARTH, 4.0) / libm::pow(dist, 3.0);
+    let coeff = (gm / GM_EARTH) * libm::pow(r_norm, 4.0) / libm::pow(dist, 3.0);
 
     // Radial displacement component (h2)
     let dr = H2 * r_hat * (1.5 * dot * dot - 0.5);

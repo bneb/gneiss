@@ -12,10 +12,11 @@ pub struct WindupUpdates {
 pub fn get_sat_state(
     eph: &Ephemeris,
     pr: f64,
+    rcv_clk_bias_m: f64,
     t_rx: GpsTime,
     rx_pos: Vector3<f64>,
 ) -> (Vector3<f64>, Vector3<f64>) {
-    let tau_pr = pr / gneiss_core::constants::SPEED_OF_LIGHT_M_S;
+    let tau_pr = (pr - rcv_clk_bias_m) / gneiss_core::constants::SPEED_OF_LIGHT_M_S;
     assert!(tau_pr.abs() < 1000.0, "tau_pr must be < 1000.0s");
     let t_tx_nom = GpsTime::new(t_rx.week, t_rx.tow - tau_pr);
     let (_, _, dt_s, _) = eph.position(t_tx_nom);
@@ -472,7 +473,7 @@ fn test_get_sat_state_catches_tau_pr_mutation() {
     });
 
     let pr = 20000000.0;
-    let (pos1, _) = get_sat_state(&eph, pr, time, rx_pos);
+    let (pos1, _) = get_sat_state(&eph, pr, 0.0, time, rx_pos);
 
     // Exact assertion to catch symmetric swap of + and -
     assert!(
@@ -529,11 +530,11 @@ fn test_get_sat_state_catches_rotation_mutation() {
     // For vel = 2000, change is 2000 * 5.4e-5 = 0.1 m/s.
     // We will assert with < 1e-9 tolerance to ensure the exact math is used.
     let pr = 3e10; // 100 seconds
-    let (_, _vel) = get_sat_state(&eph, pr, time, rx_pos);
+    let (_, _vel) = get_sat_state(&eph, pr, 0.0, time, rx_pos);
 
     // Actually, let's just make the assertion extremely tight on the normal PR
     let pr_normal = 20000000.0;
-    let (_, vel_normal) = get_sat_state(&eph, pr_normal, time, rx_pos);
+    let (_, vel_normal) = get_sat_state(&eph, pr_normal, 0.0, time, rx_pos);
     assert!((vel_normal.x - (-2062.128434083682)).abs() < 1e-12);
     assert!((vel_normal.y - (-1216.6504200626093)).abs() < 1e-12);
 }

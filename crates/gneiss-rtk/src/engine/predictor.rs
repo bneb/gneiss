@@ -83,7 +83,7 @@ pub fn compute_transition_matrix(
             phi[(i, 3 + i)] = dt;
         }
 
-        let vel_att = -f_e_skew * dt;
+        let vel_att = f_e_skew * dt;
         for r in 0..3 {
             for c in 0..3 {
                 phi[(3 + r, 6 + c)] = vel_att[(r, c)];

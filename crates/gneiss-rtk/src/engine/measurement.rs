@@ -514,6 +514,7 @@ pub fn compute_innovations(
         state.time,
         &geom,
         env.base_time,
+        state.rcv_clk_bias,
     );
 
     let ref_idx_l1 = state
@@ -553,9 +554,10 @@ fn compute_sat_state(
     time: gneiss_core::time::GpsTime,
     geom: &EkfGeometryContext,
     base_time: gneiss_core::time::GpsTime,
+    rcv_clk_bias_m: f64,
 ) -> SatState {
-    let (rov_pos, rov_vel) = get_sat_state(eph, rov_obs.pr_l1, time, geom.pos_apc);
-    let (bas_pos, bas_vel) = get_sat_state(eph, bas_obs.pr_l1, base_time, geom.base_coord_vec);
+    let (rov_pos, rov_vel) = get_sat_state(eph, rov_obs.pr_l1, rcv_clk_bias_m, time, geom.pos_apc);
+    let (bas_pos, bas_vel) = get_sat_state(eph, bas_obs.pr_l1, 0.0, base_time, geom.base_coord_vec);
     let (f1, f2) = gneiss_core::signal::satellite_frequencies(rov_obs.sat, eph.freq_num());
 
     SatState {
@@ -590,6 +592,7 @@ fn process_single_satellite_pair(
         state.time,
         geom,
         env.base_time,
+        state.rcv_clk_bias,
     );
 
     let e_ref_rov = (ref_state.rov_pos - geom.pos_apc).normalize();
@@ -1246,7 +1249,7 @@ mod tests {
         });
 
         let pr = 20000000.0;
-        let (pos, vel) = get_sat_state(&eph, pr, time, rx_pos);
+        let (pos, vel) = get_sat_state(&eph, pr, 0.0, time, rx_pos);
 
         // Assert non-zero output
         println!("pos: {:?}", pos);
@@ -1258,7 +1261,7 @@ mod tests {
         assert!((vel.y - (-1216.6504200626093)).abs() < 1e-6);
         assert!((vel.z - 1738.0997934704972).abs() < 1e-6);
 
-        let (pos0, _vel0) = get_sat_state(&eph, 0.0, time, rx_pos);
+        let (pos0, _vel0) = get_sat_state(&eph, 0.0, 0.0, time, rx_pos);
         assert!((pos.x - pos0.x).abs() > 0.0);
     }
     #[test]
@@ -1875,7 +1878,7 @@ mod tests {
 
         println!("h_rows[0] = {:?}", h_rows[0]);
         // Let's assert a few values of h_rows[0] to kill process_single_satellite_pair mutants
-        assert_eq!(h_rows[0][0], 0.993379336765863);
+        assert_eq!(h_rows[0][0], 0.993379331940329);
     }
 
     // -----------------------------------------------------------------------

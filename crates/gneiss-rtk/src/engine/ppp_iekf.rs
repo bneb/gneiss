@@ -445,9 +445,8 @@ impl PppIteratedEkf {
         }
 
         let a_nl = &d_nl * x_wl;
-        // Use original state covariance for NL: WL fix constrains n1-n2 but NOT n1 alone.
-        // p_wl is singular (Joseph with zero measurement noise), so project from state covariance.
-        let mut q_nl = &d_nl * &state.covariance * d_nl.transpose();
+        // Use p_wl so that the NL lambda search is constrained by the WL fixes.
+        let mut q_nl = &d_nl * p_wl * d_nl.transpose();
         // Add small diagonal to ensure full rank for LAMBDA
         for i in 0..q_nl.nrows() {
             q_nl[(i, i)] = q_nl[(i, i)].max(0.01);
@@ -480,12 +479,7 @@ impl PppIteratedEkf {
         }
 
         let s_nl_inv = q_nl.try_inverse().ok_or("NL Cov Inversion failed")?;
-        let mut k_nl = p_wl * d_nl.transpose() * s_nl_inv;
-        for i in 6..15 {
-            for j in 0..k_nl.ncols() {
-                k_nl[(i, j)] = 0.0;
-            }
-        }
+        let k_nl = p_wl * d_nl.transpose() * s_nl_inv;
 
         let dx_nl = &k_nl * (res_nl.best_integers - a_nl);
         let pos_correction_norm = (dx_nl[0].powi(2) + dx_nl[1].powi(2) + dx_nl[2].powi(2)).sqrt();

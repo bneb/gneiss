@@ -363,13 +363,7 @@ impl RtkState {
 
         let s = &d_full * &self.covariance * d_full.transpose();
         let s_inv = s.try_inverse().ok_or("Fix covariance inversion failed")?;
-        let mut k_full = &self.covariance * d_full.transpose() * &s_inv;
-
-        for i in 6..15 {
-            for j in 0..k_full.ncols() {
-                k_full[(i, j)] = 0.0;
-            }
-        }
+        let k_full = &self.covariance * d_full.transpose() * &s_inv;
 
         let dx = &k_full * &da_cycles;
         let mut fixed_state = self.clone();

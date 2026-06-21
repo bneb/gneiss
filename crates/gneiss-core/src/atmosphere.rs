@@ -190,31 +190,43 @@ fn _legendre(n: usize, m: usize, t: f64) -> f64 {
         / (n - m) as f64
 }
 
+fn _legendre_norm(n: usize, m: usize, t: f64) -> f64 {
+    let pnm = _legendre(n, m, t);
+    let mut num = 1.0;
+    let mut den = 1.0;
+    for i in 1..=(n - m) { num *= i as f64; }
+    for i in 1..=(n + m) { den *= i as f64; }
+    let delta = if m == 0 { 1.0 } else { 2.0 };
+    let norm = libm::sqrt(num / den * (2.0 * n as f64 + 1.0) * delta);
+    pnm * norm
+}
+
 fn _sh_eval_annual(
-    coeffs: &[(usize, usize, f64, f64)], lat: f64, _lon: f64, doy: f64,
+    coeffs: &[(usize, usize, f64, f64)], lat: f64, lon: f64, doy: f64,
 ) -> f64 {
     let t = libm::sin(lat);
     let cos_doy = libm::cos(2.0 * core::f64::consts::PI * doy / 365.25);
     let mut val = 0.0;
     for &(n, m, a_mean, a_ann) in coeffs {
-        let pnm = _legendre(n, m, t);
+        let pnm = _legendre_norm(n, m, t) * libm::cos(m as f64 * lon);
         val += (a_mean + a_ann * cos_doy) * pnm;
     }
     val
 }
 
-fn _sh_eval_static(coeffs: &[(usize, usize, f64)], lat: f64, _lon: f64) -> f64 {
+fn _sh_eval_static(coeffs: &[(usize, usize, f64)], lat: f64, lon: f64) -> f64 {
     let t = libm::sin(lat);
     let mut val = 0.0;
     for &(n, m, a) in coeffs {
-        val += a * _legendre(n, m, t);
+        let pnm = _legendre_norm(n, m, t) * libm::cos(m as f64 * lon);
+        val += a * pnm;
     }
     val
 }
 
 fn gmf_impl(pos_llh: Vector3<f64>, el: f64, time: GpsTime) -> (f64, f64) {
     let lat = pos_llh.x;
-    let _lon = pos_llh.y;
+    let lon = pos_llh.y;
     let hgt = pos_llh.z;
     let fy = time.to_fractional_year();
     let doy = (fy - libm::floor(fy)) * 365.25;
@@ -278,10 +290,10 @@ fn gmf_impl(pos_llh: Vector3<f64>, el: f64, time: GpsTime) -> (f64, f64) {
         (7,5, 1.244e-07), (7,6,-1.305e-07), (7,7,-8.158e-08),
     ];
 
-    let a_h = _sh_eval_annual(gmf_anm_h, lat, _lon, doy);
-    let b_h = _sh_eval_static(gmf_bh, lat, _lon);
-    let c_h = _sh_eval_static(gmf_ch, lat, _lon);
-    let a_w = _sh_eval_static(gmf_anm_w, lat, _lon);
+    let a_h = _sh_eval_annual(gmf_anm_h, lat, lon, doy);
+    let b_h = _sh_eval_static(gmf_bh, lat, lon);
+    let c_h = _sh_eval_static(gmf_ch, lat, lon);
+    let a_w = _sh_eval_static(gmf_anm_w, lat, lon);
     let b_w = 0.00146;   // empirical from NMF wet heritage
     let c_w = 0.04391;
 

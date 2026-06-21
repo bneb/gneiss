@@ -640,7 +640,7 @@ mod osb_tests {
         assert!((res.p1.unwrap() - (10.0 - 1.0 * 1e-9 * LIGHT_SPEED)).abs() < 1e-6);
         assert!((res.p2.unwrap() - (20.0 - 3.0 * 1e-9 * LIGHT_SPEED)).abs() < 1e-6);
         assert!((res.cp1.unwrap() - (30.0 - (2.0 * 1e-9 * LIGHT_SPEED) / wl1)).abs() < 1e-6);
-        assert!((res.cp2.unwrap() - (40.0 - (4.0 * 1e-9 * LIGHT_SPEED) / wl2 - 0.25)).abs() < 1e-6);
+        assert!((res.cp2.unwrap() - (40.0 - (4.0 * 1e-9 * LIGHT_SPEED) / wl2)).abs() < 1e-6);
     }
 }
 

@@ -71,20 +71,6 @@ pub fn apply_osb_corrections(
         if let Some(v) = out.cp2.as_mut() {
             *v -= out.osb_cp2 / (LIGHT_SPEED / f2);
 
-            let is_cp2_fb = cp2_obs
-                .and_then(|(_, c)| sinex.get_exact_bias(sat_obs.sat, c, time))
-                .is_none()
-                && cp2_obs
-                    .and_then(|(_, c)| sinex.get_bias(sat_obs.sat, c, time))
-                    .is_some();
-            if is_cp2_fb && sat_obs.sat.constellation == Constellation::Gps {
-                if let Some((_, c)) = cp2_obs {
-                    let s = c.to_string();
-                    if s == "L2L" || s == "L2S" || s == "L2X" {
-                        *v -= 0.25;
-                    }
-                }
-            }
         }
     }
     out
@@ -121,9 +107,10 @@ pub fn apply_earth_rotation(
         -raw_pos.x * s2 + raw_pos.y * c2,
         raw_pos.z,
     );
+    let omge = gneiss_core::constants::EARTH_ROTATION_RATE_RAD_S;
     let v2 = Vector3::new(
-        raw_vel.x * c2 + raw_vel.y * s2,
-        -raw_vel.x * s2 + raw_vel.y * c2,
+        raw_vel.x * c2 + raw_vel.y * s2 - omge * p2.y,
+        -raw_vel.x * s2 + raw_vel.y * c2 + omge * p2.x,
         raw_vel.z,
     );
 
@@ -194,7 +181,7 @@ pub fn detect_mw_slip(
     threshold_cycles: f64,
 ) -> (bool, f64) {
     let _wl = lam1 * lam2 / (lam2 - lam1); // widelane wavelength
-    let mw = (cp1 - cp2) - (p1 / lam1 + p2 / lam2) * (lam1 * lam2) / (lam1 + lam2);
+    let mw = (cp1 - cp2) - (p1 / lam1 + p2 / lam2) * (lam2 - lam1) / (lam1 + lam2);
     if !has_prev {
         return (false, mw);
     }
@@ -538,9 +525,10 @@ mod tests {
             -raw_pos.x * s2 + raw_pos.y * c2,
             raw_pos.z,
         );
+        let omge = gneiss_core::constants::EARTH_ROTATION_RATE_RAD_S;
         let v2 = Vector3::new(
-            raw_vel.x * c2 + raw_vel.y * s2,
-            -raw_vel.x * s2 + raw_vel.y * c2,
+            raw_vel.x * c2 + raw_vel.y * s2 - omge * p2.y,
+            -raw_vel.x * s2 + raw_vel.y * c2 + omge * p2.x,
             raw_vel.z,
         );
 
@@ -582,7 +570,7 @@ mod tests {
         let sinex = SinexBias {
             records: vec![record],
         };
-        // Check all three codes that trigger -0.25
+        // Check all three codes (previously triggered -0.25, now should not)
         for code_str in ["L2L", "L2S", "L2X"] {
             let mut obs = SatObs {
                 sat: sat_id,
@@ -606,13 +594,13 @@ mod tests {
                 2,
             );
             if let Some(cp2) = out.cp2 {
-                assert_eq!(cp2, 297.35, "failed for code {}", code_str);
+                assert_eq!(cp2, 297.6, "failed for code {}", code_str);
             } else {
                 panic!("cp2 is None for {}", code_str);
             }
         }
 
-        // Check a code that DOES NOT trigger -0.25 but still triggers fallback
+        // Check a code that also triggers fallback
         let mut obs = SatObs {
             sat: sat_id,
             observations: vec![],
@@ -656,13 +644,26 @@ mod tests {
 
     #[test]
     fn test_mw_slip_detection() {
-        // MW with identical values → no slip
-        let (_, mw) = detect_mw_slip(1000.0, 0.19, 800.0, 0.24, 20000000.0, 20000000.0, 0.0, false, 2.0);
-        // First epoch: no previous → no slip
-        let (slip, _) = detect_mw_slip(1000.0, 0.19, 800.0, 0.24, 20000000.0, 20000000.0, mw, true, 2.0);
-        assert!(!slip);
-        // Large MW jump of 5 cycles → slip
-        let (slip2, _) = detect_mw_slip(1000.0, 0.19, 805.0, 0.24, 20000000.0, 20000000.0, mw, true, 2.0);
-        assert!(slip2);
+        let p1 = 20000000.0;
+        let p2 = p1;
+        let cp1 = p1 / 0.19;
+        let cp2 = p2 / 0.24;
+        
+        let (_, mw) = detect_mw_slip(cp1, 0.19, cp2, 0.24, p1, p2, 0.0, false, 2.0);
+        
+        // Move by 1000m (normal geometry change) -> should NOT trigger a slip
+        let dist_change = 1000.0;
+        let p1_new = p1 + dist_change;
+        let p2_new = p2 + dist_change;
+        let cp1_new = p1_new / 0.19;
+        let cp2_new = p2_new / 0.24;
+        
+        let (slip, _) = detect_mw_slip(cp1_new, 0.19, cp2_new, 0.24, p1_new, p2_new, mw, true, 2.0);
+        assert!(!slip, "MW should cancel geometry changes");
+        
+        // Now introduce a 5-cycle slip on L1 phase
+        let cp1_slip = cp1_new + 5.0;
+        let (slip2, _) = detect_mw_slip(cp1_slip, 0.19, cp2_new, 0.24, p1_new, p2_new, mw, true, 2.0);
+        assert!(slip2, "MW should detect phase cycle slips");
     }
 }

@@ -172,7 +172,11 @@ impl PppInsIteratedEkf {
         apply_state_vector(state, &x_i, final_p);
         let omega_eb_b = imu_history.last()
             .and_then(|buf: &Vec<gneiss_core::imu::ImuMeasurement>| buf.last())
-            .map(|m| m.gyro - nalgebra::Vector3::new(x_i[12], x_i[13], x_i[14]))
+            .map(|m| {
+                let r_b_e = nalgebra::UnitQuaternion::from_scaled_axis(nalgebra::Vector3::new(x_i[6], x_i[7], x_i[8])).to_rotation_matrix();
+                let omega_ie_e = nalgebra::Vector3::new(0.0, 0.0, gneiss_core::constants::EARTH_ROTATION_RATE_RAD_S);
+                m.gyro - nalgebra::Vector3::new(x_i[12], x_i[13], x_i[14]) - r_b_e.transpose() * omega_ie_e
+            })
             .unwrap_or(nalgebra::Vector3::zeros());
         log_ppp_convergence(state, sats, &x_i, &x_pred, &p_pred, self, lever_arm, &omega_eb_b);
         Ok(true)
@@ -188,7 +192,11 @@ impl PppInsIteratedEkf {
     ) -> Option<gneiss_core::sat::SatelliteId> {
         let omega_eb_b = imu_history.last()
             .and_then(|buf: &Vec<gneiss_core::imu::ImuMeasurement>| buf.last())
-            .map(|m| m.gyro - nalgebra::Vector3::new(x_i[12], x_i[13], x_i[14]))
+            .map(|m| {
+                let r_b_e = nalgebra::UnitQuaternion::from_scaled_axis(nalgebra::Vector3::new(x_i[6], x_i[7], x_i[8])).to_rotation_matrix();
+                let omega_ie_e = nalgebra::Vector3::new(0.0, 0.0, gneiss_core::constants::EARTH_ROTATION_RATE_RAD_S);
+                m.gyro - nalgebra::Vector3::new(x_i[12], x_i[13], x_i[14]) - r_b_e.transpose() * omega_ie_e
+            })
             .unwrap_or(nalgebra::Vector3::zeros());
         let final_meas = self.build_measurements(state, sats, x_i, self.max_iterations, lever_arm, &omega_eb_b);
         Self::find_worst_outlier_sat(&final_meas)
@@ -368,12 +376,7 @@ impl PppInsIteratedEkf {
         }
 
         let s_nl_inv = q_nl.try_inverse().ok_or("NL Cov Inversion failed")?;
-        let mut k_nl = p_wl * d_nl.transpose() * s_nl_inv;
-        for i in 6..15 {
-            for j in 0..k_nl.ncols() {
-                k_nl[(i, j)] = 0.0;
-            }
-        }
+        let k_nl = p_wl * d_nl.transpose() * s_nl_inv;
 
         let dx_nl = &k_nl * (res_nl.best_integers - a_nl);
 
@@ -407,7 +410,11 @@ impl PppInsIteratedEkf {
     ) -> Result<Option<DVector<f64>>, EngineError> {
         let omega_eb_b = imu_history.last()
             .and_then(|buf: &Vec<gneiss_core::imu::ImuMeasurement>| buf.last())
-            .map(|m| m.gyro - nalgebra::Vector3::new(x_i[12], x_i[13], x_i[14]))
+            .map(|m| {
+                let r_b_e = nalgebra::UnitQuaternion::from_scaled_axis(nalgebra::Vector3::new(x_i[6], x_i[7], x_i[8])).to_rotation_matrix();
+                let omega_ie_e = nalgebra::Vector3::new(0.0, 0.0, gneiss_core::constants::EARTH_ROTATION_RATE_RAD_S);
+                m.gyro - nalgebra::Vector3::new(x_i[12], x_i[13], x_i[14]) - r_b_e.transpose() * omega_ie_e
+            })
             .unwrap_or(nalgebra::Vector3::zeros());
         let meas = self.build_measurements(state, sats, x_i, iter, lever_arm, &omega_eb_b);
         if meas.is_empty() {
@@ -456,7 +463,11 @@ impl PppInsIteratedEkf {
     ) -> DMatrix<f64> {
         let omega_eb_b = imu_history.last()
             .and_then(|buf: &Vec<gneiss_core::imu::ImuMeasurement>| buf.last())
-            .map(|m| m.gyro - nalgebra::Vector3::new(x_i[12], x_i[13], x_i[14]))
+            .map(|m| {
+                let r_b_e = nalgebra::UnitQuaternion::from_scaled_axis(nalgebra::Vector3::new(x_i[6], x_i[7], x_i[8])).to_rotation_matrix();
+                let omega_ie_e = nalgebra::Vector3::new(0.0, 0.0, gneiss_core::constants::EARTH_ROTATION_RATE_RAD_S);
+                m.gyro - nalgebra::Vector3::new(x_i[12], x_i[13], x_i[14]) - r_b_e.transpose() * omega_ie_e
+            })
             .unwrap_or(nalgebra::Vector3::zeros());
         let last_meas = self.build_measurements(state, sats, x_i, self.max_iterations, lever_arm, &omega_eb_b);
         if last_meas.is_empty() {

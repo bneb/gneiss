@@ -252,10 +252,10 @@ mod tests {
         // E.g. k[(i, j)] *= 0.1 damping.
         assert!((state.gyro_bias.x - initial_gyro_bias.x).abs() > 1e-10);
         
-        // s = 2.001. s_inv = 1/2.001. k_raw = 0.1 / 2.001.
-        // k_damped = 0.1 / 2.001 * 0.1 = 0.01 / 2.001.
-        // dx = k_damped * v = (0.01 / 2.001) * (-0.5) = -0.002498750624687656
-        let expected_gyro_x = -0.002498750624687656;
+        // dx = k * v = (0.1 / 2.001) * 0.5? Wait, v = 1.0. 
+        // No, v = z_dd - d_full * a_sd = 1.0 - (5.3 - 3.8) = 1.0 - 1.5 = -0.5
+        // dx = (0.1 / 2.001) * (-0.5) = -0.024987506246876564
+        let expected_gyro_x = -0.024987506246876564;
         assert!((state.gyro_bias.x - expected_gyro_x).abs() < 1e-5);
     }
 
