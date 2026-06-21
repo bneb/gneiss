@@ -1,4 +1,4 @@
-# BRIEFING — 2026-06-21T03:00:00Z
+# BRIEFING — 2026-06-21T10:00:00Z
 
 ## Mission
 Fix 25 mathematically-identified bugs in the gneiss navigation engine, and guard each fix with a regression test that would fail if the buggy formula were restored.
@@ -59,7 +59,7 @@ Fix 25 mathematically-identified bugs in the gneiss navigation engine, and guard
 - Successor: not yet spawned
 
 ## Active Timers
-- Heartbeat cron: 2fa793b7-d67e-47b9-8b06-31cfa02fc26b/task-47
+- Heartbeat cron: e2b4cf86-7ee9-4f3c-990c-2c79b1094647/task-25
 - Safety timer: none
 
 ## Artifact Index

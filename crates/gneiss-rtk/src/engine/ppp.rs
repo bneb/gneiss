@@ -424,14 +424,11 @@ fn compute_sat_state(
         .as_ref()
         .and_then(|c| c.get_clock_bias(sat, t_nom))
         .unwrap_or(0.0);
-    let brdc_clk = eph.position(t_nom).2;
+    let brdc_clk = eph.position_iono_free(t_nom).2;
 
     let mut clk_found = dt_s != 0.0;
     if !precise {
-        // calc_keplerian subtracts TGD for single-frequency users.
-        // In dual-frequency iono-free PPP, TGD cancels in the IF combination
-        // and must NOT be in the clock correction.  Add it back to undo it.
-        dt_s = brdc_clk + eph.tgd();
+        dt_s = brdc_clk;
         clk_found = true;
     }
 
@@ -450,7 +447,7 @@ fn compute_sat_state(
     }
 
     let t_tx = gneiss_core::time::GpsTime::new(t_nom.week, t_nom.tow - dt_s);
-    let (brdc_pos, brdc_vel, _, _) = eph.position(t_tx);
+    let (brdc_pos, brdc_vel, _, _) = eph.position_iono_free(t_tx);
     let mut sat_pos: Vector3<f64> = brdc_pos;
     let mut sat_vel: Vector3<f64> = brdc_vel;
 

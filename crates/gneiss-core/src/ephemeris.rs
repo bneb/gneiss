@@ -44,6 +44,16 @@ impl Ephemeris {
         }
     }
 
+    pub fn position_iono_free(&self, t: GpsTime) -> (Vector3<f64>, Vector3<f64>, f64, f64) {
+        match self {
+            Ephemeris::Gps(e) => e.position_iono_free(t),
+            Ephemeris::Galileo(e) => e.position_iono_free(t),
+            Ephemeris::Beidou(e) => e.position_iono_free(t),
+            Ephemeris::Qzss(e) => e.position_iono_free(t),
+            Ephemeris::Glonass(e) => e.position(t),
+        }
+    }
+
     pub fn toe(&self) -> GpsTime {
         match self {
             Ephemeris::Gps(e) => e.toe,
@@ -503,6 +513,36 @@ impl GpsEphemeris {
             false,
         )
     }
+
+    pub fn position_iono_free(&self, t: GpsTime) -> (Vector3<f64>, Vector3<f64>, f64, f64) {
+        calc_keplerian(
+            t,
+            self.toe,
+            self.toc,
+            self.af0,
+            self.af1,
+            self.af2,
+            self.crs,
+            self.crc,
+            self.cuc,
+            self.cus,
+            self.cic,
+            self.cis,
+            self.m0,
+            self.e,
+            self.sqrt_a,
+            self.delta_n,
+            self.omega0,
+            self.omega_dot,
+            self.i0,
+            self.idot,
+            self.omega,
+            0.0,
+            MU_GPS,
+            OMEGA_E_GPS,
+            false,
+        )
+    }
 }
 
 impl GalileoEphemeris {
@@ -530,6 +570,36 @@ impl GalileoEphemeris {
             self.idot,
             self.omega,
             self.bgd_e1_e5a,
+            MU_GAL,
+            OMEGA_E_GAL,
+            false,
+        )
+    }
+
+    pub fn position_iono_free(&self, t: GpsTime) -> (Vector3<f64>, Vector3<f64>, f64, f64) {
+        calc_keplerian(
+            t,
+            self.toe,
+            self.toc,
+            self.af0,
+            self.af1,
+            self.af2,
+            self.crs,
+            self.crc,
+            self.cuc,
+            self.cus,
+            self.cic,
+            self.cis,
+            self.m0,
+            self.e,
+            self.sqrt_a,
+            self.delta_n,
+            self.omega0,
+            self.omega_dot,
+            self.i0,
+            self.idot,
+            self.omega,
+            0.0,
             MU_GAL,
             OMEGA_E_GAL,
             false,
@@ -573,6 +643,40 @@ impl BeidouEphemeris {
             is_bds_geo,
         )
     }
+
+    pub fn position_iono_free(&self, t: GpsTime) -> (Vector3<f64>, Vector3<f64>, f64, f64) {
+        let t_bdt = GpsTime::new(t.week, t.tow - 14.0);
+
+        let is_bds_geo = self.sat.prn <= 5 || self.sat.prn >= 59;
+
+        calc_keplerian(
+            t_bdt,
+            self.toe,
+            self.toc,
+            self.af0,
+            self.af1,
+            self.af2,
+            self.crs,
+            self.crc,
+            self.cuc,
+            self.cus,
+            self.cic,
+            self.cis,
+            self.m0,
+            self.e,
+            self.sqrt_a,
+            self.delta_n,
+            self.omega0,
+            self.omega_dot,
+            self.i0,
+            self.idot,
+            self.omega,
+            0.0,
+            MU_BDS,
+            OMEGA_E_BDS,
+            is_bds_geo,
+        )
+    }
 }
 
 impl QzssEphemeris {
@@ -600,6 +704,36 @@ impl QzssEphemeris {
             self.idot,
             self.omega,
             self.tgd,
+            MU_GPS,
+            OMEGA_E_GPS,
+            false,
+        )
+    }
+
+    pub fn position_iono_free(&self, t: GpsTime) -> (Vector3<f64>, Vector3<f64>, f64, f64) {
+        calc_keplerian(
+            t,
+            self.toe,
+            self.toc,
+            self.af0,
+            self.af1,
+            self.af2,
+            self.crs,
+            self.crc,
+            self.cuc,
+            self.cus,
+            self.cic,
+            self.cis,
+            self.m0,
+            self.e,
+            self.sqrt_a,
+            self.delta_n,
+            self.omega0,
+            self.omega_dot,
+            self.i0,
+            self.idot,
+            self.omega,
+            0.0,
             MU_GPS,
             OMEGA_E_GPS,
             false,
@@ -1246,5 +1380,137 @@ mod tests {
             (eph.tgd() - eph.bgd_e5b()).abs() > 0.5e-9,
             "bgd_e1_e5a and bgd_e1_e5b must differ in this test"
         );
+    }
+
+    #[test]
+    fn test_broadcast_clock_tgd_correct() {
+        // Test GPS
+        let gps_eph = GpsEphemeris {
+            sat: SatelliteId { constellation: Constellation::Gps, prn: 1 },
+            toe: GpsTime::new(2000, 100000.0),
+            toc: GpsTime::new(2000, 100000.0),
+            af0: 1e-3,
+            af1: 0.0,
+            af2: 0.0,
+            crs: 0.0,
+            crc: 0.0,
+            cuc: 0.0,
+            cus: 0.0,
+            cic: 0.0,
+            cis: 0.0,
+            m0: 0.0,
+            e: 0.0,
+            sqrt_a: 5153.6,
+            delta_n: 0.0,
+            omega0: 0.0,
+            omega_dot: 0.0,
+            i0: 0.0,
+            idot: 0.0,
+            omega: 0.0,
+            tgd: 1.5e-8,
+            iode: 1,
+            iodc: 1,
+        };
+        let gps = Ephemeris::Gps(gps_eph.clone());
+        let t = GpsTime::new(2000, 100000.0);
+        let (_, _, clk_pos, _) = gps.position(t);
+        let (_, _, clk_if, _) = gps.position_iono_free(t);
+        assert!((clk_if - clk_pos - gps_eph.tgd).abs() < 1e-15);
+
+        // Test Galileo
+        let gal_eph = GalileoEphemeris {
+            sat: SatelliteId { constellation: Constellation::Galileo, prn: 1 },
+            toe: GpsTime::new(2000, 100000.0),
+            toc: GpsTime::new(2000, 100000.0),
+            af0: 1e-3,
+            af1: 0.0,
+            af2: 0.0,
+            crs: 0.0,
+            crc: 0.0,
+            cuc: 0.0,
+            cus: 0.0,
+            cic: 0.0,
+            cis: 0.0,
+            m0: 0.0,
+            e: 0.0,
+            sqrt_a: 5440.6,
+            delta_n: 0.0,
+            omega0: 0.0,
+            omega_dot: 0.0,
+            i0: 0.0,
+            idot: 0.0,
+            omega: 0.0,
+            bgd_e1_e5a: 2.0e-9,
+            bgd_e1_e5b: 3.0e-9,
+            iod_nav: 1,
+        };
+        let gal = Ephemeris::Galileo(gal_eph.clone());
+        let (_, _, clk_pos, _) = gal.position(t);
+        let (_, _, clk_if, _) = gal.position_iono_free(t);
+        assert!((clk_if - clk_pos - gal_eph.bgd_e1_e5a).abs() < 1e-15);
+
+        // Test Beidou
+        let bds_eph = BeidouEphemeris {
+            sat: SatelliteId { constellation: Constellation::Beidou, prn: 1 },
+            toe: GpsTime::new(2000, 100000.0),
+            toc: GpsTime::new(2000, 100000.0),
+            af0: 1e-3,
+            af1: 0.0,
+            af2: 0.0,
+            crs: 0.0,
+            crc: 0.0,
+            cuc: 0.0,
+            cus: 0.0,
+            cic: 0.0,
+            cis: 0.0,
+            m0: 0.0,
+            e: 0.0,
+            sqrt_a: 5440.6,
+            delta_n: 0.0,
+            omega0: 0.0,
+            omega_dot: 0.0,
+            i0: 0.0,
+            idot: 0.0,
+            omega: 0.0,
+            tgd1: 4.0e-9,
+            aode: 1,
+            aodc: 1,
+        };
+        let bds = Ephemeris::Beidou(bds_eph.clone());
+        let (_, _, clk_pos, _) = bds.position(t);
+        let (_, _, clk_if, _) = bds.position_iono_free(t);
+        assert!((clk_if - clk_pos - bds_eph.tgd1).abs() < 1e-15);
+
+        // Test Qzss
+        let qzss_eph = QzssEphemeris {
+            sat: SatelliteId { constellation: Constellation::Qzss, prn: 193 },
+            toe: GpsTime::new(2000, 100000.0),
+            toc: GpsTime::new(2000, 100000.0),
+            af0: 1e-3,
+            af1: 0.0,
+            af2: 0.0,
+            crs: 0.0,
+            crc: 0.0,
+            cuc: 0.0,
+            cus: 0.0,
+            cic: 0.0,
+            cis: 0.0,
+            m0: 0.0,
+            e: 0.0,
+            sqrt_a: 5153.6,
+            delta_n: 0.0,
+            omega0: 0.0,
+            omega_dot: 0.0,
+            i0: 0.0,
+            idot: 0.0,
+            omega: 0.0,
+            tgd: 1.5e-8,
+            iode: 1,
+            iodc: 1,
+        };
+        let qzss = Ephemeris::Qzss(qzss_eph.clone());
+        let (_, _, clk_pos, _) = qzss.position(t);
+        let (_, _, clk_if, _) = qzss.position_iono_free(t);
+        assert!((clk_if - clk_pos - qzss_eph.tgd).abs() < 1e-15);
     }
 }

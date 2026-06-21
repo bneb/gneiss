@@ -51,11 +51,17 @@ Orchestrate the fixes for the remaining Tier 1 bugs in the gneiss navigation eng
 ## Team Roster
 | Agent | Type | Work Item | Status | Conv ID |
 |-------|------|-----------|--------|---------|
+| worker_verify | teamwork_preview_worker | Initial test verification | completed | 7a59ddcb-97aa-4ef0-be46-94011e2ec5f1 |
+| explorer_bug15 | teamwork_preview_explorer | Analyze Bug 15 | completed | afaf2d17-d55a-469a-9384-1af2f294a5d1 |
+| worker_bug15 | teamwork_preview_worker | Implement Bug 15 fix | completed | b2eb69bc-2541-42e1-8594-ec23daad7f8d |
+| reviewer1_bug15 | teamwork_preview_reviewer | Review Bug 15 | pending | 5cfd34e6-421e-4baf-88b5-93a61844c6b9 |
+| reviewer2_bug15 | teamwork_preview_reviewer | Review Bug 15 | pending | 53ab8920-6299-4b10-9f74-60c9b5348155 |
+| auditor_bug15 | teamwork_preview_auditor | Audit Bug 15 | pending | d6ade033-ff8a-4964-8b6c-bab3ae4b4b0f |
 
 ## Succession Status
 - Succession required: no
-- Spawn count: 0 / 16
-- Pending subagents: none
+- Spawn count: 6 / 16
+- Pending subagents: 5cfd34e6-421e-4baf-88b5-93a61844c6b9, 53ab8920-6299-4b10-9f74-60c9b5348155, d6ade033-ff8a-4964-8b6c-bab3ae4b4b0f
 - Predecessor: none
 - Successor: not yet spawned
 

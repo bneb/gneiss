@@ -182,12 +182,20 @@ fn compute_sat_state(m: &SppMeasurement, receiver_cdt: f64) -> (Coordinate, f64)
     let t_tx_sat = t_rcv - pr_time;
     let t_tx_sat_gps = GpsTime::new(m.time.week, t_tx_sat);
 
-    let (_, _, sat_clk_err_rough, _) = m.eph.position(t_tx_sat_gps);
+    let (_, _, sat_clk_err_rough, _) = if m.is_iono_free {
+        m.eph.position_iono_free(t_tx_sat_gps)
+    } else {
+        m.eph.position(t_tx_sat_gps)
+    };
 
     let t_tx_true = t_tx_sat - sat_clk_err_rough;
     let t_tx_true_gps = GpsTime::new(m.time.week, t_tx_true);
 
-    let (sat_pos, _, sat_clk_err, _) = m.eph.position(t_tx_true_gps);
+    let (sat_pos, _, sat_clk_err, _) = if m.is_iono_free {
+        m.eph.position_iono_free(t_tx_true_gps)
+    } else {
+        m.eph.position(t_tx_true_gps)
+    };
     let corrected_pr = m.raw_pr + (sat_clk_err * LIGHT_SPEED);
 
     (
