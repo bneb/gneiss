@@ -58,44 +58,51 @@ pub struct RtkState {
     pub ins_aligned: bool,
 }
 
+/// Initializes the core 21x21 covariance matrix for a new EKF state.
+fn init_covariance(initial_var: f64) -> DMatrix<f64> {
+    let mut cov = DMatrix::zeros(CORE_STATE_SIZE, CORE_STATE_SIZE);
+    for i in 0..3 {
+        cov[(i, i)] = initial_var;
+    } // position
+    for i in 3..6 {
+        cov[(i, i)] = 100.0;
+    } // velocity
+    let att_var = (1.0f64.to_radians()).powi(2);
+    for i in 6..9 {
+        cov[(i, i)] = att_var;
+    } // attitude
+    for i in 9..12 {
+        cov[(i, i)] = 0.01;
+    } // accel bias
+    for i in 12..15 {
+        cov[(i, i)] = 1e-6;
+    } // gyro bias
+    cov[(15, 15)] = 100000.0; // rcv_clk_bias
+    cov[(16, 16)] = 100000.0; // isb_glo
+    cov[(17, 17)] = 100000.0; // isb_gal
+    cov[(18, 18)] = 100000.0; // isb_bds
+    cov[(19, 19)] = 1000.0; // rcv_clk_drift
+    cov[(20, 20)] = 1.0; // zwd
+    cov
+}
+
+/// Computes the initial attitude from the position by aligning the body frame
+/// with the local NED frame (level attitude).
+fn init_attitude(initial_pos: &Coordinate) -> UnitQuaternion<f64> {
+    let llh = gneiss_core::coords::ecef_to_llh(initial_pos.vector);
+    let ecef_to_ned = gneiss_core::coords::ecef_to_ned_matrix(llh);
+    let ned_to_ecef = ecef_to_ned.transpose();
+    UnitQuaternion::from_rotation_matrix(&nalgebra::Rotation3::from_matrix(&ned_to_ecef))
+}
+
 impl RtkState {
     pub fn new(time: GpsTime, initial_pos: Coordinate, initial_var: f64) -> Self {
-        let mut cov = DMatrix::zeros(CORE_STATE_SIZE, CORE_STATE_SIZE);
-        for i in 0..3 {
-            cov[(i, i)] = initial_var;
-        } // position
-        for i in 3..6 {
-            cov[(i, i)] = 100.0;
-        } // velocity
-        let att_var = (1.0f64.to_radians()).powi(2);
-        for i in 6..9 {
-            cov[(i, i)] = att_var;
-        } // attitude
-        for i in 9..12 {
-            cov[(i, i)] = 0.01;
-        } // accel bias
-        for i in 12..15 {
-            cov[(i, i)] = 1e-6;
-        } // gyro bias
-        cov[(15, 15)] = 100000.0; // rcv_clk_bias
-        cov[(16, 16)] = 100000.0; // isb_glo
-        cov[(17, 17)] = 100000.0; // isb_gal
-        cov[(18, 18)] = 100000.0; // isb_bds
-        cov[(19, 19)] = 1000.0; // rcv_clk_drift
-        cov[(20, 20)] = 1.0; // zwd
-
+        let cov = init_covariance(initial_var);
         Self {
             time,
             position: initial_pos,
             velocity: Vector3::zeros(),
-            attitude: {
-                let llh = gneiss_core::coords::ecef_to_llh(initial_pos.vector);
-                let ecef_to_ned = gneiss_core::coords::ecef_to_ned_matrix(llh);
-                let ned_to_ecef = ecef_to_ned.transpose();
-                UnitQuaternion::from_rotation_matrix(&nalgebra::Rotation3::from_matrix(
-                    &ned_to_ecef,
-                ))
-            },
+            attitude: init_attitude(&initial_pos),
             accel_bias: Vector3::zeros(),
             gyro_bias: Vector3::zeros(),
             rcv_clk_bias: 0.0,
