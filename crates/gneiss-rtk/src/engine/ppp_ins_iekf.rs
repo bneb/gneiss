@@ -925,7 +925,7 @@ impl PppInsIteratedEkf {
     ) {
         if let Some(amb_idx) = find_ambiguity_index(state, sat.sat_obs.sat) {
             let windup = *state.windup.get(&sat.sat_obs.sat).unwrap_or(&0.0);
-            let l_meas = (cp1 + windup) * sat.lam1;
+            let l_meas = (cp1 - windup) * sat.lam1;
             let expected_cp = if sat.is_iono_free {
                 expected_base + x_i[CORE_STATE_SIZE + amb_idx]
             } else {
@@ -1039,7 +1039,7 @@ impl PppInsIteratedEkf {
     ) {
         let windup = *state.windup.get(&sat.sat_obs.sat).unwrap_or(&0.0);
         let var_l1 = 0.0001 * snr_scale(sat.snr as i32) / libm::sin(sat.el);
-        let res_l1 = (sat.cp1.unwrap() + windup) * sat.lam1 - (expected_base - idx.i1 + idx.n1);
+        let res_l1 = (sat.cp1.unwrap() - windup) * sat.lam1 - (expected_base - idx.i1 + idx.n1);
         meas.push(FgMeasurement {
             res: res_l1,
             h_row: build_h_row_uduc(
@@ -1058,7 +1058,7 @@ impl PppInsIteratedEkf {
             sat: Some(sat.sat_obs.sat),
         });
         let res_l2 =
-            (sat.cp2.unwrap() + windup) * sat.lam2 - (expected_base - idx.gamma * idx.i1 + idx.n2);
+            (sat.cp2.unwrap() - windup) * sat.lam2 - (expected_base - idx.gamma * idx.i1 + idx.n2);
         meas.push(FgMeasurement {
             res: res_l2,
             h_row: build_h_row_uduc(

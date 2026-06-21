@@ -220,10 +220,13 @@ pub fn manage_ambiguities_and_slips(
                         )] < 0.05
                         {
                             if let (Some(ar_cp), Some(ab_cp)) = (anchor_r.cp_l1, anchor_b.cp_l1) {
-                                let anchor_eph = ephemerides
+                                let anchor_eph = match ephemerides
                                     .iter()
                                     .find(|e| e.sat() == anchor_r.sat)
-                                    .unwrap();
+                                {
+                                    Some(eph) => eph,
+                                    None => continue,
+                                };
                                 let (a_f1, _) = gneiss_core::signal::satellite_frequencies(
                                     anchor_r.sat,
                                     anchor_eph.freq_num(),
@@ -256,7 +259,10 @@ pub fn manage_ambiguities_and_slips(
                                 let b_clock_rov = a_cp_rov - ar_dist_rov - anchor_sd;
                                 let b_clock_base = a_cp_base - ar_dist_base; // Base has no ambiguity in SD, assuming SD = rov - base
 
-                                let r_eph = ephemerides.iter().find(|e| e.sat() == r.sat).unwrap();
+                                let r_eph = match ephemerides.iter().find(|e| e.sat() == r.sat) {
+                                    Some(eph) => eph,
+                                    None => continue,
+                                };
                                 let (r_sat_vec, _) = crate::engine::measurement_math::get_sat_state(
                                     r_eph,
                                     r.pr_l1,
@@ -324,10 +330,13 @@ pub fn manage_ambiguities_and_slips(
                         )] < 0.05
                         {
                             if let (Some(ar_cp), Some(ab_cp)) = (anchor_r.cp_l2, anchor_b.cp_l2) {
-                                let anchor_eph = ephemerides
+                                let anchor_eph = match ephemerides
                                     .iter()
                                     .find(|e| e.sat() == anchor_r.sat)
-                                    .unwrap();
+                                {
+                                    Some(eph) => eph,
+                                    None => continue,
+                                };
                                 let (_, a_f2) = gneiss_core::signal::satellite_frequencies(
                                     anchor_r.sat,
                                     anchor_eph.freq_num(),
@@ -360,7 +369,10 @@ pub fn manage_ambiguities_and_slips(
                                 let b_clock_rov = a_cp_rov - ar_dist_rov - anchor_sd;
                                 let b_clock_base = a_cp_base - ar_dist_base;
 
-                                let r_eph = ephemerides.iter().find(|e| e.sat() == r.sat).unwrap();
+                                let r_eph = match ephemerides.iter().find(|e| e.sat() == r.sat) {
+                                    Some(eph) => eph,
+                                    None => continue,
+                                };
                                 let (r_sat_vec, _) = crate::engine::measurement_math::get_sat_state(
                                     r_eph,
                                     r.pr_l1,

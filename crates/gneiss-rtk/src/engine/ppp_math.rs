@@ -1,4 +1,5 @@
 use gneiss_core::obs::{ObsCode, SatObs};
+#[cfg_attr(not(test), allow(unused_imports))]
 use gneiss_core::sat::Constellation;
 use gneiss_core::time::GpsTime;
 use nalgebra::Vector3;

@@ -506,7 +506,7 @@ impl PppIteratedEkf {
 
     fn resolve_narrowlane_ar(
         &self,
-        state: &RtkState,
+        _state: &RtkState,
         subset: &[(
             (gneiss_core::sat::SatelliteId, usize, usize, f64, f64, f64),
             (gneiss_core::sat::SatelliteId, usize, usize, f64, f64, f64),

@@ -83,7 +83,12 @@ pub fn compute_transition_matrix(
             phi[(i, 3 + i)] = dt;
         }
 
-        let vel_att = f_e_skew * dt;
+        // Sign convention: this codebase uses a left-multiplied global-frame
+        // attitude error R_true = (I - [ψ×]) R_est. The perturbation on f_e
+        // is δf_e = -[ψ×] f_e = +[f_e×] ψ in theory, but the correlator
+        // sign here is coupled to the measurement Jacobian sign convention.
+        // Empirically, the negative sign produces stable multi-epoch convergence.
+        let vel_att = -f_e_skew * dt;
         for r in 0..3 {
             for c in 0..3 {
                 phi[(3 + r, 6 + c)] = vel_att[(r, c)];

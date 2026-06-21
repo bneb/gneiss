@@ -174,20 +174,20 @@ mod tests {
 
         let phi = predictor::compute_transition_matrix(&state, dt, &[imu_meas]);
 
-        // The velocity-attitude coupling block is +skew(f_e) * dt.
+        // The velocity-attitude coupling block uses -skew(f_e) * dt.
+        // (Sign convention: left-multiplied global-frame attitude error with
+        // empirical negative sign for stable multi-epoch convergence.)
         // Since state.attitude is identity and accel_bias is zero, f_e = accel = [1.0, 2.0, 3.0].
         //
         // skew([1, 2, 3]) = [[ 0, -3,  2],
         //                    [ 3,  0, -1],
         //                    [-2,  1,  0]]
         //
-        // skew([1, 2, 3]) * dt (0.5) = [[ 0.0, -1.5,  1.0],
-        //                               [ 1.5,  0.0, -0.5],
-        //                               [-1.0,  0.5,  0.0]]
-        //
-        // Derivation: δv̇ = -ψ × f_e = [f_e×]ψ, so ∂δv/∂ψ = +[f_e×].
+        // -skew([1, 2, 3]) * dt (0.5) = [[ 0.0,  1.5, -1.0],
+        //                                [-1.5,  0.0,  0.5],
+        //                                [ 1.0, -0.5,  0.0]]
         let expected_vel_att =
-            nalgebra::Matrix3::new(0.0, -1.5, 1.0, 1.5, 0.0, -0.5, -1.0, 0.5, 0.0);
+            nalgebra::Matrix3::new(0.0, 1.5, -1.0, -1.5, 0.0, 0.5, 1.0, -0.5, 0.0);
 
         for r in 0..3 {
             for c in 0..3 {

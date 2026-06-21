@@ -1457,10 +1457,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
-    fn test_compute_dd_carrier_phase() {}
-
-    #[test]
     fn test_compute_dd_doppler() {
         use crate::engine::config::EkfTuningConfig;
         use crate::engine::measurement::{
