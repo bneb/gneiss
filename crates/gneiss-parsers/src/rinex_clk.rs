@@ -80,7 +80,7 @@ impl RinexClock {
 
         // Binary search for nearest or bounding interval
         let idx = match records.binary_search_by(|r| r.time.partial_cmp(&t).unwrap()) {
-            Ok(i) => i,
+            Ok(i) => return Some(records[i].bias),
             Err(i) => i,
         };
 
@@ -103,9 +103,7 @@ impl RinexClock {
         let r2 = &records[idx];
 
         let dt = r2.time - r1.time;
-        // Bug 24 fix: gap too large → stale clock, return None rather than
-        // propagating a drifting bias into the EKF.
-        if dt == 0.0 || (t - r1.time).abs() > 900.0 {
+        if dt == 0.0 || (t - r1.time).abs() > 900.0 || (r2.time - t).abs() > 900.0 {
             return None;
         }
 
@@ -136,10 +134,7 @@ mod tests {
             prn: 1,
         };
         // Two records with a 1800 s gap
-        let records = vec![
-            make_record(0.0, 1.0e-7),
-            make_record(1800.0, 2.0e-7),
-        ];
+        let records = vec![make_record(0.0, 1.0e-7), make_record(1800.0, 2.0e-7)];
         clk.satellites.insert(sat, records);
 
         // Query at t = 950 s, which is 950 s past r1 (> 900 s threshold)
@@ -160,20 +155,70 @@ mod tests {
             constellation: gneiss_core::sat::Constellation::Gps,
             prn: 2,
         };
-        let records = vec![
-            make_record(0.0, 0.0),
-            make_record(30.0, 3.0e-9),
-        ];
+        let records = vec![make_record(0.0, 0.0), make_record(30.0, 3.0e-9)];
         clk.satellites.insert(sat, records);
 
         // Midpoint should interpolate to 1.5e-9
         let t = GpsTime::new(2000, 15.0);
         let result = clk.get_clock_bias(sat, t);
-        assert!(result.is_some(), "Expected Some for records within tolerance");
+        assert!(
+            result.is_some(),
+            "Expected Some for records within tolerance"
+        );
         assert!(
             (result.unwrap() - 1.5e-9).abs() < 1e-18,
             "Expected 1.5e-9, got {:?}",
             result
         );
+    }
+
+    #[test]
+    fn test_precise_clock_gap_tolerance() {
+        let mut clk = RinexClock::default();
+        let sat = SatelliteId {
+            constellation: gneiss_core::sat::Constellation::Gps,
+            prn: 1,
+        };
+        // Setup records:
+        // - Record 0: t = 0.0, bias = 1.0e-7
+        // - Record 1: t = 1800.0, bias = 2.0e-7  (gap is 1800s > 900s)
+        // - Record 2: t = 2400.0, bias = 3.0e-7  (gap is 600s <= 900s)
+        let records = vec![
+            make_record(0.0, 1.0e-7),
+            make_record(1800.0, 2.0e-7),
+            make_record(2400.0, 3.0e-7),
+        ];
+        clk.satellites.insert(sat, records);
+
+        // An exact match at a timestamp (which is preceded by a gap > 900s)
+        // returns the correct bias immediately and doesn't trigger the gap check.
+        let result_exact = clk.get_clock_bias(sat, GpsTime::new(2000, 1800.0));
+        assert_eq!(result_exact, Some(2.0e-7));
+
+        // Non-exact matches within gaps > 900s return None.
+        // Gap between record 0 (t=0.0) and record 1 (t=1800.0) is 1800s (> 900s).
+        // t = 901.0 is 901.0s away from r1 (> 900s).
+        let result_gap_none_1 = clk.get_clock_bias(sat, GpsTime::new(2000, 901.0));
+        assert!(result_gap_none_1.is_none());
+
+        // t = 899.0 is 901.0s away from r2 (> 900s).
+        let result_gap_none_2 = clk.get_clock_bias(sat, GpsTime::new(2000, 899.0));
+        assert!(result_gap_none_2.is_none());
+
+        // Non-exact matches within gaps <= 900s correctly interpolate.
+        // Gap between record 1 (t=1800.0) and record 2 (t=2400.0) is 600s (<= 900s).
+        // Midpoint t = 2100.0 is 300.0s away from both r1 and r2.
+        let result_interpolate = clk.get_clock_bias(sat, GpsTime::new(2000, 2100.0));
+        assert!(result_interpolate.is_some());
+        assert!((result_interpolate.unwrap() - 2.5e-7).abs() < 1e-18);
+
+        // Extrapolations beyond bounds (> 900s) return None.
+        // Before first record (t = -901.0)
+        let result_extrap_before = clk.get_clock_bias(sat, GpsTime::new(2000, -901.0));
+        assert!(result_extrap_before.is_none());
+
+        // After last record (t = 3301.0)
+        let result_extrap_after = clk.get_clock_bias(sat, GpsTime::new(2000, 3301.0));
+        assert!(result_extrap_after.is_none());
     }
 }

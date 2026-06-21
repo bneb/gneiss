@@ -70,7 +70,6 @@ pub fn process_ppp<'a>(
     if sats.is_empty() {
         return Err(EngineError::InsufficientSatellites);
     }
-    let use_factor_graph = engine.ppp_factor_opt.is_some();
     let state = engine.current_state.as_mut().unwrap();
     update_phase_ambiguities(state, &sats, rover_obs.time);
     state.prune_stale_ambiguities(state.epoch_count as u32, 10);

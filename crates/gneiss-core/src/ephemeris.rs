@@ -1419,7 +1419,10 @@ mod tests {
     fn test_broadcast_clock_tgd_correct() {
         // Test GPS
         let gps_eph = GpsEphemeris {
-            sat: SatelliteId { constellation: Constellation::Gps, prn: 1 },
+            sat: SatelliteId {
+                constellation: Constellation::Gps,
+                prn: 1,
+            },
             toe: GpsTime::new(2000, 100000.0),
             toc: GpsTime::new(2000, 100000.0),
             af0: 1e-3,
@@ -1452,7 +1455,10 @@ mod tests {
 
         // Test Galileo
         let gal_eph = GalileoEphemeris {
-            sat: SatelliteId { constellation: Constellation::Galileo, prn: 1 },
+            sat: SatelliteId {
+                constellation: Constellation::Galileo,
+                prn: 1,
+            },
             toe: GpsTime::new(2000, 100000.0),
             toc: GpsTime::new(2000, 100000.0),
             af0: 1e-3,
@@ -1484,7 +1490,10 @@ mod tests {
 
         // Test Beidou
         let bds_eph = BeidouEphemeris {
-            sat: SatelliteId { constellation: Constellation::Beidou, prn: 1 },
+            sat: SatelliteId {
+                constellation: Constellation::Beidou,
+                prn: 1,
+            },
             toe: GpsTime::new(2000, 100000.0),
             toc: GpsTime::new(2000, 100000.0),
             af0: 1e-3,
@@ -1516,7 +1525,10 @@ mod tests {
 
         // Test Qzss
         let qzss_eph = QzssEphemeris {
-            sat: SatelliteId { constellation: Constellation::Qzss, prn: 193 },
+            sat: SatelliteId {
+                constellation: Constellation::Qzss,
+                prn: 193,
+            },
             toe: GpsTime::new(2000, 100000.0),
             toc: GpsTime::new(2000, 100000.0),
             af0: 1e-3,

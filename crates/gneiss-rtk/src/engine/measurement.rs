@@ -41,10 +41,10 @@ fn update_windup_state_and_obs(
 
 fn apply_windup_to_obs(obs: &mut DdObservation, windup: f64) {
     if let Some(cp) = &mut obs.cp_l1 {
-        *cp += windup;
+        *cp -= windup;
     }
     if let Some(cp2) = &mut obs.cp_l2 {
-        *cp2 += windup;
+        *cp2 -= windup;
     }
 }
 pub use crate::engine::measurement_math::*;
@@ -975,6 +975,33 @@ mod tests {
     use gneiss_core::sat::{Constellation, SatelliteId};
     use gneiss_core::time::GpsTime;
     use nalgebra::Vector3;
+
+    #[test]
+    fn test_phase_windup_correction_sign_rtk() {
+        use super::apply_windup_to_obs;
+        use gneiss_core::sat::{Constellation, SatelliteId};
+
+        let mut obs = DdObservation {
+            sat: SatelliteId {
+                constellation: Constellation::Gps,
+                prn: 1,
+            },
+            pr_l1: 0.0,
+            pr_l2: None,
+            cp_l1: Some(10.0),
+            cp_l2: Some(20.0),
+            doppler: 0.0,
+            snr: 45.0,
+            locktime: None,
+        };
+
+        let windup = 0.25; // 0.25 cycles of positive wind-up
+        apply_windup_to_obs(&mut obs, windup);
+
+        // Corrected carrier phase = raw_cp - windup
+        assert_eq!(obs.cp_l1.unwrap(), 9.75);
+        assert_eq!(obs.cp_l2.unwrap(), 19.75);
+    }
 
     #[test]
     fn test_measurement_model_against_rtklib_golden_data() {

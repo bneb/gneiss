@@ -89,12 +89,18 @@ Coordinate the investigation, fixing, and verification of 8 Tier 1 bugs in the g
 | 62556895-2c21-4375-bd68-6a531c1c1fa0 | teamwork_preview_reviewer | Bug 2 Final Reviewer 1 (Fixed) | completed | 62556895-2c21-4375-bd68-6a531c1c1fa0 |
 | dd95c85f-ae13-406a-9cfb-1ee0de30bca3 | teamwork_preview_reviewer | Bug 2 Final Reviewer 2 (Fixed) | completed | dd95c85f-ae13-406a-9cfb-1ee0de30bca3 |
 | 0d15cb32-16f2-46d4-b29a-38a6db2a4237 | teamwork_preview_auditor | Bug 2 Auditor | completed | 0d15cb32-16f2-46d4-b29a-38a6db2a4237 |
-| 4d6bcce7-fa83-440a-8ad2-2f1a1bf49722 | teamwork_preview_worker | Bug 18 Worker | in-progress | 4d6bcce7-fa83-440a-8ad2-2f1a1bf49722 |
+| 4d6bcce7-fa83-440a-8ad2-2f1a1bf49722 | teamwork_preview_worker | Bug 18 Worker | failed | 4d6bcce7-fa83-440a-8ad2-2f1a1bf49722 |
+| 126724d0-423c-4d8a-9e37-539c9cd30609 | teamwork_preview_worker | Bug 18 Worker (Retry) | completed | 126724d0-423c-4d8a-9e37-539c9cd30609 |
+| 1043e7ca-e6a7-454e-b490-2ce60ee2acdf | teamwork_preview_reviewer | Bug 18 Reviewer 1 | completed | 1043e7ca-e6a7-454e-b490-2ce60ee2acdf |
+| 7345077b-f7e1-40a5-a947-662eed01eeef | teamwork_preview_reviewer | Bug 18 Reviewer 2 | completed | 7345077b-f7e1-40a5-a947-662eed01eeef |
+| cf5a9788-93b3-47ec-848a-d5a39aabd128 | teamwork_preview_worker | Bug 18 Worker (INS) | completed | cf5a9788-93b3-47ec-848a-d5a39aabd128 |
+| 4b4aa5ee-fefc-4701-938f-2ba69d6dd381 | teamwork_preview_reviewer | Bug 18 Reviewer 1 (Retry) | in-progress | 4b4aa5ee-fefc-4701-938f-2ba69d6dd381 |
+| 814be54e-6d55-4a64-b929-54295bebec58 | teamwork_preview_reviewer | Bug 18 Reviewer 2 (Retry) | in-progress | 814be54e-6d55-4a64-b929-54295bebec58 |
 
 ## Succession Status
 - Succession required: no
-- Spawn count: 7 / 16
-- Pending subagents: 4d6bcce7-fa83-440a-8ad2-2f1a1bf49722
+- Spawn count: 13 / 16
+- Pending subagents: 4b4aa5ee-fefc-4701-938f-2ba69d6dd381, 814be54e-6d55-4a64-b929-54295bebec58
 - Predecessor: e2b4cf86-7ee9-4f3c-990c-2c79b1094647 (or previous gen)
 - Successor: not yet spawned
 - Successor generation: gen4

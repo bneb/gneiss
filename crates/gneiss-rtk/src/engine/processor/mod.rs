@@ -24,6 +24,7 @@ pub struct ProcessingEngine {
     pub ref_sat: Option<SatelliteId>,
     pub hatch_filter: crate::hatch::HatchFilter,
     pub innovation_tracker: crate::engine::adaptive::InnovationTracker,
+    pub consecutive_rejections: usize,
     pub tropo_mapper: Box<dyn gneiss_core::atmosphere::TropoMapper>,
     pub ppp_factor_opt: Option<crate::engine::ppp_iekf::PppIteratedEkf>,
     pub sp3_epochs: Vec<gneiss_parsers::sp3::Sp3Epoch>,
@@ -63,6 +64,7 @@ impl ProcessingEngine {
             ppp_factor_opt: Some(crate::engine::ppp_iekf::PppIteratedEkf::new()),
             hatch_filter: crate::hatch::HatchFilter::default(),
             innovation_tracker: crate::engine::adaptive::InnovationTracker::default(),
+            consecutive_rejections: 0,
             sp3_epochs: Vec::new(),
             clk_data: None,
             antex: None,
@@ -285,17 +287,38 @@ impl ProcessingEngine {
             }
         };
         if let Some(e) = err {
-            if let EngineError::StateDisappeared = e {
-                tracing::warn!("EKF unrecoverable divergence. Resetting state...");
-                self.current_state = None;
-            } else {
-                tracing::warn!(
-                    "Epoch processing failed: {:?}. Preserving state for next epoch.",
-                    e
-                );
+            match e {
+                EngineError::StateDisappeared => {
+                    tracing::warn!("EKF unrecoverable divergence. Resetting state...");
+                    self.current_state = None;
+                }
+                EngineError::InsufficientSatellites => {
+                    self.consecutive_rejections += 1;
+                    if self.consecutive_rejections >= 3 {
+                        tracing::warn!(
+                            "Insufficient satellites for {} consecutive epochs — resetting state",
+                            self.consecutive_rejections
+                        );
+                        self.current_state = None;
+                        self.consecutive_rejections = 0;
+                    } else {
+                        tracing::warn!(
+                            "Epoch processing failed: InsufficientSatellites (attempt {}/3). Preserving state.",
+                            self.consecutive_rejections
+                        );
+                    }
+                }
+                _ => {
+                    self.consecutive_rejections = 0;
+                    tracing::warn!(
+                        "Epoch processing failed: {:?}. Preserving state for next epoch.",
+                        e
+                    );
+                }
             }
             Err(e)
         } else {
+            self.consecutive_rejections = 0;
             Ok(self.current_state.as_ref().unwrap())
         }
     }

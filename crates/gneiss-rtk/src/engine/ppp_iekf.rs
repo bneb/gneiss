@@ -493,14 +493,13 @@ impl PppIteratedEkf {
         let s_inv = q_wl.try_inverse().ok_or("WL Cov Inversion failed")?;
         let k_wl = p * d_wl.transpose() * s_inv;
         let dx_wl = &k_wl * (res_wl.best_integers - a_wl);
+        // Tiny regularization prevents p_wl from going singular (Joseph form
+        // with zero measurement noise collapses rank). 1e-6 m² per pair keeps
+        // the covariance full-rank for downstream NL LAMBDA and gain inversion.
+        let r_wl = DMatrix::identity(keep_indices.len(), keep_indices.len()) * 1e-6;
         Ok((
             x + dx_wl,
-            crate::math::covariance::apply_joseph_covariance_update(
-                p,
-                &k_wl,
-                &d_wl,
-                &DMatrix::zeros(keep_indices.len(), keep_indices.len()),
-            ),
+            crate::math::covariance::apply_joseph_covariance_update(p, &k_wl, &d_wl, &r_wl),
             keep_indices,
         ))
     }
@@ -539,6 +538,8 @@ impl PppIteratedEkf {
 
         let a_nl = &d_nl * x_wl;
         // Use p_wl so that the NL lambda search is constrained by the WL fixes.
+        // p_wl is the WL-constrained covariance (now regularized to stay full-rank).
+        // Using it for NL correctly reflects the WL fix's information gain.
         let mut q_nl = &d_nl * p_wl * d_nl.transpose();
         // Add small diagonal to ensure full rank for LAMBDA
         for i in 0..q_nl.nrows() {
@@ -895,7 +896,7 @@ impl PppIteratedEkf {
     ) {
         if let Some(amb_idx) = find_ambiguity_index(state, sat.sat_obs.sat) {
             let windup = *state.windup.get(&sat.sat_obs.sat).unwrap_or(&0.0);
-            let l_meas = (cp1 + windup) * sat.lam1;
+            let l_meas = (cp1 - windup) * sat.lam1;
             let expected_cp = if sat.is_iono_free {
                 expected_base + x_i[CORE_STATE_SIZE + amb_idx]
             } else {
@@ -1023,7 +1024,7 @@ impl PppIteratedEkf {
     ) {
         let windup = *state.windup.get(&sat.sat_obs.sat).unwrap_or(&0.0);
         let var_l1 = 0.0001 * snr_scale(sat.snr as i32) / libm::sin(sat.el);
-        let res_l1 = (sat.cp1.unwrap() + windup) * sat.lam1 - (expected_base - i1 + n1);
+        let res_l1 = (sat.cp1.unwrap() - windup) * sat.lam1 - (expected_base - i1 + n1);
         meas.push(FgMeasurement {
             res: res_l1,
             h_row: build_h_row_uduc(
@@ -1040,7 +1041,7 @@ impl PppIteratedEkf {
             is_phase: true,
             sat: Some(sat.sat_obs.sat),
         });
-        let res_l2 = (sat.cp2.unwrap() + windup) * sat.lam2 - (expected_base - gamma * i1 + n2);
+        let res_l2 = (sat.cp2.unwrap() - windup) * sat.lam2 - (expected_base - gamma * i1 + n2);
         meas.push(FgMeasurement {
             res: res_l2,
             h_row: build_h_row_uduc(

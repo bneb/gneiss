@@ -295,7 +295,9 @@ fn _sh_eval_annual(
     }
     if let Some(sin_coeffs) = coeffs_sin {
         for &(n, m, b_mean, b_ann) in sin_coeffs {
-            if m == 0 { continue; } // sin(0*lon) = 0
+            if m == 0 {
+                continue;
+            } // sin(0*lon) = 0
             let pnm = _legendre_norm(n, m, t);
             val += (b_mean + b_ann * cos_doy) * pnm * libm::sin(m as f64 * lon);
         }
@@ -318,7 +320,9 @@ fn _sh_eval_static(
     }
     if let Some(sin_coeffs) = coeffs_sin {
         for &(n, m, b) in sin_coeffs {
-            if m == 0 { continue; }
+            if m == 0 {
+                continue;
+            }
             let pnm = _legendre_norm(n, m, t);
             val += b * pnm * libm::sin(m as f64 * lon);
         }
@@ -579,23 +583,6 @@ impl AtmosphereModel {
         (trph + trpw) / libm::cos(z)
     }
 
-    fn nmf_interpc(coef: &[f64; 5], lat: f64) -> f64 {
-        let i = (lat / 15.0) as usize;
-        if i < 1 {
-            return coef[0];
-        } else if i > 4 {
-            return coef[4];
-        }
-        let lat_f = lat / 15.0;
-        let i_f = i as f64;
-        coef[i - 1] * (1.0 - lat_f + i_f) + coef[i] * (lat_f - i_f)
-    }
-
-    fn nmf_mapf(el: f64, a: f64, b: f64, c: f64) -> f64 {
-        let sinel = libm::sin(el);
-        (1.0 + a / (1.0 + b / (1.0 + c))) / (sinel + (a / (sinel + b / (sinel + c))))
-    }
-
     #[allow(dead_code)]
     pub fn nmf_mapping_functions(pos_llh: Vector3<f64>, el: f64, time: GpsTime) -> (f64, f64) {
         nmf_impl(pos_llh, el, time)
@@ -806,13 +793,8 @@ mod tests {
         // Azimuth north vs. south — IPP moves in opposite latitude directions,
         // so the Klobuchar geomagnetic latitude and hence the delay differ.
         let delay_north = AtmosphereModel::iono_klobuchar(&params, pos_llh, 0.0, el, t);
-        let delay_south = AtmosphereModel::iono_klobuchar(
-            &params,
-            pos_llh,
-            core::f64::consts::PI,
-            el,
-            t,
-        );
+        let delay_south =
+            AtmosphereModel::iono_klobuchar(&params, pos_llh, core::f64::consts::PI, el, t);
 
         // The delays must differ because the IPP geomagnetic latitude differs.
         assert!(
@@ -821,7 +803,13 @@ mod tests {
         );
 
         // Both delays must be non-negative (Klobuchar is always ≥ 0)
-        assert!(delay_north >= 0.0, "Klobuchar delay must be ≥ 0, got {delay_north}");
-        assert!(delay_south >= 0.0, "Klobuchar delay must be ≥ 0, got {delay_south}");
+        assert!(
+            delay_north >= 0.0,
+            "Klobuchar delay must be ≥ 0, got {delay_north}"
+        );
+        assert!(
+            delay_south >= 0.0,
+            "Klobuchar delay must be ≥ 0, got {delay_south}"
+        );
     }
 }
