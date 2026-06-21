@@ -987,7 +987,10 @@ impl PppIteratedEkf {
             is_phase: false,
             sat: Some(sat.sat_obs.sat),
         });
-        let res_p2 = sat.p2.unwrap() - (expected_base + gamma * i1);
+        let res_p2 = match sat.p2 {
+            Some(p2) => p2 - (expected_base + gamma * i1),
+            None => return,
+        };
         meas.push(FgMeasurement {
             res: res_p2,
             h_row: build_h_row_uduc(
@@ -1024,7 +1027,11 @@ impl PppIteratedEkf {
     ) {
         let windup = *state.windup.get(&sat.sat_obs.sat).unwrap_or(&0.0);
         let var_l1 = 0.0001 * snr_scale(sat.snr as i32) / libm::sin(sat.el);
-        let res_l1 = (sat.cp1.unwrap() - windup) * sat.lam1 - (expected_base - i1 + n1);
+        let cp1_val = match sat.cp1 {
+            Some(cp1) => cp1,
+            None => return,
+        };
+        let res_l1 = (cp1_val - windup) * sat.lam1 - (expected_base - i1 + n1);
         meas.push(FgMeasurement {
             res: res_l1,
             h_row: build_h_row_uduc(
@@ -1041,7 +1048,11 @@ impl PppIteratedEkf {
             is_phase: true,
             sat: Some(sat.sat_obs.sat),
         });
-        let res_l2 = (sat.cp2.unwrap() - windup) * sat.lam2 - (expected_base - gamma * i1 + n2);
+        let cp2_val = match sat.cp2 {
+            Some(cp2) => cp2,
+            None => return,
+        };
+        let res_l2 = (cp2_val - windup) * sat.lam2 - (expected_base - gamma * i1 + n2);
         meas.push(FgMeasurement {
             res: res_l2,
             h_row: build_h_row_uduc(
@@ -2061,7 +2072,7 @@ mod mutant_killer_tests {
                 observations: vec![],
             }));
 
-            let mut make_processed = |obs: &'static SatObs| ProcessedSat {
+            let make_processed = |obs: &'static SatObs| ProcessedSat {
                 sat_obs: obs,
                 dt_sat_m: 0.0,
                 p1: 0.0,
