@@ -330,7 +330,7 @@ fn test_evaluate_post_fit_outliers_loose_coupling() {
         50.0,
         &tuning,
     );
-    assert_eq!(outlier, Some(3)); 
+    assert_eq!(outlier, Some(3));
 
     // Test 2: Check ratio thresholds for LooseCoupling
     let v2 = DVector::from_vec(vec![3.0, 6.0, 2.1, 0.0]);
@@ -789,17 +789,17 @@ mod missed_mutant_tests {
     fn test_get_pre_fit_threshold_multipliers() {
         let thresh1 = super::get_pre_fit_threshold::<super::LooseCoupling>(1, 10.0);
         let thresh2 = super::get_pre_fit_threshold::<super::TightCoupling>(1, 10.0);
-        
+
         assert!(super::TightCoupling::is_tightly_coupled());
         assert!(!super::LooseCoupling::is_tightly_coupled());
-        
+
         // TightCoupling multiplier is 25.0, LooseCoupling is 1.0
         assert!(thresh1 != thresh2);
-        
+
         let multiplier = super::LooseCoupling::pre_fit_threshold_multiplier();
         let expected = super::CP_PRE_FIT_CHI2_THRESHOLD * multiplier;
         assert!((thresh1 - expected).abs() < 1e-6);
-        
+
         // Catch replacing * with /
         assert!((thresh2 - super::CP_PRE_FIT_CHI2_THRESHOLD / 25.0).abs() > 1e-2);
     }

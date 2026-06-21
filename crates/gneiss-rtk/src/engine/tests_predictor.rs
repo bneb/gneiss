@@ -154,4 +154,54 @@ mod tests {
             dx[8]
         );
     }
+
+    #[test]
+    fn test_transition_matrix_velocity_attitude_coupling() {
+        let time = GpsTime::new(2000, 0.0);
+        let pos = Coordinate::new(
+            Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+        let mut state = RtkState::new(time, pos, 1.0);
+        state.attitude = UnitQuaternion::identity();
+        state.accel_bias = Vector3::zeros();
+
+        let dt = 0.5;
+        let accel = Vector3::new(1.0, 2.0, 3.0);
+        let imu_meas = ImuMeasurement::new(0, accel, Vector3::zeros());
+
+        let phi = predictor::compute_transition_matrix(&state, dt, &[imu_meas]);
+
+        // The velocity-attitude coupling block is +skew(f_e) * dt.
+        // Since state.attitude is identity and accel_bias is zero, f_e = accel = [1.0, 2.0, 3.0].
+        //
+        // skew([1, 2, 3]) = [[ 0, -3,  2],
+        //                    [ 3,  0, -1],
+        //                    [-2,  1,  0]]
+        //
+        // skew([1, 2, 3]) * dt (0.5) = [[ 0.0, -1.5,  1.0],
+        //                               [ 1.5,  0.0, -0.5],
+        //                               [-1.0,  0.5,  0.0]]
+        //
+        // Derivation: δv̇ = -ψ × f_e = [f_e×]ψ, so ∂δv/∂ψ = +[f_e×].
+        let expected_vel_att =
+            nalgebra::Matrix3::new(0.0, -1.5, 1.0, 1.5, 0.0, -0.5, -1.0, 0.5, 0.0);
+
+        for r in 0..3 {
+            for c in 0..3 {
+                let actual_val = phi[(3 + r, 6 + c)];
+                let expected_val = expected_vel_att[(r, c)];
+                assert!(
+                    (actual_val - expected_val).abs() < 1e-10,
+                    "Mismatch at ({}, {}): expected {}, got {}",
+                    r,
+                    c,
+                    expected_val,
+                    actual_val
+                );
+            }
+        }
+    }
 }

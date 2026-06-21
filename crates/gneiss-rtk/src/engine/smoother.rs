@@ -145,7 +145,10 @@ fn smooth_epoch(
     let p_k_n = 0.5 * (&p_k_n_raw + p_k_n_raw.transpose());
 
     // Guard: reject non-finite or pathologically large covariance
-    if p_k_n.iter().any(|v| !v.is_finite() || v.abs() > MAX_STATE_VARIANCE) {
+    if p_k_n
+        .iter()
+        .any(|v| !v.is_finite() || v.abs() > MAX_STATE_VARIANCE)
+    {
         return Err("smoothed covariance diverged");
     }
 

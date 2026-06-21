@@ -33,9 +33,11 @@ pub fn process_ppp<'a>(
     // sliding-window factor graph — not just disabling the prior.
     let mut position_prior: Option<(Vector3<f64>, f64)> = None;
     if let Ok(spp) = crate::spp::compute_spp(
-        rover_obs, &engine.ephemerides,
+        rover_obs,
+        &engine.ephemerides,
         engine.klobuchar_params.as_ref(),
-        &crate::spp::SppConfig::default(), None,
+        &crate::spp::SppConfig::default(),
+        None,
     ) {
         let is_cold_start = state.epoch_count < 2;
         if is_cold_start {
@@ -44,7 +46,9 @@ pub fn process_ppp<'a>(
         } else {
             // Prior variance: start at 25 m² (5m std), decrease with
             // state covariance convergence (min 1 m²).
-            let pos_cov = state.covariance[(0, 0)].min(state.covariance[(1, 1)]).min(state.covariance[(2, 2)]);
+            let pos_cov = state.covariance[(0, 0)]
+                .min(state.covariance[(1, 1)])
+                .min(state.covariance[(2, 2)]);
             let prior_var = (pos_cov.min(25.0)).max(1.0);
             position_prior = Some((spp.position.vector, prior_var));
         }
@@ -102,13 +106,21 @@ fn compute_receiver_pco(
     freq_code: &str,
     rcv_llh: Vector3<f64>,
 ) -> Vector3<f64> {
-    let db = match antex { Some(d) => d, None => return Vector3::zeros() };
-    let ant_type = match antenna_type { Some(t) => t, None => return Vector3::zeros() };
+    let db = match antex {
+        Some(d) => d,
+        None => return Vector3::zeros(),
+    };
+    let ant_type = match antenna_type {
+        Some(t) => t,
+        None => return Vector3::zeros(),
+    };
     let antenna = match db.antennas.iter().find(|a| a.antenna_type == ant_type) {
-        Some(a) => a, None => return Vector3::zeros(),
+        Some(a) => a,
+        None => return Vector3::zeros(),
     };
     let freq = match antenna.frequencies.get(freq_code) {
-        Some(f) => f, None => return Vector3::zeros(),
+        Some(f) => f,
+        None => return Vector3::zeros(),
     };
     let pco_neu = &freq.pco;
     let (lat, lon) = (rcv_llh.x, rcv_llh.y);
@@ -121,7 +133,10 @@ fn compute_receiver_pco(
     )
 }
 
-pub(crate) fn build_sats<'a>(engine: &ProcessingEngine, r_obs: &'a EpochObs) -> Vec<ProcessedSat<'a>> {
+pub(crate) fn build_sats<'a>(
+    engine: &ProcessingEngine,
+    r_obs: &'a EpochObs,
+) -> Vec<ProcessedSat<'a>> {
     let state = engine.current_state.as_ref().unwrap();
     let base_rcv_pos = Vector3::new(
         state.position.vector.x,
@@ -177,7 +192,10 @@ fn process_single_sat<'a>(
     }
 
     let (tropo_dry, map_wet) = crate::engine::ppp_math::compute_tropo_dry(
-        rcv_llh, el, r_obs.time, engine.tropo_mapper.as_ref(),
+        rcv_llh,
+        el,
+        r_obs.time,
+        engine.tropo_mapper.as_ref(),
     );
     let klobuchar = engine.klobuchar_params.unwrap_or_default();
     let iono_delay = if is_if {
@@ -248,16 +266,26 @@ fn get_obs_and_corrections(
     Option<f64>,
     crate::engine::ppp_math::OsbCorrections,
     bool,
-    f64,  // actual f2 (may differ from satellite_frequencies if L5 fallback)
+    f64, // actual f2 (may differ from satellite_frequencies if L5 fallback)
 ) {
-    let f1_b = if sat_obs.sat.constellation == Constellation::Beidou { 2 } else { 1 };
+    let f1_b = if sat_obs.sat.constellation == Constellation::Beidou {
+        2
+    } else {
+        1
+    };
     let f2_b = match sat_obs.sat.constellation {
         Constellation::Galileo | Constellation::Beidou => 7,
         _ => 2,
     };
     // Try standard bands first
     let mut osb = crate::engine::ppp_math::apply_osb_corrections(
-        engine.sinex_bias.as_ref(), sat_obs, time, _f1, _f2, f1_b, f2_b,
+        engine.sinex_bias.as_ref(),
+        sat_obs,
+        time,
+        _f1,
+        _f2,
+        f1_b,
+        f2_b,
     );
     // L5 fallback: if no L2 observation (smartphones track L5, not L2),
     // retry with band 5 (GPS L5 / Galileo E5a / BDS B2a at 1176.45 MHz)
@@ -267,7 +295,13 @@ fn get_obs_and_corrections(
         let l5_freq = gneiss_core::signal::get_frequency(sat_obs.sat, l5_band, 0);
         if l5_freq != _f2 {
             osb = crate::engine::ppp_math::apply_osb_corrections(
-                engine.sinex_bias.as_ref(), sat_obs, time, _f1, l5_freq, f1_b, l5_band,
+                engine.sinex_bias.as_ref(),
+                sat_obs,
+                time,
+                _f1,
+                l5_freq,
+                f1_b,
+                l5_band,
             );
             if osb.p2.is_some() || osb.cp2.is_some() {
                 actual_f2 = l5_freq;
@@ -296,13 +330,16 @@ fn get_obs_and_corrections(
     let precise = !engine.sp3_epochs.is_empty() || engine.clk_data.is_some();
     if precise && !engine.config.uduc_ar {
         if let (Some(v1), Some(v2)) = (p1, p2) {
-            p1 = Some(crate::engine::ppp_math::compute_iono_free(_f1, actual_f2, v1, v2));
+            p1 = Some(crate::engine::ppp_math::compute_iono_free(
+                _f1, actual_f2, v1, v2,
+            ));
             is_if = true;
         }
         if let (Some(l1), Some(l2)) = (cp1, cp2) {
             cp1 = Some(
                 crate::engine::ppp_math::compute_iono_free(
-                    _f1, actual_f2,
+                    _f1,
+                    actual_f2,
                     l1 * LIGHT_SPEED / _f1,
                     l2 * LIGHT_SPEED / actual_f2,
                 ) / (LIGHT_SPEED / _f1),
@@ -469,15 +506,24 @@ pub(crate) fn update_phase_ambiguities(
         let mut gf_prev = state.gf_prev.get(&sat.sat_obs.sat).copied();
         let mut mw_prev = state.mw_prev.get(&sat.sat_obs.sat).copied();
         let (slip, new_lk) = crate::engine::ppp_math::detect_slip_combined(
-            sat.sat_obs, prev as u32,
-            sat.cp1, sat.lam1,
-            sat.cp2, sat.lam2,
-            Some(sat.p1), sat.p2,
-            &mut gf_prev, &mut mw_prev,
+            sat.sat_obs,
+            prev as u32,
+            sat.cp1,
+            sat.lam1,
+            sat.cp2,
+            sat.lam2,
+            Some(sat.p1),
+            sat.p2,
+            &mut gf_prev,
+            &mut mw_prev,
         );
         state.locktimes.insert((sat.sat_obs.sat, 1), new_lk as u16);
-        if let Some(v) = gf_prev { state.gf_prev.insert(sat.sat_obs.sat, v); }
-        if let Some(v) = mw_prev { state.mw_prev.insert(sat.sat_obs.sat, v); }
+        if let Some(v) = gf_prev {
+            state.gf_prev.insert(sat.sat_obs.sat, v);
+        }
+        if let Some(v) = mw_prev {
+            state.mw_prev.insert(sat.sat_obs.sat, v);
+        }
         if slip {
             for i in 0..4 {
                 state.remove_ambiguity(sat.sat_obs.sat, i);
@@ -543,16 +589,31 @@ fn add_uduc_ambiguities(
     let l2_meas = (sat.cp2.unwrap() + wup) * sat.lam2;
 
     // Use MW widelane to reduce initial ambiguity variance when available
-    let mw_confident = state.mw_sd_counts.get(&sat.sat_obs.sat).copied().unwrap_or(0) > 10;
+    let mw_confident = state
+        .mw_sd_counts
+        .get(&sat.sat_obs.sat)
+        .copied()
+        .unwrap_or(0)
+        > 10;
     let init_var = if mw_confident { 0.04 } else { 10000.0 }; // 0.2 cycle or 100m std
     if !state.ambiguity_keys.contains(&(sat.sat_obs.sat, 3)) {
         state.add_ambiguity(sat.sat_obs.sat, 3, i1_est, 100.0);
     }
     if !state.ambiguity_keys.contains(&(sat.sat_obs.sat, 1)) {
-        state.add_ambiguity(sat.sat_obs.sat, 1, l1_meas - (expected_base - i1_est), init_var);
+        state.add_ambiguity(
+            sat.sat_obs.sat,
+            1,
+            l1_meas - (expected_base - i1_est),
+            init_var,
+        );
     }
     if !state.ambiguity_keys.contains(&(sat.sat_obs.sat, 2)) {
-        state.add_ambiguity(sat.sat_obs.sat, 2, l2_meas - (expected_base - gamma * i1_est), init_var);
+        state.add_ambiguity(
+            sat.sat_obs.sat,
+            2,
+            l2_meas - (expected_base - gamma * i1_est),
+            init_var,
+        );
     }
 
     for i in 1..4 {
@@ -716,7 +777,6 @@ mod ppp_tests {
         use gneiss_core::ephemeris::Ephemeris;
         use gneiss_core::obs::{Observation, SatObs};
         use gneiss_core::sat::{Constellation, SatelliteId};
-        
 
         let mut engine = ProcessingEngine::new(EngineConfig::default());
         let t = gneiss_core::time::GpsTime::new(2156, 0.0);
@@ -927,7 +987,10 @@ mod ppp_tests {
     fn test_process_ppp_falls_back_to_spp_when_no_state() {
         let mut engine = ProcessingEngine::new(EngineConfig::default());
         engine.config.mode = EngineMode::Ppp;
-        let obs = EpochObs { time: GpsTime::new(2156, 129600.0), satellites: vec![] };
+        let obs = EpochObs {
+            time: GpsTime::new(2156, 129600.0),
+            satellites: vec![],
+        };
         // No valid position → should fall back to SPP
         let res = process_ppp(&mut engine, &obs);
         assert!(res.is_err()); // SPP fails with no satellites and no ephemerides
@@ -949,12 +1012,20 @@ mod ppp_tests {
         // Set a valid but wrong position
         let mut state = RtkState::new(
             GpsTime::new(2156, 129000.0),
-            Coordinate::new(Vector3::new(2000.0, 2000.0, 2000.0), Datum::WGS84, Frame::ECEF, GpsTime::new(2156, 129000.0)),
+            Coordinate::new(
+                Vector3::new(2000.0, 2000.0, 2000.0),
+                Datum::WGS84,
+                Frame::ECEF,
+                GpsTime::new(2156, 129000.0),
+            ),
             1.0,
         );
         state.covariance[(0, 0)] = 10.0;
         engine.current_state = Some(state);
-        let obs = EpochObs { time: GpsTime::new(2156, 129600.0), satellites: vec![] };
+        let obs = EpochObs {
+            time: GpsTime::new(2156, 129600.0),
+            satellites: vec![],
+        };
         // SPP-anchoring triggers inside process_ppp — should return error since no sats
         let res = process_ppp(&mut engine, &obs);
         assert!(matches!(res, Err(EngineError::InsufficientSatellites)));

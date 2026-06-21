@@ -244,7 +244,12 @@ fn process_measurement(ctx: &EkfContext, m: &SppMeasurement, target: &mut Matrix
     }
 }
 
-fn populate_pr_attitude_jacobian(ctx: &EkfContext, los: &Vector3<f64>, h: &mut DMatrix<f64>, r_idx: usize) {
+fn populate_pr_attitude_jacobian(
+    ctx: &EkfContext,
+    los: &Vector3<f64>,
+    h: &mut DMatrix<f64>,
+    r_idx: usize,
+) {
     let h_pos_att = -(ctx.r_b_e * ctx.lever_arm).cross_matrix();
     let pr_h_att = los.transpose() * h_pos_att;
     h[(r_idx, 6)] = pr_h_att[0];
@@ -276,14 +281,18 @@ fn process_pseudorange(
     let expected_pr = geom.geom_r + geom.cdt_rx - geom.sat_clk * SPEED_OF_LIGHT_M_S + tropo + iono;
     let r_idx = *target.row;
     target.z[r_idx] = m.raw_pr - expected_pr;
-    for i in 0..3 { target.h[(r_idx, i)] = geom.los[i]; }
+    for i in 0..3 {
+        target.h[(r_idx, i)] = geom.los[i];
+    }
     if ctx.n_cols > 15 {
         populate_pr_attitude_jacobian(ctx, &geom.los, target.h, r_idx);
         populate_pr_clock_jacobian(target.h, r_idx, m.constellation);
     }
     let v_scale = gneiss_core::variance::observation_variance(
-        m.snr, geom.el,
-        ctx.engine.config.tuning.snr_a, ctx.engine.config.tuning.snr_b,
+        m.snr,
+        geom.el,
+        ctx.engine.config.tuning.snr_a,
+        ctx.engine.config.tuning.snr_b,
     );
     target.r[(r_idx, r_idx)] = ctx.engine.config.tuning.pr_base_var * v_scale;
     target.types.push((m.eph.sat(), 0));
@@ -312,8 +321,8 @@ fn process_doppler(
     geom: &SatGeometry,
 ) {
     let rel_vel = ctx.v_apc - geom.sat_vel;
-    let expected_dop = geom.los.dot(&rel_vel) + ctx.state.rcv_clk_drift
-        - geom.sat_drift * SPEED_OF_LIGHT_M_S;
+    let expected_dop =
+        geom.los.dot(&rel_vel) + ctx.state.rcv_clk_drift - geom.sat_drift * SPEED_OF_LIGHT_M_S;
     let f1 = gneiss_core::signal::satellite_frequencies(m.eph.sat(), m.eph.freq_num()).0;
     let measured_dop_ms = -m.doppler * (SPEED_OF_LIGHT_M_S / f1);
     let r_idx = *target.row;
@@ -325,8 +334,10 @@ fn process_doppler(
         populate_dop_jacobian(ctx, &geom.los, target.h, r_idx);
     }
     let v_scale = gneiss_core::variance::observation_variance(
-        m.snr, geom.el,
-        ctx.engine.config.tuning.snr_a, ctx.engine.config.tuning.snr_b,
+        m.snr,
+        geom.el,
+        ctx.engine.config.tuning.snr_a,
+        ctx.engine.config.tuning.snr_b,
     );
     target.r[(r_idx, r_idx)] = ctx.engine.config.tuning.dop_base_var * v_scale;
     target.types.push((m.eph.sat(), 3));

@@ -411,7 +411,6 @@ pub fn compute_dd_doppler(
     None
 }
 
-
 pub struct EkfGeometryContext {
     pub pos_apc: Vector3<f64>,
     pub base_coord_vec: Vector3<f64>,

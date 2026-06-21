@@ -201,8 +201,9 @@ fn extract_and_push_features(
     let mut el = 0.0;
     let mut az = 0.0;
     if let Some(eph) = ephemerides.iter().find(|e| e.sat() == rov.sat) {
-        let (sat_pos, _) =
-            crate::engine::measurement_math::get_sat_state(eph, rov.pr_l1, 0.0, state_time, pos_apc);
+        let (sat_pos, _) = crate::engine::measurement_math::get_sat_state(
+            eph, rov.pr_l1, 0.0, state_time, pos_apc,
+        );
         let (a, e) = gneiss_core::coords::az_el(rov_llh, pos_apc, sat_pos);
         az = a.to_degrees();
         el = e.to_degrees();

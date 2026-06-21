@@ -192,7 +192,9 @@ pub struct VarianceFactors {
 /// Scale factor for ionospheric decorrelation with baseline distance.
 /// Returns a multiplier >= 1.0 that inflates measurement variance for longer baselines.
 fn iono_baseline_scale(distance_m: f64) -> f64 {
-    if distance_m <= 0.0 { return 1.0; }
+    if distance_m <= 0.0 {
+        return 1.0;
+    }
     let d_km = distance_m / 1000.0;
     1.0 + (d_km / 10.0).powi(2) * libm::exp(d_km / 500.0)
 }
@@ -239,9 +241,7 @@ pub fn compute_geometric_dd(
 #[cfg(test)]
 mod tests {
     use super::*;
-    
-    
-    
+
     use gneiss_core::time::GpsTime;
     use nalgebra::{Matrix3, Vector3};
 

@@ -38,7 +38,8 @@ impl ProcessingEngine {
 
         let lever_arm = nalgebra::Vector3::from_column_slice(&self.config.imu_to_antenna_lever_arm);
         let r_b_e = state.attitude.to_rotation_matrix();
-        let omega_ie_e = nalgebra::Vector3::new(0.0, 0.0, gneiss_core::constants::EARTH_ROTATION_RATE_RAD_S);
+        let omega_ie_e =
+            nalgebra::Vector3::new(0.0, 0.0, gneiss_core::constants::EARTH_ROTATION_RATE_RAD_S);
         let omega_b = if let Some(imu_buf) = self.imu_history.last() {
             if let Some(last_imu) = imu_buf.last() {
                 last_imu.gyro - state.gyro_bias - r_b_e.transpose() * omega_ie_e
@@ -136,7 +137,8 @@ impl ProcessingEngine {
 
         let gnss_state = self.gnss_only_state.as_ref().unwrap();
         let r_b_e = state.attitude.to_rotation_matrix();
-        let omega_ie_e = nalgebra::Vector3::new(0.0, 0.0, gneiss_core::constants::EARTH_ROTATION_RATE_RAD_S);
+        let omega_ie_e =
+            nalgebra::Vector3::new(0.0, 0.0, gneiss_core::constants::EARTH_ROTATION_RATE_RAD_S);
         let omega_b = if let Some(imu_buf) = self.imu_history.last() {
             if let Some(last_imu) = imu_buf.last() {
                 last_imu.gyro - state.gyro_bias - r_b_e.transpose() * omega_ie_e
@@ -145,7 +147,7 @@ impl ProcessingEngine {
             }
         } else {
             nalgebra::Vector3::zeros()
-        };;
+        };
 
         if crate::engine::updater::update_loosely_coupled(
             state,

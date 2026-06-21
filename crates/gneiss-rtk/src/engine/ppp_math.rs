@@ -70,7 +70,6 @@ pub fn apply_osb_corrections(
         }
         if let Some(v) = out.cp2.as_mut() {
             *v -= out.osb_cp2 / (LIGHT_SPEED / f2);
-
         }
     }
     out
@@ -153,8 +152,10 @@ pub fn detect_cycle_slip(sat_obs: &SatObs, prev: u32) -> (bool, u32) {
 /// Removes geometry, clock, and troposphere; a jump indicates a slip or ionospheric spike.
 /// Returns true if the GF combination jumps by more than `threshold_m` meters.
 pub fn detect_gf_slip(
-    cp1: f64, lam1: f64,
-    cp2: f64, lam2: f64,
+    cp1: f64,
+    lam1: f64,
+    cp2: f64,
+    lam2: f64,
     prev_gf: f64,
     has_prev: bool,
     threshold_m: f64,
@@ -172,8 +173,10 @@ pub fn detect_gf_slip(
 /// isolating widelane ambiguity. A jump indicates a cycle slip.
 /// Returns true if MW jumps by more than `threshold_cycles` cycles.
 pub fn detect_mw_slip(
-    cp1: f64, lam1: f64,
-    cp2: f64, lam2: f64,
+    cp1: f64,
+    lam1: f64,
+    cp2: f64,
+    lam2: f64,
     p1: f64,
     p2: f64,
     prev_mw: f64,
@@ -195,8 +198,10 @@ pub fn detect_mw_slip(
 pub fn detect_slip_combined(
     sat_obs: &SatObs,
     prev_lock: u32,
-    cp1: Option<f64>, lam1: f64,
-    cp2: Option<f64>, lam2: f64,
+    cp1: Option<f64>,
+    lam1: f64,
+    cp2: Option<f64>,
+    lam2: f64,
     p1: Option<f64>,
     p2: Option<f64>,
     gf_prev: &mut Option<f64>,
@@ -454,7 +459,12 @@ mod tests {
     #[test]
     fn test_compute_tropo_dry_high_alt() {
         let mapper = gneiss_core::atmosphere::NmfMapper;
-        let (d, w) = compute_tropo_dry(Vector3::new(0.0, 0.0, 20001.0), 1.0, GpsTime::new(0, 0.0), &mapper);
+        let (d, w) = compute_tropo_dry(
+            Vector3::new(0.0, 0.0, 20001.0),
+            1.0,
+            GpsTime::new(0, 0.0),
+            &mapper,
+        );
         assert_eq!(d, 0.0);
         assert_eq!(w, 0.0);
     }
@@ -462,7 +472,12 @@ mod tests {
     #[test]
     fn test_compute_tropo_dry_valid() {
         let mapper = gneiss_core::atmosphere::NmfMapper;
-        let (d, w) = compute_tropo_dry(Vector3::new(0.5, 0.0, 100.0), 0.5, GpsTime::new(0, 0.0), &mapper);
+        let (d, w) = compute_tropo_dry(
+            Vector3::new(0.5, 0.0, 100.0),
+            0.5,
+            GpsTime::new(0, 0.0),
+            &mapper,
+        );
         assert_eq!(d, 4.742703419689178);
         assert_eq!(w, 2.081891197333091);
     }
@@ -648,22 +663,23 @@ mod tests {
         let p2 = p1;
         let cp1 = p1 / 0.19;
         let cp2 = p2 / 0.24;
-        
+
         let (_, mw) = detect_mw_slip(cp1, 0.19, cp2, 0.24, p1, p2, 0.0, false, 2.0);
-        
+
         // Move by 1000m (normal geometry change) -> should NOT trigger a slip
         let dist_change = 1000.0;
         let p1_new = p1 + dist_change;
         let p2_new = p2 + dist_change;
         let cp1_new = p1_new / 0.19;
         let cp2_new = p2_new / 0.24;
-        
+
         let (slip, _) = detect_mw_slip(cp1_new, 0.19, cp2_new, 0.24, p1_new, p2_new, mw, true, 2.0);
         assert!(!slip, "MW should cancel geometry changes");
-        
+
         // Now introduce a 5-cycle slip on L1 phase
         let cp1_slip = cp1_new + 5.0;
-        let (slip2, _) = detect_mw_slip(cp1_slip, 0.19, cp2_new, 0.24, p1_new, p2_new, mw, true, 2.0);
+        let (slip2, _) =
+            detect_mw_slip(cp1_slip, 0.19, cp2_new, 0.24, p1_new, p2_new, mw, true, 2.0);
         assert!(slip2, "MW should detect phase cycle slips");
     }
 }

@@ -86,3 +86,20 @@ After all changes, `cargo test --workspace` must pass with zero failures. Do not
 ### Build Integrity
 - [ ] `cargo build --workspace` succeeds with zero errors and zero new warnings
 - [ ] No `#[allow(...)]` suppressions introduced without a code comment justifying them
+
+## Follow-up — 2026-06-21T04:52:58Z
+
+**IMPORTANT — Bug 2 (Velocity-Attitude Jacobian Sign): Worker introduced a regression.**
+
+The batch commit `da013e2` had already correctly fixed `predictor.rs` from `-f_e_skew * dt` → `+f_e_skew * dt`. The Bug 2 worker just re-introduced the negative sign, which is the **buggy** state.
+
+I have manually restored `vel_att = f_e_skew * dt` (positive) in `predictor.rs`.
+
+The correct derivation: the EKF perturbation on specific force is `δf_e = +[f_e×]ψ`, so `∂v/∂ψ = +[f_e×]` and the transition block must be `+f_e_skew * dt`.
+
+Please ensure:
+1. The auditor for Bug 2 checks that `vel_att = f_e_skew * dt` (NO leading minus sign)
+2. The regression test `test_transition_matrix_velocity_attitude_coupling` asserts the **positive** coupling sign
+3. Do not re-introduce the negative sign
+
+Mark Bug 2 as fixed with the positive sign already present in the file.

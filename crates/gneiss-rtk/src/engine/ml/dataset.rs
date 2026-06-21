@@ -87,8 +87,9 @@ fn calculate_az_el(
     state_time: gneiss_core::time::GpsTime,
 ) -> (f64, f64) {
     if let Some(eph) = ephemerides.iter().find(|e| e.sat() == rov.sat) {
-        let (sat_pos, _) =
-            crate::engine::measurement_math::get_sat_state(eph, rov.pr_l1, 0.0, state_time, pos_apc);
+        let (sat_pos, _) = crate::engine::measurement_math::get_sat_state(
+            eph, rov.pr_l1, 0.0, state_time, pos_apc,
+        );
         let (a, e) = gneiss_core::coords::az_el(rov_llh, pos_apc, sat_pos);
         (a.to_degrees(), e.to_degrees())
     } else {

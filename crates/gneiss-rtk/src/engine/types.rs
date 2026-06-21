@@ -29,7 +29,11 @@ impl EngineMode {
     pub fn is_ppp(&self) -> bool {
         matches!(
             self,
-            Self::Ppp | Self::PppIns | Self::PppInsLooselyCoupled | Self::PppIekf | Self::PppInsIekf
+            Self::Ppp
+                | Self::PppIns
+                | Self::PppInsLooselyCoupled
+                | Self::PppIekf
+                | Self::PppInsIekf
         )
     }
 }

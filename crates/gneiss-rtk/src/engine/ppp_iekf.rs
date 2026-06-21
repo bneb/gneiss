@@ -1,13 +1,27 @@
-use crate::engine::ppp_common::{FgMeasurement, snr_scale, invert_matrix, find_ambiguity_index, find_amb_idx, extract_state_vector, apply_state_vector, build_weight_matrix, assemble_matrices, build_iono_constraint_row};
+use crate::engine::ppp_common::{
+    apply_state_vector, assemble_matrices, build_iono_constraint_row, build_weight_matrix,
+    extract_state_vector, find_amb_idx, find_ambiguity_index, invert_matrix, snr_scale,
+    FgMeasurement,
+};
 use crate::engine::processed_sat::ProcessedSat;
 use crate::engine::EngineError;
 use crate::filter::{RtkState, CORE_STATE_SIZE};
 use crate::math::{inversion::solve_cholesky_svd, thresholding::apply_huber};
 use nalgebra::{DMatrix, DVector, Vector3};
 
+#[cfg(test)]
+#[derive(Clone)]
+pub struct ArMock {
+    pub wl_result: Option<Result<(DVector<f64>, DMatrix<f64>, Vec<usize>), &'static str>>,
+    pub nl_result: Option<Result<(DVector<f64>, DMatrix<f64>), &'static str>>,
+    pub nl_calls: usize,
+}
+
+#[cfg(test)]
+pub static AR_MOCK: std::sync::Mutex<Option<ArMock>> = std::sync::Mutex::new(None);
+
 const SPEED_OF_LIGHT: f64 = gneiss_core::constants::SPEED_OF_LIGHT_M_S;
 const PSEUDORANGE_VARIANCE_BASE: f64 = 1.0;
-
 
 /// Iterated Extended Kalman Filter for PPP.
 ///
@@ -73,9 +87,15 @@ impl PppIteratedEkf {
         let p_inv = invert_matrix(&p_pred).ok_or(EngineError::StateDisappeared)?;
 
         for _iter in 0..self.max_iterations {
-            if let Some(dx) =
-                self.compute_iteration_dx(state, sats, &x_i, &x_pred, &p_inv, _iter, position_prior)?
-            {
+            if let Some(dx) = self.compute_iteration_dx(
+                state,
+                sats,
+                &x_i,
+                &x_pred,
+                &p_inv,
+                _iter,
+                position_prior,
+            )? {
                 x_i = &x_i + &dx;
                 if dx.norm() < self.convergence_threshold {
                     break;
@@ -135,14 +155,34 @@ impl PppIteratedEkf {
         let cands = self.find_ar_candidates(state, sats);
 
         // Diagnostic: log constellation breakdown and MW state
-        let gps_c: Vec<_> = cands.iter().filter(|c| c.0.constellation == gneiss_core::sat::Constellation::Gps).collect();
-        let gal_c: Vec<_> = cands.iter().filter(|c| c.0.constellation == gneiss_core::sat::Constellation::Galileo).collect();
-        let bds_c: Vec<_> = cands.iter().filter(|c| c.0.constellation == gneiss_core::sat::Constellation::Beidou).collect();
-        let mw_counts: Vec<_> = cands.iter().map(|c| (c.0, state.mw_sd_counts.get(&c.0).copied().unwrap_or(0))).collect();
-        let mw_vals: Vec<_> = cands.iter().map(|c| (c.0, state.mw_sd_ema.get(&c.0).copied().unwrap_or(0.0))).collect();
+        let gps_c: Vec<_> = cands
+            .iter()
+            .filter(|c| c.0.constellation == gneiss_core::sat::Constellation::Gps)
+            .collect();
+        let gal_c: Vec<_> = cands
+            .iter()
+            .filter(|c| c.0.constellation == gneiss_core::sat::Constellation::Galileo)
+            .collect();
+        let bds_c: Vec<_> = cands
+            .iter()
+            .filter(|c| c.0.constellation == gneiss_core::sat::Constellation::Beidou)
+            .collect();
+        let mw_counts: Vec<_> = cands
+            .iter()
+            .map(|c| (c.0, state.mw_sd_counts.get(&c.0).copied().unwrap_or(0)))
+            .collect();
+        let mw_vals: Vec<_> = cands
+            .iter()
+            .map(|c| (c.0, state.mw_sd_ema.get(&c.0).copied().unwrap_or(0.0)))
+            .collect();
         tracing::info!(
             "PPP-AR diag: cands={} (GPS={} GAL={} BDS={}) mw_counts={:?} mw_vals={:?}",
-            cands.len(), gps_c.len(), gal_c.len(), bds_c.len(), mw_counts, mw_vals
+            cands.len(),
+            gps_c.len(),
+            gal_c.len(),
+            bds_c.len(),
+            mw_counts,
+            mw_vals
         );
 
         if cands.len() < 4 {
@@ -157,7 +197,10 @@ impl PppIteratedEkf {
             Vec<(gneiss_core::sat::SatelliteId, usize, usize, f64, f64, f64)>,
         > = std::collections::HashMap::new();
         for cand in &cands {
-            const_groups.entry(cand.0.constellation).or_default().push(cand.clone());
+            const_groups
+                .entry(cand.0.constellation)
+                .or_default()
+                .push(cand.clone());
         }
 
         let x = extract_state_vector(state);
@@ -174,7 +217,9 @@ impl PppIteratedEkf {
             let mut sorted = group_cands.clone();
             sorted.sort_by(|a, b| b.3.partial_cmp(&a.3).unwrap_or(std::cmp::Ordering::Equal));
             let ref_cand = &sorted[0];
-            let subset: Vec<_> = sorted.iter().skip(1)
+            let subset: Vec<_> = sorted
+                .iter()
+                .skip(1)
                 .map(|c| (c.clone(), ref_cand.clone()))
                 .collect();
 
@@ -184,11 +229,13 @@ impl PppIteratedEkf {
 
             tracing::info!(
                 "PPP-AR per-const {:?}: {} pairs ({} sats)",
-                constellation, subset.len(), group_cands.len()
+                constellation,
+                subset.len(),
+                group_cands.len()
             );
 
             // WL for this constellation
-            let wl_result = self.resolve_widelane_ar(state, &subset, &x_current);
+            let wl_result = self.resolve_widelane_ar(state, &p_current, &subset, &x_current);
             let (x_wl, p_wl, keep_indices) = match wl_result {
                 Ok(r) => r,
                 Err(e) => {
@@ -218,20 +265,20 @@ impl PppIteratedEkf {
             if jump > 10.0 {
                 tracing::warn!(
                     "PPP-AR {:?} rejected: position jump {:.2}m > 10m",
-                    constellation, jump
+                    constellation,
+                    jump
                 );
                 continue;
             }
 
             tracing::info!(
                 "PPP-AR {:?} Fixed! N_Sats={} jump={:.2}m",
-                constellation, keep_indices.len() + 1, jump
+                constellation,
+                keep_indices.len() + 1,
+                jump
             );
             x_current = x_fixed;
             p_current = p_fixed;
-            // Update state in-place so subsequent constellations use
-            // the constrained covariance from this fix
-            apply_state_vector(state, &x_current, p_current.clone());
             any_fixed = true;
             total_fixed_sats += keep_indices.len() + 1;
         }
@@ -244,12 +291,12 @@ impl PppIteratedEkf {
             tracing::info!("PPP-AR: per-constellation failed, trying inter-constellation fallback");
             let subset = self.build_ar_subset(&cands);
             if subset.len() >= 3 {
-                let wl_result = self.resolve_widelane_ar(state, &subset, &x_current);
+                let wl_result = self.resolve_widelane_ar(state, &p_current, &subset, &x_current);
                 if let Ok((x_wl, p_wl, keep_indices)) = wl_result {
                     if keep_indices.len() >= 1 {
-                        if let Ok((x_fixed, p_fixed)) = self.resolve_narrowlane_ar(
-                            state, &subset, &keep_indices, &x_wl, &p_wl,
-                        ) {
+                        if let Ok((x_fixed, p_fixed)) =
+                            self.resolve_narrowlane_ar(state, &subset, &keep_indices, &x_wl, &p_wl)
+                        {
                             let float_pos = Vector3::new(x_current[0], x_current[1], x_current[2]);
                             let fixed_pos = Vector3::new(x_fixed[0], x_fixed[1], x_fixed[2]);
                             let jump = (fixed_pos - float_pos).norm();
@@ -278,7 +325,11 @@ impl PppIteratedEkf {
             return Err("Position jump too large after AR fix");
         }
 
-        tracing::info!("PPP Cascade AR Fixed! N_Sats: {} jump={:.2}m", total_fixed_sats, jump);
+        tracing::info!(
+            "PPP Cascade AR Fixed! N_Sats: {} jump={:.2}m",
+            total_fixed_sats,
+            jump
+        );
         apply_state_vector(state, &x_current, p_current);
         state.is_fixed = true;
         Ok(())
@@ -314,12 +365,14 @@ impl PppIteratedEkf {
     )> {
         // Inter-constellation: single highest-elevation GPS as universal reference.
         // Fall back to per-constellation if no GPS available.
-        if let Some(ref_cand) = cands.iter()
+        if let Some(ref_cand) = cands
+            .iter()
             .filter(|c| c.0.constellation == gneiss_core::sat::Constellation::Gps)
             .max_by(|a, b| a.3.partial_cmp(&b.3).unwrap_or(std::cmp::Ordering::Equal))
         {
             let ref_cand = ref_cand.clone();
-            return cands.iter()
+            return cands
+                .iter()
                 .filter(|c| c.0 != ref_cand.0)
                 .map(|c| (c.clone(), ref_cand.clone()))
                 .collect();
@@ -328,13 +381,20 @@ impl PppIteratedEkf {
         let mut subset = Vec::new();
         let mut const_cands = std::collections::HashMap::new();
         for cand in cands {
-            const_cands.entry(cand.0.constellation).or_insert_with(Vec::new).push(cand.clone());
+            const_cands
+                .entry(cand.0.constellation)
+                .or_insert_with(Vec::new)
+                .push(cand.clone());
         }
         for (_, mut group) in const_cands {
-            if group.len() < 2 { continue; }
+            if group.len() < 2 {
+                continue;
+            }
             group.sort_by(|a, b| b.3.partial_cmp(&a.3).unwrap_or(std::cmp::Ordering::Equal));
             let ref_cand = group[0].clone();
-            for cand in group.iter().skip(1) { subset.push((cand.clone(), ref_cand.clone())); }
+            for cand in group.iter().skip(1) {
+                subset.push((cand.clone(), ref_cand.clone()));
+            }
         }
         subset
     }
@@ -342,13 +402,26 @@ impl PppIteratedEkf {
     fn resolve_widelane_ar(
         &self,
         state: &RtkState,
+        p: &DMatrix<f64>,
         subset: &[(
             (gneiss_core::sat::SatelliteId, usize, usize, f64, f64, f64),
             (gneiss_core::sat::SatelliteId, usize, usize, f64, f64, f64),
         )],
         x: &DVector<f64>,
     ) -> Result<(DVector<f64>, DMatrix<f64>, Vec<usize>), &'static str> {
-        let mut d_wl_full = DMatrix::zeros(subset.len(), state.covariance.nrows());
+        #[cfg(test)]
+        {
+            let mut lock = AR_MOCK.lock().unwrap();
+            if let Some(ref mut mock) = *lock {
+                if let Some(ref wl) = mock.wl_result {
+                    let mut res = wl.clone()?;
+                    res.0 = x.clone();
+                    res.1 = p.clone();
+                    return Ok(res);
+                }
+            }
+        }
+        let mut d_wl_full = DMatrix::zeros(subset.len(), p.nrows());
         for (i, (c, ref_sat)) in subset.iter().enumerate() {
             d_wl_full[(i, CORE_STATE_SIZE + c.1)] = 1.0 / c.4;
             d_wl_full[(i, CORE_STATE_SIZE + c.2)] = -1.0 / c.5;
@@ -356,12 +429,14 @@ impl PppIteratedEkf {
             d_wl_full[(i, CORE_STATE_SIZE + ref_sat.2)] = 1.0 / ref_sat.5;
         }
 
-        let q_wl_full = &d_wl_full * &state.covariance * d_wl_full.transpose();
+        let q_wl_full = &d_wl_full * p * d_wl_full.transpose();
         // Accept satellites with converged covariance OR sufficient MW samples
         let keep_indices: Vec<usize> = (0..q_wl_full.nrows())
             .filter(|&i| {
                 let cov_ok = q_wl_full[(i, i)].sqrt() < 0.30;
-                if cov_ok { return true; }
+                if cov_ok {
+                    return true;
+                }
                 // MW-based: accept if both rover and reference have >10 MW samples
                 let (c, ref_sat) = &subset[i];
                 let mw_ok = state.mw_sd_counts.get(&c.0).unwrap_or(&0) > &10
@@ -373,9 +448,9 @@ impl PppIteratedEkf {
             return Err("Insufficient well-converged Widelane ambiguities");
         }
 
-        let mut d_wl = DMatrix::zeros(keep_indices.len(), state.covariance.nrows());
+        let mut d_wl = DMatrix::zeros(keep_indices.len(), p.nrows());
         for (i, &idx) in keep_indices.iter().enumerate() {
-            for j in 0..state.covariance.nrows() {
+            for j in 0..p.nrows() {
                 d_wl[(i, j)] = d_wl_full[(idx, j)];
             }
         }
@@ -395,14 +470,18 @@ impl PppIteratedEkf {
                 a_wl[i] = mw_c - mw_ref;
             }
         }
-        let mut q_wl = &d_wl * &state.covariance * d_wl.transpose();
-        for i in 0..q_wl.nrows() { q_wl[(i, i)] = q_wl[(i, i)].max(0.01); }
+        let mut q_wl = &d_wl * p * d_wl.transpose();
+        for i in 0..q_wl.nrows() {
+            q_wl[(i, i)] = q_wl[(i, i)].max(0.01);
+        }
         let res_wl = crate::ambiguity::lambda::resolve_lambda(&a_wl, &q_wl)
             .map_err(|_| "WL LAMBDA Failed")?;
 
         tracing::info!(
             "PPP-AR WL: {} pairs, ratio={:.2}, success_rate={:.3}",
-            n, res_wl.ratio, res_wl.success_rate
+            n,
+            res_wl.ratio,
+            res_wl.success_rate
         );
         // NL fixes are all sub-cycle when WL passes — lower threshold to
         // recover more epochs. Bootstrapping success_rate provides secondary gating.
@@ -412,12 +491,12 @@ impl PppIteratedEkf {
         }
 
         let s_inv = q_wl.try_inverse().ok_or("WL Cov Inversion failed")?;
-        let k_wl = &state.covariance * d_wl.transpose() * s_inv;
+        let k_wl = p * d_wl.transpose() * s_inv;
         let dx_wl = &k_wl * (res_wl.best_integers - a_wl);
         Ok((
             x + dx_wl,
             crate::math::covariance::apply_joseph_covariance_update(
-                &state.covariance,
+                p,
                 &k_wl,
                 &d_wl,
                 &DMatrix::zeros(keep_indices.len(), keep_indices.len()),
@@ -437,7 +516,21 @@ impl PppIteratedEkf {
         x_wl: &DVector<f64>,
         p_wl: &DMatrix<f64>,
     ) -> Result<(DVector<f64>, DMatrix<f64>), &'static str> {
-        let mut d_nl = DMatrix::zeros(keep_indices.len(), state.covariance.nrows());
+        #[cfg(test)]
+        {
+            let mut lock = AR_MOCK.lock().unwrap();
+            if let Some(ref mut mock) = *lock {
+                if let Some(ref nl) = mock.nl_result {
+                    mock.nl_calls += 1;
+                    let mut res = nl.clone()?;
+                    res.0 = x_wl.clone();
+                    res.0[0] += 9.5;
+                    res.1 = p_wl.clone() * 0.5;
+                    return Ok(res);
+                }
+            }
+        }
+        let mut d_nl = DMatrix::zeros(keep_indices.len(), p_wl.nrows());
         for (i, &idx) in keep_indices.iter().enumerate() {
             let (c, ref_sat) = &subset[idx];
             d_nl[(i, CORE_STATE_SIZE + c.1)] = 1.0 / c.4;
@@ -454,7 +547,12 @@ impl PppIteratedEkf {
         let res_nl = crate::ambiguity::lambda::resolve_lambda(&a_nl, &q_nl)
             .map_err(|_| "NL LAMBDA Failed")?;
 
-        tracing::info!("PPP-AR NL: {} pairs, ratio={:.2}, success_rate={:.3}", keep_indices.len(), res_nl.ratio, res_nl.success_rate);
+        tracing::info!(
+            "PPP-AR NL: {} pairs, ratio={:.2}, success_rate={:.3}",
+            keep_indices.len(),
+            res_nl.ratio,
+            res_nl.success_rate
+        );
         // NL uses state covariance which has large initial variance (10000 m²).
         // When WL has fixed correctly (all_mw), accept lower NL confidence.
         // Skip NL ratio test — WL fix constrains the solution enough that
@@ -467,7 +565,11 @@ impl PppIteratedEkf {
             let fixed_val = res_nl.best_integers[i];
             let residual = fixed_val - float_val;
             let q_sqrt = q_nl[(i, i)].sqrt();
-            let nsigma = if q_sqrt > 1e-9 { residual / q_sqrt } else { 0.0 };
+            let nsigma = if q_sqrt > 1e-9 {
+                residual / q_sqrt
+            } else {
+                0.0
+            };
             let (sat, ref_sat) = &subset[keep_indices[i]];
             let float_s = format!("{:.3}", float_val);
             let fix_s = format!("{:.0}", fixed_val);
@@ -486,7 +588,8 @@ impl PppIteratedEkf {
         let pos_corr_str = format!("{:.3}", pos_correction_norm);
         tracing::info!(
             "PPP-AR NL diag: pos_corr={}m | {}",
-            pos_corr_str, diag_parts.join(" | ")
+            pos_corr_str,
+            diag_parts.join(" | ")
         );
 
         let p_fixed = crate::math::covariance::apply_joseph_covariance_update(
@@ -497,7 +600,11 @@ impl PppIteratedEkf {
         );
 
         let pos_corr_str2 = format!("{:.3}", pos_correction_norm);
-        tracing::info!("PPP Cascade AR Fixed! N_Sats: {} pos_corr={}m", keep_indices.len() + 1, pos_corr_str2);
+        tracing::info!(
+            "PPP Cascade AR Fixed! N_Sats: {} pos_corr={}m",
+            keep_indices.len() + 1,
+            pos_corr_str2
+        );
         Ok((x_wl + dx_nl, p_fixed))
     }
 
@@ -820,14 +927,34 @@ impl PppIteratedEkf {
         }
     }
 
-    fn resolve_uduc_indices(state: &RtkState, sat: &ProcessedSat, x_i: &DVector<f64>) -> (Option<usize>, Option<usize>, Option<usize>, f64, f64, f64, f64) {
+    fn resolve_uduc_indices(
+        state: &RtkState,
+        sat: &ProcessedSat,
+        x_i: &DVector<f64>,
+    ) -> (
+        Option<usize>,
+        Option<usize>,
+        Option<usize>,
+        f64,
+        f64,
+        f64,
+        f64,
+    ) {
         let i1_idx = find_amb_idx(state, sat.sat_obs.sat, 3).map(|idx| CORE_STATE_SIZE + idx);
         let n1_idx = find_amb_idx(state, sat.sat_obs.sat, 1).map(|idx| CORE_STATE_SIZE + idx);
         let n2_idx = find_amb_idx(state, sat.sat_obs.sat, 2).map(|idx| CORE_STATE_SIZE + idx);
         let i1 = i1_idx.map(|idx| x_i[idx]).unwrap_or(0.0);
         let n1 = n1_idx.map(|idx| x_i[idx]).unwrap_or(0.0);
         let n2 = n2_idx.map(|idx| x_i[idx]).unwrap_or(0.0);
-        (i1_idx, n1_idx, n2_idx, i1, n1, n2, (sat.f1 * sat.f1) / (sat.f2 * sat.f2))
+        (
+            i1_idx,
+            n1_idx,
+            n2_idx,
+            i1,
+            n1,
+            n2,
+            (sat.f1 * sat.f1) / (sat.f2 * sat.f2),
+        )
     }
 
     fn push_uduc_pr_measurements(
@@ -845,18 +972,36 @@ impl PppIteratedEkf {
         let res_p1 = sat.p1 - (expected_base + i1);
         meas.push(FgMeasurement {
             res: res_p1,
-            h_row: build_h_row_uduc(los, sat.map_wet, i1_idx, 1.0, None,
-                x_i.len(), sat.sat_obs.sat.constellation),
+            h_row: build_h_row_uduc(
+                los,
+                sat.map_wet,
+                i1_idx,
+                1.0,
+                None,
+                x_i.len(),
+                sat.sat_obs.sat.constellation,
+            ),
             weight: var_p1 / apply_huber(res_p1, var_p1, self.huber_k),
-            raw_var: var_p1, is_phase: false, sat: Some(sat.sat_obs.sat),
+            raw_var: var_p1,
+            is_phase: false,
+            sat: Some(sat.sat_obs.sat),
         });
         let res_p2 = sat.p2.unwrap() - (expected_base + gamma * i1);
         meas.push(FgMeasurement {
             res: res_p2,
-            h_row: build_h_row_uduc(los, sat.map_wet, i1_idx, gamma, None,
-                x_i.len(), sat.sat_obs.sat.constellation),
+            h_row: build_h_row_uduc(
+                los,
+                sat.map_wet,
+                i1_idx,
+                gamma,
+                None,
+                x_i.len(),
+                sat.sat_obs.sat.constellation,
+            ),
             weight: (var_p1 * 1.5) / apply_huber(res_p2, var_p1 * 1.5, self.huber_k),
-            raw_var: var_p1 * 1.5, is_phase: false, sat: Some(sat.sat_obs.sat),
+            raw_var: var_p1 * 1.5,
+            is_phase: false,
+            sat: Some(sat.sat_obs.sat),
         });
     }
 
@@ -881,18 +1026,36 @@ impl PppIteratedEkf {
         let res_l1 = (sat.cp1.unwrap() + windup) * sat.lam1 - (expected_base - i1 + n1);
         meas.push(FgMeasurement {
             res: res_l1,
-            h_row: build_h_row_uduc(los, sat.map_wet, i1_idx, -1.0, n1_idx,
-                x_i.len(), sat.sat_obs.sat.constellation),
+            h_row: build_h_row_uduc(
+                los,
+                sat.map_wet,
+                i1_idx,
+                -1.0,
+                n1_idx,
+                x_i.len(),
+                sat.sat_obs.sat.constellation,
+            ),
             weight: var_l1 / apply_huber(res_l1, var_l1, self.huber_k),
-            raw_var: var_l1, is_phase: true, sat: Some(sat.sat_obs.sat),
+            raw_var: var_l1,
+            is_phase: true,
+            sat: Some(sat.sat_obs.sat),
         });
         let res_l2 = (sat.cp2.unwrap() + windup) * sat.lam2 - (expected_base - gamma * i1 + n2);
         meas.push(FgMeasurement {
             res: res_l2,
-            h_row: build_h_row_uduc(los, sat.map_wet, i1_idx, -gamma, n2_idx,
-                x_i.len(), sat.sat_obs.sat.constellation),
+            h_row: build_h_row_uduc(
+                los,
+                sat.map_wet,
+                i1_idx,
+                -gamma,
+                n2_idx,
+                x_i.len(),
+                sat.sat_obs.sat.constellation,
+            ),
             weight: (var_l1 * 1.5) / apply_huber(res_l2, var_l1 * 1.5, self.huber_k),
-            raw_var: var_l1 * 1.5, is_phase: true, sat: Some(sat.sat_obs.sat),
+            raw_var: var_l1 * 1.5,
+            is_phase: true,
+            sat: Some(sat.sat_obs.sat),
         });
     }
 
@@ -911,8 +1074,21 @@ impl PppIteratedEkf {
         let (i1_idx, n1_idx, n2_idx, i1, n1, n2, gamma) =
             Self::resolve_uduc_indices(state, sat, x_i);
         self.push_uduc_pr_measurements(meas, sat, x_i, los, expected_base, i1_idx, i1, gamma);
-        self.push_uduc_cp_measurements(meas, state, sat, x_i, los, expected_base,
-            i1_idx, n1_idx, n2_idx, i1, n1, n2, gamma);
+        self.push_uduc_cp_measurements(
+            meas,
+            state,
+            sat,
+            x_i,
+            los,
+            expected_base,
+            i1_idx,
+            n1_idx,
+            n2_idx,
+            i1,
+            n1,
+            n2,
+            gamma,
+        );
     }
 }
 
@@ -962,7 +1138,6 @@ fn log_ppp_convergence(
         );
     }
 }
-
 
 fn build_h_row_uduc(
     los: &Vector3<f64>,
@@ -1027,7 +1202,6 @@ fn build_h_row(
     h
 }
 
-
 fn build_h_row_doppler(los: &Vector3<f64>, size: usize) -> DVector<f64> {
     let mut h = DVector::zeros(size);
     if size > 19 {
@@ -1082,8 +1256,7 @@ mod tests {
     #[test]
     fn test_find_ambiguity_index() {
         let mut state = dummy_rtk_state();
-        
-        
+
         use gneiss_core::sat::{Constellation, SatelliteId};
         let sat1 = SatelliteId {
             constellation: Constellation::Gps,
@@ -1407,7 +1580,7 @@ mod mutant_killer_tests {
             ),
         ];
         let x = DVector::zeros(CORE_STATE_SIZE + 4);
-        let res = fg.resolve_widelane_ar(&state, &subset, &x);
+        let res = fg.resolve_widelane_ar(&state, &state.covariance, &subset, &x);
         assert!(res.is_err());
     }
 
@@ -1850,6 +2023,136 @@ mod mutant_killer_tests {
         let h = build_iono_constraint_row(30, 15);
         assert_eq!(h.len(), 30);
         assert_eq!(h[15], 1.0);
-        for i in 0..30 { if i != 15 { assert_eq!(h[i], 0.0); } }
+        for i in 0..30 {
+            if i != 15 {
+                assert_eq!(h[i], 0.0);
+            }
+        }
+    }
+
+    #[test]
+    fn test_sequential_ar_mismatch_regression() {
+        let fg = PppIteratedEkf::default();
+        let mut state = dummy_rtk_state();
+
+        // Add 6 satellites across 3 constellations (GPS, Galileo, Beidou) to get 3 constellation groups
+        let mut sats = Vec::new();
+        let constellations = [
+            Constellation::Gps,
+            Constellation::Galileo,
+            Constellation::Beidou,
+        ];
+
+        for (i, &constellation) in constellations.iter().enumerate() {
+            let sat1 = SatelliteId {
+                constellation,
+                prn: (i * 2 + 1) as u8,
+            };
+            let sat2 = SatelliteId {
+                constellation,
+                prn: (i * 2 + 2) as u8,
+            };
+
+            state.add_ambiguity(sat1, 1, 0.0, 1.0);
+            state.add_ambiguity(sat1, 2, 0.0, 1.0);
+            state.add_ambiguity(sat2, 1, 0.0, 1.0);
+            state.add_ambiguity(sat2, 2, 0.0, 1.0);
+
+            let obs1 = Box::leak(Box::new(SatObs {
+                sat: sat1,
+                observations: vec![],
+            }));
+            let obs2 = Box::leak(Box::new(SatObs {
+                sat: sat2,
+                observations: vec![],
+            }));
+
+            let mut make_processed = |obs: &'static SatObs| ProcessedSat {
+                sat_obs: obs,
+                dt_sat_m: 0.0,
+                p1: 0.0,
+                p2: None,
+                cp1: Some(0.0),
+                cp2: Some(0.0),
+                is_iono_free: false,
+                osb_p1: 0.0,
+                osb_p2: 0.0,
+                osb_cp1: 0.0,
+                osb_cp2: 0.0,
+                los: Vector3::zeros(),
+                dist: 0.0,
+                el: 15.01_f64.to_radians(),
+                snr: 45.0,
+                doppler: 0.0,
+                lam1: 0.19,
+                lam2: 0.24,
+                tropo_dry: 0.0,
+                map_wet: 0.0,
+                iono_delay: 5.0,
+                f1: 1.0,
+                f2: 1.0,
+                sat_pos_rot: Vector3::zeros(),
+                sat_vel: Vector3::zeros(),
+                sat_clock_drift: 0.0,
+                rcv_pos_ecef: Vector3::zeros(),
+                pcv_correction: 0.0,
+            };
+            sats.push(make_processed(obs1));
+            sats.push(make_processed(obs2));
+        }
+
+        // Initialize state vector and covariance
+        let state_dim = CORE_STATE_SIZE + state.ambiguities.len();
+        state.covariance = DMatrix::from_fn(state_dim, state_dim, |r, c| {
+            if r == c {
+                (r + 1) as f64 * 1.5
+            } else {
+                0.01
+            }
+        });
+        state.position.vector = Vector3::new(1.0, 2.0, 3.0);
+        state.velocity = Vector3::new(4.0, 5.0, 6.0);
+        state.is_fixed = false;
+
+        let initial_state_vector = extract_state_vector(&state);
+        let initial_covariance = state.covariance.clone();
+
+        // Configure mock
+        let mock_wl = Ok((
+            DVector::zeros(state_dim),
+            DMatrix::zeros(state_dim, state_dim),
+            vec![0, 1],
+        ));
+        let mock_nl = Ok((
+            DVector::zeros(state_dim),
+            DMatrix::zeros(state_dim, state_dim),
+        ));
+
+        {
+            let mut mock_lock = AR_MOCK.lock().unwrap();
+            *mock_lock = Some(ArMock {
+                wl_result: Some(mock_wl),
+                nl_result: Some(mock_nl),
+                nl_calls: 0,
+            });
+        }
+
+        // Execute resolve_cascade_ar
+        let result = fg.resolve_cascade_ar(&mut state, &sats);
+
+        // Verify that it failed due to global position jump check
+        assert_eq!(result, Err("Position jump too large after AR fix"));
+
+        // Verify state is unmodified
+        let final_state_vector = extract_state_vector(&state);
+        assert_eq!(final_state_vector, initial_state_vector);
+        assert_eq!(state.covariance, initial_covariance);
+        assert_eq!(state.is_fixed, false);
+
+        // Clear mock
+        {
+            let mut mock_lock = AR_MOCK.lock().unwrap();
+            *mock_lock = None;
+        }
     }
 }

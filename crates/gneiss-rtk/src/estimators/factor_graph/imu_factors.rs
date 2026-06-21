@@ -130,7 +130,21 @@ impl ImuPreintegrationFactor {
 }
 
 impl ImuPreintegrationFactor {
-    fn extract_all_states(&self, state: &DVector<f64>) -> (Vector3<f64>, Vector3<f64>, UnitQuaternion<f64>, Vector3<f64>, Vector3<f64>, Vector3<f64>, Vector3<f64>, UnitQuaternion<f64>, Vector3<f64>, Vector3<f64>) {
+    fn extract_all_states(
+        &self,
+        state: &DVector<f64>,
+    ) -> (
+        Vector3<f64>,
+        Vector3<f64>,
+        UnitQuaternion<f64>,
+        Vector3<f64>,
+        Vector3<f64>,
+        Vector3<f64>,
+        Vector3<f64>,
+        UnitQuaternion<f64>,
+        Vector3<f64>,
+        Vector3<f64>,
+    ) {
         let p_i = Self::extract_vec(state, self.idx_p_i, self.nominal_p_i);
         let v_i = Self::extract_vec(state, self.idx_v_i, self.nominal_v_i);
         let q_i = Self::extract_quat(state, self.idx_q_i, self.nominal_q_i);
@@ -156,8 +170,8 @@ impl Factor for ImuPreintegrationFactor {
         let dq = self.preint.dq * UnitQuaternion::from_scaled_axis(self.preint.dq_dbg * dbg);
         let mut res = DVector::zeros(15);
         let r_i_t = q_i.inverse();
-        res.fixed_rows_mut::<3>(0).copy_from(
-            &(r_i_t * (p_j - p_i - v_i * dt - 0.5 * self.gravity * dt * dt) - dp));
+        res.fixed_rows_mut::<3>(0)
+            .copy_from(&(r_i_t * (p_j - p_i - v_i * dt - 0.5 * self.gravity * dt * dt) - dp));
         res.fixed_rows_mut::<3>(3)
             .copy_from(&(r_i_t * (v_j - v_i - self.gravity * dt) - dv));
         res.fixed_rows_mut::<3>(6)

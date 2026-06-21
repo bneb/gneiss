@@ -1,4 +1,7 @@
-use crate::engine::ppp_common::{FgMeasurement, snr_scale, invert_matrix, find_ambiguity_index, find_amb_idx, extract_state_vector, apply_state_vector, build_weight_matrix, assemble_matrices};
+use crate::engine::ppp_common::{
+    apply_state_vector, assemble_matrices, build_weight_matrix, extract_state_vector, find_amb_idx,
+    find_ambiguity_index, invert_matrix, snr_scale, FgMeasurement,
+};
 use crate::engine::processed_sat::ProcessedSat;
 use crate::engine::EngineError;
 use crate::filter::{RtkState, CORE_STATE_SIZE};
@@ -25,17 +28,17 @@ pub fn process_ppp_ins_fg<'a>(
     if sats.is_empty() {
         return Err(EngineError::InsufficientSatellites);
     }
-    
+
     let state = engine.current_state.as_mut().unwrap();
     crate::engine::ppp::update_phase_ambiguities(state, &sats, rover_obs.time);
     state.prune_stale_ambiguities(state.epoch_count as u32, 10);
-    
+
     let last_state = engine.state_history.last();
     let imu_history = &engine.imu_history;
-    
+
     let lever_arm = nalgebra::Vector3::from_column_slice(&engine.config.imu_to_antenna_lever_arm);
     PppInsIteratedEkf::new().solve(state, &sats, imu_history, last_state, &lever_arm)?;
-    
+
     crate::engine::processor::ProcessingEngine::attempt_kinematic_alignment(engine);
     let state = engine.current_state.as_mut().unwrap();
     crate::engine::processor::ProcessingEngine::apply_nhc_updates(
@@ -51,7 +54,6 @@ pub fn process_ppp_ins_fg<'a>(
     engine.imu_buffer.clear();
     Ok(engine.current_state.as_ref().unwrap())
 }
-
 
 /// Iterated Extended Kalman Filter for tightly-coupled PPP+INS.
 ///
@@ -77,7 +79,6 @@ impl Default for PppInsIteratedEkf {
         }
     }
 }
-
 
 struct UducIndices {
     i1_idx: Option<usize>,
@@ -135,13 +136,25 @@ impl PppInsIteratedEkf {
         let p_inv = invert_matrix(&p_pred).ok_or(EngineError::StateDisappeared)?;
 
         for _iter in 0..self.max_iterations {
-            if let Some(dx) =
-                self.compute_iteration_dx(state, sats, &x_i, &x_pred, &p_inv, _iter, imu_history, last_state, lever_arm)?
-            {
+            if let Some(dx) = self.compute_iteration_dx(
+                state,
+                sats,
+                &x_i,
+                &x_pred,
+                &p_inv,
+                _iter,
+                imu_history,
+                last_state,
+                lever_arm,
+            )? {
                 let mut x_next = &x_i + &dx;
                 if x_next.len() > 8 {
-                    let q_old = nalgebra::UnitQuaternion::from_scaled_axis(nalgebra::Vector3::new(x_i[6], x_i[7], x_i[8]));
-                    let dq = nalgebra::UnitQuaternion::from_scaled_axis(nalgebra::Vector3::new(dx[6], dx[7], dx[8]));
+                    let q_old = nalgebra::UnitQuaternion::from_scaled_axis(nalgebra::Vector3::new(
+                        x_i[6], x_i[7], x_i[8],
+                    ));
+                    let dq = nalgebra::UnitQuaternion::from_scaled_axis(nalgebra::Vector3::new(
+                        dx[6], dx[7], dx[8],
+                    ));
                     let q_new = q_old * dq;
                     let new_scaled = q_new.scaled_axis();
                     x_next[6] = new_scaled.x;
@@ -168,17 +181,45 @@ impl PppInsIteratedEkf {
             return Ok(false);
         }
 
-        let final_p = self.compute_final_covariance(state, sats, &x_i, &p_pred, &p_inv, imu_history, last_state, lever_arm);
+        let final_p = self.compute_final_covariance(
+            state,
+            sats,
+            &x_i,
+            &p_pred,
+            &p_inv,
+            imu_history,
+            last_state,
+            lever_arm,
+        );
         apply_state_vector(state, &x_i, final_p);
-        let omega_eb_b = imu_history.last()
+        let omega_eb_b = imu_history
+            .last()
             .and_then(|buf: &Vec<gneiss_core::imu::ImuMeasurement>| buf.last())
             .map(|m| {
-                let r_b_e = nalgebra::UnitQuaternion::from_scaled_axis(nalgebra::Vector3::new(x_i[6], x_i[7], x_i[8])).to_rotation_matrix();
-                let omega_ie_e = nalgebra::Vector3::new(0.0, 0.0, gneiss_core::constants::EARTH_ROTATION_RATE_RAD_S);
-                m.gyro - nalgebra::Vector3::new(x_i[12], x_i[13], x_i[14]) - r_b_e.transpose() * omega_ie_e
+                let r_b_e = nalgebra::UnitQuaternion::from_scaled_axis(nalgebra::Vector3::new(
+                    x_i[6], x_i[7], x_i[8],
+                ))
+                .to_rotation_matrix();
+                let omega_ie_e = nalgebra::Vector3::new(
+                    0.0,
+                    0.0,
+                    gneiss_core::constants::EARTH_ROTATION_RATE_RAD_S,
+                );
+                m.gyro
+                    - nalgebra::Vector3::new(x_i[12], x_i[13], x_i[14])
+                    - r_b_e.transpose() * omega_ie_e
             })
             .unwrap_or(nalgebra::Vector3::zeros());
-        log_ppp_convergence(state, sats, &x_i, &x_pred, &p_pred, self, lever_arm, &omega_eb_b);
+        log_ppp_convergence(
+            state,
+            sats,
+            &x_i,
+            &x_pred,
+            &p_pred,
+            self,
+            lever_arm,
+            &omega_eb_b,
+        );
         Ok(true)
     }
 
@@ -190,15 +231,32 @@ impl PppInsIteratedEkf {
         imu_history: &[Vec<gneiss_core::imu::ImuMeasurement>],
         lever_arm: &nalgebra::Vector3<f64>,
     ) -> Option<gneiss_core::sat::SatelliteId> {
-        let omega_eb_b = imu_history.last()
+        let omega_eb_b = imu_history
+            .last()
             .and_then(|buf: &Vec<gneiss_core::imu::ImuMeasurement>| buf.last())
             .map(|m| {
-                let r_b_e = nalgebra::UnitQuaternion::from_scaled_axis(nalgebra::Vector3::new(x_i[6], x_i[7], x_i[8])).to_rotation_matrix();
-                let omega_ie_e = nalgebra::Vector3::new(0.0, 0.0, gneiss_core::constants::EARTH_ROTATION_RATE_RAD_S);
-                m.gyro - nalgebra::Vector3::new(x_i[12], x_i[13], x_i[14]) - r_b_e.transpose() * omega_ie_e
+                let r_b_e = nalgebra::UnitQuaternion::from_scaled_axis(nalgebra::Vector3::new(
+                    x_i[6], x_i[7], x_i[8],
+                ))
+                .to_rotation_matrix();
+                let omega_ie_e = nalgebra::Vector3::new(
+                    0.0,
+                    0.0,
+                    gneiss_core::constants::EARTH_ROTATION_RATE_RAD_S,
+                );
+                m.gyro
+                    - nalgebra::Vector3::new(x_i[12], x_i[13], x_i[14])
+                    - r_b_e.transpose() * omega_ie_e
             })
             .unwrap_or(nalgebra::Vector3::zeros());
-        let final_meas = self.build_measurements(state, sats, x_i, self.max_iterations, lever_arm, &omega_eb_b);
+        let final_meas = self.build_measurements(
+            state,
+            sats,
+            x_i,
+            self.max_iterations,
+            lever_arm,
+            &omega_eb_b,
+        );
         Self::find_worst_outlier_sat(&final_meas)
     }
 
@@ -234,7 +292,8 @@ impl PppInsIteratedEkf {
         let x = extract_state_vector(state);
         let (x_wl, p_wl, keep_indices) = self.resolve_widelane_ar(state, &subset, &x)?;
 
-        let (x_fixed, p_fixed) = self.resolve_narrowlane_ar(state, &subset, &keep_indices, &x_wl, &p_wl)?;
+        let (x_fixed, p_fixed) =
+            self.resolve_narrowlane_ar(state, &subset, &keep_indices, &x_wl, &p_wl)?;
 
         apply_state_vector(state, &x_fixed, p_fixed);
         state.is_fixed = true;
@@ -273,7 +332,10 @@ impl PppInsIteratedEkf {
         // Group by constellation
         let mut const_cands = std::collections::HashMap::new();
         for cand in cands {
-            const_cands.entry(cand.0.constellation).or_insert_with(Vec::new).push(cand.clone());
+            const_cands
+                .entry(cand.0.constellation)
+                .or_insert_with(Vec::new)
+                .push(cand.clone());
         }
 
         for (_, mut group) in const_cands {
@@ -408,12 +470,22 @@ impl PppInsIteratedEkf {
         last_state: Option<&RtkState>,
         lever_arm: &nalgebra::Vector3<f64>,
     ) -> Result<Option<DVector<f64>>, EngineError> {
-        let omega_eb_b = imu_history.last()
+        let omega_eb_b = imu_history
+            .last()
             .and_then(|buf: &Vec<gneiss_core::imu::ImuMeasurement>| buf.last())
             .map(|m| {
-                let r_b_e = nalgebra::UnitQuaternion::from_scaled_axis(nalgebra::Vector3::new(x_i[6], x_i[7], x_i[8])).to_rotation_matrix();
-                let omega_ie_e = nalgebra::Vector3::new(0.0, 0.0, gneiss_core::constants::EARTH_ROTATION_RATE_RAD_S);
-                m.gyro - nalgebra::Vector3::new(x_i[12], x_i[13], x_i[14]) - r_b_e.transpose() * omega_ie_e
+                let r_b_e = nalgebra::UnitQuaternion::from_scaled_axis(nalgebra::Vector3::new(
+                    x_i[6], x_i[7], x_i[8],
+                ))
+                .to_rotation_matrix();
+                let omega_ie_e = nalgebra::Vector3::new(
+                    0.0,
+                    0.0,
+                    gneiss_core::constants::EARTH_ROTATION_RATE_RAD_S,
+                );
+                m.gyro
+                    - nalgebra::Vector3::new(x_i[12], x_i[13], x_i[14])
+                    - r_b_e.transpose() * omega_ie_e
             })
             .unwrap_or(nalgebra::Vector3::zeros());
         let meas = self.build_measurements(state, sats, x_i, iter, lever_arm, &omega_eb_b);
@@ -426,14 +498,18 @@ impl PppInsIteratedEkf {
 
         let mut htwh = h_mat.transpose() * &w_mat * &h_mat;
         let mut htwr = h_mat.transpose() * &w_mat * &res_vec;
-        
+
         self.accumulate_imu_factors(x_i, imu_history, last_state, &mut htwh, Some(&mut htwr));
 
         let htwh_damped = &htwh + p_inv;
         let mut diff = x_pred - x_i;
         if diff.len() > 8 {
-            let q_pred = nalgebra::UnitQuaternion::from_scaled_axis(nalgebra::Vector3::new(x_pred[6], x_pred[7], x_pred[8]));
-            let q_i = nalgebra::UnitQuaternion::from_scaled_axis(nalgebra::Vector3::new(x_i[6], x_i[7], x_i[8]));
+            let q_pred = nalgebra::UnitQuaternion::from_scaled_axis(nalgebra::Vector3::new(
+                x_pred[6], x_pred[7], x_pred[8],
+            ));
+            let q_i = nalgebra::UnitQuaternion::from_scaled_axis(nalgebra::Vector3::new(
+                x_i[6], x_i[7], x_i[8],
+            ));
             let dq_local = (q_i.inverse() * q_pred).scaled_axis();
             diff[6] = dq_local.x;
             diff[7] = dq_local.y;
@@ -461,15 +537,32 @@ impl PppInsIteratedEkf {
         last_state: Option<&RtkState>,
         lever_arm: &nalgebra::Vector3<f64>,
     ) -> DMatrix<f64> {
-        let omega_eb_b = imu_history.last()
+        let omega_eb_b = imu_history
+            .last()
             .and_then(|buf: &Vec<gneiss_core::imu::ImuMeasurement>| buf.last())
             .map(|m| {
-                let r_b_e = nalgebra::UnitQuaternion::from_scaled_axis(nalgebra::Vector3::new(x_i[6], x_i[7], x_i[8])).to_rotation_matrix();
-                let omega_ie_e = nalgebra::Vector3::new(0.0, 0.0, gneiss_core::constants::EARTH_ROTATION_RATE_RAD_S);
-                m.gyro - nalgebra::Vector3::new(x_i[12], x_i[13], x_i[14]) - r_b_e.transpose() * omega_ie_e
+                let r_b_e = nalgebra::UnitQuaternion::from_scaled_axis(nalgebra::Vector3::new(
+                    x_i[6], x_i[7], x_i[8],
+                ))
+                .to_rotation_matrix();
+                let omega_ie_e = nalgebra::Vector3::new(
+                    0.0,
+                    0.0,
+                    gneiss_core::constants::EARTH_ROTATION_RATE_RAD_S,
+                );
+                m.gyro
+                    - nalgebra::Vector3::new(x_i[12], x_i[13], x_i[14])
+                    - r_b_e.transpose() * omega_ie_e
             })
             .unwrap_or(nalgebra::Vector3::zeros());
-        let last_meas = self.build_measurements(state, sats, x_i, self.max_iterations, lever_arm, &omega_eb_b);
+        let last_meas = self.build_measurements(
+            state,
+            sats,
+            x_i,
+            self.max_iterations,
+            lever_arm,
+            &omega_eb_b,
+        );
         if last_meas.is_empty() {
             return p_pred.clone();
         }
@@ -477,7 +570,7 @@ impl PppInsIteratedEkf {
         let (h_mat, _, r_mat) = assemble_matrices(&last_meas, x_i.len());
         let w_mat = build_weight_matrix(&last_meas, &r_mat);
         let mut htwh = h_mat.transpose() * &w_mat * h_mat;
-        
+
         self.accumulate_imu_factors(x_i, imu_history, last_state, &mut htwh, None);
 
         let htwh_damped = htwh + p_inv;
@@ -488,7 +581,9 @@ impl PppInsIteratedEkf {
         })
     }
 
-    fn fill_imu_preint_covariance(preint: &mut crate::estimators::factor_graph::imu_factors::ImuPreintegration) {
+    fn fill_imu_preint_covariance(
+        preint: &mut crate::estimators::factor_graph::imu_factors::ImuPreintegration,
+    ) {
         let dt = preint.dt.max(0.01);
         preint.covariance.fill(0.0);
         for i in 0..3 {
@@ -513,7 +608,8 @@ impl PppInsIteratedEkf {
             UnitQuaternion::identity()
         };
         crate::estimators::factor_graph::imu_factors::ImuPreintegrationFactor {
-            preint, gravity,
+            preint,
+            gravity,
             nominal_p_i: last.position.vector,
             nominal_v_i: last.velocity,
             nominal_q_i: last.attitude,
@@ -524,8 +620,16 @@ impl PppInsIteratedEkf {
             nominal_q_j: q_j,
             nominal_ba_j: Vector3::new(x_i[9], x_i[10], x_i[11]),
             nominal_bg_j: Vector3::new(x_i[12], x_i[13], x_i[14]),
-            idx_p_i: 0, idx_v_i: 3, idx_q_i: 6, idx_ba_i: 9, idx_bg_i: 12,
-            idx_p_j: 15, idx_v_j: 18, idx_q_j: 21, idx_ba_j: 24, idx_bg_j: 27,
+            idx_p_i: 0,
+            idx_v_i: 3,
+            idx_q_i: 6,
+            idx_ba_i: 9,
+            idx_bg_i: 12,
+            idx_p_j: 15,
+            idx_v_j: 18,
+            idx_q_j: 21,
+            idx_ba_j: 24,
+            idx_bg_j: 27,
         }
     }
 
@@ -558,8 +662,12 @@ impl PppInsIteratedEkf {
         htwh: &mut DMatrix<f64>,
         htwr: Option<&mut DVector<f64>>,
     ) {
-        let (Some(last), Some(imu_buf)) = (last_state, imu_history.last()) else { return };
-        if imu_buf.is_empty() || !last.ins_aligned { return; }
+        let (Some(last), Some(imu_buf)) = (last_state, imu_history.last()) else {
+            return;
+        };
+        if imu_buf.is_empty() || !last.ins_aligned {
+            return;
+        }
         let mut preint = crate::estimators::factor_graph::imu_factors::ImuPreintegration::new();
         preint.integrate(imu_buf, &last.accel_bias, &last.gyro_bias);
         Self::fill_imu_preint_covariance(&mut preint);
@@ -588,7 +696,7 @@ impl PppInsIteratedEkf {
         let r_b_e = attitude.to_rotation_matrix();
         let l_e = r_b_e * lever_arm;
         let rcv_pos = nalgebra::Vector3::new(x_i[0], x_i[1], x_i[2]) + l_e + tide_offset;
-        
+
         let h_pos_att = -(r_b_e.matrix() * lever_arm.cross_matrix());
         let a_0 = r_b_e * omega_eb_b.cross(lever_arm);
         let h_vel_att = -a_0.cross_matrix();
@@ -623,7 +731,9 @@ impl PppInsIteratedEkf {
                 continue;
             }
             if sat.doppler != 0.0 {
-                self.push_doppler_measurement(&mut meas, sat, x_i, &los, &h_vel_att, &h_vel_bg, &v_apc);
+                self.push_doppler_measurement(
+                    &mut meas, sat, x_i, &los, &h_vel_att, &h_vel_bg, &v_apc,
+                );
             }
         }
         meas
@@ -659,9 +769,31 @@ impl PppInsIteratedEkf {
         }
 
         if !sat.is_iono_free && sat.cp1.is_some() && sat.cp2.is_some() && sat.p2.is_some() {
-            self.push_uduc_measurements(meas, state, sat, x_i, iter, los, expected_base, dist, isb, h_pos_att);
+            self.push_uduc_measurements(
+                meas,
+                state,
+                sat,
+                x_i,
+                iter,
+                los,
+                expected_base,
+                dist,
+                isb,
+                h_pos_att,
+            );
         } else {
-            self.push_pr_measurement(meas, state, sat, x_i, iter, los, expected_base, dist, isb, h_pos_att);
+            self.push_pr_measurement(
+                meas,
+                state,
+                sat,
+                x_i,
+                iter,
+                los,
+                expected_base,
+                dist,
+                isb,
+                h_pos_att,
+            );
             if let Some(cp1) = sat.cp1 {
                 if cp1 != 0.0 {
                     self.push_cp_measurement(
@@ -826,7 +958,11 @@ impl PppInsIteratedEkf {
         }
     }
 
-    fn resolve_uduc_indices(state: &RtkState, sat: &ProcessedSat, x_i: &DVector<f64>) -> UducIndices {
+    fn resolve_uduc_indices(
+        state: &RtkState,
+        sat: &ProcessedSat,
+        x_i: &DVector<f64>,
+    ) -> UducIndices {
         let i1_idx = find_amb_idx(state, sat.sat_obs.sat, 3).map(|idx| CORE_STATE_SIZE + idx);
         let n1_idx = find_amb_idx(state, sat.sat_obs.sat, 1).map(|idx| CORE_STATE_SIZE + idx);
         let n2_idx = find_amb_idx(state, sat.sat_obs.sat, 2).map(|idx| CORE_STATE_SIZE + idx);
@@ -834,7 +970,9 @@ impl PppInsIteratedEkf {
             i1: i1_idx.map(|idx| x_i[idx]).unwrap_or(0.0),
             n1: n1_idx.map(|idx| x_i[idx]).unwrap_or(0.0),
             n2: n2_idx.map(|idx| x_i[idx]).unwrap_or(0.0),
-            i1_idx, n1_idx, n2_idx,
+            i1_idx,
+            n1_idx,
+            n2_idx,
             gamma: (sat.f1 * sat.f1) / (sat.f2 * sat.f2),
         }
     }
@@ -853,18 +991,38 @@ impl PppInsIteratedEkf {
         let res_p1 = sat.p1 - (expected_base + idx.i1);
         meas.push(FgMeasurement {
             res: res_p1,
-            h_row: build_h_row_uduc(los, sat.map_wet, idx.i1_idx, 1.0, None,
-                x_i.len(), sat.sat_obs.sat.constellation, h_pos_att),
+            h_row: build_h_row_uduc(
+                los,
+                sat.map_wet,
+                idx.i1_idx,
+                1.0,
+                None,
+                x_i.len(),
+                sat.sat_obs.sat.constellation,
+                h_pos_att,
+            ),
             weight: var_p1 / apply_huber(res_p1, var_p1, self.huber_k),
-            raw_var: var_p1, is_phase: false, sat: Some(sat.sat_obs.sat),
+            raw_var: var_p1,
+            is_phase: false,
+            sat: Some(sat.sat_obs.sat),
         });
         let res_p2 = sat.p2.unwrap() - (expected_base + idx.gamma * idx.i1);
         meas.push(FgMeasurement {
             res: res_p2,
-            h_row: build_h_row_uduc(los, sat.map_wet, idx.i1_idx, idx.gamma, None,
-                x_i.len(), sat.sat_obs.sat.constellation, h_pos_att),
+            h_row: build_h_row_uduc(
+                los,
+                sat.map_wet,
+                idx.i1_idx,
+                idx.gamma,
+                None,
+                x_i.len(),
+                sat.sat_obs.sat.constellation,
+                h_pos_att,
+            ),
             weight: (var_p1 * 1.5) / apply_huber(res_p2, var_p1 * 1.5, self.huber_k),
-            raw_var: var_p1 * 1.5, is_phase: false, sat: Some(sat.sat_obs.sat),
+            raw_var: var_p1 * 1.5,
+            is_phase: false,
+            sat: Some(sat.sat_obs.sat),
         });
     }
 
@@ -884,18 +1042,39 @@ impl PppInsIteratedEkf {
         let res_l1 = (sat.cp1.unwrap() + windup) * sat.lam1 - (expected_base - idx.i1 + idx.n1);
         meas.push(FgMeasurement {
             res: res_l1,
-            h_row: build_h_row_uduc(los, sat.map_wet, idx.i1_idx, -1.0, idx.n1_idx,
-                x_i.len(), sat.sat_obs.sat.constellation, h_pos_att),
+            h_row: build_h_row_uduc(
+                los,
+                sat.map_wet,
+                idx.i1_idx,
+                -1.0,
+                idx.n1_idx,
+                x_i.len(),
+                sat.sat_obs.sat.constellation,
+                h_pos_att,
+            ),
             weight: var_l1 / apply_huber(res_l1, var_l1, self.huber_k),
-            raw_var: var_l1, is_phase: true, sat: Some(sat.sat_obs.sat),
+            raw_var: var_l1,
+            is_phase: true,
+            sat: Some(sat.sat_obs.sat),
         });
-        let res_l2 = (sat.cp2.unwrap() + windup) * sat.lam2 - (expected_base - idx.gamma * idx.i1 + idx.n2);
+        let res_l2 =
+            (sat.cp2.unwrap() + windup) * sat.lam2 - (expected_base - idx.gamma * idx.i1 + idx.n2);
         meas.push(FgMeasurement {
             res: res_l2,
-            h_row: build_h_row_uduc(los, sat.map_wet, idx.i1_idx, -idx.gamma, idx.n2_idx,
-                x_i.len(), sat.sat_obs.sat.constellation, h_pos_att),
+            h_row: build_h_row_uduc(
+                los,
+                sat.map_wet,
+                idx.i1_idx,
+                -idx.gamma,
+                idx.n2_idx,
+                x_i.len(),
+                sat.sat_obs.sat.constellation,
+                h_pos_att,
+            ),
             weight: (var_l1 * 1.5) / apply_huber(res_l2, var_l1 * 1.5, self.huber_k),
-            raw_var: var_l1 * 1.5, is_phase: true, sat: Some(sat.sat_obs.sat),
+            raw_var: var_l1 * 1.5,
+            is_phase: true,
+            sat: Some(sat.sat_obs.sat),
         });
     }
 
@@ -947,7 +1126,14 @@ fn log_ppp_convergence(
         dx_norm
     );
 
-    let meas = solver.build_measurements(state, sats, x_i, solver.max_iterations - 1, lever_arm, &omega_eb_b);
+    let meas = solver.build_measurements(
+        state,
+        sats,
+        x_i,
+        solver.max_iterations - 1,
+        lever_arm,
+        &omega_eb_b,
+    );
     let (mut sum_pr, mut count_pr, mut sum_rr, mut count_rr) = (0.0, 0, 0.0, 0);
     for m in &meas {
         if m.h_row.len() == x_i.len() {
@@ -972,11 +1158,6 @@ fn log_ppp_convergence(
         );
     }
 }
-
-
-
-
-
 
 fn build_h_row_uduc(
     los: &Vector3<f64>,
@@ -1055,7 +1236,12 @@ fn build_h_row(
     h
 }
 
-fn build_h_row_doppler(los: &Vector3<f64>, size: usize, h_vel_att: &nalgebra::Matrix3<f64>, h_vel_bg: &nalgebra::Matrix3<f64>) -> DVector<f64> {
+fn build_h_row_doppler(
+    los: &Vector3<f64>,
+    size: usize,
+    h_vel_att: &nalgebra::Matrix3<f64>,
+    h_vel_bg: &nalgebra::Matrix3<f64>,
+) -> DVector<f64> {
     let mut h = DVector::zeros(size);
     if size > 19 {
         h[3] = -los.x;
@@ -1118,8 +1304,7 @@ mod tests {
     #[test]
     fn test_find_ambiguity_index() {
         let mut state = dummy_rtk_state();
-        
-        
+
         use gneiss_core::sat::{Constellation, SatelliteId};
         let sat1 = SatelliteId {
             constellation: Constellation::Gps,

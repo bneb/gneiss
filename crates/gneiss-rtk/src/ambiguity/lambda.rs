@@ -13,12 +13,11 @@ pub struct DecorrelateResult {
     pub d: DVector<f64>,
 }
 
-
 /// Output of the LAMBDA algorithm
 #[derive(Debug, Clone, PartialEq)]
 pub struct LambdaResult {
     /// The best integer ambiguity combination
-    pub best_integers: DVector<f64>, 
+    pub best_integers: DVector<f64>,
     /// The second best integer ambiguity combination (used for ratio test)
     pub second_best_integers: DVector<f64>,
     /// The ratio test value (sq_norm_second_best / sq_norm_best)
@@ -32,14 +31,24 @@ pub fn resolve_lambda(a: &DVector<f64>, q: &DMatrix<f64>) -> Result<LambdaResult
     resolve_lambda_inner(a, q, 10000)
 }
 
-fn resolve_lambda_inner(a: &DVector<f64>, q: &DMatrix<f64>, max_iters: usize) -> Result<LambdaResult, &'static str> {
+fn resolve_lambda_inner(
+    a: &DVector<f64>,
+    q: &DMatrix<f64>,
+    max_iters: usize,
+) -> Result<LambdaResult, &'static str> {
     let n = a.len();
-    if n == 0 { return Err("Empty ambiguity vector"); }
+    if n == 0 {
+        return Err("Empty ambiguity vector");
+    }
 
     let dec = decorrelate(a, q)?;
     let (best_z, second_best_z) = run_lambda_search(n, &dec, max_iters)?;
 
-    let t_inv = dec.z_mat.transpose().try_inverse().ok_or("Transformation matrix inversion failed")?;
+    let t_inv = dec
+        .z_mat
+        .transpose()
+        .try_inverse()
+        .ok_or("Transformation matrix inversion failed")?;
     let best_a = &t_inv * &best_z.0;
     let second_best_a = &t_inv * &second_best_z.0;
 
@@ -54,7 +63,11 @@ fn resolve_lambda_inner(a: &DVector<f64>, q: &DMatrix<f64>, max_iters: usize) ->
     })
 }
 
-fn run_lambda_search(n: usize, dec: &DecorrelateResult, max_iters: usize) -> Result<((DVector<f64>, f64), (DVector<f64>, f64)), &'static str> {
+fn run_lambda_search(
+    n: usize,
+    dec: &DecorrelateResult,
+    max_iters: usize,
+) -> Result<((DVector<f64>, f64), (DVector<f64>, f64)), &'static str> {
     let mut best_z = DVector::zeros(n);
     let mut best_dist = f64::MAX;
     let mut second_best_z = DVector::zeros(n);
@@ -64,8 +77,20 @@ fn run_lambda_search(n: usize, dec: &DecorrelateResult, max_iters: usize) -> Res
     let mut y = DVector::zeros(n);
 
     search_recursive(
-        (n - 1) as isize, n, &dec.l, &dec.d, &dec.z_hat, &mut y, &mut current_z, 0.0,
-        &mut best_z, &mut best_dist, &mut second_best_z, &mut second_best_dist, &mut iter_count, max_iters,
+        (n - 1) as isize,
+        n,
+        &dec.l,
+        &dec.d,
+        &dec.z_hat,
+        &mut y,
+        &mut current_z,
+        0.0,
+        &mut best_z,
+        &mut best_dist,
+        &mut second_best_z,
+        &mut second_best_dist,
+        &mut iter_count,
+        max_iters,
     );
 
     if iter_count > max_iters || best_dist >= f64::MAX || second_best_dist >= f64::MAX {
@@ -81,9 +106,11 @@ fn decorrelate(a: &DVector<f64>, q: &DMatrix<f64>) -> Result<DecorrelateResult, 
     let n = a.len();
     let mut z_mat = DMatrix::<f64>::identity(n, n);
     let mut z_hat = a.clone();
-    
+
     let mut q_z = q.clone();
-    for i in 0..n { q_z[(i, i)] += 1e-10; }
+    for i in 0..n {
+        q_z[(i, i)] += 1e-10;
+    }
 
     let res = ldlt_lower(&q_z)?;
     let mut l = res.l;
@@ -111,19 +138,32 @@ fn decorrelate(a: &DVector<f64>, q: &DMatrix<f64>) -> Result<DecorrelateResult, 
             k -= 1;
         }
     }
-    
+
     let res = ldlt_lower(&q_z)?;
-    Ok(DecorrelateResult { z_hat, q_z, z_mat, l: res.l, d: res.d })
+    Ok(DecorrelateResult {
+        z_hat,
+        q_z,
+        z_mat,
+        l: res.l,
+        d: res.d,
+    })
 }
 
-fn apply_decorrelation_step(n: usize, k_u: usize, l: &DMatrix<f64>, z_mat: &mut DMatrix<f64>, z_hat: &mut DVector<f64>, q_z: &mut DMatrix<f64>) -> bool {
+fn apply_decorrelation_step(
+    n: usize,
+    k_u: usize,
+    l: &DMatrix<f64>,
+    z_mat: &mut DMatrix<f64>,
+    z_hat: &mut DVector<f64>,
+    q_z: &mut DMatrix<f64>,
+) -> bool {
     let mut modified = false;
     for i in (k_u + 1)..n {
         let mu = l[(i, k_u)].round();
         if mu != 0.0 {
             let mut e = DMatrix::<f64>::identity(n, n);
             e[(k_u, i)] = -mu;
-            
+
             *z_mat = &*z_mat * &e;
             *z_hat = e.transpose() * &*z_hat;
             *q_z = e.transpose() * &*q_z * &e;
@@ -139,10 +179,16 @@ fn check_swap_condition(k_u: usize, l: &DMatrix<f64>, d: &DVector<f64>) -> bool 
     delta < d[k_u] - 1e-6
 }
 
-fn swap_columns(n: usize, k_u: usize, z_mat: &mut DMatrix<f64>, z_hat: &mut DVector<f64>, q_z: &mut DMatrix<f64>) {
+fn swap_columns(
+    n: usize,
+    k_u: usize,
+    z_mat: &mut DMatrix<f64>,
+    z_hat: &mut DVector<f64>,
+    q_z: &mut DMatrix<f64>,
+) {
     let mut p = DMatrix::<f64>::identity(n, n);
     p.swap_columns(k_u, k_u + 1);
-    
+
     *z_mat = &*z_mat * &p;
     *z_hat = p.transpose() * &*z_hat;
     *q_z = p.transpose() * &*q_z * &p;
@@ -156,7 +202,9 @@ fn ldlt_lower(q: &DMatrix<f64>) -> Result<LdltResult, &'static str> {
 
     for j in (0..n).rev() {
         d[j] = q_tmp[(j, j)];
-        if d[j] <= 1e-18 { return Err("Covariance matrix is not positive definite"); }
+        if d[j] <= 1e-18 {
+            return Err("Covariance matrix is not positive definite");
+        }
         for i in 0..j {
             l[(j, i)] = q_tmp[(j, i)] / d[j];
             for k in 0..=i {
@@ -186,8 +234,12 @@ fn search_recursive(
     max_iters: usize,
 ) -> bool {
     *iter_count += 1;
-    if *iter_count > max_iters { return true; }
-    if current_dist >= *second_best_dist { return false; }
+    if *iter_count > max_iters {
+        return true;
+    }
+    if current_dist >= *second_best_dist {
+        return false;
+    }
 
     if k < 0 {
         if current_dist < *best_dist {
@@ -203,13 +255,13 @@ fn search_recursive(
     }
 
     let k_u = k as usize;
-    
+
     // Calculate conditional mean offset
     let mut s = 0.0;
     for j in (k_u + 1)..n {
         s += l[(j, k_u)] * y[j];
     }
-    
+
     let z_cond_k = z_hat[k_u] + s; // Fixed sign: L y = z - z_hat => y_k = z_k - z_hat_k - s
     let center_z = z_cond_k.round();
 
@@ -222,31 +274,51 @@ fn search_recursive(
         let y_k = z_test - z_cond_k;
         let new_dist = current_dist + (y_k * y_k) / d[k_u];
 
-        if new_dist >= *second_best_dist { break; }
+        if new_dist >= *second_best_dist {
+            break;
+        }
 
         current_z[k_u] = z_test;
         y[k_u] = y_k;
-        
+
         // Removed debug print
 
         let aborted = search_recursive(
-            k - 1, n, l, d, z_hat, y, current_z, new_dist,
-            best_z, best_dist, second_best_z, second_best_dist, iter_count, max_iters,
+            k - 1,
+            n,
+            l,
+            d,
+            z_hat,
+            y,
+            current_z,
+            new_dist,
+            best_z,
+            best_dist,
+            second_best_z,
+            second_best_dist,
+            iter_count,
+            max_iters,
         );
-        if aborted { return true; }
+        if aborted {
+            return true;
+        }
 
         offset = step * direction;
-        if direction > 0.0 { step += 1.0; }
+        if direction > 0.0 {
+            step += 1.0;
+        }
         direction = -direction;
     }
-    
+
     false
 }
 
 pub fn bootstrapping_success_rate(d: &DVector<f64>) -> f64 {
     let mut ps = 1.0;
     for &di in d.as_slice() {
-        if di <= 0.0 { continue; }
+        if di <= 0.0 {
+            continue;
+        }
         let x = 1.0 / (2.0 * f64::sqrt(di));
         ps *= libm::erf(x / std::f64::consts::SQRT_2);
     }
@@ -261,7 +333,7 @@ mod tests {
     fn test_lambda_2d() {
         let a = DVector::from_vec(vec![5.45, 3.10]);
         let q = DMatrix::from_row_slice(2, 2, &[6.290, 5.978, 5.978, 5.692]);
-        
+
         let dec = decorrelate(&a, &q).unwrap();
         let (z_hat, z_mat, l, d) = (dec.z_hat, dec.z_mat, dec.l, dec.d);
         println!("z_hat: {:?}", z_hat);
@@ -280,10 +352,18 @@ mod tests {
 
         assert_eq!(result.best_integers[0].fract(), 0.0);
         assert_eq!(result.best_integers[1].fract(), 0.0);
-        
+
         // Expected from standard LAMBDA example: [1.0, -1.0]
-        assert!((result.best_integers[0] - 1.0).abs() < 1e-6, "Expected 1.0, got {}", result.best_integers[0]);
-        assert!((result.best_integers[1] - -1.0).abs() < 1e-6, "Expected -1.0, got {}", result.best_integers[1]);
+        assert!(
+            (result.best_integers[0] - 1.0).abs() < 1e-6,
+            "Expected 1.0, got {}",
+            result.best_integers[0]
+        );
+        assert!(
+            (result.best_integers[1] - -1.0).abs() < 1e-6,
+            "Expected -1.0, got {}",
+            result.best_integers[1]
+        );
         assert!(result.ratio > 1.0);
         assert!(result.success_rate > 0.0 && result.success_rate <= 1.0);
     }
@@ -292,19 +372,20 @@ mod tests {
     fn test_lambda_iter_limit() {
         let a = DVector::from_vec(vec![5.45, 3.10]);
         let q = DMatrix::from_row_slice(2, 2, &[6.290, 5.978, 5.978, 5.692]);
-        
+
         let result = super::resolve_lambda_inner(&a, &q, 0);
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), "LAMBDA search iteration limit exceeded");
+        assert_eq!(
+            result.unwrap_err(),
+            "LAMBDA search iteration limit exceeded"
+        );
     }
-
-
 
     #[test]
     fn test_lambda_catch_gte_mutant() {
         let a = DVector::from_vec(vec![0.0, 0.0]);
         let q = DMatrix::from_row_slice(2, 2, &[1.0, 0.0, 0.0, 1.0]);
-        
+
         // This search should take exactly 4 iterations.
         // If max_iters=4, iter_count > max_iters (4 > 4) is FALSE (succeeds).
         // If mutated to >=, (4 >= 4) is TRUE (fails).

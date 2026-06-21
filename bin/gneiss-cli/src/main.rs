@@ -192,9 +192,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     "ppp-ins-loosely-coupled" => {
                         gneiss_rtk::engine::EngineMode::PppInsLooselyCoupled
                     }
-                    "rtk-ins-fg" | "rtk-fg" | "rtk-ins-iekf" | "rtk-iekf" => gneiss_rtk::engine::EngineMode::RtkInsIekf,
+                    "rtk-ins-fg" | "rtk-fg" | "rtk-ins-iekf" | "rtk-iekf" => {
+                        gneiss_rtk::engine::EngineMode::RtkInsIekf
+                    }
                     "ppp-fg" | "ppp-iekf" => gneiss_rtk::engine::EngineMode::PppIekf,
-                    "ppp-ins-fg" | "tight-fg" | "ppp-ins-iekf" => gneiss_rtk::engine::EngineMode::PppInsIekf,
+                    "ppp-ins-fg" | "tight-fg" | "ppp-ins-iekf" => {
+                        gneiss_rtk::engine::EngineMode::PppInsIekf
+                    }
                     _ => return Err("Invalid engine mode specified".into()),
                 };
             }
@@ -426,9 +430,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     "ppp-ins-loosely-coupled" => {
                         gneiss_rtk::engine::EngineMode::PppInsLooselyCoupled
                     }
-                    "rtk-ins-fg" | "rtk-fg" | "rtk-ins-iekf" | "rtk-iekf" => gneiss_rtk::engine::EngineMode::RtkInsIekf,
+                    "rtk-ins-fg" | "rtk-fg" | "rtk-ins-iekf" | "rtk-iekf" => {
+                        gneiss_rtk::engine::EngineMode::RtkInsIekf
+                    }
                     "ppp-fg" | "ppp-iekf" => gneiss_rtk::engine::EngineMode::PppIekf,
-                    "ppp-ins-fg" | "tight-fg" | "ppp-ins-iekf" => gneiss_rtk::engine::EngineMode::PppInsIekf,
+                    "ppp-ins-fg" | "tight-fg" | "ppp-ins-iekf" => {
+                        gneiss_rtk::engine::EngineMode::PppInsIekf
+                    }
                     _ => return Err("Invalid engine mode specified".into()),
                 };
 
@@ -1064,5 +1072,3 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 }
-
-

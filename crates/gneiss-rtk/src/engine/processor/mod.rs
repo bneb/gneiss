@@ -167,7 +167,11 @@ impl ProcessingEngine {
                 let _ = crate::nhc::apply_zupt(state, zupt_var, &config.tuning);
             } else {
                 let r_b_e = state.attitude.to_rotation_matrix();
-                let omega_ie_e = nalgebra::Vector3::new(0.0, 0.0, gneiss_core::constants::EARTH_ROTATION_RATE_RAD_S);
+                let omega_ie_e = nalgebra::Vector3::new(
+                    0.0,
+                    0.0,
+                    gneiss_core::constants::EARTH_ROTATION_RATE_RAD_S,
+                );
                 let omega_b = if let Some(imu_buf) = imu_history.last() {
                     if let Some(last_imu) = imu_buf.last() {
                         last_imu.gyro - state.gyro_bias - r_b_e.transpose() * omega_ie_e
@@ -276,7 +280,9 @@ impl ProcessingEngine {
             | EngineMode::PppIns
             | EngineMode::PppInsLooselyCoupled
             | EngineMode::PppIekf => crate::engine::ppp::process_ppp(self, &filtered_rover).err(),
-            EngineMode::PppInsIekf => crate::engine::ppp_ins_iekf::process_ppp_ins_fg(self, &filtered_rover).err(),
+            EngineMode::PppInsIekf => {
+                crate::engine::ppp_ins_iekf::process_ppp_ins_fg(self, &filtered_rover).err()
+            }
         };
         if let Some(e) = err {
             if let EngineError::StateDisappeared = e {
@@ -400,7 +406,12 @@ impl ProcessingEngine {
         }
 
         // Do not attempt to align an INS if we have no IMU data.
-        if self.imu_history.last().map(|b| b.is_empty()).unwrap_or(true) {
+        if self
+            .imu_history
+            .last()
+            .map(|b| b.is_empty())
+            .unwrap_or(true)
+        {
             return;
         }
 
