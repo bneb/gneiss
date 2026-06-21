@@ -1591,6 +1591,12 @@ mod tests {
         );
         let u = update.unwrap();
         assert!(!u.z.is_nan());
+        assert!(u.z.is_finite(), "doppler innovation should be finite");
+        assert!(
+            u.z.abs() < 1000.0,
+            "doppler innovation abs should be < 1000 Hz"
+        );
+        assert!(u.r > 0.0, "doppler variance should be positive");
     }
 
     #[test]
@@ -1732,10 +1738,17 @@ mod tests {
             *cp2 += w_bas_ref;
         }
 
-        assert!(ctx.rov_sat.cp_l1.unwrap() != 10.0);
-        assert!(ctx.rov_sat.cp_l2.unwrap() != 20.0);
-        assert!(ctx.rov_ref.cp_l1.unwrap() != 10.0);
-        assert!(ctx.rov_ref.cp_l2.unwrap() != 20.0);
+        assert!(w_sat != 0.0, "windup correction should be non-zero");
+        assert_eq!(
+            ctx.rov_sat.cp_l1.unwrap(),
+            10.0 + w_sat,
+            "corrected L1 phase should differ from original by w_sat"
+        );
+        assert_eq!(
+            ctx.rov_sat.cp_l2.unwrap(),
+            20.0 + w_sat,
+            "corrected L2 phase should differ from original by w_sat"
+        );
     }
 
     #[test]

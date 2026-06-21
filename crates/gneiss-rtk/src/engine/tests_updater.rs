@@ -361,6 +361,9 @@ mod tests {
         let omega_b = Vector3::new(0.01, 0.02, 0.03);
         let tuning = crate::engine::config::EkfTuningConfig::default();
 
+        let initial_pos = state.position.vector;
+        let initial_vel = state.velocity;
+
         let res = crate::engine::updater::update_loosely_coupled(
             &mut state,
             &gnss_state,
@@ -369,6 +372,17 @@ mod tests {
             &tuning,
         );
         assert!(res.is_ok());
+
+        // Loosely coupled innovation has 6 elements (3 position + 3 velocity),
+        // and the update should have modified the state from its initial zeros.
+        assert_ne!(
+            state.position.vector, initial_pos,
+            "position should be updated by loosely coupled correction"
+        );
+        assert_ne!(
+            state.velocity, initial_vel,
+            "velocity should be updated by loosely coupled correction"
+        );
     }
 
     #[test]
@@ -403,7 +417,7 @@ mod tests {
             "Huber scaling should prevent rejection of the huge error"
         );
 
-        assert!(state.position.vector.x > 0.0 && state.position.vector.x < 15.0);
+        assert!(state.position.vector.x > 0.1 && state.position.vector.x < 5.0);
     }
 
     #[test]
@@ -630,6 +644,12 @@ mod tests {
             &tuning,
         );
         assert!(res.is_ok());
+        let result = res.unwrap();
+        assert_eq!(
+            result.dx.len(),
+            3,
+            "dx should have 3 elements matching n_state"
+        );
     }
 
     #[test]
