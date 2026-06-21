@@ -4,6 +4,9 @@ version.workspace = true
 edition.workspace = true
 authors.workspace = true
 
+[lints]
+workspace = true
+
 [dependencies]
 candle-core = "0.10.2"
 candle-nn = "0.10.2"

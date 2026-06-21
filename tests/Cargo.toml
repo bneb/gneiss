@@ -5,6 +5,9 @@ edition.workspace = true
 authors.workspace = true
 publish = false
 
+[lints]
+workspace = true
+
 [dependencies]
 gneiss-core.workspace = true
 gneiss-rtk.workspace = true

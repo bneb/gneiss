@@ -4,6 +4,9 @@ version.workspace = true
 edition.workspace = true
 authors.workspace = true
 
+[lints]
+workspace = true
+
 [dependencies]
 gneiss-parsers.workspace = true
 tokio = { version = "1.37", features = ["full"] }
