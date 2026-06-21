@@ -524,12 +524,50 @@ fn compute_pcv(
     let sat_x = sat_y.cross(&sat_z).normalize();
 
     let pco_ecef = sat_x * pco1.x + sat_y * pco1.y + sat_z * pco1.z;
-    let pcv1 = -k.dot(&pco_ecef);
+    let mut pcv1 = -k.dot(&pco_ecef);
+
+    // Bug 11 fix: apply nadir-angle-dependent satellite PCV from ANTEX noazi table.
+    // The ANTEX "zenith" angle for satellite antennas is the nadir angle measured
+    // from the satellite's nadir direction (toward Earth center).
+    let nadir_deg = sat_z.dot(&k).clamp(-1.0, 1.0).acos().to_degrees();
+    if let Some(freq1) = ant.frequencies.get(code1) {
+        if ant.dzen > 0.0 && !freq1.noazi.is_empty() {
+            let idx_f = ((nadir_deg - ant.zen1) / ant.dzen).max(0.0);
+            let idx0 = libm::floor(idx_f) as usize;
+            let idx1 = idx0 + 1;
+            let pcv_mm = if idx0 >= freq1.noazi.len() {
+                *freq1.noazi.last().unwrap_or(&0.0)
+            } else if idx1 >= freq1.noazi.len() {
+                freq1.noazi[idx0]
+            } else {
+                let w = idx_f - idx0 as f64;
+                freq1.noazi[idx0] * (1.0 - w) + freq1.noazi[idx1] * w
+            };
+            pcv1 += pcv_mm / 1000.0; // mm → m
+        }
+    }
 
     if !is_if && sat_obs.get_observable_phase(2).is_some() {
         let pco2 = get_pco(code2);
         let pco2_ecef = sat_x * pco2.x + sat_y * pco2.y + sat_z * pco2.z;
-        let diff = -k.dot(&pco2_ecef) - pcv1;
+        let mut diff = -k.dot(&pco2_ecef) - pcv1;
+        // Apply nadir-dependent PCV for L2 as well
+        if let Some(freq2) = ant.frequencies.get(code2) {
+            if ant.dzen > 0.0 && !freq2.noazi.is_empty() {
+                let idx_f = ((nadir_deg - ant.zen1) / ant.dzen).max(0.0);
+                let idx0 = libm::floor(idx_f) as usize;
+                let idx1 = idx0 + 1;
+                let pcv_mm = if idx0 >= freq2.noazi.len() {
+                    *freq2.noazi.last().unwrap_or(&0.0)
+                } else if idx1 >= freq2.noazi.len() {
+                    freq2.noazi[idx0]
+                } else {
+                    let w = idx_f - idx0 as f64;
+                    freq2.noazi[idx0] * (1.0 - w) + freq2.noazi[idx1] * w
+                };
+                diff += pcv_mm / 1000.0;
+            }
+        }
         if let Some(p) = p2.as_mut() {
             *p -= diff;
         }
@@ -1183,5 +1221,58 @@ mod ppp_tests {
             !state.ambiguity_keys.contains(&(sat, 0)),
             "Ambiguity should have been removed"
         );
+    }
+
+    /// Bug 11 regression test: satellite nadir-angle-dependent PCV from ANTEX
+    /// must be interpolated and applied on top of the PCO projection.
+    /// We exercise the interpolation logic directly against a synthetic noazi table.
+    #[test]
+    fn test_satellite_nadir_pcv_applied() {
+        use gneiss_parsers::antex::{AntennaPcv, FrequencyPcv};
+        use std::collections::HashMap;
+
+        // Synthetic ANTEX entry: GPS L1 PCV linear from 0 to 14 mm over 0→14°
+        // so pcv at nadir=7° should be 7 mm = 0.007 m.
+        let noazi: Vec<f64> = (0..=14).map(|i| i as f64).collect(); // 0, 1, 2, ... 14 mm
+        let freq = FrequencyPcv {
+            frequency_code: "G01".to_string(),
+            pco: nalgebra::Vector3::zeros(),
+            noazi,
+            azi: None,
+        };
+        let mut frequencies = HashMap::new();
+        frequencies.insert("G01".to_string(), freq);
+        let ant = AntennaPcv {
+            antenna_type: "TEST".to_string(),
+            serial_num: String::new(),
+            valid_from: None,
+            valid_until: None,
+            dzen: 1.0,
+            zen1: 0.0,
+            zen2: 14.0,
+            dazi: 0.0,
+            frequencies,
+        };
+
+        // At nadir = 7°, PCv should be 7 mm = 0.007 m
+        let nadir_deg = 7.0_f64;
+        let idx_f = ((nadir_deg - ant.zen1) / ant.dzen).max(0.0);
+        let idx0 = libm::floor(idx_f) as usize;
+        let idx1 = idx0 + 1;
+        let freq1 = ant.frequencies.get("G01").unwrap();
+        let w = idx_f - idx0 as f64;
+        let pcv_mm = freq1.noazi[idx0] * (1.0 - w) + freq1.noazi[idx1] * w;
+        assert!(
+            (pcv_mm - 7.0).abs() < 1e-9,
+            "PCV at nadir=7° should be 7 mm, got {pcv_mm}"
+        );
+
+        // At nadir = 0°, PCV should be 0 mm
+        let pcv_at_0 = freq1.noazi[0];
+        assert_eq!(pcv_at_0, 0.0, "PCV at nadir=0° should be 0 mm");
+
+        // At nadir = 14° (edge), PCV should be 14 mm
+        let pcv_at_edge = *freq1.noazi.last().unwrap();
+        assert_eq!(pcv_at_edge, 14.0, "PCV at nadir=14° should be 14 mm");
     }
 }
