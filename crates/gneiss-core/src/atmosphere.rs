@@ -275,23 +275,53 @@ fn _legendre_norm(n: usize, m: usize, t: f64) -> f64 {
     pnm * norm
 }
 
-fn _sh_eval_annual(coeffs: &[(usize, usize, f64, f64)], lat: f64, lon: f64, doy: f64) -> f64 {
+/// Evaluate a spherical harmonic sum with annual variation.
+/// coeffs: (n, m, A_cos, A_sin) where A_cos is the cosine coefficient
+/// and A_sin is the sine coefficient for the cos(m*lon)/sin(m*lon) terms.
+/// The annual amplitude uses the same A_cos/A_sin structure.
+fn _sh_eval_annual(
+    coeffs_cos: &[(usize, usize, f64, f64)],
+    coeffs_sin: Option<&[(usize, usize, f64, f64)]>,
+    lat: f64,
+    lon: f64,
+    doy: f64,
+) -> f64 {
     let t = libm::sin(lat);
     let cos_doy = libm::cos(2.0 * core::f64::consts::PI * doy / 365.25);
     let mut val = 0.0;
-    for &(n, m, a_mean, a_ann) in coeffs {
-        let pnm = _legendre_norm(n, m, t) * libm::cos(m as f64 * lon);
-        val += (a_mean + a_ann * cos_doy) * pnm;
+    for &(n, m, a_mean, a_ann) in coeffs_cos {
+        let pnm = _legendre_norm(n, m, t);
+        val += (a_mean + a_ann * cos_doy) * pnm * libm::cos(m as f64 * lon);
+    }
+    if let Some(sin_coeffs) = coeffs_sin {
+        for &(n, m, b_mean, b_ann) in sin_coeffs {
+            if m == 0 { continue; } // sin(0*lon) = 0
+            let pnm = _legendre_norm(n, m, t);
+            val += (b_mean + b_ann * cos_doy) * pnm * libm::sin(m as f64 * lon);
+        }
     }
     val
 }
 
-fn _sh_eval_static(coeffs: &[(usize, usize, f64)], lat: f64, lon: f64) -> f64 {
+/// Evaluate a spherical harmonic sum (static, no annual variation).
+fn _sh_eval_static(
+    coeffs_cos: &[(usize, usize, f64)],
+    coeffs_sin: Option<&[(usize, usize, f64)]>,
+    lat: f64,
+    lon: f64,
+) -> f64 {
     let t = libm::sin(lat);
     let mut val = 0.0;
-    for &(n, m, a) in coeffs {
-        let pnm = _legendre_norm(n, m, t) * libm::cos(m as f64 * lon);
-        val += a * pnm;
+    for &(n, m, a) in coeffs_cos {
+        let pnm = _legendre_norm(n, m, t);
+        val += a * pnm * libm::cos(m as f64 * lon);
+    }
+    if let Some(sin_coeffs) = coeffs_sin {
+        for &(n, m, b) in sin_coeffs {
+            if m == 0 { continue; }
+            let pnm = _legendre_norm(n, m, t);
+            val += b * pnm * libm::sin(m as f64 * lon);
+        }
     }
     val
 }
@@ -433,10 +463,10 @@ fn gmf_impl(pos_llh: Vector3<f64>, el: f64, time: GpsTime) -> (f64, f64) {
         (7, 7, -8.158e-08),
     ];
 
-    let a_h = _sh_eval_annual(gmf_anm_h, lat, lon, doy);
-    let b_h = _sh_eval_static(gmf_bh, lat, lon);
-    let c_h = _sh_eval_static(gmf_ch, lat, lon);
-    let a_w = _sh_eval_static(gmf_anm_w, lat, lon);
+    let a_h = _sh_eval_annual(gmf_anm_h, None, lat, lon, doy);
+    let b_h = _sh_eval_static(gmf_bh, None, lat, lon);
+    let c_h = _sh_eval_static(gmf_ch, None, lat, lon);
+    let a_w = _sh_eval_static(gmf_anm_w, None, lat, lon);
     let b_w = 0.00146; // empirical from NMF wet heritage
     let c_w = 0.04391;
 
