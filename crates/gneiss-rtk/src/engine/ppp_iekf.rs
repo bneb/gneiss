@@ -147,6 +147,104 @@ impl PppIteratedEkf {
         worst_sat
     }
 
+    /// Try to fix ambiguities for a single constellation group using WL+NL cascade.
+    /// Returns (x_fixed, p_fixed, n_sats) on success, or None if this group cannot fix.
+    fn process_constellation_group(
+        &self,
+        state: &RtkState,
+        p_current: &DMatrix<f64>,
+        x_current: &DVector<f64>,
+        group_cands: &[(gneiss_core::sat::SatelliteId, usize, usize, f64, f64, f64)],
+        constellation: gneiss_core::sat::Constellation,
+    ) -> Option<(DVector<f64>, DMatrix<f64>, usize)> {
+        if group_cands.len() < 2 {
+            return None;
+        }
+        // Build per-constellation subset: highest-el as reference
+        let mut sorted: Vec<_> = group_cands.to_vec();
+        sorted.sort_by(|a, b| b.3.partial_cmp(&a.3).unwrap_or(std::cmp::Ordering::Equal));
+        let ref_cand = &sorted[0];
+        let subset: Vec<_> = sorted
+            .iter()
+            .skip(1)
+            .map(|c| (c.clone(), ref_cand.clone()))
+            .collect();
+
+        if subset.is_empty() {
+            return None;
+        }
+
+        tracing::info!(
+            "PPP-AR per-const {:?}: {} pairs ({} sats)",
+            constellation,
+            subset.len(),
+            group_cands.len()
+        );
+
+        // WL for this constellation
+        let wl_result = self.resolve_widelane_ar(state, p_current, &subset, x_current);
+        let (x_wl, p_wl, keep_indices) = wl_result.ok()?;
+
+        if keep_indices.is_empty() {
+            return None;
+        }
+
+        // NL for this constellation
+        let nl_result = self.resolve_narrowlane_ar(state, &subset, &keep_indices, &x_wl, &p_wl);
+        let (x_fixed, p_fixed) = nl_result.ok()?;
+
+        // Per-constellation position validation
+        let float_pos = Vector3::new(x_current[0], x_current[1], x_current[2]);
+        let fixed_pos = Vector3::new(x_fixed[0], x_fixed[1], x_fixed[2]);
+        let jump = (fixed_pos - float_pos).norm();
+        if jump > 10.0 {
+            tracing::warn!(
+                "PPP-AR {:?} rejected: position jump {:.2}m > 10m",
+                constellation,
+                jump
+            );
+            return None;
+        }
+
+        tracing::info!(
+            "PPP-AR {:?} Fixed! N_Sats={} jump={:.2}m",
+            constellation,
+            keep_indices.len() + 1,
+            jump
+        );
+        Some((x_fixed, p_fixed, keep_indices.len() + 1))
+    }
+
+    /// Try inter-constellation fallback: build DD pairs across constellations
+    /// using the highest-elevation GPS as universal reference.
+    fn try_inter_constellation_fallback(
+        &self,
+        state: &RtkState,
+        p_current: &DMatrix<f64>,
+        x_current: &DVector<f64>,
+        cands: &[(gneiss_core::sat::SatelliteId, usize, usize, f64, f64, f64)],
+    ) -> Option<(DVector<f64>, DMatrix<f64>, usize)> {
+        tracing::info!("PPP-AR: per-constellation failed, trying inter-constellation fallback");
+        let subset = self.build_ar_subset(cands);
+        if subset.len() < 3 {
+            return None;
+        }
+        let wl_result = self.resolve_widelane_ar(state, p_current, &subset, x_current);
+        let (x_wl, p_wl, keep_indices) = wl_result.ok()?;
+        if keep_indices.is_empty() {
+            return None;
+        }
+        let nl_result = self.resolve_narrowlane_ar(state, &subset, &keep_indices, &x_wl, &p_wl);
+        let (x_fixed, p_fixed) = nl_result.ok()?;
+        let float_pos = Vector3::new(x_current[0], x_current[1], x_current[2]);
+        let fixed_pos = Vector3::new(x_fixed[0], x_fixed[1], x_fixed[2]);
+        let jump = (fixed_pos - float_pos).norm();
+        if jump > 20.0 {
+            return None;
+        }
+        Some((x_fixed, p_fixed, keep_indices.len() + 1))
+    }
+
     pub fn resolve_cascade_ar(
         &self,
         state: &mut RtkState,
@@ -210,105 +308,28 @@ impl PppIteratedEkf {
         let mut total_fixed_sats = 0usize;
 
         for (constellation, group_cands) in &const_groups {
-            if group_cands.len() < 2 {
-                continue; // need at least 2 sats per constellation for DD
+            if let Some((xf, pf, n_sats)) = self.process_constellation_group(
+                state,
+                &p_current,
+                &x_current,
+                group_cands,
+                *constellation,
+            ) {
+                x_current = xf;
+                p_current = pf;
+                any_fixed = true;
+                total_fixed_sats += n_sats;
             }
-            // Build per-constellation subset: highest-el as reference
-            let mut sorted = group_cands.clone();
-            sorted.sort_by(|a, b| b.3.partial_cmp(&a.3).unwrap_or(std::cmp::Ordering::Equal));
-            let ref_cand = &sorted[0];
-            let subset: Vec<_> = sorted
-                .iter()
-                .skip(1)
-                .map(|c| (c.clone(), ref_cand.clone()))
-                .collect();
-
-            if subset.len() < 1 {
-                continue;
-            }
-
-            tracing::info!(
-                "PPP-AR per-const {:?}: {} pairs ({} sats)",
-                constellation,
-                subset.len(),
-                group_cands.len()
-            );
-
-            // WL for this constellation
-            let wl_result = self.resolve_widelane_ar(state, &p_current, &subset, &x_current);
-            let (x_wl, p_wl, keep_indices) = match wl_result {
-                Ok(r) => r,
-                Err(e) => {
-                    tracing::info!("PPP-AR {:?} WL failed: {}", constellation, e);
-                    continue;
-                }
-            };
-
-            if keep_indices.len() < 1 {
-                continue;
-            }
-
-            // NL for this constellation
-            let nl_result = self.resolve_narrowlane_ar(state, &subset, &keep_indices, &x_wl, &p_wl);
-            let (x_fixed, p_fixed) = match nl_result {
-                Ok(r) => r,
-                Err(e) => {
-                    tracing::info!("PPP-AR {:?} NL failed: {}", constellation, e);
-                    continue;
-                }
-            };
-
-            // Per-constellation position validation
-            let float_pos = Vector3::new(x_current[0], x_current[1], x_current[2]);
-            let fixed_pos = Vector3::new(x_fixed[0], x_fixed[1], x_fixed[2]);
-            let jump = (fixed_pos - float_pos).norm();
-            if jump > 10.0 {
-                tracing::warn!(
-                    "PPP-AR {:?} rejected: position jump {:.2}m > 10m",
-                    constellation,
-                    jump
-                );
-                continue;
-            }
-
-            tracing::info!(
-                "PPP-AR {:?} Fixed! N_Sats={} jump={:.2}m",
-                constellation,
-                keep_indices.len() + 1,
-                jump
-            );
-            x_current = x_fixed;
-            p_current = p_fixed;
-            any_fixed = true;
-            total_fixed_sats += keep_indices.len() + 1;
         }
 
         if !any_fixed {
-            // Per-constellation failed — fall back to inter-constellation pooling.
-            // This handles datasets with few sats per constellation where per-const
-            // DD pairs are insufficient. ISB mixing degrades WL ratio but provides
-            // enough pairs for LAMBDA to find candidate integer sets.
-            tracing::info!("PPP-AR: per-constellation failed, trying inter-constellation fallback");
-            let subset = self.build_ar_subset(&cands);
-            if subset.len() >= 3 {
-                let wl_result = self.resolve_widelane_ar(state, &p_current, &subset, &x_current);
-                if let Ok((x_wl, p_wl, keep_indices)) = wl_result {
-                    if keep_indices.len() >= 1 {
-                        if let Ok((x_fixed, p_fixed)) =
-                            self.resolve_narrowlane_ar(state, &subset, &keep_indices, &x_wl, &p_wl)
-                        {
-                            let float_pos = Vector3::new(x_current[0], x_current[1], x_current[2]);
-                            let fixed_pos = Vector3::new(x_fixed[0], x_fixed[1], x_fixed[2]);
-                            let jump = (fixed_pos - float_pos).norm();
-                            if jump <= 20.0 {
-                                x_current = x_fixed;
-                                p_current = p_fixed;
-                                any_fixed = true;
-                                total_fixed_sats = keep_indices.len() + 1;
-                            }
-                        }
-                    }
-                }
+            if let Some((xf, pf, n_sats)) = self.try_inter_constellation_fallback(
+                state, &p_current, &x_current, &cands,
+            ) {
+                x_current = xf;
+                p_current = pf;
+                any_fixed = true;
+                total_fixed_sats = n_sats;
             }
         }
 
@@ -772,21 +793,16 @@ impl PppIteratedEkf {
             }
         } else {
             self.push_pr_measurement(meas, state, sat, x_i, iter, los, expected_base, dist, isb);
-            if let Some(cp1) = sat.cp1 {
-                if cp1 != 0.0 {
-                    self.push_cp_measurement(
-                        meas,
-                        state,
-                        sat,
-                        x_i,
-                        iter,
-                        los,
-                        expected_base,
-                        dist,
-                        cp1,
-                    );
-                }
-            }
+            self.try_push_cp_measurement(
+                meas,
+                state,
+                sat,
+                x_i,
+                iter,
+                los,
+                expected_base,
+                dist,
+            );
         }
         true
     }
@@ -926,6 +942,26 @@ impl PppIteratedEkf {
                 sat: Some(sat.sat_obs.sat),
             });
         }
+    }
+
+    /// Push CP measurement only if sat.cp1 is Some and non-zero.
+    /// Extracted as a helper to reduce nesting depth in push_sat_meas.
+    fn try_push_cp_measurement(
+        &self,
+        meas: &mut Vec<FgMeasurement>,
+        state: &RtkState,
+        sat: &ProcessedSat,
+        x_i: &DVector<f64>,
+        iter: usize,
+        los: &Vector3<f64>,
+        expected_base: f64,
+        dist: f64,
+    ) {
+        let cp1 = match sat.cp1 {
+            Some(cp) if cp != 0.0 => cp,
+            _ => return,
+        };
+        self.push_cp_measurement(meas, state, sat, x_i, iter, los, expected_base, dist, cp1);
     }
 
     fn resolve_uduc_indices(
