@@ -685,8 +685,8 @@ pub fn parse_rinex_nav<R: BufRead>(
 
             let mut toc_gpst = parse_rinex_nav_epoch_time(&line, is_rinex_3);
             match current_constellation {
-                Constellation::Glonass => toc_gpst.tow += 18.0,
-                Constellation::Beidou => toc_gpst.tow += 14.0,
+                Constellation::Glonass => toc_gpst = toc_gpst + (18.0 - 10800.0),
+                Constellation::Beidou => toc_gpst = toc_gpst + 14.0,
                 _ => {}
             }
             current_toc = toc_gpst;
@@ -961,10 +961,10 @@ R 6 2020 12 24 21 15  0  .189751386642E-03  .000000000000E+00  .422910000000E+06
 
         // Year 2020, Month 12, Day 24, Hour 21, Min 15
         assert_eq!(eph.toe().week, 2137);
-        // Thursday 21:15 UTC + 18s leap seconds
+        // Thursday 21:15 UTC + 18s leap seconds - 3h Moscow offset
         assert!(
-            (eph.toe().tow - 422118.0).abs() < 1e-4,
-            "Expected TOW near 422118.0, got {}",
+            (eph.toe().tow - 411318.0).abs() < 1e-4,
+            "Expected TOW near 411318.0, got {}",
             eph.toe().tow
         );
     }
