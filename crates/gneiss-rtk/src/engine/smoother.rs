@@ -115,13 +115,22 @@ fn smooth_epoch(
     }
 
     if core_size > 15 {
-        delta_x[15] = 0.0; // rcv_clk_bias is white noise
+        // White-noise states must not be smoothed backward — they are
+        // re-estimated from scratch each epoch. Clock bias (15) and
+        // inter-system biases (16=GLO, 17=GAL, 18=BDS) change by
+        // km-equivalents between epochs; blending them corrupts the
+        // vertical solution.
+        for idx in [15, 16, 17, 18] {
+            delta_x[idx] = 0.0;
+        }
     }
 
     let mut correction = &c_k * &delta_x;
 
     if core_size > 15 {
-        correction[15] = 0.0; // rcv_clk_bias is white noise
+        for idx in [15, 16, 17, 18] {
+            correction[idx] = 0.0;
+        }
     }
 
     let x_k_n = x_k + correction;
@@ -221,6 +230,19 @@ fn build_phi_submatrix(phi: &DMatrix<f64>, core_size: usize, len: usize) -> DMat
             sub[(i, j)] = phi[(i, j)];
         }
     }
+    // White-noise states (clock bias 15, ISBs 16-18) should have zero
+    // phi entries — they have no inter-epoch correlation. Setting their
+    // phi row/column to zero prevents the smoother gain C_k from
+    // propagating these states backward.
+    if core_size > 15 {
+        for idx in [15, 16, 17, 18] {
+            for j in 0..core_size {
+                sub[(idx, j)] = 0.0;
+                sub[(j, idx)] = 0.0;
+            }
+        }
+    }
+    // Ambiguity states: identity transition (persist across epochs)
     for i in core_size..len {
         sub[(i, i)] = 1.0;
     }
@@ -230,8 +252,9 @@ fn build_phi_submatrix(phi: &DMatrix<f64>, core_size: usize, len: usize) -> DMat
 fn invert_p_pred(p_pred: &DMatrix<f64>, len: usize) -> Result<DMatrix<f64>, &'static str> {
     let active: Vec<usize> = (0..len)
         .filter(|&i| {
-            // Exclude white-noise clock bias (15) to prevent instability
-            let is_white_noise = i == 15;
+            // Exclude white-noise states from inversion: clock bias (15)
+            // and inter-system biases (16=GLO, 17=GAL, 18=BDS).
+            let is_white_noise = matches!(i, 15 | 16 | 17 | 18);
             !is_white_noise && p_pred[(i, i)] > MIN_ACTIVE_STATE_VARIANCE
         })
         .collect();

@@ -26,6 +26,11 @@ pub fn process_ppp<'a>(
     // Subsequent epochs: inject SPP as a prior measurement with
     // variance that decreases as the filter converges. This allows
     // multi-epoch carrier-phase convergence while staying anchored.
+    //
+    // NOTE: Removing the SPP anchor after convergence was attempted
+    // (Phase 2) but caused severe divergence (9m→44m Hz, confirming
+    // POST_MORTEM hypothesis #8). Multi-epoch convergence requires a
+    // sliding-window factor graph — not just disabling the prior.
     let mut position_prior: Option<(Vector3<f64>, f64)> = None;
     if let Ok(spp) = crate::spp::compute_spp(
         rover_obs, &engine.ephemerides,
@@ -44,6 +49,7 @@ pub fn process_ppp<'a>(
             position_prior = Some((spp.position.vector, prior_var));
         }
     }
+
     // Auto-enable UDUC AR when precise products are available.
     // Ionosphere-free combination (default without uduc_ar) hides raw
     // L1/L2 observations needed for ambiguity resolution.

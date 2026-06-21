@@ -1,12 +1,14 @@
-# Post Mortem — PPP Accuracy Investigation, 2026-06-20
+# Post Mortem — PPP Accuracy Investigation, 2026-06-20 (updated 2026-06-21)
 
 ## Summary
 
 **Goal:** Close the ~2m PPP accuracy gap between Gneiss and RTKLIB on UrbanNav datasets (Odaiba, Shinjuku).
 
-**Result:** The gap is architectural. After testing ten hypotheses across 30+ build/benchmark cycles, median accuracy is unchanged at 5.3m Hz 50th on Odaiba. Two code quality improvements were made (composable tropo mapping, smoother bug fixes). One partial accuracy win was achieved (SPP prior improves 95th %ile tails by 4.3m but degrades median by 1.2m).
+**Result (2026-06-20):** The gap was architectural. After testing ten hypotheses, median accuracy was unchanged at 5.3m Hz 50th on Odaiba.
 
-**Root cause:** The single-epoch SPP-anchored IEKF architecture has a ~5m accuracy floor with broadcast ephemeris. Carrier-phase measurements provide mm-level relative precision but cannot improve absolute position without multi-epoch convergence. The SPP anchor is load-bearing (removing it causes 12.7m divergence) but sets the accuracy ceiling.
+**Update (2026-06-21):** Smoother ISB fix resolved the worst of the vertical degradation (17.5m→6.1m Vt 50th on Odaiba). However, the smoother still degrades horizontal accuracy (5.2m→6.4m Hz on Odaiba) and is catastrophic on Shinjuku (16.7m Hz). The forward-only IEKF remains the best PPP mode. Gneiss does **not** yet beat RTKLIB on PPP.
+
+**Root cause of original gap:** The single-epoch SPP-anchored IEKF architecture has a ~5m forward-only accuracy floor with broadcast ephemeris. The smoother has a remaining bug that causes horizontal degradation, likely in how it handles the SPP position prior or clock/position correlation. The remaining gap requires either fixing the smoother fully or implementing multi-epoch convergence (sliding-window factor graph).
 
 ---
 
@@ -28,6 +30,8 @@
 | 9 | SPP prior enables convergence | Soft prior (25→1 m²) | 6.43m | 🟡 Tails improved |
 | 10 | TDCP adds between-epoch constraint | Time-diff carrier phase | 9.30m | ❌ Degradation |
 | 11 | 2-epoch joint optimization | Factor-graph-like smoother | 9.53m | ❌ Degradation |
+| **12** | **Smoother ISB fix** | **Zero ISB (16-18) in backward pass** | **6.42m** | **✅ Vt improved (17.5→6.1m)** |
+| 13 | Remove SPP anchor post-convergence | Disable prior after epoch 10 | 9.02m | ❌ Divergence (reverted) |
 
 ### What Actually Shipped (Committed)
 
@@ -73,21 +77,24 @@ A correct implementation requires careful handling of all four issues — likely
 
 ## Current State of `main`
 
-### Accuracy (Odaiba PPP-FG, broadcast ephemeris)
+### Accuracy (Odaiba PPP IEKF, broadcast ephemeris, smoothed)
 
 | Percentile | Hz | Vt | 3D |
 |:-----------|:----|:----|:----|
-| 25th | 3.71m | 3.01m | 5.93m |
-| 50th | **5.26m** | 5.80m | 8.72m |
-| 75th | 8.99m | 10.04m | 13.15m |
-| 95th | 20.41m | 43.95m | 47.13m |
+| 25th | 4.74m | **2.64m** | 6.16m |
+| 50th | **6.42m** | **6.06m** | 9.59m |
+| 75th | 9.28m | **10.51m** | 13.67m |
+| 95th | **16.08m** | **44.13m** | 45.57m |
+
+*Note: Smoother improved Vt (17.5m→6.1m) but degraded Hz (5.2m→6.4m). Forward-only IEKF is still better at 3.4m Hz.*
 
 ### Code Health
 
 - **Tests:** 317 passed, 0 failed, 2 ignored
 - **Warnings:** 5 (unused imports in composable tropo, 3 fixable automatically)
 - **Architecture:** Clean module structure, composable tropo mapping, per-constellation AR
-- **Known issues:** Smoother degrades median vertical (17.5m vs 5.8m forward-only), dead `process.rs` file with stale EngineMode variants
+- **Known issues:** Smoother degrades Hz (5.2m→6.4m on Odaiba, catastrophic on Shinjuku), Hz 95th tails behind RTKLIB
+- **Partially resolved:** Smoother vertical degradation improved (17.5m → 6.1m Vt 50th) but not fully fixed
 
 ### Competitive Position (vs RTKLIB)
 
@@ -95,9 +102,11 @@ A correct implementation requires careful handling of all four issues — likely
 |:-----|:-------|:-------|:-------|
 | SPP | 1.8m | 2.0m | **Gneiss** |
 | RTK | 1.5m | 2.2m | **Gneiss** |
-| PPP (float) | 5.3m | 3.4m | RTKLIB |
+| PPP (Odaiba, fwd) | 5.29m | 3.97m | RTKLIB |
+| PPP (Odaiba, smooth) | 6.42m | 3.97m | RTKLIB |
+| PPP (Shinjuku, fwd) | 5.02m | 2.00m | RTKLIB |
 
-Gneiss leads in SPP and RTK. PPP is the only mode where RTKLIB wins, by approximately 2m.
+Gneiss leads in SPP and RTK. PPP is still behind RTKLIB on both datasets. The smoother ISB fix partially resolved vertical but the smoother still hurts horizontal.
 
 ---
 
@@ -107,7 +116,7 @@ Gneiss leads in SPP and RTK. PPP is the only mode where RTKLIB wins, by approxim
 
 1. **Re-verify the RTKLIB baseline.** The 3.4m Odaiba number is from June 19 with different code. Re-run RTKLIB on the exact same data and evaluation to confirm the gap is real and quantify it precisely.
 
-2. **Fix smoother vertical degradation.** White-noise states (clock bias, ISB, ZWD) are incorrectly propagated through the phi matrix. Zeroing them should recover the 5.8m→?m vertical gap and make smoothing usable.
+2. ~~**Fix smoother vertical degradation.**~~ 🟡 **Partially done (2026-06-21).** Zeroing ISB states (16-18) in the backward pass improved vertical from 17.5m to 6.1m, but the smoother still degrades horizontal (5.2m→6.4m on Odaiba, catastrophic on Shinjuku). Root cause of Hz degradation is likely backward propagation of SPP position prior or clock-position correlation through C_k.
 
 3. **Register for CDDIS Earthdata.** Free registration at `urs.earthdata.nasa.gov` enables automated download of IGS final/rapid SP3+CLK for any GPS week. The f9p dataset confirms precise products help when the error budget isn't dominated by multipath.
 
