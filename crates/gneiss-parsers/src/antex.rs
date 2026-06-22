@@ -175,6 +175,200 @@ fn parse_antex_date(s: &str) -> Option<DateTime<Utc>> {
 mod tests {
     use super::*;
     use std::path::PathBuf;
+    use std::sync::atomic::{AtomicU32, Ordering};
+
+    // ------------------------------------------------------------------
+    // Helpers for building minimal ANTEX test files
+    // ------------------------------------------------------------------
+
+    /// Build a single ANTEX line: data padded to 60 chars followed by `label`.
+    fn ant_line(data: &str, label: &str) -> String {
+        let mut line = String::with_capacity(80);
+        line.push_str(data);
+        while line.len() < 60 {
+            line.push(' ');
+        }
+        line.push_str(label);
+        line.push('\n');
+        line
+    }
+
+    /// Atomically-increasing counter for temp file names so parallel
+    /// `cargo test` runs do not collide.
+    static ANTEX_COUNTER: AtomicU32 = AtomicU32::new(0);
+
+    /// Write `content` to a uniquely-named temp file and return the path.
+    fn write_temp_antex(content: &str) -> PathBuf {
+        let dir = std::env::temp_dir();
+        let n = ANTEX_COUNTER.fetch_add(1, Ordering::SeqCst);
+        let path = dir.join(format!("test_antex_{}.atx", n));
+        std::fs::write(&path, content).unwrap();
+        path
+    }
+
+    /// A minimal valid antenna block (single frequency G01).
+    fn minimal_antenna_block(ant_type: &str, serial: &str, freq_code: &str) -> String {
+        let mut b = String::new();
+        b.push_str(&ant_line("", "START OF ANTENNA"));
+        b.push_str(&ant_line(
+            &format!("{:20}{:20}", ant_type, serial),
+            "TYPE / SERIAL NO",
+        ));
+        b.push_str(&ant_line("     0.0", "DAZI"));
+        b.push_str(&ant_line("     0.0  17.0   1.0", "ZEN1 / ZEN2 / DZEN"));
+        b.push_str(&ant_line(
+            "  2020     1    15     0     0    0.0000000",
+            "VALID FROM",
+        ));
+        b.push_str(&ant_line(
+            "  2030     1    15     0     0    0.0000000",
+            "VALID UNTIL",
+        ));
+        b.push_str(&ant_line(&format!("   {:4}", freq_code), "START OF FREQUENCY"));
+        b.push_str(&ant_line(
+            "      1.00      2.00      3.00",
+            "NORTH / EAST / UP",
+        ));
+        b.push_str(&ant_line(
+            "   NOAZI    0.10    0.20    0.30",
+            "",
+        ));
+        b.push_str(&ant_line("", "END OF FREQUENCY"));
+        b.push_str(&ant_line("", "END OF ANTENNA"));
+        b
+    }
+
+    // ------------------------------------------------------------------
+    // Tests
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn test_parse_minimal_antex() {
+        let content = minimal_antenna_block("TEST_ANT", "G01", "G01");
+        let path = write_temp_antex(&content);
+        let db = AntexDatabase::parse(&path).unwrap();
+        std::fs::remove_file(&path).ok();
+
+        assert_eq!(db.antennas.len(), 1);
+        let ant = &db.antennas[0];
+        assert_eq!(ant.antenna_type, "TEST_ANT");
+        assert_eq!(ant.serial_num, "G01");
+        assert_eq!(ant.dazi, 0.0);
+        assert!((ant.zen1 - 0.0).abs() < 1e-12);
+        assert!((ant.zen2 - 17.0).abs() < 1e-12);
+        assert!((ant.dzen - 1.0).abs() < 1e-12);
+
+        let freq = ant.frequencies.get("G01").unwrap();
+        assert!((freq.pco.x - 1.0).abs() < 1e-12);
+        assert!((freq.pco.y - 2.0).abs() < 1e-12);
+        assert!((freq.pco.z - 3.0).abs() < 1e-12);
+        assert_eq!(freq.noazi.len(), 3);
+        assert!((freq.noazi[0] - 0.10).abs() < 1e-12);
+    }
+
+    #[test]
+    fn test_parse_multiple_antennas() {
+        let mut content = String::new();
+        content.push_str(&minimal_antenna_block("ANT_A", "G01", "G01"));
+        content.push_str(&minimal_antenna_block("ANT_B", "R02", "G01"));
+
+        let path = write_temp_antex(&content);
+        let db = AntexDatabase::parse(&path).unwrap();
+        std::fs::remove_file(&path).ok();
+
+        assert_eq!(db.antennas.len(), 2);
+        assert_eq!(db.antennas[0].antenna_type, "ANT_A");
+        assert_eq!(db.antennas[1].antenna_type, "ANT_B");
+    }
+
+    #[test]
+    fn test_parse_invalid_path_returns_error() {
+        let result = AntexDatabase::parse("/nonexistent/path/antex.atx");
+        assert!(result.is_err());
+        let is_io_err = matches!(result, Err(AntexError::Io(_)));
+        assert!(is_io_err, "expected Io error, got unexpected result variant");
+    }
+
+    #[test]
+    fn test_find_satellite_matches_serial() {
+        let content = minimal_antenna_block("BLOCK_IIA", "G01", "G01");
+        let path = write_temp_antex(&content);
+        let db = AntexDatabase::parse(&path).unwrap();
+        std::fs::remove_file(&path).ok();
+
+        let found = db.find_satellite("G01", Utc.with_ymd_and_hms(2025, 6, 1, 0, 0, 0).unwrap());
+        assert!(found.is_some());
+        assert_eq!(found.unwrap().serial_num, "G01");
+    }
+
+    #[test]
+    fn test_find_satellite_no_match() {
+        let content = minimal_antenna_block("BLOCK_IIA", "G01", "G01");
+        let path = write_temp_antex(&content);
+        let db = AntexDatabase::parse(&path).unwrap();
+        std::fs::remove_file(&path).ok();
+
+        let found = db.find_satellite("R99", Utc.with_ymd_and_hms(2025, 6, 1, 0, 0, 0).unwrap());
+        assert!(found.is_none());
+    }
+
+    #[test]
+    fn test_parse_short_lines_skipped() {
+        // Lines shorter than 60 characters are skipped.
+        let short = "short line\n";
+        let path = write_temp_antex(short);
+        let db = AntexDatabase::parse(&path).unwrap();
+        std::fs::remove_file(&path).ok();
+
+        assert!(db.antennas.is_empty());
+    }
+
+    #[test]
+    fn test_parse_frequency_multiple_frequencies() {
+        let mut content = String::new();
+        content.push_str(&ant_line("", "START OF ANTENNA"));
+        content.push_str(&ant_line(
+            &format!("{:20}{:20}", "MULTI_FREQ", "G01"),
+            "TYPE / SERIAL NO",
+        ));
+        content.push_str(&ant_line("     0.0", "DAZI"));
+        content.push_str(&ant_line("     0.0  17.0   1.0", "ZEN1 / ZEN2 / DZEN"));
+        content.push_str(&ant_line(
+            "  2020     1    15     0     0    0.0000000",
+            "VALID FROM",
+        ));
+        content.push_str(&ant_line(
+            "  2030     1    15     0     0    0.0000000",
+            "VALID UNTIL",
+        ));
+        // Frequency G01
+        content.push_str(&ant_line("   G01", "START OF FREQUENCY"));
+        content.push_str(&ant_line(
+            "     10.00     20.00     30.00",
+            "NORTH / EAST / UP",
+        ));
+        content.push_str(&ant_line("   NOAZI    0.10    0.20", ""));
+        content.push_str(&ant_line("", "END OF FREQUENCY"));
+        // Frequency G02
+        content.push_str(&ant_line("   G02", "START OF FREQUENCY"));
+        content.push_str(&ant_line(
+            "     40.00     50.00     60.00",
+            "NORTH / EAST / UP",
+        ));
+        content.push_str(&ant_line("   NOAZI    0.30    0.40", ""));
+        content.push_str(&ant_line("", "END OF FREQUENCY"));
+        content.push_str(&ant_line("", "END OF ANTENNA"));
+
+        let path = write_temp_antex(&content);
+        let db = AntexDatabase::parse(&path).unwrap();
+        std::fs::remove_file(&path).ok();
+
+        assert_eq!(db.antennas[0].frequencies.len(), 2);
+        let g01 = db.antennas[0].frequencies.get("G01").unwrap();
+        assert!((g01.pco.z - 30.0).abs() < 1e-12);
+        let g02 = db.antennas[0].frequencies.get("G02").unwrap();
+        assert!((g02.pco.z - 60.0).abs() < 1e-12);
+    }
 
     #[test]
     fn test_parse_igs14_antex() {

@@ -32,6 +32,7 @@ pub fn solve_cholesky_svd(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nalgebra::dmatrix;
 
     #[test]
     fn test_invert_matrix_robust() {
@@ -53,5 +54,38 @@ mod tests {
         let x = solve_cholesky_svd(&h, &b, 1e-9).unwrap();
         assert!((x[(0, 0)] - 2.0).abs() < 1e-6);
         assert!((x[(1, 0)] - 3.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_solve_cholesky_svd_fallback_svd_path() {
+        // Non-positive-definite matrix: cholesky will fail, SVD solve is used
+        // A 2x2 matrix with a small negative eigenvalue (not SPD)
+        let h = dmatrix![1.0, 2.0; 2.0, 1.0];
+        // h has eigenvalues 3 and -1 -> not SPD -> cholesky fails
+        let b = nalgebra::DVector::from_vec(vec![5.0, 4.0]);
+        let x = solve_cholesky_svd(&h, &b, 1e-9).unwrap();
+        // Verify result solves H*x = b
+        let residual = &h * &x - b;
+        assert!(residual.norm() < 1e-6);
+    }
+
+    #[test]
+    fn test_solve_cholesky_svd_zero_matrix_ok() {
+        // Zero matrix: cholesky fails, SVD solve returns zero solution (not an error)
+        let h = dmatrix![0.0, 0.0; 0.0, 0.0];
+        let b = nalgebra::DVector::from_vec(vec![1.0, 1.0]);
+        let x = solve_cholesky_svd(&h, &b, 1e-9).unwrap();
+        assert!((x[0]).abs() < 1e-12);
+        assert!((x[1]).abs() < 1e-12);
+    }
+
+    #[test]
+    fn test_invert_matrix_robust_svd_path() {
+        // Diagonal matrix with a zero element: not SPD, pseudo-inverse handles it
+        let m = dmatrix![1.0, 0.0, 0.0; 0.0, 0.0, 0.0; 0.0, 0.0, 4.0];
+        let inv = invert_matrix_robust(&m);
+        assert!((inv[(0, 0)] - 1.0).abs() < 1e-6);
+        assert!((inv[(1, 1)] - 0.0).abs() < 1e-12);
+        assert!((inv[(2, 2)] - 0.25).abs() < 1e-6);
     }
 }

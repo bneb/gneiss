@@ -99,6 +99,7 @@ impl fmt::Display for SatelliteId {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::format;
     use alloc::string::ToString;
 
     #[test]
@@ -174,5 +175,137 @@ mod tests {
             prn: 24,
         };
         assert_eq!(sat.to_string(), "R24");
+    }
+
+    #[test]
+    fn test_parse_constellation_error_display() {
+        let err = ParseConstellationError;
+        assert_eq!(format!("{}", err), "invalid constellation character");
+    }
+
+    #[test]
+    fn test_parse_satellite_id_error_display() {
+        let err = ParseSatelliteIdError;
+        assert_eq!(format!("{}", err), "invalid satellite id format");
+    }
+
+    #[test]
+    fn test_satellite_id_parsing_all_constellations() {
+        assert_eq!(
+            SatelliteId::from_str("C15").unwrap(),
+            SatelliteId {
+                constellation: Constellation::Beidou,
+                prn: 15
+            }
+        );
+        assert_eq!(
+            SatelliteId::from_str("S36").unwrap(),
+            SatelliteId {
+                constellation: Constellation::Sbas,
+                prn: 36
+            }
+        );
+        assert_eq!(
+            SatelliteId::from_str("J07").unwrap(),
+            SatelliteId {
+                constellation: Constellation::Qzss,
+                prn: 7
+            }
+        );
+        assert_eq!(
+            SatelliteId::from_str("I03").unwrap(),
+            SatelliteId {
+                constellation: Constellation::Navic,
+                prn: 3
+            }
+        );
+    }
+
+    #[test]
+    fn test_satellite_id_parsing_single_digit_prn() {
+        // Without leading zero
+        assert_eq!(
+            SatelliteId::from_str("G1").unwrap(),
+            SatelliteId {
+                constellation: Constellation::Gps,
+                prn: 1
+            }
+        );
+        assert_eq!(
+            SatelliteId::from_str("R5").unwrap(),
+            SatelliteId {
+                constellation: Constellation::Glonass,
+                prn: 5
+            }
+        );
+    }
+
+    #[test]
+    fn test_satellite_id_display_all_constellations() {
+        let cases = [
+            (Constellation::Gps, 1, "G01"),
+            (Constellation::Glonass, 7, "R07"),
+            (Constellation::Galileo, 12, "E12"),
+            (Constellation::Beidou, 3, "C03"),
+            (Constellation::Sbas, 40, "S40"),
+            (Constellation::Qzss, 8, "J08"),
+            (Constellation::Navic, 9, "I09"),
+        ];
+        for (constellation, prn, expected) in &cases {
+            let sat = SatelliteId {
+                constellation: *constellation,
+                prn: *prn,
+            };
+            assert_eq!(
+                sat.to_string(),
+                *expected,
+                "Display failed for {:?} PRN {}",
+                constellation,
+                prn
+            );
+        }
+    }
+
+    #[test]
+    fn test_satellite_id_parsing_prn_overflow() {
+        // u8 can hold up to 255; 256 should fail
+        assert!(SatelliteId::from_str("G256").is_err());
+    }
+
+    #[test]
+    fn test_satellite_id_parsing_too_short() {
+        assert!(SatelliteId::from_str("").is_err());
+        assert!(SatelliteId::from_str("G").is_err());
+    }
+
+    #[test]
+    fn test_satellite_id_parsing_negative_prn() {
+        assert!(SatelliteId::from_str("G-1").is_err());
+    }
+
+    #[test]
+    fn test_satellite_id_equality() {
+        let a = SatelliteId {
+            constellation: Constellation::Gps,
+            prn: 1,
+        };
+        let b = SatelliteId {
+            constellation: Constellation::Gps,
+            prn: 1,
+        };
+        let c = SatelliteId {
+            constellation: Constellation::Glonass,
+            prn: 1,
+        };
+        assert_eq!(a, b);
+        assert_ne!(a, c);
+    }
+
+    #[test]
+    fn test_constellation_ordering() {
+        // Ensure Ord is derived and works
+        assert!(Constellation::Gps < Constellation::Glonass);
+        assert!(Constellation::Gps < Constellation::Galileo);
+        assert!(Constellation::Galileo > Constellation::Glonass);
     }
 }

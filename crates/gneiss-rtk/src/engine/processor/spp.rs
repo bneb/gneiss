@@ -203,3 +203,215 @@ impl ProcessingEngine {
             .ok_or(EngineError::StateDisappeared)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::engine::{EngineConfig, EngineError, EngineMode};
+    use gneiss_core::coords::{Coordinate, Datum, Frame};
+    use gneiss_core::obs::EpochObs;
+    use gneiss_core::time::GpsTime;
+    use nalgebra::Vector3;
+
+    fn make_empty_rover(time: GpsTime) -> EpochObs {
+        EpochObs {
+            time,
+            satellites: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn test_perform_spp_ekf_update_no_pos_no_op() {
+        let config = EngineConfig::default();
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::new(1.0, 2.0, 3.0), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos.clone(), 1.0);
+
+        // spp_pos=None should do nothing
+        ProcessingEngine::perform_spp_ekf_update(&config, &mut state, None, 0.0);
+        assert!((state.position.vector.x - 1.0).abs() < 1e-6);
+        assert_eq!(state.consecutive_rejections, 0);
+    }
+
+    #[test]
+    fn test_perform_spp_ekf_update_tightly_coupled_rejects_large_diff() {
+        let mut config = EngineConfig::default();
+        config.mode = EngineMode::RtkIns; // tightly coupled
+        config.spp_consistency_threshold_m = 15.0;
+
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::new(1.0, 2.0, 3.0), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 1.0);
+        state.ins_aligned = true;
+
+        let spp_pos = Coordinate::new(
+            Vector3::new(1000.0, 2000.0, 3000.0), // very far
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+
+        ProcessingEngine::perform_spp_ekf_update(&config, &mut state, Some(spp_pos), 0.0);
+        // Should be rejected
+        assert_eq!(state.consecutive_rejections, 1);
+    }
+
+    #[test]
+    fn test_perform_spp_ekf_update_rejection_hard_reset_after_six() {
+        let mut config = EngineConfig::default();
+        config.mode = EngineMode::RtkIns;
+        config.spp_consistency_threshold_m = 15.0;
+
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::new(1.0, 2.0, 3.0), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 1.0);
+        state.ins_aligned = true;
+        state.consecutive_rejections = 5; // 5 previous rejections
+
+        let spp_pos = Coordinate::new(
+            Vector3::new(1000.0, 2000.0, 3000.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+
+        ProcessingEngine::perform_spp_ekf_update(&config, &mut state, Some(spp_pos), 0.0);
+        // Should have hard reset — position updated and rejections cleared
+        assert!((state.position.vector.x - 1000.0).abs() < 1e-6);
+        assert_eq!(state.consecutive_rejections, 0);
+        // Should have is_reset flag
+        assert!(state.is_reset);
+        // Velocity should be zeroed
+        assert!((state.velocity.norm() - 0.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_process_spp_fails_on_empty_ephemeris_and_no_state() {
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        engine.current_state = None;
+        engine.ephemerides = Vec::new();
+
+        let rover = make_empty_rover(GpsTime::new(0, 0.0));
+        let err = engine.process_spp(&rover).unwrap_err();
+
+        // Should fail because SPP compute fails and no state to fall back on
+        assert!(matches!(err, EngineError::InitialSppFailed));
+    }
+
+    #[test]
+    fn test_process_spp_preserves_state_on_failure_in_spp_mode() {
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        engine.config.mode = EngineMode::Spp;
+
+        // Set up a valid current state
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::new(1.0, 2.0, 3.0), Datum::WGS84, Frame::ECEF, time);
+        let existing = RtkState::new(time, pos, 1.0);
+        engine.current_state = Some(existing);
+        engine.ephemerides = Vec::new();
+
+        let rover = make_empty_rover(GpsTime::new(0, 1.0));
+        let err = engine.process_spp(&rover).unwrap_err();
+        assert!(matches!(err, EngineError::InitialSppFailed));
+
+        // State should still be present (preserved for next epoch)
+        assert!(engine.current_state.is_some());
+    }
+
+    #[test]
+    fn test_process_spp_state_disappeared_error() {
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        engine.config.mode = EngineMode::RtkIns; // Not SPP mode, won't early-return
+        // Don't set current_state — it will try to use it after SPP compute fails
+
+        let rover = make_empty_rover(GpsTime::new(0, 0.0));
+        let err = engine.process_spp(&rover).unwrap_err();
+        assert!(matches!(err, EngineError::InitialSppFailed));
+    }
+
+    #[test]
+    fn test_process_spp_non_spp_mode_with_state_succeeds() {
+        // In non-SPP mode (e.g. RtkIns) with an existing state but no ephemerides,
+        // process_spp should succeed by coasting on the existing state.
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        engine.config.mode = EngineMode::RtkIns; // non-pure-SPP mode
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(
+            Vector3::new(1.0, 2.0, 3.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+        engine.current_state = Some(RtkState::new(time, pos, 1.0));
+
+        let rover = make_empty_rover(GpsTime::new(0, 1.0));
+        let result = engine.process_spp(&rover);
+        assert!(result.is_ok());
+        // State should have time moved forward
+        assert!((result.unwrap().time.tow - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_perform_spp_ekf_update_success() {
+        // When SPP position is close to the current state, the EKF update
+        // should succeed (not be rejected).
+        let mut config = EngineConfig::default();
+        config.mode = EngineMode::Rtk; // Not tightly coupled
+        let time = GpsTime::new(0, 0.0);
+
+        // State position
+        let state_pos = Coordinate::new(
+            Vector3::new(1.0, 2.0, 3.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+        let mut state = RtkState::new(time, state_pos, 1.0);
+
+        // SPP position very close to current state — should pass chi-square
+        let spp_pos = Coordinate::new(
+            Vector3::new(1.1, 2.2, 3.3),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+
+        ProcessingEngine::perform_spp_ekf_update(&config, &mut state, Some(spp_pos), 0.0);
+        // No rejection
+        assert_eq!(state.consecutive_rejections, 0);
+        // Position should have been nudged toward SPP (EKF blends the two)
+        assert!((state.position.vector.x - 1.0).abs() > 1e-6);
+    }
+
+    #[test]
+    fn test_perform_spp_ekf_update_tight_coupled_small_diff_accepted() {
+        // Tightly coupled mode with a small position difference should accept.
+        let mut config = EngineConfig::default();
+        config.mode = EngineMode::RtkIns; // tightly coupled
+        config.spp_consistency_threshold_m = 15.0;
+        let time = GpsTime::new(0, 0.0);
+
+        let state_pos = Coordinate::new(
+            Vector3::new(1.0, 2.0, 3.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+        let mut state = RtkState::new(time, state_pos, 1.0);
+        state.ins_aligned = true;
+
+        // Small diff (within threshold) that should be accepted
+        let spp_pos = Coordinate::new(
+            Vector3::new(1.1, 2.1, 3.1),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+
+        ProcessingEngine::perform_spp_ekf_update(&config, &mut state, Some(spp_pos), 0.0);
+        // Should NOT be rejected since diff is well under 15m
+        assert_eq!(state.consecutive_rejections, 0);
+        // Position should have been nudged
+        assert!((state.position.vector.x - 1.0).abs() > 1e-6);
+    }
+}

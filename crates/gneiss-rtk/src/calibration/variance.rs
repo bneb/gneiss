@@ -49,4 +49,81 @@ mod tests {
             var
         );
     }
+
+    #[test]
+    fn test_dynamic_variance_boundary_snr_low_clamp() {
+        // SNR below 25 should clamp to 25
+        let el = core::f64::consts::FRAC_PI_2;
+        let base_var = 1.0;
+        let v_low = dynamic_variance(10.0, el, base_var);
+        let v_clamp = dynamic_variance(25.0, el, base_var);
+        assert!((v_low - v_clamp).abs() < 1e-12, "SNR below 25 should clamp to 25");
+    }
+
+    #[test]
+    fn test_dynamic_variance_boundary_snr_high_clamp() {
+        // SNR above 50 should clamp to 50
+        let el = core::f64::consts::FRAC_PI_2;
+        let base_var = 1.0;
+        let v_high = dynamic_variance(60.0, el, base_var);
+        let v_clamp = dynamic_variance(50.0, el, base_var);
+        assert!((v_high - v_clamp).abs() < 1e-12, "SNR above 50 should clamp to 50");
+    }
+
+    #[test]
+    fn test_dynamic_variance_snr_scale_min_clamp() {
+        // When snr >= 45, snr_scale = 10^((45-45)/10) = 10^0 = 1.0 (clamped to min 1.0)
+        let el = core::f64::consts::FRAC_PI_2;
+        let base_var = 1.0;
+        let v = dynamic_variance(45.0, el, base_var);
+        let expected = base_var * 1.0 * 1.0; // snr_scale=1, el_scale=1/sin^2(pi/2)=1
+        assert!((v - expected).abs() < 1e-12);
+    }
+
+    #[test]
+    fn test_dynamic_variance_snr_scale_max_clamp() {
+        // When snr = 25, snr_scale = 10^((45-25)/10) = 10^2 = 100, clamped to max 100
+        let el = core::f64::consts::FRAC_PI_2;
+        let base_var = 1.0;
+        let v = dynamic_variance(25.0, el, base_var);
+        let expected = base_var * 100.0 * 1.0;
+        assert!((v - expected).abs() < 1e-12);
+    }
+
+    #[test]
+    fn test_dynamic_variance_low_elevation_clamp() {
+        // Elevation below 0.1 rad in sine should clamp sin_el to 0.1
+        let snr = 50.0;
+        let base_var = 1.0;
+        let v_very_low = dynamic_variance(snr, 0.01, base_var);
+        let v_at_clamp = dynamic_variance(snr, 0.1001, base_var);
+        // At very low elevation (0.01 rad), sin(0.01) ≈ 0.01, which clamps to 0.1
+        // So we get the same result as sin(0.1) ≈ 0.0998, actually 0.1001 rad sin ≈ 0.1
+        // The clamp happens at 0.1, so sin(0.01) is clamped to 0.1
+        // sin(0.1001) ≈ 0.1, so they should be close
+        assert!((v_very_low - v_at_clamp).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_dynamic_variance_pseudorange_base() {
+        let snr = 40.0;
+        let el = core::f64::consts::FRAC_PI_2;
+        let base_var = 9.0; // Pseudorange base
+        let var = dynamic_variance(snr, el, base_var);
+        // SNR = 45 - 40 = 5, snr_scale = 10^(5/10) ≈ 3.162
+        let expected_snr_scale = 10.0_f64.powf((45.0 - 40.0) / 10.0);
+        let expected = base_var * expected_snr_scale;
+        assert!((var - expected).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_dynamic_variance_mid_elevation() {
+        let snr = 50.0;
+        let el = 0.5; // ~28.6 degrees, sin ≈ 0.479
+        let base_var = 1.0;
+        let var = dynamic_variance(snr, el, base_var);
+        let sin_el = el.sin();
+        let expected = base_var * 1.0 * (1.0 / (sin_el * sin_el));
+        assert!((var - expected).abs() < 1e-10);
+    }
 }

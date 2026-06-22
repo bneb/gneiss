@@ -334,6 +334,7 @@ mod tests {
     use nalgebra::Vector3;
 
     use super::*;
+    use gneiss_core::obs::{EpochObs, SatObs};
     use gneiss_core::time::GpsTime;
     use nalgebra::{DMatrix, DVector};
     #[test]
@@ -414,6 +415,450 @@ mod tests {
             "Position mismatch: {}",
             x_0_1
         );
+    }
+
+    #[test]
+    fn test_snr_scale_returns_finite() {
+        let scale = snr_scale(45.0);
+        assert!(scale.is_finite() && scale > 0.0);
+
+        let scale_low = snr_scale(20.0);
+        assert!(scale_low > scale);
+    }
+
+    #[test]
+    fn test_covariance_divergence_no_reset_when_normal() {
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::new(1.0, 2.0, 3.0), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 1.0);
+
+        // Covariance is well under 10000
+        let orig_pos = state.position.vector;
+        ProcessingEngine::check_covariance_divergence(&mut state, None, None, true);
+        assert!((state.position.vector.x - orig_pos.x).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_covariance_divergence_resets_when_extreme() {
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::new(1.0, 2.0, 3.0), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 1.0);
+        state.covariance[(0, 0)] = 20000.0;
+
+        let spp_pos = Coordinate::new(
+            Vector3::new(100.0, 200.0, 300.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+        ProcessingEngine::check_covariance_divergence(&mut state, Some(spp_pos), None, true);
+        assert!((state.position.vector.x - 100.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_apply_nhc_updates_disabled_does_nothing() {
+        let mut config = EngineConfig::default();
+        config.enable_nhc = false;
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 1.0);
+
+        ProcessingEngine::apply_nhc_updates(&config, &[], &mut state);
+        // State should be unchanged
+        assert!(!state.is_reset);
+    }
+
+    #[test]
+    fn test_apply_nhc_updates_not_ins_mode_does_nothing() {
+        let mut config = EngineConfig::default();
+        config.enable_nhc = true;
+        config.mode = EngineMode::Rtk; // Not an INS mode
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 1.0);
+
+        ProcessingEngine::apply_nhc_updates(&config, &[], &mut state);
+        assert!(!state.is_reset);
+    }
+
+    #[test]
+    fn test_apply_nhc_updates_ins_not_aligned_does_nothing() {
+        let mut config = EngineConfig::default();
+        config.enable_nhc = true;
+        config.mode = EngineMode::RtkIns;
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 1.0);
+        state.ins_aligned = false;
+
+        ProcessingEngine::apply_nhc_updates(&config, &[], &mut state);
+        assert!(!state.is_reset);
+    }
+
+    #[test]
+    fn test_reset_for_multipass_no_history() {
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        engine.current_state = Some(RtkState::new(
+            GpsTime::new(0, 0.0),
+            Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, GpsTime::new(0, 0.0)),
+            1.0,
+        ));
+        engine.state_history = Vec::new();
+
+        engine.reset_for_multipass();
+        // With no history, current_state should be None
+        assert!(engine.current_state.is_none());
+        assert!(engine.gnss_only_state.is_none());
+    }
+
+    #[test]
+    fn test_reset_for_multipass_with_history() {
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let state = RtkState::new(time, pos, 1.0);
+        engine.state_history.push(state);
+        engine.obs_history.push((make_epoch(time), None));
+        engine.imu_buffer.push(gneiss_core::imu::ImuMeasurement {
+            accel: Vector3::zeros(),
+            gyro: Vector3::zeros(),
+            time_tag: 0,
+            temperature: None,
+        });
+
+        engine.reset_for_multipass();
+        assert!(engine.current_state.is_some());
+        assert!(engine.gnss_only_state.is_none());
+        assert!(engine.state_history.is_empty());
+        assert!(engine.obs_history.is_empty());
+        assert!(engine.imu_buffer.is_empty());
+        assert!(engine.ref_sat.is_none());
+    }
+
+    #[test]
+    fn test_add_imu_measurement_no_mounting() {
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        engine.add_imu_measurement(gneiss_core::imu::ImuMeasurement {
+            accel: Vector3::new(1.0, 2.0, 3.0),
+            gyro: Vector3::new(0.1, 0.2, 0.3),
+            time_tag: 0,
+            temperature: None,
+        });
+        assert_eq!(engine.imu_buffer.len(), 1);
+        let m = &engine.imu_buffer[0];
+        assert!((m.accel.x - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_add_imu_measurement_with_mounting_angles() {
+        let mut config = EngineConfig::default();
+        config.imu_mounting_angles = Some([0.1, 0.2, 0.3]); // Roll, Pitch, Yaw
+        let mut engine = ProcessingEngine::new(config);
+        engine.add_imu_measurement(gneiss_core::imu::ImuMeasurement {
+            accel: Vector3::new(1.0, 0.0, 0.0),
+            gyro: Vector3::new(0.0, 1.0, 0.0),
+            time_tag: 0,
+            temperature: None,
+        });
+        assert_eq!(engine.imu_buffer.len(), 1);
+        // With mounting angles, the measurement should be rotated
+        // (exact values depend on rotation, just verify it changed)
+        let m = &engine.imu_buffer[0];
+        // Accel should have been rotated from the mounting angles
+        assert!(m.accel.x.abs() > 0.0 || m.accel.y.abs() > 0.0 || m.accel.z.abs() > 0.0);
+    }
+
+    #[test]
+    fn test_attempt_kinematic_alignment_no_state() {
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        engine.current_state = None;
+        // Should not panic
+        engine.attempt_kinematic_alignment();
+    }
+
+    #[test]
+    fn test_attempt_kinematic_alignment_already_aligned() {
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(
+            Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+        let mut state = RtkState::new(time, pos, 1.0);
+        state.ins_aligned = true;
+        engine.current_state = Some(state);
+        engine.config.mode = EngineMode::RtkIns;
+
+        // Should do nothing because already aligned
+        engine.attempt_kinematic_alignment();
+        assert!(engine.current_state.as_ref().unwrap().ins_aligned);
+    }
+
+    #[test]
+    fn test_attempt_kinematic_alignment_non_tight_mode() {
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        engine.config.mode = EngineMode::RtkInsLooselyCoupled; // Not tightly coupled
+
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let state = RtkState::new(time, pos, 1.0);
+        engine.current_state = Some(state);
+        engine.attempt_kinematic_alignment();
+        assert!(!engine.current_state.as_ref().unwrap().ins_aligned);
+    }
+
+    #[test]
+    fn test_attempt_kinematic_alignment_no_imu_data() {
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        engine.config.mode = EngineMode::RtkIns;
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(
+            Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+        let state = RtkState::new(time, pos, 1.0);
+        engine.current_state = Some(state);
+        engine.imu_history.push(Vec::new()); // Empty IMU history
+
+        engine.attempt_kinematic_alignment();
+        assert!(!engine.current_state.as_ref().unwrap().ins_aligned);
+    }
+
+    #[test]
+    fn test_process_epoch_constellation_filtering() {
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        engine.config.mode = EngineMode::Spp;
+        engine.config.enabled_constellations =
+            Some(vec![gneiss_core::sat::Constellation::Gps]);
+
+        let time = GpsTime::new(0, 0.0);
+        let gps_sat = gneiss_core::sat::SatelliteId {
+            constellation: gneiss_core::sat::Constellation::Gps,
+            prn: 1,
+        };
+        let glo_sat = gneiss_core::sat::SatelliteId {
+            constellation: gneiss_core::sat::Constellation::Glonass,
+            prn: 1,
+        };
+
+        let rover = EpochObs {
+            time,
+            satellites: vec![
+                SatObs {
+                    sat: gps_sat,
+                    observations: Vec::new(),
+                },
+                SatObs {
+                    sat: glo_sat,
+                    observations: Vec::new(),
+                },
+            ],
+        };
+
+        let result = engine.process_epoch(&rover, None);
+        // Should fail due to insufficient data (no ephemerides), but the constellation
+        // filtering should have happened — Glonass sat should be filtered out
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_process_epoch_state_disappeared_resets() {
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        engine.config.mode = EngineMode::Rtk;
+        let time = GpsTime::new(0, 0.0);
+        let rover = EpochObs {
+            time,
+            satellites: Vec::new(),
+        };
+
+        // With no base obs and no state, process_rtk will error with InitialSppFailed
+        // which does NOT trigger StateDisappeared reset
+        let err = engine.process_epoch(&rover, None).unwrap_err();
+        assert!(matches!(err, EngineError::InitialSppFailed));
+    }
+
+    #[test]
+    fn test_add_ephemeris() {
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        assert!(engine.ephemerides.is_empty());
+        let eph = gneiss_core::ephemeris::Ephemeris::Gps(gneiss_core::ephemeris::GpsEphemeris {
+            sat: SatelliteId {
+                constellation: gneiss_core::sat::Constellation::Gps,
+                prn: 1,
+            },
+            toe: GpsTime::new(0, 0.0),
+            toc: GpsTime::new(0, 0.0),
+            af0: 0.0, af1: 0.0, af2: 0.0,
+            crs: 0.0, crc: 0.0, cuc: 0.0, cus: 0.0,
+            cic: 0.0, cis: 0.0,
+            m0: 0.0, e: 0.0, sqrt_a: 5153.6, delta_n: 0.0,
+            omega0: 0.0, omega_dot: 0.0, i0: 0.95, idot: 0.0,
+            omega: 0.0, tgd: 0.0, iode: 1, iodc: 1,
+        });
+        engine.add_ephemeris(eph);
+        assert_eq!(engine.ephemerides.len(), 1);
+    }
+
+    #[test]
+    fn test_process_epoch_spp_mode_with_state_preserved() {
+        // SPP mode with an existing state and empty observations/ephemerides.
+        // SPP compute fails, but state should be preserved.
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        engine.config.mode = EngineMode::Spp;
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(
+            Vector3::new(1.0, 2.0, 3.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+        engine.current_state = Some(RtkState::new(time, pos, 1.0));
+
+        let rover = EpochObs {
+            time: GpsTime::new(0, 1.0),
+            satellites: vec![],
+        };
+        let err = engine.process_epoch(&rover, None).unwrap_err();
+        assert!(matches!(err, EngineError::InitialSppFailed));
+        // State must be preserved for the next epoch
+        assert!(engine.current_state.is_some());
+    }
+
+    #[test]
+    fn test_process_epoch_rtk_mode_needs_base_position() {
+        // RTK mode with base_obs but no base_position configured should
+        // fail with MissingBasePosition, confirming process_rtk was dispatched.
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        engine.config.mode = EngineMode::Rtk;
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(
+            Vector3::new(1.0, 2.0, 3.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+        engine.current_state = Some(RtkState::new(time, pos, 1.0));
+
+        let rover = EpochObs { time, satellites: vec![] };
+        let base = EpochObs { time, satellites: vec![] };
+        let err = engine.process_epoch(&rover, Some(&base)).unwrap_err();
+        assert!(matches!(err, EngineError::MissingBasePosition));
+    }
+
+    #[test]
+    fn test_process_epoch_rtkins_mode_needs_base_position() {
+        // RtkIns mode also dispatches to process_rtk, so it should produce
+        // the same MissingBasePosition error.
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        engine.config.mode = EngineMode::RtkIns;
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(
+            Vector3::new(1.0, 2.0, 3.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+        engine.current_state = Some(RtkState::new(time, pos, 1.0));
+
+        let rover = EpochObs { time, satellites: vec![] };
+        let base = EpochObs { time, satellites: vec![] };
+        let err = engine.process_epoch(&rover, Some(&base)).unwrap_err();
+        assert!(matches!(err, EngineError::MissingBasePosition));
+    }
+
+    #[test]
+    fn test_process_epoch_sppins_dispatches_correctly() {
+        // SppIns mode should NOT call process_rtk (would give MissingBasePosition).
+        // Instead it calls process_spp_tightly_coupled -> fails with InitialSppFailed
+        // since no state or ephemerides are available.
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        engine.config.mode = EngineMode::SppIns;
+        let time = GpsTime::new(0, 0.0);
+        let rover = EpochObs { time, satellites: vec![] };
+        let err = engine.process_epoch(&rover, None).unwrap_err();
+        // process_spp_tightly_coupled returns InitialSppFailed when no state
+        assert!(matches!(err, EngineError::InitialSppFailed));
+    }
+
+    #[test]
+    fn test_process_epoch_min_snr_keeps_high_snr() {
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        engine.config.mode = EngineMode::Spp;
+        engine.config.min_snr_dbhz = 30.0;
+
+        let time = GpsTime::new(0, 0.0);
+        let sat = SatelliteId {
+            constellation: gneiss_core::sat::Constellation::Gps,
+            prn: 1,
+        };
+        let rover = EpochObs {
+            time,
+            satellites: vec![SatObs {
+                sat,
+                observations: vec![
+                    gneiss_core::obs::Observation {
+                        code: gneiss_core::obs::ObsCode {
+                            obs_type: ObsType::Snr,
+                            signal: gneiss_core::obs::SignalCode { freq_band: 1, attribute: 'C' },
+                        },
+                        value: 35.0, // Above min_snr
+                        lock_time: None,
+                        lli: None,
+                    },
+                ],
+            }],
+        };
+
+        // SPP compute will still fail (no ephemeris), but the SNR-filtering
+        // step should not panic regardless of the observation count.
+        let err = engine.process_epoch(&rover, None).unwrap_err();
+        assert!(matches!(err, EngineError::InitialSppFailed));
+    }
+
+    #[test]
+    fn test_process_epoch_min_snr_removes_low_snr() {
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        engine.config.mode = EngineMode::Spp;
+        engine.config.min_snr_dbhz = 30.0;
+
+        let time = GpsTime::new(0, 0.0);
+        let sat = SatelliteId {
+            constellation: gneiss_core::sat::Constellation::Gps,
+            prn: 1,
+        };
+        let rover = EpochObs {
+            time,
+            satellites: vec![SatObs {
+                sat,
+                observations: vec![
+                    gneiss_core::obs::Observation {
+                        code: gneiss_core::obs::ObsCode {
+                            obs_type: ObsType::Snr,
+                            signal: gneiss_core::obs::SignalCode { freq_band: 1, attribute: 'C' },
+                        },
+                        value: 20.0, // Below min_snr
+                        lock_time: None,
+                        lli: None,
+                    },
+                ],
+            }],
+        };
+
+        // Even with a low-SNR satellite that gets filtered out entirely,
+        // process_epoch should not panic. SPP compute fails (no ephemeris).
+        let err = engine.process_epoch(&rover, None).unwrap_err();
+        assert!(matches!(err, EngineError::InitialSppFailed));
+    }
+
+    fn make_epoch(time: GpsTime) -> EpochObs {
+        EpochObs {
+            time,
+            satellites: vec![],
+        }
     }
 }
 

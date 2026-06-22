@@ -151,3 +151,410 @@ pub fn match_observations(
     }
     matched_obs
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gneiss_core::ephemeris::{Ephemeris, GalileoEphemeris, GpsEphemeris};
+    use gneiss_core::obs::{Observation, ObsCode, ObsType, SatObs, SignalCode};
+    use gneiss_core::sat::{Constellation, SatelliteId};
+    use gneiss_core::time::GpsTime;
+
+    // -----------------------------------------------------------------------
+    // Helpers
+    // -----------------------------------------------------------------------
+
+    fn make_obs_code(obs_type: ObsType, freq_band: u8, attribute: char) -> ObsCode {
+        ObsCode {
+            obs_type,
+            signal: SignalCode {
+                freq_band,
+                attribute,
+            },
+        }
+    }
+
+    fn make_obs(val: f64, obs_type: ObsType, freq_band: u8, lock_time: Option<u16>) -> Observation {
+        Observation {
+            code: make_obs_code(obs_type, freq_band, 'C'),
+            value: val,
+            lock_time,
+            lli: None,
+        }
+    }
+
+    fn make_full_obs(sat: SatelliteId, pr_l1: f64, pr_l2: f64, cp_l1: f64, cp_l2: f64) -> SatObs {
+        SatObs {
+            sat,
+            observations: vec![
+                make_obs(pr_l1, ObsType::Pseudorange, 1, None),
+                make_obs(pr_l2, ObsType::Pseudorange, 2, None),
+                make_obs(cp_l1, ObsType::CarrierPhase, 1, Some(100)),
+                make_obs(cp_l2, ObsType::CarrierPhase, 2, None),
+                make_obs(100.0, ObsType::Doppler, 1, None),
+                make_obs(45.0, ObsType::Snr, 1, None),
+            ],
+        }
+    }
+
+    fn make_ephemeris(sat: SatelliteId) -> Ephemeris {
+        Ephemeris::Gps(GpsEphemeris {
+            sat,
+            toe: GpsTime::new(2000, 0.0),
+            toc: GpsTime::new(2000, 0.0),
+            af0: 0.0,
+            af1: 0.0,
+            af2: 0.0,
+            crs: 0.0,
+            crc: 0.0,
+            cuc: 0.0,
+            cus: 0.0,
+            cic: 0.0,
+            cis: 0.0,
+            m0: 0.0,
+            e: 0.0,
+            sqrt_a: 0.0,
+            delta_n: 0.0,
+            omega0: 0.0,
+            omega_dot: 0.0,
+            i0: 0.0,
+            idot: 0.0,
+            omega: 0.0,
+            tgd: 0.0,
+            iode: 0,
+            iodc: 0,
+        })
+    }
+
+    fn make_epoch(satellites: Vec<SatObs>, week: u32, tow: f64) -> EpochObs {
+        EpochObs {
+            time: GpsTime::new(week, tow),
+            satellites,
+        }
+    }
+
+    fn sat(constellation: Constellation, prn: u8) -> SatelliteId {
+        SatelliteId { constellation, prn }
+    }
+
+    // -----------------------------------------------------------------------
+    // Tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_basic_match() {
+        let rover = make_epoch(
+            vec![
+                make_full_obs(sat(Constellation::Gps, 1), 100.0, 200.0, 300.0, 400.0),
+                make_full_obs(sat(Constellation::Gps, 3), 500.0, 600.0, 700.0, 800.0),
+            ],
+            2000,
+            1.0,
+        );
+        let base = make_epoch(
+            vec![
+                make_full_obs(sat(Constellation::Gps, 1), 101.0, 201.0, 301.0, 401.0),
+                make_full_obs(sat(Constellation::Gps, 3), 501.0, 601.0, 701.0, 801.0),
+            ],
+            2000,
+            1.0,
+        );
+        let ephemerides = vec![
+            make_ephemeris(sat(Constellation::Gps, 1)),
+            make_ephemeris(sat(Constellation::Gps, 3)),
+        ];
+
+        let result = match_observations(&rover, &base, &ephemerides);
+        assert_eq!(result.len(), 2);
+
+        // First match: G01
+        assert_eq!(result[0].0.sat, sat(Constellation::Gps, 1));
+        assert_eq!(result[0].0.pr_l1, 100.0);
+        assert_eq!(result[0].0.pr_l2, Some(200.0));
+        assert_eq!(result[0].0.cp_l1, Some(300.0));
+        assert_eq!(result[0].0.cp_l2, Some(400.0));
+        assert_eq!(result[0].0.doppler, 100.0);
+        assert_eq!(result[0].0.snr, 45.0);
+        assert_eq!(result[0].0.locktime, Some(100));
+
+        assert_eq!(result[0].1.sat, sat(Constellation::Gps, 1));
+        assert_eq!(result[0].1.pr_l1, 101.0);
+        assert_eq!(result[0].1.pr_l2, Some(201.0));
+
+        // Second match: G03
+        assert_eq!(result[1].0.sat, sat(Constellation::Gps, 3));
+        assert_eq!(result[1].0.pr_l1, 500.0);
+        assert_eq!(result[1].1.pr_l1, 501.0);
+    }
+
+    #[test]
+    fn test_empty_rover() {
+        let rover = make_epoch(vec![], 2000, 1.0);
+        let base = make_epoch(
+            vec![make_full_obs(sat(Constellation::Gps, 1), 101.0, 201.0, 301.0, 401.0)],
+            2000,
+            1.0,
+        );
+        let ephemerides = vec![make_ephemeris(sat(Constellation::Gps, 1))];
+
+        let result = match_observations(&rover, &base, &ephemerides);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_empty_base() {
+        let rover = make_epoch(
+            vec![make_full_obs(sat(Constellation::Gps, 1), 100.0, 200.0, 300.0, 400.0)],
+            2000,
+            1.0,
+        );
+        let base = make_epoch(vec![], 2000, 1.0);
+        let ephemerides = vec![make_ephemeris(sat(Constellation::Gps, 1))];
+
+        let result = match_observations(&rover, &base, &ephemerides);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_no_ephemeris() {
+        let rover = make_epoch(
+            vec![make_full_obs(sat(Constellation::Gps, 1), 100.0, 200.0, 300.0, 400.0)],
+            2000,
+            1.0,
+        );
+        let base = make_epoch(
+            vec![make_full_obs(sat(Constellation::Gps, 1), 101.0, 201.0, 301.0, 401.0)],
+            2000,
+            1.0,
+        );
+        // No ephemerides at all
+        let ephemerides: Vec<Ephemeris> = vec![];
+
+        let result = match_observations(&rover, &base, &ephemerides);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_no_base_match() {
+        let rover = make_epoch(
+            vec![make_full_obs(sat(Constellation::Gps, 1), 100.0, 200.0, 300.0, 400.0)],
+            2000,
+            1.0,
+        );
+        let base = make_epoch(
+            // G03 in base, not G01
+            vec![make_full_obs(sat(Constellation::Gps, 3), 501.0, 601.0, 701.0, 801.0)],
+            2000,
+            1.0,
+        );
+        let ephemerides = vec![
+            make_ephemeris(sat(Constellation::Gps, 1)),
+            make_ephemeris(sat(Constellation::Gps, 3)),
+        ];
+
+        let result = match_observations(&rover, &base, &ephemerides);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_rover_missing_pr_l1() {
+        let rover_sat = SatObs {
+            sat: sat(Constellation::Gps, 1),
+            observations: vec![
+                // Only L2 pseudorange, no L1
+                make_obs(200.0, ObsType::Pseudorange, 2, None),
+                make_obs(300.0, ObsType::CarrierPhase, 1, Some(100)),
+            ],
+        };
+        let rover = make_epoch(vec![rover_sat], 2000, 1.0);
+        let base = make_epoch(
+            vec![make_full_obs(sat(Constellation::Gps, 1), 101.0, 201.0, 301.0, 401.0)],
+            2000,
+            1.0,
+        );
+        let ephemerides = vec![make_ephemeris(sat(Constellation::Gps, 1))];
+
+        let result = match_observations(&rover, &base, &ephemerides);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_base_missing_pr_l1() {
+        let rover = make_epoch(
+            vec![make_full_obs(sat(Constellation::Gps, 1), 100.0, 200.0, 300.0, 400.0)],
+            2000,
+            1.0,
+        );
+        let base_sat = SatObs {
+            sat: sat(Constellation::Gps, 1),
+            observations: vec![
+                make_obs(201.0, ObsType::Pseudorange, 2, None),
+                make_obs(301.0, ObsType::CarrierPhase, 1, Some(100)),
+            ],
+        };
+        let base = make_epoch(vec![base_sat], 2000, 1.0);
+        let ephemerides = vec![make_ephemeris(sat(Constellation::Gps, 1))];
+
+        let result = match_observations(&rover, &base, &ephemerides);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_duplicate_rover_satellite() {
+        // Two entries for G01 in rover; only the first pair should match
+        // (base has only one G01, find will match the first)
+        let rover = make_epoch(
+            vec![
+                make_full_obs(sat(Constellation::Gps, 1), 100.0, 200.0, 300.0, 400.0),
+                make_full_obs(sat(Constellation::Gps, 1), 999.0, 888.0, 777.0, 666.0),
+            ],
+            2000,
+            1.0,
+        );
+        let base = make_epoch(
+            vec![make_full_obs(sat(Constellation::Gps, 1), 101.0, 201.0, 301.0, 401.0)],
+            2000,
+            1.0,
+        );
+        let ephemerides = vec![make_ephemeris(sat(Constellation::Gps, 1))];
+
+        let result = match_observations(&rover, &base, &ephemerides);
+        // Two rover entries for G01, both match base G01 → two output pairs
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].0.pr_l1, 100.0);
+        assert_eq!(result[1].0.pr_l1, 999.0);
+    }
+
+    #[test]
+    fn test_mixed_constellations() {
+        let rover = make_epoch(
+            vec![
+                make_full_obs(sat(Constellation::Gps, 1), 100.0, 200.0, 300.0, 400.0),
+                make_full_obs(sat(Constellation::Galileo, 2), 500.0, 600.0, 700.0, 800.0),
+            ],
+            2000,
+            1.0,
+        );
+        let base = make_epoch(
+            vec![
+                make_full_obs(sat(Constellation::Gps, 1), 101.0, 201.0, 301.0, 401.0),
+                make_full_obs(sat(Constellation::Galileo, 2), 501.0, 601.0, 701.0, 801.0),
+            ],
+            2000,
+            1.0,
+        );
+        let ephemerides = vec![
+            make_ephemeris(sat(Constellation::Gps, 1)),
+            Ephemeris::Galileo(GalileoEphemeris {
+                sat: sat(Constellation::Galileo, 2),
+                toe: GpsTime::new(2000, 0.0),
+                toc: GpsTime::new(2000, 0.0),
+                af0: 0.0, af1: 0.0, af2: 0.0,
+                crs: 0.0, crc: 0.0, cuc: 0.0, cus: 0.0, cic: 0.0, cis: 0.0,
+                m0: 0.0, e: 0.0, sqrt_a: 0.0, delta_n: 0.0,
+                omega0: 0.0, omega_dot: 0.0, i0: 0.0, idot: 0.0, omega: 0.0,
+                bgd_e1_e5a: 0.0, bgd_e1_e5b: 0.0, iod_nav: 0,
+            }),
+        ];
+
+        let result = match_observations(&rover, &base, &ephemerides);
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].0.sat, sat(Constellation::Gps, 1));
+        assert_eq!(result[1].0.sat, sat(Constellation::Galileo, 2));
+    }
+
+    #[test]
+    fn test_partial_observations() {
+        // Only PR L1 and CP L1 — no L2
+        let rover_sat = SatObs {
+            sat: sat(Constellation::Gps, 1),
+            observations: vec![
+                make_obs(100.0, ObsType::Pseudorange, 1, None),
+                make_obs(300.0, ObsType::CarrierPhase, 1, Some(100)),
+                make_obs(50.0, ObsType::Doppler, 1, None),
+            ],
+        };
+        let base_sat = SatObs {
+            sat: sat(Constellation::Gps, 1),
+            observations: vec![
+                make_obs(101.0, ObsType::Pseudorange, 1, None),
+                make_obs(301.0, ObsType::CarrierPhase, 1, None),
+                make_obs(51.0, ObsType::Doppler, 1, None),
+            ],
+        };
+        let rover = make_epoch(vec![rover_sat], 2000, 1.0);
+        let base = make_epoch(vec![base_sat], 2000, 1.0);
+        let ephemerides = vec![make_ephemeris(sat(Constellation::Gps, 1))];
+
+        let result = match_observations(&rover, &base, &ephemerides);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].0.pr_l1, 100.0);
+        assert_eq!(result[0].0.pr_l2, None);
+        assert_eq!(result[0].0.cp_l1, Some(300.0));
+        assert_eq!(result[0].0.cp_l2, None);
+        // Doppler present
+        assert_eq!(result[0].0.doppler, 50.0);
+        // SNR missing → default 25.0
+        assert_eq!(result[0].0.snr, 25.0);
+        assert_eq!(result[0].0.locktime, Some(100));
+
+        // Base side
+        assert_eq!(result[0].1.pr_l1, 101.0);
+        assert_eq!(result[0].1.pr_l2, None);
+        assert_eq!(result[0].1.cp_l1, Some(301.0));
+        assert_eq!(result[0].1.cp_l2, None);
+        assert_eq!(result[0].1.doppler, 51.0);
+        // Base SNR always 25.0
+        assert_eq!(result[0].1.snr, 25.0);
+        // Base locktime always Some(1000)
+        assert_eq!(result[0].1.locktime, Some(1000));
+    }
+
+    #[test]
+    fn test_doppler_default_zero() {
+        let rover_sat = SatObs {
+            sat: sat(Constellation::Gps, 1),
+            observations: vec![
+                make_obs(100.0, ObsType::Pseudorange, 1, None),
+                make_obs(200.0, ObsType::Pseudorange, 2, None),
+                make_obs(300.0, ObsType::CarrierPhase, 1, Some(100)),
+            ],
+        };
+        let base_sat = SatObs {
+            sat: sat(Constellation::Gps, 1),
+            observations: vec![
+                make_obs(101.0, ObsType::Pseudorange, 1, None),
+                make_obs(201.0, ObsType::Pseudorange, 2, None),
+                make_obs(301.0, ObsType::CarrierPhase, 1, None),
+            ],
+        };
+        let rover = make_epoch(vec![rover_sat], 2000, 1.0);
+        let base = make_epoch(vec![base_sat], 2000, 1.0);
+        let ephemerides = vec![make_ephemeris(sat(Constellation::Gps, 1))];
+
+        let result = match_observations(&rover, &base, &ephemerides);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].0.doppler, 0.0);
+    }
+
+    #[test]
+    fn test_epoch_time_fields() {
+        // Different epochs (different week/tow) but same satellites → still match
+        let rover = make_epoch(
+            vec![make_full_obs(sat(Constellation::Gps, 1), 100.0, 200.0, 300.0, 400.0)],
+            2001,
+            0.0,
+        );
+        let base = make_epoch(
+            vec![make_full_obs(sat(Constellation::Gps, 1), 101.0, 201.0, 301.0, 401.0)],
+            2000,
+            5.0,
+        );
+        let ephemerides = vec![make_ephemeris(sat(Constellation::Gps, 1))];
+
+        let result = match_observations(&rover, &base, &ephemerides);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].0.pr_l1, 100.0);
+        assert_eq!(result[0].1.pr_l1, 101.0);
+    }
+}

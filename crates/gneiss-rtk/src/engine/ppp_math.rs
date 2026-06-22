@@ -683,4 +683,271 @@ mod tests {
             detect_mw_slip(cp1_slip, 0.19, cp2_new, 0.24, p1_new, p2_new, mw, true, 2.0);
         assert!(slip2, "MW should detect phase cycle slips");
     }
+
+    #[test]
+    fn test_detect_slip_combined_hw_slip_via_lli() {
+        let mut obs = SatObs {
+            sat: SatelliteId { constellation: Constellation::Gps, prn: 1 },
+            observations: vec![],
+        };
+        obs.observations.push(gneiss_core::obs::Observation {
+            code: ObsCode::from_str("L1C").unwrap(),
+            value: 100.0,
+            lli: Some(1),
+            lock_time: Some(10),
+        });
+        let mut gf_prev = Some(0.0);
+        let mut mw_prev = Some(0.0);
+        let (slip, lk) = detect_slip_combined(&obs, 5, Some(100.0), 0.19, Some(80.0), 0.24, Some(20000000.0), Some(20000000.0), &mut gf_prev, &mut mw_prev);
+        assert!(slip);
+        assert_eq!(lk, 0);
+        assert!(gf_prev.is_none());
+        assert!(mw_prev.is_none());
+    }
+
+    #[test]
+    fn test_detect_slip_combined_gf_initializes_and_then_detects_slip() {
+        let obs = SatObs {
+            sat: SatelliteId { constellation: Constellation::Gps, prn: 1 },
+            observations: vec![],
+        };
+        let mut gf_prev: Option<f64> = None;
+        let mut mw_prev: Option<f64> = None;
+        let (slip1, _) = detect_slip_combined(&obs, 5, Some(1000.0), 0.19, Some(800.0), 0.24, Some(20000000.0), Some(20000000.0), &mut gf_prev, &mut mw_prev);
+        assert!(!slip1);
+        assert!(gf_prev.is_some());
+        assert!(mw_prev.is_some());
+        let (slip2, _) = detect_slip_combined(&obs, 5, Some(1000.0), 0.19, Some(850.0), 0.24, Some(20000000.0), Some(20000000.0), &mut gf_prev, &mut mw_prev);
+        assert!(slip2);
+        assert!(gf_prev.is_none());
+        assert!(mw_prev.is_none());
+    }
+
+    #[test]
+    fn test_detect_slip_combined_gf_only_no_pseudorange() {
+        let obs = SatObs {
+            sat: SatelliteId { constellation: Constellation::Gps, prn: 1 },
+            observations: vec![],
+        };
+        let mut gf_prev: Option<f64> = None;
+        let mut mw_prev: Option<f64> = None;
+        let (slip1, _) = detect_slip_combined(&obs, 5, Some(1000.0), 0.19, Some(800.0), 0.24, None, None, &mut gf_prev, &mut mw_prev);
+        assert!(!slip1);
+        assert!(gf_prev.is_some());
+        assert!(mw_prev.is_none());
+    }
+
+    #[test]
+    fn test_apply_osb_corrections_sinex_with_cp_corrections() {
+        use gneiss_parsers::sinex_bia::{BiasRecord, BiasType, SinexBias};
+        let sat_id = SatelliteId { constellation: Constellation::Gps, prn: 1 };
+        let bias_p1 = BiasRecord {
+            bias_type: BiasType::Osb,
+            sat: sat_id, station: None,
+            obs1: "C1C".parse().unwrap(), obs2: None,
+            start_time: GpsTime::new(0, 0.0), end_time: GpsTime::new(0, 100.0),
+            unit: "ns".to_string(), value: 5.0, std_dev: 0.0,
+        };
+        let sinex = SinexBias { records: vec![bias_p1] };
+        let mut obs = SatObs { sat: sat_id, observations: vec![] };
+        obs.observations.push(gneiss_core::obs::Observation {
+            code: ObsCode::from_str("C1C").unwrap(),
+            value: 200.0, lli: None, lock_time: None,
+        });
+        let out = apply_osb_corrections(Some(&sinex), &obs, GpsTime::new(0, 50.0), 1.5e9, 1.2e9, 1, 2);
+        let expected_osb = 5.0e-9 * LIGHT_SPEED;
+        assert!((out.osb_p1 - expected_osb).abs() < 1e-6);
+        assert!((out.p1.unwrap() - (200.0 - expected_osb)).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_apply_osb_corrections_time_out_of_range() {
+        use gneiss_parsers::sinex_bia::{BiasRecord, BiasType, SinexBias};
+        let sat_id = SatelliteId { constellation: Constellation::Gps, prn: 1 };
+        let bias = BiasRecord {
+            bias_type: BiasType::Osb,
+            sat: sat_id, station: None,
+            obs1: "C1C".parse().unwrap(), obs2: None,
+            start_time: GpsTime::new(0, 0.0), end_time: GpsTime::new(0, 100.0),
+            unit: "ns".to_string(), value: 5.0, std_dev: 0.0,
+        };
+        let sinex = SinexBias { records: vec![bias] };
+        let mut obs = SatObs { sat: sat_id, observations: vec![] };
+        obs.observations.push(gneiss_core::obs::Observation {
+            code: ObsCode::from_str("C1C").unwrap(),
+            value: 200.0, lli: None, lock_time: None,
+        });
+        let out = apply_osb_corrections(Some(&sinex), &obs, GpsTime::new(0, 200.0), 1.5e9, 1.2e9, 1, 2);
+        assert!((out.osb_p1 - 0.0).abs() < 1e-9);
+        assert!((out.p1.unwrap() - 200.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_detect_slip_combined_mw_only_slip() {
+        // Test MW slip detection when GF does NOT trigger.
+        // With lam1=0.19, lam2=0.24, adding +9.1 to cp1 and +7.0 to cp2 gives:
+        //   DMW = 9.1 - 7.0 = 2.1 (> 2.0 threshold)
+        //   DGF = 0.19*9.1 - 0.24*7.0 = 0.049 (< 0.05 threshold)
+        // So MW triggers first.
+        let obs = SatObs {
+            sat: SatelliteId { constellation: Constellation::Gps, prn: 1 },
+            observations: vec![],
+        };
+        let lam1 = 0.19;
+        let lam2 = 0.24;
+        let p1 = 20000000.0;
+        let p2 = 20000000.0;
+        let cp1 = p1 / lam1;
+        let cp2 = p2 / lam2;
+
+        let mut gf_prev: Option<f64> = None;
+        let mut mw_prev: Option<f64> = None;
+
+        // First call: initialize GF and MW (no slip)
+        let (slip1, lk1) = detect_slip_combined(
+            &obs, 5,
+            Some(cp1), lam1, Some(cp2), lam2,
+            Some(p1), Some(p2),
+            &mut gf_prev, &mut mw_prev,
+        );
+        assert!(!slip1, "Expected no slip on initialization");
+        assert!(gf_prev.is_some());
+        assert!(mw_prev.is_some());
+
+        // Second call: change cp1/cp2 to trigger MW but not GF
+        let slip_a = 9.1;
+        let slip_b = 7.0;
+        let (slip2, lk2) = detect_slip_combined(
+            &obs, lk1,
+            Some(cp1 + slip_a), lam1, Some(cp2 + slip_b), lam2,
+            Some(p1), Some(p2),
+            &mut gf_prev, &mut mw_prev,
+        );
+        assert!(slip2, "Expected MW slip");
+        assert_eq!(lk2, 0);
+        assert!(gf_prev.is_none(), "gf_prev should be reset on slip");
+        assert!(mw_prev.is_none(), "mw_prev should be reset on slip");
+    }
+
+    #[test]
+    fn test_detect_slip_combined_no_slip_gf_and_mw() {
+        // Both GF and MW should work together and not produce false slips
+        // when the measurements are consistent across epochs.
+        let obs = SatObs {
+            sat: SatelliteId { constellation: Constellation::Gps, prn: 1 },
+            observations: vec![],
+        };
+        let lam1 = 0.19;
+        let lam2 = 0.24;
+        let p1 = 20000000.0;
+        let p2 = 20000000.0;
+        let cp1 = p1 / lam1;
+        let cp2 = p2 / lam2;
+
+        let mut gf_prev: Option<f64> = None;
+        let mut mw_prev: Option<f64> = None;
+
+        // First call: initialize
+        let (slip1, lk1) = detect_slip_combined(
+            &obs, 5,
+            Some(cp1), lam1, Some(cp2), lam2,
+            Some(p1), Some(p2),
+            &mut gf_prev, &mut mw_prev,
+        );
+        assert!(!slip1);
+        let saved_gf = gf_prev;
+        let saved_mw = mw_prev;
+
+        // Second call with identical values: no slip expected
+        let (slip2, _lk2) = detect_slip_combined(
+            &obs, lk1,
+            Some(cp1), lam1, Some(cp2), lam2,
+            Some(p1), Some(p2),
+            &mut gf_prev, &mut mw_prev,
+        );
+        assert!(!slip2, "No slip expected with identical values");
+        assert!(gf_prev.is_some());
+        assert!(mw_prev.is_some());
+        // The GF/MW values should have been updated (nearly identical)
+        assert!((gf_prev.unwrap() - saved_gf.unwrap()).abs() < 1e-6);
+        assert!((mw_prev.unwrap() - saved_mw.unwrap()).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_detect_slip_combined_mw_slip_without_gf() {
+        // When cp1/cp2 are None, MW check is skipped, only GF runs.
+        // When p1/p2 are None, MW check is skipped.
+        let obs = SatObs {
+            sat: SatelliteId { constellation: Constellation::Gps, prn: 1 },
+            observations: vec![],
+        };
+        let mut gf_prev: Option<f64> = None;
+        let mut mw_prev: Option<f64> = None;
+
+        // Only GF available (cp1/cp2 Some, p1/p2 None)
+        let cp1 = 1000.0;
+        let cp2 = 800.0;
+        let (slip1, _lk1) = detect_slip_combined(
+            &obs, 5,
+            Some(cp1), 0.19, Some(cp2), 0.24,
+            None, None,
+            &mut gf_prev, &mut mw_prev,
+        );
+        assert!(!slip1);
+        assert!(gf_prev.is_some());
+        assert!(mw_prev.is_none(), "mw_prev should remain None when p1/p2 are None");
+
+        // Now test with only cp1 Some but cp2 None -> neither GF nor MW
+        gf_prev = None;
+        let (slip2, _lk2) = detect_slip_combined(
+            &obs, 5,
+            Some(cp1), 0.19, None, 0.24,
+            None, None,
+            &mut gf_prev, &mut mw_prev,
+        );
+        assert!(!slip2);
+        assert!(gf_prev.is_none(), "gf_prev stays None when cp2 is None");
+        assert!(mw_prev.is_none(), "mw_prev stays None when cp2 is None");
+    }
+
+    #[test]
+    fn test_detect_gf_slip_no_prev() {
+        let (slip, gf) = detect_gf_slip(1000.0, 0.19, 800.0, 0.24, 0.0, false, 0.05);
+        assert!(!slip);
+        assert!((gf - (-2.0)).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_detect_mw_slip_no_prev() {
+        let p1 = 20000000.0;
+        let p2 = p1;
+        let cp1 = p1 / 0.19;
+        let cp2 = p2 / 0.24;
+        let (slip, mw) = detect_mw_slip(cp1, 0.19, cp2, 0.24, p1, p2, 0.0, false, 2.0);
+        assert!(!slip);
+        // MW should be ~0 for self-consistent measurements
+        assert!(mw.abs() < 1.0);
+    }
+
+    #[test]
+    fn test_detect_mw_slip_exact_threshold() {
+        let p1 = 20000000.0;
+        let p2 = p1;
+        let cp1 = p1 / 0.19;
+        let cp2 = p2 / 0.24;
+        let (_, mw) = detect_mw_slip(cp1, 0.19, cp2, 0.24, p1, p2, 0.0, false, 2.0);
+
+        // Change by exactly 2.0 cycles on MW: threshold is > 2.0, not >=
+        let slip_cp1 = cp1 + 2.0;
+        let (slip, _) =
+            detect_mw_slip(slip_cp1, 0.19, cp2, 0.24, p1, p2, mw, true, 2.0);
+        // |DMW| = 2.0, which is NOT > 2.0, so no slip
+        assert!(!slip, "Exactly 2.0 cycles should not trigger MW slip (> threshold, not >=)");
+
+        // Change by 2.001 cycles: should trigger
+        let slip_cp1_2 = cp1 + 2.001;
+        let (slip2, _) =
+            detect_mw_slip(slip_cp1_2, 0.19, cp2, 0.24, p1, p2, mw, true, 2.0);
+        assert!(slip2, "2.001 cycles should trigger MW slip");
+    }
 }

@@ -111,4 +111,44 @@ mod tests {
             estimated_offset
         );
     }
+
+    #[test]
+    fn test_cross_correlate_time_offset_empty_inputs() {
+        let result = cross_correlate_time_offset(&[], &[], &[], &[]);
+        assert_eq!(result, 0.0);
+
+        // Only gnss_time empty
+        let v = vec![Vector3::new(1.0, 0.0, 0.0)];
+        let result2 = cross_correlate_time_offset(&[], &v, &[0.0, 1.0], &v);
+        assert_eq!(result2, 0.0);
+
+        // IMU has fewer than 2 elements
+        let result3 = cross_correlate_time_offset(&[0.0], &v, &[0.0], &v);
+        assert_eq!(result3, 0.0);
+    }
+
+    #[test]
+    fn test_cross_correlate_time_offset_single_gnss_epoch() {
+        // Single GNSS epoch, IMU with 2 elements but count <= 10 -> returns 0
+        let gnss_time = vec![0.0];
+        let gnss_vel = vec![Vector3::new(1.0, 0.0, 0.0)];
+        let imu_time = vec![0.0, 1.0];
+        let imu_vel = vec![Vector3::new(1.0, 0.0, 0.0), Vector3::new(2.0, 0.0, 0.0)];
+
+        let result = cross_correlate_time_offset(&gnss_time, &gnss_vel, &imu_time, &imu_vel);
+        assert_eq!(result, 0.0);
+    }
+
+    #[test]
+    fn test_cross_correlate_time_offset_gnss_before_imu_epochs() {
+        // GNSS epoch before any IMU epoch: binary search returns Err(0) -> idx = 0
+        // idx > 0 check fails -> correlation count stays 0
+        let gnss_time = vec![-10.0, 0.0];
+        let gnss_vel = vec![Vector3::new(1.0, 0.0, 0.0); 2];
+        let imu_time = vec![0.0, 1.0, 2.0];
+        let imu_vel = vec![Vector3::new(1.0, 0.0, 0.0); 3];
+
+        let result = cross_correlate_time_offset(&gnss_time, &gnss_vel, &imu_time, &imu_vel);
+        assert_eq!(result, 0.0);
+    }
 }

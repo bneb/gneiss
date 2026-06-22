@@ -48,6 +48,10 @@ pub fn get_frequency(sat: SatelliteId, freq_band: u8, freq_num: i8) -> f64 {
             Constellation::Beidou => FREQ_GPS_L5,
             _ => FREQ_GPS_L5,
         },
+        7 => match sat.constellation {
+            Constellation::Galileo | Constellation::Beidou => FREQ_GAL_E5B,
+            _ => FREQ_GPS_L2,
+        },
         _ => FREQ_GPS_L1,
     }
 }

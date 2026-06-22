@@ -388,4 +388,93 @@ mod tests {
         assert!((angles[1] - true_angles[1]).abs() < 1e-2);
         assert!((angles[2] - true_angles[2]).abs() < 1e-2);
     }
+
+    #[test]
+    fn test_estimate_lever_arm_insufficient_data() {
+        let result = estimate_lever_arm(&[], &[], &[], &[], &[]);
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err(),
+            "Insufficient or mismatched data for lever arm estimation"
+        );
+    }
+
+    #[test]
+    fn test_estimate_lever_arm_two_epochs() {
+        let w = Vector3::new(0.1, 0.2, 0.3);
+        let w_dot = Vector3::zeros();
+        let v_i = Vector3::new(10.0, 0.0, 0.0);
+        let v_g = Vector3::new(10.0, 0.0, 0.0);
+        let r = nalgebra::Matrix3::identity();
+
+        // n=2 is < 3
+        let omega = vec![w, w];
+        let omega_dot = vec![w_dot, w_dot];
+        let v_gnss = vec![v_g, v_g];
+        let v_imu = vec![v_i, v_i];
+        let r_be = vec![r, r];
+
+        let result = estimate_lever_arm(&omega, &omega_dot, &v_gnss, &v_imu, &r_be);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_estimate_lever_arm_mismatched_lengths() {
+        let w = Vector3::new(0.1, 0.2, 0.3);
+        let v_i = Vector3::new(10.0, 0.0, 0.0);
+        let v_g = Vector3::new(10.0, 0.0, 0.0);
+        let r = nalgebra::Matrix3::identity();
+
+        let omega = vec![w; 5];
+        let omega_dot = vec![Vector3::zeros(); 5];
+        let v_gnss = vec![v_g; 3]; // length 3 != other vectors length 5
+        let v_imu = vec![v_i; 5];
+        let r_be = vec![r; 5];
+
+        let result = estimate_lever_arm(&omega, &omega_dot, &v_gnss, &v_imu, &r_be);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_estimate_lever_arm_singular_matrix() {
+        // Zero rotation -> omega = 0 -> skew-symmetric matrix is zero -> H = 0 -> singular
+        let n = 5;
+        let omega = vec![Vector3::zeros(); n];
+        let omega_dot = vec![Vector3::zeros(); n];
+        let v_gnss = vec![Vector3::new(10.0, 0.0, 0.0); n];
+        let v_imu = vec![Vector3::new(10.0, 0.0, 0.0); n];
+        let r_be = vec![nalgebra::Matrix3::identity(); n];
+
+        let result = estimate_lever_arm(&omega, &omega_dot, &v_gnss, &v_imu, &r_be);
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err(),
+            "Matrix is singular; insufficient dynamic excitation to observe lever arm"
+        );
+    }
+
+    #[test]
+    fn test_calibrate_lever_arms_grid_search_basic() {
+        let base_config = crate::engine::EngineConfig::default();
+        let evaluate_fn = |cfg: &crate::engine::EngineConfig| -> f64 {
+            let dx = cfg.imu_to_antenna_lever_arm[0] - 1.0;
+            let dz = cfg.imu_to_antenna_lever_arm[2] - (-0.5);
+            let nhc_dx = cfg.imu_to_nhc_lever_arm[0] - 1.5;
+            let nhc_dz = cfg.imu_to_nhc_lever_arm[2] - 1.0;
+            dx * dx + dz * dz + nhc_dx * nhc_dx + nhc_dz * nhc_dz
+        };
+
+        let result = calibrate_lever_arms_grid_search(&base_config, evaluate_fn).unwrap();
+        let (gnss_arm, nhc_arm) = result;
+
+        // GNSS grid: x in [0,0.5,1.0,1.5,2.0], z in [-1,-0.5,0,0.5,1.0]
+        assert!((gnss_arm[0] - 1.0).abs() < 1e-6);
+        assert!((gnss_arm[1] - 0.0).abs() < 1e-6);
+        assert!((gnss_arm[2] - (-0.5)).abs() < 1e-6);
+
+        // NHC grid: x in [0,0.5,1.0,1.5,2.0], z in [0,0.5,1.0,1.5,2.0]
+        assert!((nhc_arm[0] - 1.5).abs() < 1e-6);
+        assert!((nhc_arm[1] - 0.0).abs() < 1e-6);
+        assert!((nhc_arm[2] - 1.0).abs() < 1e-6);
+    }
 }

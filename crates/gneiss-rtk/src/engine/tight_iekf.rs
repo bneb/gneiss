@@ -130,3 +130,222 @@ impl TightFactorGraph {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::engine::{EngineConfig, ProcessingEngine};
+    use crate::filter::RtkState;
+    use gneiss_core::coords::{Coordinate, Datum, Frame};
+    use gneiss_core::time::GpsTime;
+
+    #[test]
+    fn test_default_config() {
+        let fg = TightFactorGraph::new();
+        assert_eq!(fg.max_iterations, 10);
+        assert_eq!(fg.convergence_threshold, 1e-3);
+    }
+
+    #[test]
+    fn test_solve_no_state() {
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        let empty_obs = EpochObs {
+            time: GpsTime::new(2000, 0.0),
+            satellites: vec![],
+        };
+        // Should not panic when current_state is None
+        let fg = TightFactorGraph::new();
+        fg.solve(&mut engine, &empty_obs, None);
+        assert!(engine.current_state.is_none());
+    }
+
+    #[test]
+    fn test_solve_with_state_unchanged() {
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        let coord = Coordinate::new(
+            Vector3::new(1.0, 2.0, 3.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            GpsTime::new(2000, 0.0),
+        );
+        let state = RtkState::new(GpsTime::new(2000, 0.0), coord, 1.0);
+        engine.current_state = Some(state);
+        let empty_obs = EpochObs {
+            time: GpsTime::new(2000, 1.0),
+            satellites: vec![],
+        };
+        let fg = TightFactorGraph::new();
+        fg.solve(&mut engine, &empty_obs, Some(1.0));
+        let final_state = engine.current_state.as_ref().unwrap();
+        // State should remain as initialized (placeholder math produces zero updates)
+        assert_eq!(final_state.position.vector.x, 1.0);
+        assert_eq!(final_state.position.vector.y, 2.0);
+        assert_eq!(final_state.position.vector.z, 3.0);
+        assert_eq!(final_state.rcv_clk_bias, 0.0);
+    }
+
+    #[test]
+    fn test_solve_with_ambiguities() {
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        let coord = Coordinate::new(
+            Vector3::new(0.0, 0.0, 0.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            GpsTime::new(2000, 0.0),
+        );
+        let mut state = RtkState::new(GpsTime::new(2000, 0.0), coord, 1.0);
+        state.ambiguities = vec![1.5, 2.5, 3.5];
+        engine.current_state = Some(state);
+        let empty_obs = EpochObs {
+            time: GpsTime::new(2000, 1.0),
+            satellites: vec![],
+        };
+        let fg = TightFactorGraph::new();
+        fg.solve(&mut engine, &empty_obs, None);
+        let final_state = engine.current_state.as_ref().unwrap();
+        assert_eq!(final_state.ambiguities.len(), 3);
+        // Ambiguities should be preserved (placeholder math)
+        assert!((final_state.ambiguities[0] - 1.5).abs() < 1e-10);
+        assert!((final_state.ambiguities[1] - 2.5).abs() < 1e-10);
+        assert!((final_state.ambiguities[2] - 3.5).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_solve_convergence_threshold_works() {
+        // Verify that different threshold values don't break the solver
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        let coord = Coordinate::new(
+            Vector3::new(10.0, 20.0, 30.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            GpsTime::new(2000, 0.0),
+        );
+        let state = RtkState::new(GpsTime::new(2000, 0.0), coord, 1.0);
+        engine.current_state = Some(state);
+        let empty_obs = EpochObs {
+            time: GpsTime::new(2000, 1.0),
+            satellites: vec![],
+        };
+        let fg = TightFactorGraph {
+            max_iterations: 5,
+            convergence_threshold: 1e-6,
+        };
+        fg.solve(&mut engine, &empty_obs, None);
+        assert!(engine.current_state.is_some());
+    }
+
+    // -------------------------------------------------------------------------
+    // Extended tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_solve_updates_attitude_from_vector() {
+        // The solver places x[6..9] (attitude) into the state's attitude quaternion
+        // via UnitQuaternion::from_scaled_axis. With zero delta, attitude stays the same.
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        let coord = Coordinate::new(
+            Vector3::new(0.0, 0.0, 0.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            GpsTime::new(2000, 0.0),
+        );
+        let state = RtkState::new(GpsTime::new(2000, 0.0), coord, 1.0);
+        engine.current_state = Some(state);
+        let empty_obs = EpochObs {
+            time: GpsTime::new(2000, 1.0),
+            satellites: vec![],
+        };
+        let fg = TightFactorGraph::new();
+        fg.solve(&mut engine, &empty_obs, None);
+        let state = engine.current_state.as_ref().unwrap();
+        // Attitude should still be a unit quaternion (from init_attitude)
+        assert!((state.attitude.quaternion().norm() - 1.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_solve_sets_clock_drift_and_zwd() {
+        // When CORE_STATE_SIZE > 16, the solver fills x[19] = rcv_clk_drift and x[20] = zwd.
+        // Since CORE_STATE_SIZE is 21, this always applies.
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        let coord = Coordinate::new(
+            Vector3::new(10.0, 20.0, 30.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            GpsTime::new(2000, 0.0),
+        );
+        let mut state = RtkState::new(GpsTime::new(2000, 0.0), coord, 1.0);
+        state.isb_glo = 1.0;
+        state.isb_gal = 2.0;
+        state.isb_bds = 3.0;
+        state.rcv_clk_drift = 4.0;
+        state.zwd = 0.2;
+        engine.current_state = Some(state);
+        let empty_obs = EpochObs {
+            time: GpsTime::new(2000, 1.0),
+            satellites: vec![],
+        };
+        let fg = TightFactorGraph::new();
+        fg.solve(&mut engine, &empty_obs, None);
+        let state = engine.current_state.as_ref().unwrap();
+        // With placeholder math (zero delta), values stay as initialized
+        assert!((state.isb_glo - 1.0).abs() < 1e-10);
+        assert!((state.isb_gal - 2.0).abs() < 1e-10);
+        assert!((state.isb_bds - 3.0).abs() < 1e-10);
+        assert!((state.rcv_clk_drift - 4.0).abs() < 1e-10);
+        assert!((state.zwd - 0.2).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_solve_applies_ambiguity_update_loop() {
+        // Verify the ambiguity update loop in the iteration (lines 103-105)
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        let coord = Coordinate::new(
+            Vector3::new(100.0, 200.0, 300.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            GpsTime::new(2000, 0.0),
+        );
+        let mut state = RtkState::new(GpsTime::new(2000, 0.0), coord, 1.0);
+        state.ambiguities = vec![5.0, 10.0, 15.0];
+        engine.current_state = Some(state);
+        let empty_obs = EpochObs {
+            time: GpsTime::new(2000, 1.0),
+            satellites: vec![],
+        };
+        let fg = TightFactorGraph::new();
+        fg.solve(&mut engine, &empty_obs, None);
+        let state = engine.current_state.as_ref().unwrap();
+        assert_eq!(state.ambiguities.len(), 3);
+        // Zero delta means ambiguities unchanged
+        assert!((state.ambiguities[0] - 5.0).abs() < 1e-10);
+        assert!((state.ambiguities[1] - 10.0).abs() < 1e-10);
+        assert!((state.ambiguities[2] - 15.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_solve_zero_iterations_still_finalizes() {
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        let coord = Coordinate::new(
+            Vector3::new(1.0, 2.0, 3.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            GpsTime::new(2000, 0.0),
+        );
+        let state = RtkState::new(GpsTime::new(2000, 0.0), coord, 1.0);
+        engine.current_state = Some(state);
+        let empty_obs = EpochObs {
+            time: GpsTime::new(2000, 1.0),
+            satellites: vec![],
+        };
+        let fg = TightFactorGraph {
+            max_iterations: 0,
+            convergence_threshold: 1e-3,
+        };
+        fg.solve(&mut engine, &empty_obs, None);
+        let state = engine.current_state.as_ref().unwrap();
+        // With 0 iterations, the solver still runs the finalization step
+        assert!((state.position.vector.x - 1.0).abs() < 1e-10);
+        assert!((state.position.vector.y - 2.0).abs() < 1e-10);
+        assert!((state.position.vector.z - 3.0).abs() < 1e-10);
+    }
+}

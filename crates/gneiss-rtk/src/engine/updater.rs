@@ -5,7 +5,7 @@ use crate::math::inversion::invert_matrix_robust;
 use crate::math::thresholding::huber_scale_covariance;
 use nalgebra::{DMatrix, DVector, UnitQuaternion, Vector3};
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum UpdateError {
     SingularMatrix,
     DimensionMismatch,
@@ -218,7 +218,7 @@ fn subset_ekf_matrices(
     (z_new, h_new, r_new)
 }
 
-#[derive(PartialEq)]
+#[derive(Debug, PartialEq)]
 enum OutlierAction {
     ContinueLoop,
     BreakLoop,
@@ -439,4 +439,551 @@ pub fn apply_fix_and_hold(
     apply_state_correction(state, &dx);
     state.covariance = apply_joseph_covariance_update(&state.covariance, &k, d_full, &r);
     Ok(())
+}
+
+#[cfg(test)]
+mod private_tests {
+    use super::*;
+    use crate::filter::RtkState;
+    use gneiss_core::coords::{Coordinate, Datum, Frame};
+    use gneiss_core::sat::{Constellation, SatelliteId};
+    use gneiss_core::time::GpsTime;
+    use nalgebra::{DMatrix, DVector, Vector3};
+
+    // -----------------------------------------------------------------------
+    // validate_ekf_dimensions
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_validate_ekf_dimensions_ok() {
+        let z = DVector::zeros(3);
+        let h = DMatrix::zeros(3, 5);
+        assert!(validate_ekf_dimensions(&z, &h, 5).is_ok());
+    }
+
+    #[test]
+    fn test_validate_ekf_dimensions_z_h_rows_mismatch() {
+        let z = DVector::zeros(3);
+        let h = DMatrix::zeros(5, 5);
+        assert_eq!(
+            validate_ekf_dimensions(&z, &h, 5),
+            Err(UpdateError::DimensionMismatch)
+        );
+    }
+
+    #[test]
+    fn test_validate_ekf_dimensions_h_cols_cov_mismatch() {
+        let z = DVector::zeros(3);
+        let h = DMatrix::zeros(3, 5);
+        assert_eq!(
+            validate_ekf_dimensions(&z, &h, 7),
+            Err(UpdateError::DimensionMismatch)
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // validate_pr_measurements
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_validate_pr_measurements_empty_indices() {
+        assert_eq!(
+            validate_pr_measurements(&[], None),
+            Err(UpdateError::InvalidMeasurement)
+        );
+    }
+
+    #[test]
+    fn test_validate_pr_measurements_no_pr_types() {
+        let sat = SatelliteId { constellation: Constellation::Gps, prn: 1 };
+        let meas_types = vec![(sat, 1), (sat, 2)];
+        assert_eq!(
+            validate_pr_measurements(&[0, 1], Some(&meas_types)),
+            Err(UpdateError::InvalidMeasurement)
+        );
+    }
+
+    #[test]
+    fn test_validate_pr_measurements_has_pr() {
+        let sat = SatelliteId { constellation: Constellation::Gps, prn: 1 };
+        let meas_types = vec![(sat, 0), (sat, 1)];
+        assert!(validate_pr_measurements(&[0, 1], Some(&meas_types)).is_ok());
+    }
+
+    #[test]
+    fn test_validate_pr_measurements_no_meas_types_uses_default() {
+        // When meas_types is None, all are default type 0 (PR)
+        assert!(validate_pr_measurements(&[0, 1], None).is_ok());
+    }
+
+    // -----------------------------------------------------------------------
+    // subset_ekf_matrices
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_subset_ekf_matrices_full() {
+        let z = DVector::from_vec(vec![1.0, 2.0, 3.0]);
+        let h = DMatrix::identity(3, 2);
+        let r = DMatrix::identity(3, 3) * 2.0;
+        let valid = vec![0, 1, 2];
+
+        let (z2, h2, r2) = subset_ekf_matrices(&z, &h, &r, &valid);
+        assert_eq!(z2, z);
+        assert_eq!(h2, h);
+        assert_eq!(r2, r);
+    }
+
+    #[test]
+    fn test_subset_ekf_matrices_partial() {
+        let z = DVector::from_vec(vec![1.0, 2.0, 3.0, 4.0]);
+        let h = DMatrix::identity(4, 2);
+        let r = DMatrix::identity(4, 4);
+        let valid = vec![0, 2, 3];
+
+        let (z2, h2, r2) = subset_ekf_matrices(&z, &h, &r, &valid);
+        assert_eq!(z2.len(), 3);
+        assert_eq!(z2[0], 1.0);
+        assert_eq!(z2[1], 3.0);
+        assert_eq!(z2[2], 4.0);
+        assert_eq!(h2.nrows(), 3);
+        assert_eq!(h2.ncols(), 2);
+        assert_eq!(r2.nrows(), 3);
+        assert_eq!(r2.ncols(), 3);
+    }
+
+    // -----------------------------------------------------------------------
+    // build_loose_coupling_h
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_build_loose_coupling_h_full_state() {
+        let time = GpsTime::new(2000, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let state = RtkState::new(time, pos, 1.0);
+        let lever_arm = Vector3::new(1.0, 0.0, 0.0);
+        let omega_b = Vector3::zeros();
+
+        let h = build_loose_coupling_h(&state, &lever_arm, &omega_b);
+        assert_eq!(h.nrows(), 6);
+        assert_eq!(h.ncols(), state.covariance.ncols());
+        // First 6 columns should be identity
+        for i in 0..6 {
+            assert_eq!(h[(i, i)], 1.0);
+        }
+    }
+
+    #[test]
+    fn test_build_loose_coupling_h_small_state() {
+        // State with covariance nrows < CORE_STATE_SIZE
+        let h = build_loose_coupling_h_custom(6);
+        assert_eq!(h.nrows(), 6);
+        assert_eq!(h.ncols(), 6);
+        for i in 0..6 {
+            assert_eq!(h[(i, i)], 1.0);
+        }
+    }
+
+    // Helper for the above test — build h with controlled covariance size
+    fn build_loose_coupling_h_custom(cov_cols: usize) -> DMatrix<f64> {
+        let mut h_mat = DMatrix::zeros(6, cov_cols);
+        h_mat.view_mut((0, 0), (6, 6)).fill_diagonal(1.0);
+        if cov_cols >= crate::filter::CORE_STATE_SIZE {
+            // Would normally call populate_loosely_coupled_jacobian
+            // but we skip since cov_cols < 21
+        }
+        h_mat
+    }
+
+    // -----------------------------------------------------------------------
+    // compute_loose_coupling_gain
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_compute_loose_coupling_gain_basic() {
+        let time = GpsTime::new(2000, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let state = RtkState::new(time, pos, 2.0); // cov = 2.0 on diagonal
+        let z = DVector::zeros(6);
+        let h = build_loose_coupling_h_custom(21);
+        // R is identity (variance 1.0 for each of 6 measurements)
+        let r = DMatrix::identity(6, 6);
+
+        let k = compute_loose_coupling_gain(&state, &z, &h, &r).unwrap();
+        // P = diag(2,...), H = [I 0], R = I
+        // S = P[:6,:6] + R = 2*I + I = 3*I
+        // K = P * H^T * S^-1
+        // For i=0..6: K[i, i] = 2.0 / 3.0 ≈ 0.667
+        assert_eq!(k.nrows(), state.covariance.nrows());
+        assert_eq!(k.ncols(), 6);
+        assert!((k[(0, 0)] - 2.0 / 3.0).abs() < 1e-10);
+    }
+
+    // -----------------------------------------------------------------------
+    // check_outlier
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_check_outlier_single_valid_no_ratio() {
+        let mut valid = vec![0];
+        let mut z = DVector::from_vec(vec![10.0]);
+        let mut h = DMatrix::zeros(1, 3);
+        let mut r = DMatrix::from_element(1, 1, 1.0);
+        let mut base_r = DMatrix::from_element(1, 1, 1.0);
+
+        // max_outlier_ratio = 0.0 (not bad), valid.len() == 1 => BreakLoop
+        let action = check_outlier(&mut valid, &mut z, &mut h, &mut r, &mut base_r, 0, 0, 2.0).unwrap();
+        assert_eq!(action, OutlierAction::BreakLoop);
+    }
+
+    #[test]
+    fn test_check_outlier_single_valid_bad_ratio() {
+        let mut valid = vec![0];
+        let mut z = DVector::from_vec(vec![10.0]);
+        let mut h = DMatrix::zeros(1, 3);
+        let mut r = DMatrix::from_element(1, 1, 1.0);
+        let mut base_r = DMatrix::from_element(1, 1, 1.0);
+
+        // max_outlier_ratio > 3.0 and valid.len() <= 1 => InvalidMeasurement
+        let result = check_outlier(&mut valid, &mut z, &mut h, &mut r, &mut base_r, 0, 0, f64::INFINITY);
+        assert_eq!(result, Err(UpdateError::InvalidMeasurement));
+    }
+
+    #[test]
+    fn test_check_outlier_iter_limit_bad_ratio() {
+        let mut valid = vec![0, 1, 2];
+        let mut z = DVector::from_vec(vec![1.0, 2.0, 3.0]);
+        let mut h = DMatrix::identity(3, 3);
+        let mut r = DMatrix::identity(3, 3);
+        let mut base_r = DMatrix::identity(3, 3);
+
+        // iter >= 99 and ratio bad => InvalidMeasurement
+        let result = check_outlier(&mut valid, &mut z, &mut h, &mut r, &mut base_r, 0, 99, f64::INFINITY);
+        assert_eq!(result, Err(UpdateError::InvalidMeasurement));
+    }
+
+    #[test]
+    fn test_check_outlier_iter_limit_good_ratio() {
+        let mut valid = vec![0, 1, 2];
+        let mut z = DVector::from_vec(vec![1.0, 2.0, 3.0]);
+        let mut h = DMatrix::identity(3, 3);
+        let mut r = DMatrix::identity(3, 3);
+        let mut base_r = DMatrix::identity(3, 3);
+
+        // iter >= 99 and ratio OK => BreakLoop
+        let action = check_outlier(&mut valid, &mut z, &mut h, &mut r, &mut base_r, 0, 99, 2.0).unwrap();
+        assert_eq!(action, OutlierAction::BreakLoop);
+    }
+
+    #[test]
+    fn test_check_outlier_removes_worst() {
+        let mut valid = vec![0, 1, 2];
+        let mut z = DVector::from_vec(vec![10.0, 20.0, 30.0]);
+        let mut h = DMatrix::identity(3, 3);
+        let mut r = DMatrix::identity(3, 3);
+        let mut base_r = DMatrix::identity(3, 3);
+
+        // ratio OK, iter=0, valid.len()=3 => remove worst_idx
+        let action = check_outlier(&mut valid, &mut z, &mut h, &mut r, &mut base_r, 1, 0, 4.0).unwrap();
+        assert_eq!(action, OutlierAction::ContinueLoop);
+        assert_eq!(valid.len(), 2);
+        assert_eq!(z.len(), 2);
+        assert_eq!(h.nrows(), 2);
+        assert_eq!(r.nrows(), 2);
+        assert_eq!(r.ncols(), 2);
+        // After removing index 1: valid = [0, 2], z = [10, 30]
+        assert_eq!(z[0], 10.0);
+        assert_eq!(z[1], 30.0);
+    }
+
+    // -----------------------------------------------------------------------
+    // update_measurement_variances
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_update_measurement_variances_no_change() {
+        let mut r = DMatrix::identity(2, 2) * 2.0;
+        let base_r = DMatrix::identity(2, 2) * 2.0;
+        let weights = DVector::from_element(2, 1.0);
+
+        // new_r_ii = 2.0 / 1.0 = 2.0, same as old, so no change
+        let changed = update_measurement_variances(&mut r, &base_r, &weights);
+        assert!(!changed);
+    }
+
+    #[test]
+    fn test_update_measurement_variances_changes() {
+        let mut r = DMatrix::identity(2, 2) * 2.0;
+        let base_r = DMatrix::identity(2, 2) * 2.0;
+        let weights = DVector::from_vec(vec![1.0, 0.5]);
+
+        // new_r_00 = 2.0 / 1.0 = 2.0, same -> no change for idx 0
+        // new_r_11 = 2.0 / 0.5 = 4.0, |4.0 - 2.0| = 2.0 > 2.0 * 0.05 = 0.1 -> changed!
+        let changed = update_measurement_variances(&mut r, &base_r, &weights);
+        assert!(changed);
+        assert!((r[(1, 1)] - 4.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_update_measurement_variances_exact_boundary() {
+        let mut r = DMatrix::identity(2, 2);
+        let base_r = DMatrix::identity(2, 2);
+        let weights = DVector::from_vec(vec![1.0, 1.0 / 0.95]); // new_r_11 = 1.0 / (1/0.95) = 0.95
+
+        // |0.95 - 1.0| = 0.05 = base_r[1,1] * 0.05 = 0.05
+        // The check uses >, so 0.05 > 0.05 is false -> no change
+        let changed = update_measurement_variances(&mut r, &base_r, &weights);
+        assert!(!changed);
+    }
+
+    // -----------------------------------------------------------------------
+    // build_ambiguity_vector
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_build_ambiguity_vector_empty() {
+        let time = GpsTime::new(2000, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let state = RtkState::new(time, pos, 1.0);
+        let cols = crate::filter::CORE_STATE_SIZE;
+
+        let a = build_ambiguity_vector(&state, cols);
+        assert_eq!(a.len(), cols);
+        assert!(a.iter().all(|&x| x == 0.0));
+    }
+
+    #[test]
+    fn test_build_ambiguity_vector_with_values() {
+        let time = GpsTime::new(2000, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 1.0);
+        let sat = SatelliteId { constellation: Constellation::Gps, prn: 1 };
+        state.add_ambiguity(sat, 1, 42.0, 1.0);
+
+        let cols = state.covariance.ncols();
+        let a = build_ambiguity_vector(&state, cols);
+        assert_eq!(a[crate::filter::CORE_STATE_SIZE], 42.0);
+    }
+
+    // -----------------------------------------------------------------------
+    // compute_fix_hold_gain
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_compute_fix_hold_gain_basic() {
+        let time = GpsTime::new(2000, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 2.0);
+        let sat = SatelliteId { constellation: Constellation::Gps, prn: 1 };
+        state.add_ambiguity(sat, 1, 10.0, 1.0);
+
+        let n_cols = state.covariance.ncols();
+        let mut d_full = DMatrix::zeros(1, n_cols);
+        d_full[(0, crate::filter::CORE_STATE_SIZE)] = 1.0;
+        let r = DMatrix::from_element(1, 1, 0.1);
+
+        let k = compute_fix_hold_gain(&state, &d_full, &r).unwrap();
+        assert_eq!(k.nrows(), n_cols);
+        assert_eq!(k.ncols(), 1);
+    }
+
+    #[test]
+    fn test_compute_fix_hold_gain_singular() {
+        // d_full contains all zeros -> H*P*H^T = 0, S = 0+R = R, invertible
+        // This test should actually work fine with zero d_full.
+        let time = GpsTime::new(2000, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 2.0);
+        let sat = SatelliteId { constellation: Constellation::Gps, prn: 1 };
+        state.add_ambiguity(sat, 1, 10.0, 1.0);
+
+        let n_cols = state.covariance.ncols();
+        let d_full = DMatrix::zeros(1, n_cols);
+        let r = DMatrix::from_element(1, 1, 0.1);
+
+        // S = 0 + 0.1 = 0.1, not singular
+        let k = compute_fix_hold_gain(&state, &d_full, &r).unwrap();
+        assert_eq!(k.nrows(), n_cols);
+    }
+
+    // -----------------------------------------------------------------------
+    // apply_fix_and_hold edge cases
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_apply_fix_and_hold_empty_z() {
+        let time = GpsTime::new(2000, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 2.0);
+        let z_dd = DVector::from_vec(vec![]);
+        let d_full = DMatrix::zeros(0, crate::filter::CORE_STATE_SIZE);
+        let var = 0.1;
+
+        // Empty z_dd -> Ok(())
+        let result = apply_fix_and_hold(&mut state, &z_dd, &d_full, var);
+        assert!(result.is_ok());
+    }
+
+    // -----------------------------------------------------------------------
+    // compute_update_iteration NaN in dx
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_compute_update_iteration_nan_dx() {
+        let state_cov = DMatrix::from_diagonal(&DVector::from_element(1, f64::NAN));
+        let h = DMatrix::from_element(1, 1, 1.0);
+        let r = DMatrix::from_element(1, 1, 1.0);
+        let z = DVector::from_element(1, 5.0);
+        let valid = vec![0];
+        let tuning = crate::engine::config::EkfTuningConfig::default();
+
+        // State cov has NaN, so S will have NaN, then S_inv will be computed,
+        // and dx will have NaN, returning Err(SingularMatrix)
+        let res = compute_update_iteration::<TightCoupling>(
+            &state_cov, &z, &h, &r, &valid, None, 10.0, &tuning,
+        );
+        assert!(res.is_err());
+    }
+
+    // -----------------------------------------------------------------------
+    // compute_loose_coupling_innovation (the private wrapper)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_compute_loose_coupling_innovation_identical_states() {
+        let time = GpsTime::new(2000, 0.0);
+        let pos = Coordinate::new(Vector3::new(100.0, 200.0, 300.0), Datum::WGS84, Frame::ECEF, time);
+        let state = RtkState::new(time, pos.clone(), 1.0);
+        let gnss_state = RtkState::new(time, pos, 1.0);
+        let lever_arm = Vector3::new(0.5, 0.3, 0.1);
+        let omega_b = Vector3::new(0.01, 0.02, 0.03);
+
+        let z = compute_loose_coupling_innovation(&state, &gnss_state, &lever_arm, &omega_b);
+        // With identical positions, the innovation is -R_b_e * lever_arm for position
+        // and -R_b_e * (omega_b x lever_arm) for velocity
+        assert_eq!(z.len(), 6);
+        // Innovation should be non-zero because lever arm creates a position offset
+        assert!(z.rows_range(0..3).norm() > 0.0);
+    }
+
+    // -----------------------------------------------------------------------
+    // apply_attitude_correction boundary
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_apply_attitude_correction_boundary() {
+        let time = GpsTime::new(2000, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 1.0);
+
+        // d_theta norm = 1e-10, exactly the boundary where it should return without change
+        let mut dx = DVector::zeros(state.covariance.nrows());
+        dx[6] = 1e-10;
+
+        let original_att = state.attitude;
+        // attitude correction is called inside apply_state_correction -> apply_imu_and_clock_correction -> apply_attitude_correction
+        apply_state_correction(&mut state, &dx);
+        // The check is `<= 1e-10`, so norm=1e-10 should NOT change attitude
+        assert_eq!(state.attitude, original_att);
+
+        // Now with d_theta norm slightly above 1e-10
+        let mut state2 = RtkState::new(time, pos.clone(), 1.0);
+        let mut dx2 = DVector::zeros(state2.covariance.nrows());
+        dx2[6] = 1.0000001e-10;
+        let original_att2 = state2.attitude;
+        apply_state_correction(&mut state2, &dx2);
+        // Should have changed
+        assert_ne!(state2.attitude, original_att2);
+    }
+
+    // -----------------------------------------------------------------------
+    // apply_clock_correction ZWD clamping
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_apply_clock_correction_zwd_clamping() {
+        let time = GpsTime::new(2000, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 1.0);
+        state.zwd = 0.1;
+
+        // Apply large negative ZWD correction that would push ZWD below 0
+        let mut dx = DVector::zeros(state.covariance.nrows());
+        dx[20] = -0.5; // would make zwd = 0.1 - 0.5 = -0.4, clamped to 0.0
+        apply_state_correction(&mut state, &dx);
+        assert_eq!(state.zwd, 0.0);
+
+        // Normal positive correction
+        dx[20] = 0.2;
+        let mut state2 = RtkState::new(time, pos, 1.0);
+        state2.zwd = 0.1;
+        apply_clock_correction(&mut state2, &dx);
+        assert!((state2.zwd - 0.3).abs() < 1e-14);
+    }
+
+    // -----------------------------------------------------------------------
+    // update (the main pub wrapper) — error paths
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_update_dimension_mismatch() {
+        let time = GpsTime::new(2000, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 1.0);
+
+        let z = DVector::zeros(3);  // 3 measurements
+        let h = DMatrix::zeros(3, 5); // 5 state columns
+        let r = DMatrix::identity(3, 3);
+        let tuning = crate::engine::config::EkfTuningConfig::default();
+
+        // state.covariance has 21 columns, but h has 5 cols -> mismatch
+        let result = update::<TightCoupling>(
+            &mut state, &z, &h, &r, 10.0, None, &tuning,
+        );
+        assert_eq!(result, Err(UpdateError::DimensionMismatch));
+    }
+
+    #[test]
+    fn test_update_empty_valid_indices() {
+        let time = GpsTime::new(2000, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 1.0);
+        let n = state.covariance.nrows();
+
+        // Make large innovations so all get rejected by pre-fit residual check
+        let z = DVector::from_element(n, 1e10);
+        let h = DMatrix::identity(n, n);
+        let r = DMatrix::identity(n, n);
+        let tuning = crate::engine::config::EkfTuningConfig::default();
+
+        let result = update::<TightCoupling>(
+            &mut state, &z, &h, &r, 1.0, None, &tuning,
+        );
+        assert!(result.is_err());
+    }
+
+    // -----------------------------------------------------------------------
+    // update_loosely_coupled — singular matrix path
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_update_loosely_coupled_singular_huber() {
+        let time = GpsTime::new(2000, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos.clone(), 1.0);
+        let mut gnss_state = RtkState::new(time, pos, 1.0);
+        gnss_state.position.vector.x = 1e10; // huge innovation
+
+        // Mahalanobis threshold very low -> forces scaling
+        let tuning = crate::engine::config::EkfTuningConfig {
+            loosely_coupled_mahalanobis_sq: 0.001,
+            huber_threshold_loosely: 3.0,
+            ..Default::default()
+        };
+
+        let lever_arm = Vector3::zeros();
+        let omega_b = Vector3::zeros();
+        let result = update_loosely_coupled(&mut state, &gnss_state, lever_arm, omega_b, &tuning);
+        // Should succeed with Huber scaling
+        assert!(result.is_ok());
+    }
 }

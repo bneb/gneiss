@@ -189,4 +189,39 @@ mod tests {
         assert!(k_fa > 4.0); // k_fa for p_fa=1e-5 / 10 should be ~4.7
         assert!(k_md > 3.0); // k_md for p_md=1e-3 / 2 should be ~3.29
     }
+
+    #[test]
+    fn test_araim_empty_subsets() {
+        let monitor = AraimMonitor::new();
+        let full = mock_state(1000.0, 1000.0, 1000.0, 0.1);
+        let status = monitor.evaluate_solution_separation(&full, &[]);
+        assert_eq!(status.hpl, f64::INFINITY);
+        assert_eq!(status.vpl, f64::INFINITY);
+        assert!(!status.alert);
+    }
+
+    #[test]
+    fn test_ecef_to_enu_diff() {
+        use gneiss_core::coords::{Datum, Frame, Coordinate};
+        let coord = Coordinate::new(
+            Vector3::new(10000000.0, 0.0, 0.0), // On equator at lon=0
+            Datum::WGS84, Frame::ECEF, GpsTime::new(0, 0.0),
+        );
+        // dx=100m at equator, lon=0 -> should give du~=100m (up), de~=0, dn~=0
+        let (dn, de, du) = ecef_to_enu_diff(coord, 100.0, 0.0, 0.0);
+        assert!((du - 100.0).abs() < 1.0, "du should be ~100, got {}", du);
+        assert!((de).abs() < 1.0, "de should be ~0, got {}", de);
+        assert!((dn).abs() < 1.0, "dn should be ~0, got {}", dn);
+    }
+
+    #[test]
+    fn test_evaluate_single_subset_no_alert() {
+        let full = mock_state(1000.0, 1000.0, 1000.0, 0.1);
+        let sub = mock_state(1000.01, 1000.01, 1000.01, 0.2);
+        let (k_fa, k_md) = compute_thresholds(1e-5, 1e-3, 5);
+        let status = evaluate_single_subset(&full, &sub, k_fa, k_md);
+        assert!(!status.alert);
+        assert!(status.hpl > 0.0);
+        assert!(status.vpl > 0.0);
+    }
 }

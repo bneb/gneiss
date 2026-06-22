@@ -570,3 +570,591 @@ fn export_gnn_dataset(
         );
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::engine::{EngineConfig, EngineError, EngineMode};
+    use crate::filter::{CORE_STATE_SIZE, DdObservation};
+    use gneiss_core::coords::{Coordinate, Datum, Frame};
+    use gneiss_core::obs::EpochObs;
+    use gneiss_core::sat::Constellation;
+    use gneiss_core::time::GpsTime;
+    use nalgebra::{DMatrix, DVector, Vector3};
+
+    fn make_test_sat(prn: u8) -> SatelliteId {
+        SatelliteId {
+            constellation: Constellation::Gps,
+            prn,
+        }
+    }
+
+    fn make_test_epoch(time: GpsTime) -> EpochObs {
+        EpochObs {
+            time,
+            satellites: Vec::new(),
+        }
+    }
+
+    fn make_dd_obs(sat: SatelliteId, cp_l1: Option<f64>, cp_l2: Option<f64>) -> DdObservation {
+        DdObservation {
+            sat,
+            pr_l1: 0.0,
+            pr_l2: None,
+            cp_l1,
+            cp_l2,
+            doppler: 0.0,
+            snr: 45.0,
+            locktime: Some(100),
+        }
+    }
+
+    #[test]
+    fn test_filter_valid_base_accepts_recent() {
+        let mut config = EngineConfig::default();
+        config.max_base_age_s = 5.0;
+        let rover_obs = make_test_epoch(GpsTime::new(0, 100.0));
+        let base_obs = make_test_epoch(GpsTime::new(0, 101.0));
+        let result =
+            ProcessingEngine::filter_valid_base(&config, &rover_obs, Some(&base_obs));
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_filter_valid_base_rejects_old() {
+        let mut config = EngineConfig::default();
+        config.max_base_age_s = 5.0;
+        let rover_obs = make_test_epoch(GpsTime::new(0, 100.0));
+        let base_obs = make_test_epoch(GpsTime::new(0, 120.0));
+        let result =
+            ProcessingEngine::filter_valid_base(&config, &rover_obs, Some(&base_obs));
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_filter_valid_base_no_base() {
+        let config = EngineConfig::default();
+        let rover_obs = make_test_epoch(GpsTime::new(0, 100.0));
+        let result = ProcessingEngine::filter_valid_base(&config, &rover_obs, None);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_get_base_coord_ok() {
+        let mut config = EngineConfig::default();
+        config.base_position = Some([100.0, 200.0, 300.0]);
+        let rover_obs = make_test_epoch(GpsTime::new(0, 100.0));
+        let coord = ProcessingEngine::get_base_coord(&config, &rover_obs).unwrap();
+        assert!((coord.vector.x - 100.0).abs() < 1e-6);
+        assert!((coord.vector.y - 200.0).abs() < 1e-6);
+        assert!((coord.vector.z - 300.0).abs() < 1e-6);
+        assert_eq!(coord.datum, Datum::WGS84);
+    }
+
+    #[test]
+    fn test_get_base_coord_missing() {
+        let config = EngineConfig::default();
+        let rover_obs = make_test_epoch(GpsTime::new(0, 100.0));
+        let err = ProcessingEngine::get_base_coord(&config, &rover_obs).unwrap_err();
+        assert!(matches!(err, EngineError::MissingBasePosition));
+    }
+
+    #[test]
+    fn test_update_last_observed_inserts_all() {
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 1.0);
+        state.epoch_count = 5;
+
+        let sat1 = make_test_sat(1);
+        let sat2 = make_test_sat(2);
+        let matched = vec![
+            (make_dd_obs(sat1, Some(100.0), Some(200.0)), make_dd_obs(sat1, Some(100.0), Some(200.0))),
+            (make_dd_obs(sat2, Some(300.0), None), make_dd_obs(sat2, Some(300.0), None)),
+        ];
+
+        update_last_observed(&mut state, &matched);
+
+        assert_eq!(state.last_observed[&(sat1, 1)], 5);
+        assert_eq!(state.last_observed[&(sat1, 2)], 5);
+        assert_eq!(state.last_observed[&(sat2, 1)], 5);
+        assert!(!state.last_observed.contains_key(&(sat2, 2)));
+    }
+
+    #[test]
+    fn test_update_last_observed_skips_none() {
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 1.0);
+        state.epoch_count = 3;
+
+        let sat1 = make_test_sat(1);
+        let matched = vec![
+            (make_dd_obs(sat1, None, None), make_dd_obs(sat1, None, None)),
+        ];
+
+        update_last_observed(&mut state, &matched);
+
+        assert!(!state.last_observed.contains_key(&(sat1, 1)));
+        assert!(!state.last_observed.contains_key(&(sat1, 2)));
+    }
+
+    #[test]
+    fn test_evaluate_gnn_no_model() {
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let state = RtkState::new(time, pos, 1.0);
+        let gnn_variances = ProcessingEngine::evaluate_gnn(
+            &None,
+            &[],
+            &make_test_epoch(time),
+            &[],
+            &state,
+        );
+        assert!(gnn_variances.is_empty());
+    }
+
+    #[test]
+    fn test_evaluate_gnss_only_coasting_rtk_resets_when_young() {
+        let mut config = EngineConfig::default();
+        config.mode = EngineMode::Rtk;
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 1.0);
+        state.epoch_count = 0;
+
+        let spp_pos = Some(Coordinate::new(
+            Vector3::new(10.0, 10.0, 10.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        ));
+
+        ProcessingEngine::evaluate_gnss_only_coasting(&config, &mut state, spp_pos, None, false);
+
+        // Should have been reset to SPP because epoch_count < 3
+        assert!((state.position.vector.x - 10.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_evaluate_gnss_only_coasting_rtk_no_reset_when_mature() {
+        let mut config = EngineConfig::default();
+        config.mode = EngineMode::Rtk;
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::new(5.0, 5.0, 5.0), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 1.0);
+        state.epoch_count = 5;
+
+        let spp_pos = Some(Coordinate::new(
+            Vector3::new(10.0, 10.0, 10.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        ));
+
+        ProcessingEngine::evaluate_gnss_only_coasting(&config, &mut state, spp_pos, None, false);
+
+        // Should NOT reset because epoch_count >= 3
+        assert!((state.position.vector.x - 5.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_evaluate_gnss_only_coasting_ins_with_imu_data() {
+        let mut config = EngineConfig::default();
+        config.mode = EngineMode::RtkIns;
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::new(5.0, 5.0, 5.0), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 1.0);
+        state.epoch_count = 0;
+
+        let spp_pos = Some(Coordinate::new(
+            Vector3::new(10.0, 10.0, 10.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        ));
+
+        // With IMU data, INS modes should NOT trigger GNSS-only coasting
+        ProcessingEngine::evaluate_gnss_only_coasting(&config, &mut state, spp_pos, None, true);
+        assert!((state.position.vector.x - 5.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_evaluate_gnss_only_coasting_ins_without_imu_data() {
+        let mut config = EngineConfig::default();
+        config.mode = EngineMode::RtkIns;
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::new(5.0, 5.0, 5.0), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 1.0);
+        state.epoch_count = 0;
+
+        let spp_pos = Some(Coordinate::new(
+            Vector3::new(10.0, 10.0, 10.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        ));
+
+        // Without IMU data, INS modes should trigger GNSS-only coasting
+        ProcessingEngine::evaluate_gnss_only_coasting(&config, &mut state, spp_pos, None, false);
+        assert!((state.position.vector.x - 10.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_update_state_time_sets_time_and_clears_reset() {
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 1.0);
+        state.is_reset = true;
+
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        engine.current_state = Some(state);
+
+        let new_time = GpsTime::new(0, 10.0);
+        engine.update_state_time(new_time).unwrap();
+
+        let s = engine.current_state.as_ref().unwrap();
+        assert!(!s.is_reset);
+        assert_eq!(s.time.tow, 10.0);
+    }
+
+    #[test]
+    fn test_update_state_time_no_state_errors() {
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        let err = engine.update_state_time(GpsTime::new(0, 10.0)).unwrap_err();
+        assert!(matches!(err, EngineError::StateDisappeared));
+    }
+
+    #[test]
+    fn test_handle_ekf_rejection_increments() {
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 1.0);
+        let config = EngineConfig::default();
+
+        handle_ekf_rejection(&mut state, &config, None, None, "test");
+        assert_eq!(state.consecutive_rejections, 1);
+
+        handle_ekf_rejection(&mut state, &config, None, None, "test");
+        assert_eq!(state.consecutive_rejections, 2);
+    }
+
+    #[test]
+    fn test_handle_ekf_rejection_ins_aligned_inflates_covariance() {
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 1.0);
+        state.ins_aligned = true;
+
+        let cov_0_0_before = state.covariance[(0, 0)];
+        let cov_3_3_before = state.covariance[(3, 3)];
+
+        handle_ekf_rejection(&mut state, &EngineConfig::default(), None, None, "test");
+
+        // Position covariances should be inflated
+        assert!(state.covariance[(0, 0)] > cov_0_0_before);
+        assert!(state.covariance[(3, 3)] > cov_3_3_before);
+    }
+
+    #[test]
+    fn test_handle_ekf_rejection_not_aligned_no_reset_below_3() {
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::new(5.0, 5.0, 5.0), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 1.0);
+        state.ins_aligned = false;
+        state.consecutive_rejections = 2;
+
+        handle_ekf_rejection(&mut state, &EngineConfig::default(), None, None, "test");
+        assert_eq!(state.consecutive_rejections, 3);
+        // Position should NOT be reset because we didn't provide spp_pos
+        assert!((state.position.vector.x - 5.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_handle_ekf_rejection_not_aligned_resets_at_3_with_spp() {
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::new(5.0, 5.0, 5.0), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 1.0);
+        state.ins_aligned = false;
+        state.consecutive_rejections = 2;
+
+        let spp_pos = Coordinate::new(
+            Vector3::new(50.0, 50.0, 50.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+
+        handle_ekf_rejection(&mut state, &EngineConfig::default(), Some(spp_pos), None, "test");
+        // Should have been reset
+        assert!((state.position.vector.x - 50.0).abs() < 1e-6);
+        assert_eq!(state.consecutive_rejections, 0);
+    }
+
+    #[test]
+    fn test_handle_ekf_acceptance_clears_rejections() {
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 1.0);
+        state.consecutive_rejections = 5;
+
+        handle_ekf_acceptance(&mut state, &EngineConfig::default(), &[], None, None);
+        assert_eq!(state.consecutive_rejections, 0);
+    }
+
+    #[test]
+    fn test_handle_ekf_acceptance_resets_on_extreme_variance() {
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::new(5.0, 5.0, 5.0), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 1.0);
+        state.covariance[(0, 0)] = 20000.0;
+        state.covariance[(1, 1)] = 0.0;
+        state.covariance[(2, 2)] = 0.0;
+        state.consecutive_rejections = 5;
+
+        let spp_pos = Coordinate::new(
+            Vector3::new(50.0, 50.0, 50.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+
+        handle_ekf_acceptance(&mut state, &EngineConfig::default(), &[], Some(spp_pos), None);
+        // Should be reset
+        assert!((state.position.vector.x - 50.0).abs() < 1e-6);
+        assert_eq!(state.consecutive_rejections, 0);
+    }
+
+    #[test]
+    fn test_build_measurement_environment_constructs() {
+        let config = EngineConfig::default();
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::new(100.0, 200.0, 300.0), Datum::WGS84, Frame::ECEF, time);
+        let state = RtkState::new(time, pos, 1.0);
+        let base_coord = Coordinate::new(
+            Vector3::new(110.0, 210.0, 310.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+
+        let env = build_measurement_environment(
+            &config,
+            &[],
+            &state,
+            &[],
+            &base_coord,
+            time,
+        );
+
+        assert_eq!(env.base_coord.vector.x, 110.0);
+        assert!(env.gnn_variances.is_empty());
+    }
+
+    #[test]
+    fn test_perform_spp_fallback_update_does_not_panic() {
+        let config = EngineConfig::default();
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::new(100.0, 200.0, 300.0), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 1.0);
+        state.covariance = DMatrix::identity(CORE_STATE_SIZE, CORE_STATE_SIZE);
+
+        let new_pos = Coordinate::new(
+            Vector3::new(101.0, 201.0, 301.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            GpsTime::new(0, 1.0),
+        );
+
+        // Should not panic
+        ProcessingEngine::perform_spp_fallback_update(&config, &mut state, new_pos);
+    }
+
+    #[test]
+    fn test_apply_adaptive_r_scaling_basic() {
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let state = RtkState::new(time, pos, 1.0);
+
+        let mut r = DMatrix::identity(2, 2);
+        let z = DVector::from_vec(vec![1.0; 2]);
+        let mut h = DMatrix::zeros(2, CORE_STATE_SIZE);
+        h[(0, 0)] = 1.0;
+        h[(1, 0)] = 1.0;
+
+        let sat = make_test_sat(1);
+        let meas_types = vec![(sat, 0, 0.0), (sat, 0, 0.0)];
+        let matched_obs = vec![
+            (make_dd_obs(sat, Some(100.0), None), make_dd_obs(sat, Some(100.0), None)),
+        ];
+
+        let mut tracker = crate::engine::adaptive::InnovationTracker::new();
+
+        // Just ensure it doesn't panic and modifies r
+        apply_adaptive_r_scaling(&mut tracker, &state, &z, &h, &mut r, &meas_types, &matched_obs);
+        // R should be >= 1.0 after scaling (since min scale is 1.0)
+        assert!(r[(0, 0)] >= 1.0);
+        // Since innovation is 1.0 and predicted_var = h*P*h' + r = 1.0*1.0*1.0 + 1.0 = 2.0
+        // nis = 1.0/2.0 = 0.5, so scale should be close to 1.0
+        assert!((r[(0, 0)] - 1.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn test_evaluate_gnss_only_coasting_no_spp_pos_does_nothing() {
+        // When spp_pos is None, the function should not reset regardless of epoch_count.
+        let mut config = EngineConfig::default();
+        config.mode = EngineMode::Rtk;
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(
+            Vector3::new(5.0, 5.0, 5.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+        let mut state = RtkState::new(time, pos, 1.0);
+        state.epoch_count = 0; // Would trigger reset IF spp_pos were Some
+
+        ProcessingEngine::evaluate_gnss_only_coasting(&config, &mut state, None, None, false);
+
+        // Position should remain unchanged
+        assert!((state.position.vector.x - 5.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_handle_ekf_rejection_ins_aligned_extreme_divergence_resets() {
+        // When ins_aligned and position variance exceeds 10000,
+        // handle_ekf_rejection should reset to SPP.
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(
+            Vector3::new(5.0, 5.0, 5.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+        let mut state = RtkState::new(time, pos, 1.0);
+        state.ins_aligned = true;
+        // Make position variance extreme
+        state.covariance[(0, 0)] = 5000.0;
+        state.covariance[(1, 1)] = 5000.0;
+        state.covariance[(2, 2)] = 5000.0;
+
+        let spp_pos = Coordinate::new(
+            Vector3::new(50.0, 50.0, 50.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+
+        handle_ekf_rejection(&mut state, &EngineConfig::default(), Some(spp_pos), None, "extreme");
+        // Position should have been reset to SPP
+        assert!((state.position.vector.x - 50.0).abs() < 1e-6);
+        assert_eq!(state.consecutive_rejections, 0);
+    }
+
+    #[test]
+    fn test_handle_ekf_rejection_ins_aligned_extreme_no_spp_does_not_panic() {
+        // When ins_aligned and variance is extreme but no spp_pos provided,
+        // the reset branch is skipped; consecutive_rejections still increments.
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(
+            Vector3::new(5.0, 5.0, 5.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+        let mut state = RtkState::new(time, pos, 1.0);
+        state.ins_aligned = true;
+        state.covariance[(0, 0)] = 20000.0;
+
+        handle_ekf_rejection(&mut state, &EngineConfig::default(), None, None, "no_rescue");
+        // Without spp_pos, the reset is skipped but consecutive_rejections is incremented
+        assert_eq!(state.consecutive_rejections, 1);
+        // Original position should be preserved
+        assert!((state.position.vector.x - 5.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_init_spp_state_when_state_already_exists() {
+        // When current_state already exists, init_spp_state should not fail
+        // even if SPP compute fails (no ephemerides).
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(
+            Vector3::new(100.0, 200.0, 300.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+        engine.current_state = Some(RtkState::new(time, pos, 1.0));
+
+        let rover = EpochObs { time, satellites: vec![] };
+        let result = engine.init_spp_state(&rover);
+        // Should not error because state already exists
+        assert!(result.is_ok());
+        // SPP result should be None (no ephemerides to compute)
+        assert!(result.unwrap().is_none());
+    }
+
+    #[test]
+    fn test_apply_observations_with_fewer_than_5_matched_obs() {
+        // When fewer than 5 observations match, consecutive_rejections should increase.
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(
+            Vector3::new(100.0, 200.0, 300.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+        engine.current_state = Some(RtkState::new(time, pos, 1.0));
+        engine.config.base_position = Some([100.0, 200.0, 300.0]);
+
+        let state = engine.current_state.as_mut().unwrap();
+        state.consecutive_rejections = 0;
+
+        let rover = EpochObs { time, satellites: vec![] };
+        let base = EpochObs { time, satellites: vec![] };
+
+        // This will call apply_observations with empty observations, resulting in
+        // matched_obs being empty (< 5), which increments rejections.
+        let result = engine.apply_observations(&rover, Some(&base), None, None);
+        assert!(result.is_ok());
+        assert_eq!(
+            engine.current_state.as_ref().unwrap().consecutive_rejections,
+            1
+        );
+    }
+
+    #[test]
+    fn test_apply_observations_with_valid_base_and_spp_fallback() {
+        // When no valid base (age too large) but spp_pos is available,
+        // apply_observations should call perform_spp_fallback_update (does not panic).
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        let time = GpsTime::new(0, 100.0);
+        let pos = Coordinate::new(
+            Vector3::new(100.0, 200.0, 300.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+        engine.current_state = Some(RtkState::new(time, pos, 1.0));
+        let state = engine.current_state.as_mut().unwrap();
+        state.covariance = DMatrix::identity(CORE_STATE_SIZE, CORE_STATE_SIZE);
+
+        // Base obs with large time difference (age > max_base_age_s = 5.0)
+        let old_time = GpsTime::new(0, 1.0);
+        let rover = EpochObs { time, satellites: vec![] };
+        let base = EpochObs { time: old_time, satellites: vec![] };
+
+        let spp_pos = Some(Coordinate::new(
+            Vector3::new(101.0, 201.0, 301.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        ));
+
+        // Should not panic — SPP fallback update is applied
+        let result = engine.apply_observations(&rover, Some(&base), spp_pos, None);
+        assert!(result.is_ok());
+    }
+}

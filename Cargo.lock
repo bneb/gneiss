@@ -976,6 +976,7 @@ dependencies = [
  "libm",
  "nalgebra 0.32.6",
  "serde",
+ "serde_json",
 ]
 
 [[package]]

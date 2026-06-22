@@ -984,6 +984,7 @@ mod tests {
             idot: 0.01,
             omega: 0.3,
             tgd1: 0.02,
+            tgd2: 0.0,
             aode: 1,
             aodc: 1,
         };
@@ -1013,6 +1014,7 @@ mod tests {
             idot: 0.01,
             omega: 0.3,
             tgd1: 0.02,
+            tgd2: 0.0,
             aode: 1,
             aodc: 1,
         };
@@ -1264,6 +1266,7 @@ mod tests {
             idot: 0.01,
             omega: 0.3,
             tgd1: 0.02,
+            tgd2: 0.0,
             aode: 1,
             aodc: 1,
         };
@@ -1523,6 +1526,7 @@ mod tests {
             idot: 0.0,
             omega: 0.0,
             tgd1: 4.0e-9,
+            tgd2: 0.0,
             aode: 1,
             aodc: 1,
         };

@@ -215,6 +215,54 @@ mod tests {
         }
     }
 
+    /// Factor with a robust (Huber) loss — NOT Cauchy-rejectable.
+    struct MockRobustFactor {
+        target: DVector<f64>,
+        k: f64,
+    }
+
+    impl Factor for MockRobustFactor {
+        fn residual(&self, state: &DVector<f64>) -> DVector<f64> {
+            state - &self.target
+        }
+        fn jacobian(&self, _state: &DVector<f64>) -> DMatrix<f64> {
+            DMatrix::identity(self.target.len(), self.target.len())
+        }
+        fn information(&self) -> DMatrix<f64> {
+            DMatrix::identity(self.target.len(), self.target.len())
+        }
+        fn robust_threshold(&self) -> Option<f64> {
+            Some(self.k)
+        }
+        fn is_cauchy_rejectable(&self) -> bool {
+            false // Huber only, not cauchy
+        }
+    }
+
+    /// Factor that uses Cauchy rejection (is_cauchy_rejectable() -> true).
+    struct MockCauchyFactor {
+        target: DVector<f64>,
+        k: f64,
+    }
+
+    impl Factor for MockCauchyFactor {
+        fn residual(&self, state: &DVector<f64>) -> DVector<f64> {
+            state - &self.target
+        }
+        fn jacobian(&self, _state: &DVector<f64>) -> DMatrix<f64> {
+            DMatrix::identity(self.target.len(), self.target.len())
+        }
+        fn information(&self) -> DMatrix<f64> {
+            DMatrix::identity(self.target.len(), self.target.len())
+        }
+        fn robust_threshold(&self) -> Option<f64> {
+            Some(self.k)
+        }
+        fn is_cauchy_rejectable(&self) -> bool {
+            true
+        }
+    }
+
     #[test]
     fn test_factor_graph_optimizer_convergence() {
         let mut optimizer = FactorGraphOptimizer::new();
@@ -228,6 +276,141 @@ mod tests {
 
         assert!((optimized - target).norm() < 1e-3);
         assert!((cov - DMatrix::identity(3, 3)).norm() < 1e-6);
+    }
+
+    #[test]
+    fn test_factor_graph_multi_factor_convergence() {
+        // Two factors with different targets, should converge to the average of two targets
+        let mut optimizer = FactorGraphOptimizer::new();
+        optimizer.add_factor(Box::new(MockFactor {
+            target: DVector::from_vec(vec![10.0, 0.0]),
+        }));
+        optimizer.add_factor(Box::new(MockFactor {
+            target: DVector::from_vec(vec![0.0, 10.0]),
+        }));
+
+        let initial_state = DVector::from_vec(vec![0.0, 0.0]);
+        let (optimized, _cov) = optimizer.optimize(&initial_state, 20, 1e-6);
+
+        // With identity info, this is a least-squares average: (10+0)/2=5, (0+10)/2=5
+        assert!(
+            (optimized[0] - 5.0).abs() < 1e-3,
+            "Expected x=5.0, got {}",
+            optimized[0]
+        );
+        assert!(
+            (optimized[1] - 5.0).abs() < 1e-3,
+            "Expected y=5.0, got {}",
+            optimized[1]
+        );
+    }
+
+    #[test]
+    fn test_prior_factor_with_measurement_factor() {
+        // PriorFactor with info=[2,0;0,2] + MockFactor with target=[10,10]
+        let mut optimizer = FactorGraphOptimizer::new();
+
+        // Prior: pulls towards 0 with weight 2
+        let prior_info = DMatrix::from_diagonal(&DVector::from_vec(vec![2.0, 2.0]));
+        optimizer.add_factor(Box::new(PriorFactor {
+            information: prior_info,
+        }));
+
+        // Measurement: pulls towards [10,10] with weight 1
+        optimizer.add_factor(Box::new(MockFactor {
+            target: DVector::from_vec(vec![10.0, 10.0]),
+        }));
+
+        // Weighted solution: (2*0 + 1*10)/(2+1) = 10/3 ≈ 3.333
+        let initial_state = DVector::from_vec(vec![0.0, 0.0]);
+        let (optimized, _cov) = optimizer.optimize(&initial_state, 20, 1e-6);
+
+        let expected = 10.0 / 3.0;
+        assert!(
+            (optimized[0] - expected).abs() < 1e-3,
+            "Expected {expected}, got {}",
+            optimized[0]
+        );
+        assert!(
+            (optimized[1] - expected).abs() < 1e-3,
+            "Expected {expected}, got {}",
+            optimized[1]
+        );
+    }
+
+    #[test]
+    fn test_factor_graph_robust_huber_factor() {
+        // MockRobustFactor with k=1.0, target=0.0, initial_state=2.0
+        // residual = 2.0, e=2.0, k=1.0 -> k < e < 3k -> Huber branch
+        let mut optimizer = FactorGraphOptimizer::new();
+        optimizer.add_factor(Box::new(MockRobustFactor {
+            target: DVector::from_vec(vec![0.0]),
+            k: 1.0,
+        }));
+
+        let initial_state = DVector::from_vec(vec![2.0]);
+        let (optimized, _cov) = optimizer.optimize(&initial_state, 20, 1e-6);
+
+        // Should still converge towards 0
+        assert!(
+            (optimized[0]).abs() < 1e-3,
+            "Robust factor should converge to 0. Got {}",
+            optimized[0]
+        );
+    }
+
+    #[test]
+    fn test_factor_graph_cauchy_rejection() {
+        // MockCauchyFactor with k=1.0, target=0.0, initial_state=42.0
+        // residual = 42.0, e=42.0 > 3.0*1.0=3.0 -> Cauchy rejection branch
+        let mut optimizer = FactorGraphOptimizer::new();
+        optimizer.add_factor(Box::new(MockCauchyFactor {
+            target: DVector::from_vec(vec![0.0]),
+            k: 1.0,
+        }));
+
+        let initial_state = DVector::from_vec(vec![42.0]);
+        let (optimized, _cov) = optimizer.optimize(&initial_state, 20, 1e-6);
+
+        // With Cauchy rejection, the factor is downweighted but should still move towards 0
+        assert!(
+            optimized[0].abs() < 1.0,
+            "Cauchy-rejected factor should move towards 0. Got {}",
+            optimized[0]
+        );
+    }
+
+    #[test]
+    fn test_factor_graph_optimizer_tight_tolerance() {
+        // Very tight tolerance should cause early break
+        let mut optimizer = FactorGraphOptimizer::new();
+        optimizer.add_factor(Box::new(MockFactor {
+            target: DVector::from_vec(vec![42.0]),
+        }));
+
+        let initial_state = DVector::from_vec(vec![42.0]);
+        let (optimized, _cov) = optimizer.optimize(&initial_state, 100, 1e-12);
+
+        // Should converge very close to target
+        assert!(
+            (optimized[0] - 42.0).abs() < 1e-8,
+            "Should converge close to target. Got {}",
+            optimized[0]
+        );
+    }
+
+    #[test]
+    fn test_factor_graph_optimizer_zero_iters() {
+        // max_iters=0 should return initial state unchanged
+        let mut optimizer = FactorGraphOptimizer::new();
+        optimizer.add_factor(Box::new(MockFactor {
+            target: DVector::from_vec(vec![10.0]),
+        }));
+
+        let initial_state = DVector::from_vec(vec![99.0]);
+        let (optimized, _cov) = optimizer.optimize(&initial_state, 0, 1e-4);
+
+        assert_eq!(optimized[0], 99.0, "Zero iterations should return initial state");
     }
 
     #[test]
@@ -246,5 +429,36 @@ mod tests {
 
         let info_out = factor.information();
         assert_eq!(info_out, info);
+    }
+
+    #[test]
+    fn test_prior_factor_in_optimizer() {
+        // Use a PriorFactor alone as the only factor in the optimizer
+        let mut optimizer = FactorGraphOptimizer::new();
+        let prior_info = DMatrix::from_diagonal(&DVector::from_vec(vec![2.0, 2.0]));
+        optimizer.add_factor(Box::new(PriorFactor {
+            information: prior_info,
+        }));
+
+        let initial_state = DVector::from_vec(vec![5.0, -3.0]);
+        let (optimized, cov) = optimizer.optimize(&initial_state, 10, 1e-6);
+
+        // PriorFactor residual = -state, so it pulls towards zero
+        // With identity-like GN, should converge to zero
+        assert!(
+            (optimized[0]).abs() < 1e-3,
+            "Prior-only should converge to 0. Got {}",
+            optimized[0]
+        );
+        assert!(
+            (optimized[1]).abs() < 1e-3,
+            "Prior-only should converge to 0. Got {}",
+            optimized[1]
+        );
+        // Covariance should be well-conditioned
+        assert!(
+            cov[(0, 0)] > 0.0,
+            "Covariance diagonal should be positive"
+        );
     }
 }

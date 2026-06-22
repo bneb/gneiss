@@ -96,6 +96,7 @@ impl HelmertParams {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::format;
     use nalgebra::Vector3;
 
     #[test]
@@ -181,5 +182,274 @@ mod tests {
         assert!((transformed.x - exp_x).abs() < 1e-9);
         assert!((transformed.y - exp_y).abs() < 1e-9);
         assert!((transformed.z - exp_z).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_helmert_transform_negative_dt() {
+        // Observation epoch before ref_epoch: dt negative
+        let params = HelmertParams {
+            tx: 1.0,
+            ty: 2.0,
+            tz: 3.0,
+            rx: 1000.0,
+            ry: 2000.0,
+            rz: 3000.0,
+            s: 10.0,
+            dtx: 0.1,
+            dty: 0.2,
+            dtz: 0.3,
+            drx: 10.0,
+            dry: 20.0,
+            drz: 30.0,
+            ds: 1.0,
+            ref_epoch: 2010.0,
+        };
+
+        let ecef = Vector3::new(4000000.0, 500000.0, 4800000.0);
+        // dt = 2000.0 - 2010.0 = -10.0 years
+        let transformed = params.transform(ecef, 2000.0);
+
+        let dt = -10.0;
+        let tx = 1.0 + 0.1 * dt;
+        let ty = 2.0 + 0.2 * dt;
+        let tz = 3.0 + 0.3 * dt;
+        let mas2rad = core::f64::consts::PI / (180.0 * 3600.0 * 1000.0);
+        let rx = (1000.0 + 10.0 * dt) * mas2rad;
+        let ry = (2000.0 + 20.0 * dt) * mas2rad;
+        let rz = (3000.0 + 30.0 * dt) * mas2rad;
+        let scale = 1.0 + (10.0 + 1.0 * dt) * 1e-9;
+
+        let exp_x = tx + scale * (ecef.x - rz * ecef.y + ry * ecef.z);
+        let exp_y = ty + scale * (rz * ecef.x + ecef.y - rx * ecef.z);
+        let exp_z = tz + scale * (-ry * ecef.x + rx * ecef.y + ecef.z);
+
+        assert!((transformed.x - exp_x).abs() < 1e-9);
+        assert!((transformed.y - exp_y).abs() < 1e-9);
+        assert!((transformed.z - exp_z).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_helmert_transform_at_ref_epoch() {
+        // dt = 0 -> no rate terms contribute
+        let params = HelmertParams {
+            tx: 1.5,
+            ty: 2.5,
+            tz: 3.5,
+            rx: 500.0,
+            ry: 600.0,
+            rz: 700.0,
+            s: 5.0,
+            dtx: 100.0,
+            dty: 200.0,
+            dtz: 300.0,
+            drx: 999.0,
+            dry: 999.0,
+            drz: 999.0,
+            ds: 999.0,
+            ref_epoch: 2020.0,
+        };
+
+        let ecef = Vector3::new(5000000.0, 1000000.0, 3000000.0);
+        let transformed = params.transform(ecef, 2020.0); // dt = 0
+
+        let mas2rad = core::f64::consts::PI / (180.0 * 3600.0 * 1000.0);
+        let rx = 500.0 * mas2rad;
+        let ry = 600.0 * mas2rad;
+        let rz = 700.0 * mas2rad;
+        let scale = 1.0 + 5.0 * 1e-9;
+
+        let exp_x = 1.5 + scale * (ecef.x - rz * ecef.y + ry * ecef.z);
+        let exp_y = 2.5 + scale * (rz * ecef.x + ecef.y - rx * ecef.z);
+        let exp_z = 3.5 + scale * (-ry * ecef.x + rx * ecef.y + ecef.z);
+
+        assert!((transformed.x - exp_x).abs() < 1e-9);
+        assert!((transformed.y - exp_y).abs() < 1e-9);
+        assert!((transformed.z - exp_z).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_helmert_serde_roundtrip() {
+        use serde_json;
+
+        let params = HelmertParams {
+            tx: 0.5,
+            ty: -0.3,
+            tz: 0.1,
+            rx: 100.0,
+            ry: 200.0,
+            rz: 300.0,
+            s: 2.0,
+            dtx: 0.01,
+            dty: -0.02,
+            dtz: 0.03,
+            drx: 1.0,
+            dry: 2.0,
+            drz: 3.0,
+            ds: 0.1,
+            ref_epoch: 2015.0,
+        };
+
+        let json = serde_json::to_string(&params).unwrap();
+        let deserialized: HelmertParams = serde_json::from_str(&json).unwrap();
+
+        // Check all fields
+        assert!((deserialized.tx - params.tx).abs() < 1e-12);
+        assert!((deserialized.ty - params.ty).abs() < 1e-12);
+        assert!((deserialized.tz - params.tz).abs() < 1e-12);
+        assert!((deserialized.rx - params.rx).abs() < 1e-12);
+        assert!((deserialized.ry - params.ry).abs() < 1e-12);
+        assert!((deserialized.rz - params.rz).abs() < 1e-12);
+        assert!((deserialized.s - params.s).abs() < 1e-12);
+        assert!((deserialized.dtx - params.dtx).abs() < 1e-12);
+        assert!((deserialized.dty - params.dty).abs() < 1e-12);
+        assert!((deserialized.dtz - params.dtz).abs() < 1e-12);
+        assert!((deserialized.drx - params.drx).abs() < 1e-12);
+        assert!((deserialized.dry - params.dry).abs() < 1e-12);
+        assert!((deserialized.drz - params.drz).abs() < 1e-12);
+        assert!((deserialized.ds - params.ds).abs() < 1e-12);
+        assert!((deserialized.ref_epoch - params.ref_epoch).abs() < 1e-12);
+    }
+
+    #[test]
+    fn test_helmert_apply_ecef() {
+        use gneiss_core::coords::{Coordinate, Datum, Frame};
+        use gneiss_core::time::GpsTime;
+
+        let params = HelmertParams {
+            tx: 1.0,
+            ty: 2.0,
+            tz: 3.0,
+            rx: 0.0,
+            ry: 0.0,
+            rz: 0.0,
+            s: 0.0,
+            dtx: 0.0,
+            dty: 0.0,
+            dtz: 0.0,
+            drx: 0.0,
+            dry: 0.0,
+            drz: 0.0,
+            ds: 0.0,
+            ref_epoch: 2010.0,
+        };
+
+        // Use a date close to ref_epoch so dt ~ 0
+        let epoch = GpsTime::from_calendar(2010, 1, 1, 0, 0, 0.0);
+        let coord = Coordinate::new(
+            Vector3::new(1000.0, 2000.0, 3000.0),
+            Datum::ITRF2014,
+            Frame::ECEF,
+            epoch,
+        );
+
+        let result = params.apply(coord);
+
+        // dt ~ 0, so just translation applies
+        assert!((result.vector.x - 1001.0).abs() < 0.01);
+        assert!((result.vector.y - 2002.0).abs() < 0.01);
+        assert!((result.vector.z - 3003.0).abs() < 0.01);
+        assert_eq!(result.datum, Datum::ITRF2014);
+        assert_eq!(result.frame, Frame::ECEF);
+    }
+
+    #[test]
+    fn test_helmert_apply_non_ecef_returns_unchanged() {
+        use gneiss_core::coords::{Coordinate, Datum, Frame};
+        use gneiss_core::time::GpsTime;
+
+        let params = HelmertParams {
+            tx: 100.0,
+            ty: 200.0,
+            tz: 300.0,
+            rx: 0.0,
+            ry: 0.0,
+            rz: 0.0,
+            s: 0.0,
+            dtx: 0.0,
+            dty: 0.0,
+            dtz: 0.0,
+            drx: 0.0,
+            dry: 0.0,
+            drz: 0.0,
+            ds: 0.0,
+            ref_epoch: 2000.0,
+        };
+
+        let epoch = GpsTime::from_calendar(2020, 6, 1, 12, 0, 0.0);
+        let coord = Coordinate::new(
+            Vector3::new(45.0, -73.0, 100.0), // LLH: lat, lon, height
+            Datum::WGS84,
+            Frame::LLH,
+            epoch,
+        );
+
+        let result = params.apply(coord);
+
+        // Non-ECEF frames should be returned unchanged
+        assert!((result.vector.x - 45.0).abs() < 1e-12);
+        assert!((result.vector.y + 73.0).abs() < 1e-12);
+        assert!((result.vector.z - 100.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn test_helmert_apply_enu_returns_unchanged() {
+        use gneiss_core::coords::{Coordinate, Datum, Frame};
+        use gneiss_core::time::GpsTime;
+
+        let params = HelmertParams {
+            tx: 100.0,
+            ty: 200.0,
+            tz: 300.0,
+            rx: 0.0,
+            ry: 0.0,
+            rz: 0.0,
+            s: 0.0,
+            dtx: 0.0,
+            dty: 0.0,
+            dtz: 0.0,
+            drx: 0.0,
+            dry: 0.0,
+            drz: 0.0,
+            ds: 0.0,
+            ref_epoch: 2000.0,
+        };
+
+        let epoch = GpsTime::from_calendar(2020, 6, 1, 12, 0, 0.0);
+        let coord = Coordinate::new(
+            Vector3::new(1.0, 2.0, 3.0),
+            Datum::WGS84,
+            Frame::ENU,
+            epoch,
+        );
+
+        let result = params.apply(coord);
+        assert!((result.vector.x - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn test_helmert_clone_and_debug() {
+        let params = HelmertParams {
+            tx: 1.0,
+            ty: 2.0,
+            tz: 3.0,
+            rx: 0.0,
+            ry: 0.0,
+            rz: 0.0,
+            s: 0.0,
+            dtx: 0.0,
+            dty: 0.0,
+            dtz: 0.0,
+            drx: 0.0,
+            dry: 0.0,
+            drz: 0.0,
+            ds: 0.0,
+            ref_epoch: 2000.0,
+        };
+
+        let cloned = params.clone();
+        assert!((cloned.tx - 1.0).abs() < 1e-12);
+
+        let debug_str = format!("{:?}", params);
+        assert!(debug_str.contains("tx: 1.0"));
     }
 }

@@ -2061,4 +2061,442 @@ mod mutant_killer_tests {
         // It requires state.ambiguity_keys to contain (sat, 0) and (sat, 1) and (sat, 2) etc depending on `is_iono_free`.
         // We'll skip adding a full state test and rely on smaller integration tests or direct tests.
     }
+
+    #[test]
+    fn test_extract_isb() {
+        let x = DVector::from_fn(19, |i, _| i as f64);
+        assert!((PppInsIteratedEkf::extract_isb(&x, Constellation::Gps) - 0.0).abs() < 1e-10);
+        assert!(
+            (PppInsIteratedEkf::extract_isb(&x, Constellation::Glonass) - 16.0).abs() < 1e-10
+        );
+        assert!(
+            (PppInsIteratedEkf::extract_isb(&x, Constellation::Galileo) - 17.0).abs() < 1e-10
+        );
+        assert!(
+            (PppInsIteratedEkf::extract_isb(&x, Constellation::Beidou) - 18.0).abs() < 1e-10
+        );
+        // size <= 18 returns 0.0 for all constellations
+        let x_small = DVector::from_fn(18, |i, _| i as f64);
+        assert!(
+            (PppInsIteratedEkf::extract_isb(&x_small, Constellation::Glonass) - 0.0).abs() < 1e-10
+        );
+        assert!(
+            (PppInsIteratedEkf::extract_isb(&x_small, Constellation::Galileo) - 0.0).abs() < 1e-10
+        );
+        assert!(
+            (PppInsIteratedEkf::extract_isb(&x_small, Constellation::Beidou) - 0.0).abs() < 1e-10
+        );
+    }
+
+    #[test]
+    fn test_build_h_row_uduc_ins_basic() {
+        let los = Vector3::new(1.0, 2.0, 3.0);
+        let h_pos_att = nalgebra::Matrix3::new(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0);
+        let size = CORE_STATE_SIZE + 2;
+        // No iono or ambiguity indices
+        let h = build_h_row_uduc(&los, 4.0, None, 1.0, None, size, Constellation::Gps, &h_pos_att);
+        assert_eq!(h.len(), size);
+        assert!((h[0] - (-1.0)).abs() < 1e-10);
+        assert!((h[1] - (-2.0)).abs() < 1e-10);
+        assert!((h[2] - (-3.0)).abs() < 1e-10);
+        // pr_h_att = -los^T * h_pos_att = -[1,2,3] * I = [-1,-2,-3]
+        assert!((h[6] - (-1.0)).abs() < 1e-10);
+        assert!((h[7] - (-2.0)).abs() < 1e-10);
+        assert!((h[8] - (-3.0)).abs() < 1e-10);
+        assert!((h[15] - 1.0).abs() < 1e-10);
+        assert!((h[20] - 4.0).abs() < 1e-10);
+        // No indices set
+        assert!((h[CORE_STATE_SIZE] - 0.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_build_h_row_uduc_ins_with_indices() {
+        let los = Vector3::new(0.5, -1.5, 2.0);
+        let h_pos_att = nalgebra::Matrix3::identity();
+        let size = CORE_STATE_SIZE + 4;
+        let i_idx = CORE_STATE_SIZE + 2;
+        let n_idx = CORE_STATE_SIZE + 3;
+        let h = build_h_row_uduc(
+            &los,
+            2.5,
+            Some(i_idx),
+            -1.5,
+            Some(n_idx),
+            size,
+            Constellation::Galileo,
+            &h_pos_att,
+        );
+        assert!((h[17] - 1.0).abs() < 1e-10); // Galileo ISB
+        assert!((h[i_idx] - (-1.5)).abs() < 1e-10); // Ionosphere coefficient
+        assert!((h[n_idx] - 1.0).abs() < 1e-10); // Ambiguity
+        assert!((h[20] - 2.5).abs() < 1e-10); // ZWD
+    }
+
+    #[test]
+    fn test_build_h_row_ins_with_h_pos_att() {
+        let los = Vector3::new(1.0, 0.0, 0.0);
+        let h_pos_att = nalgebra::Matrix3::new(
+            0.0, -1.0, 0.0,
+            1.0, 0.0, 0.0,
+            0.0, 0.0, 0.0,
+        );
+        let h = build_h_row(
+            &los, 2.0, None, CORE_STATE_SIZE, Constellation::Gps, &h_pos_att,
+        );
+        // pr_h_att = -los^T * h_pos_att = -[1,0,0] * [[0,-1,0],[1,0,0],[0,0,0]] = -[0,-1,0] = [0,1,0]
+        assert!((h[0] - (-1.0)).abs() < 1e-10);
+        assert!((h[6] - 0.0).abs() < 1e-10);
+        assert!((h[7] - 1.0).abs() < 1e-10);
+        assert!((h[8] - 0.0).abs() < 1e-10);
+        assert!((h[15] - 1.0).abs() < 1e-10);
+        assert!((h[20] - 2.0).abs() < 1e-10);
+
+        // With ambiguity index
+        let h2 = build_h_row(
+            &los, 2.0, Some(CORE_STATE_SIZE), CORE_STATE_SIZE + 1, Constellation::Gps, &h_pos_att,
+        );
+        assert!((h2[CORE_STATE_SIZE] - 1.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_build_h_row_doppler_ins_with_matrices() {
+        let los = Vector3::new(1.0, 2.0, 3.0);
+        let h_vel_att = nalgebra::Matrix3::new(
+            1.0, 0.0, 0.0,
+            0.0, 1.0, 0.0,
+            0.0, 0.0, 1.0,
+        );
+        let h_vel_bg = nalgebra::Matrix3::new(
+            0.0, 0.0, 1.0,
+            0.0, 1.0, 0.0,
+            1.0, 0.0, 0.0,
+        );
+        let h = build_h_row_doppler(&los, CORE_STATE_SIZE + 1, &h_vel_att, &h_vel_bg);
+        assert_eq!(h.len(), CORE_STATE_SIZE + 1);
+        // Velocity terms
+        assert!((h[3] - (-1.0)).abs() < 1e-10);
+        assert!((h[4] - (-2.0)).abs() < 1e-10);
+        assert!((h[5] - (-3.0)).abs() < 1e-10);
+        // dop_h_att = -los^T * h_vel_att = -(1,2,3) * I = (-1,-2,-3)
+        assert!((h[6] - (-1.0)).abs() < 1e-10);
+        assert!((h[7] - (-2.0)).abs() < 1e-10);
+        assert!((h[8] - (-3.0)).abs() < 1e-10);
+        // dop_h_bg = -los^T * h_vel_bg = -(1,2,3) * [[0,0,1],[0,1,0],[1,0,0]] = -(3,2,1) = (-3,-2,-1)
+        assert!((h[12] - (-3.0)).abs() < 1e-10);
+        assert!((h[13] - (-2.0)).abs() < 1e-10);
+        assert!((h[14] - (-1.0)).abs() < 1e-10);
+        // Clock drift
+        assert!((h[19] - 1.0).abs() < 1e-10);
+
+        // Small size (< 19): no velocity or clock drift cols set
+        let h2 = build_h_row_doppler(&los, 19, &h_vel_att, &h_vel_bg);
+        assert_eq!(h2.len(), 19);
+        assert!((h2[3] - 0.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_fill_imu_preint_covariance() {
+        let mut preint = crate::estimators::factor_graph::imu_factors::ImuPreintegration::new();
+        preint.dt = 0.1;
+        PppInsIteratedEkf::fill_imu_preint_covariance(&mut preint);
+        // dt=0.1 -> each diag element computed from the formulas
+        // Accelerometer: (5.0 * 0.1).max(2.0) = 2.0, squared = 4.0
+        // Gyroscope: 3.0^2 = 9.0 (3.0.max(1.0) = 3.0)
+        // Velocity: (0.1 * 0.1).max(0.05) = 0.05, squared = 0.0025
+        // Accel bias: 1e-4
+        // Gyro bias: 1e-6
+        assert!((preint.covariance[(0, 0)] - 4.0).abs() < 1e-10);
+        assert!((preint.covariance[(3, 3)] - 9.0).abs() < 1e-10);
+        assert!((preint.covariance[(6, 6)] - 0.0025).abs() < 1e-10);
+        assert!((preint.covariance[(9, 9)] - 1e-4).abs() < 1e-10);
+        assert!((preint.covariance[(12, 12)] - 1e-6).abs() < 1e-10);
+
+        // dt very small -> floor values used
+        let mut preint2 = crate::estimators::factor_graph::imu_factors::ImuPreintegration::new();
+        preint2.dt = 0.001;
+        PppInsIteratedEkf::fill_imu_preint_covariance(&mut preint2);
+        assert!((preint2.covariance[(0, 0)] - 4.0).abs() < 1e-10); // floored at 2.0
+        assert!((preint2.covariance[(6, 6)] - 0.0025).abs() < 1e-10); // floored at 0.05
+    }
+
+    #[test]
+    fn test_fill_imu_preint_covariance_large_dt() {
+        let mut preint = crate::estimators::factor_graph::imu_factors::ImuPreintegration::new();
+        preint.dt = 10.0;
+        PppInsIteratedEkf::fill_imu_preint_covariance(&mut preint);
+        // Accelerometer: (5.0 * 10.0).max(2.0) = 50.0, squared = 2500.0
+        // Gyroscope: 3.0.max(1.0) = 3.0, squared = 9.0
+        // Velocity: (0.1 * 10.0).max(0.05) = 1.0, squared = 1.0
+        assert!((preint.covariance[(0, 0)] - 2500.0).abs() < 1e-6);
+        assert!((preint.covariance[(6, 6)] - 1.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_build_ar_subset_per_constellation() {
+        let fg = PppInsIteratedEkf::default();
+        let cands = vec![
+            (
+                SatelliteId { constellation: Constellation::Gps, prn: 1 },
+                0,
+                1,
+                20.0_f64.to_radians(),
+                0.19,
+                0.24,
+            ),
+            (
+                SatelliteId { constellation: Constellation::Gps, prn: 2 },
+                2,
+                3,
+                30.0_f64.to_radians(),
+                0.19,
+                0.24,
+            ),
+            (
+                SatelliteId { constellation: Constellation::Galileo, prn: 1 },
+                4,
+                5,
+                25.0_f64.to_radians(),
+                0.19,
+                0.24,
+            ),
+            (
+                SatelliteId { constellation: Constellation::Galileo, prn: 2 },
+                6,
+                7,
+                15.0_f64.to_radians(),
+                0.19,
+                0.24,
+            ),
+        ];
+        let subset = fg.build_ar_subset(&cands);
+        // Per-constellation grouping: GPS pair (PRN1 ref, PRN2 vs ref)
+        // and Galileo pair (PRN1 ref, PRN2 vs ref)
+        assert_eq!(subset.len(), 2);
+        // Verify each pair has same constellation
+        assert_eq!(subset[0].0.0.constellation, subset[0].1.0.constellation);
+        assert_eq!(subset[1].0.0.constellation, subset[1].1.0.constellation);
+    }
+
+    #[test]
+    fn test_build_ar_subset_single_sat_skip() {
+        let fg = PppInsIteratedEkf::default();
+        let cands = vec![
+            (
+                SatelliteId { constellation: Constellation::Gps, prn: 1 },
+                0,
+                1,
+                30.0_f64.to_radians(),
+                0.19,
+                0.24,
+            ),
+            (
+                SatelliteId { constellation: Constellation::Galileo, prn: 1 },
+                2,
+                3,
+                25.0_f64.to_radians(),
+                0.19,
+                0.24,
+            ),
+        ];
+        // Each constellation has only 1 sat -> no pairs from either
+        let subset = fg.build_ar_subset(&cands);
+        assert!(subset.is_empty());
+    }
+
+    #[test]
+    fn test_resolve_uduc_indices_ins_with_all_indices() {
+        let mut state = dummy_rtk_state();
+        let sat_id = SatelliteId { constellation: Constellation::Gps, prn: 1 };
+        state.ambiguity_keys.push((sat_id, 1)); // n1 idx 0
+        state.ambiguity_keys.push((sat_id, 2)); // n2 idx 1
+        state.ambiguity_keys.push((sat_id, 3)); // i1 idx 2
+        state.ambiguities = vec![100.0, 200.0, 300.0];
+        let obs = SatObs { sat: sat_id, observations: vec![] };
+        let sat = ProcessedSat {
+            sat_obs: &obs,
+            dt_sat_m: 0.0,
+            p1: 0.0,
+            p2: None,
+            cp1: None,
+            cp2: None,
+            is_iono_free: false,
+            osb_p1: 0.0,
+            osb_p2: 0.0,
+            osb_cp1: 0.0,
+            osb_cp2: 0.0,
+            los: Vector3::zeros(),
+            dist: 0.0,
+            el: std::f64::consts::PI / 2.0,
+            snr: 45.0,
+            doppler: 0.0,
+            lam1: 0.19,
+            lam2: 0.24,
+            tropo_dry: 0.0,
+            map_wet: 0.0,
+            iono_delay: 0.0,
+            f1: 1575.42e6,
+            f2: 1227.60e6,
+            sat_pos_rot: Vector3::zeros(),
+            sat_vel: Vector3::zeros(),
+            sat_clock_drift: 0.0,
+            rcv_pos_ecef: Vector3::zeros(),
+            pcv_correction: 0.0,
+        };
+        let x_i = DVector::from_fn(CORE_STATE_SIZE + 3, |i, _| i as f64);
+        let idx = PppInsIteratedEkf::resolve_uduc_indices(&state, &sat, &x_i);
+        assert_eq!(idx.i1_idx, Some(CORE_STATE_SIZE + 2));
+        assert_eq!(idx.n1_idx, Some(CORE_STATE_SIZE + 0));
+        assert_eq!(idx.n2_idx, Some(CORE_STATE_SIZE + 1));
+        let expected_gamma = (1575.42e6 * 1575.42e6) / (1227.60e6 * 1227.60e6);
+        assert!((idx.gamma - expected_gamma).abs() < 1e-6);
+        assert!((idx.i1 - (CORE_STATE_SIZE + 2) as f64).abs() < 1e-6);
+        assert!((idx.n1 - (CORE_STATE_SIZE + 0) as f64).abs() < 1e-6);
+        assert!((idx.n2 - (CORE_STATE_SIZE + 1) as f64).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_resolve_uduc_indices_ins_missing_indices() {
+        let state = dummy_rtk_state();
+        let sat_id = SatelliteId { constellation: Constellation::Gps, prn: 1 };
+        let obs = SatObs { sat: sat_id, observations: vec![] };
+        let sat = ProcessedSat {
+            sat_obs: &obs,
+            dt_sat_m: 0.0,
+            p1: 0.0,
+            p2: None,
+            cp1: None,
+            cp2: None,
+            is_iono_free: false,
+            osb_p1: 0.0,
+            osb_p2: 0.0,
+            osb_cp1: 0.0,
+            osb_cp2: 0.0,
+            los: Vector3::zeros(),
+            dist: 0.0,
+            el: std::f64::consts::PI / 2.0,
+            snr: 45.0,
+            doppler: 0.0,
+            lam1: 0.19,
+            lam2: 0.24,
+            tropo_dry: 0.0,
+            map_wet: 0.0,
+            iono_delay: 0.0,
+            f1: 1.0,
+            f2: 1.0,
+            sat_pos_rot: Vector3::zeros(),
+            sat_vel: Vector3::zeros(),
+            sat_clock_drift: 0.0,
+            rcv_pos_ecef: Vector3::zeros(),
+            pcv_correction: 0.0,
+        };
+        let x_i = DVector::zeros(CORE_STATE_SIZE);
+        let idx = PppInsIteratedEkf::resolve_uduc_indices(&state, &sat, &x_i);
+        assert!(idx.i1_idx.is_none());
+        assert!(idx.n1_idx.is_none());
+        assert!(idx.n2_idx.is_none());
+        assert!((idx.i1 - 0.0).abs() < 1e-10);
+        assert!((idx.n1 - 0.0).abs() < 1e-10);
+        assert!((idx.n2 - 0.0).abs() < 1e-10);
+        assert!((idx.gamma - 1.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_push_sat_meas_rejects_large_pr_residual() {
+        let fg = PppInsIteratedEkf::default();
+        let mut meas = Vec::new();
+        let state = dummy_rtk_state();
+        let sat_id = SatelliteId { constellation: Constellation::Gps, prn: 1 };
+        let obs = SatObs { sat: sat_id, observations: vec![] };
+        let x_i = DVector::zeros(CORE_STATE_SIZE);
+        let los = Vector3::new(0.0, 0.0, 1.0);
+        let h_pos_att = nalgebra::Matrix3::identity();
+
+        // PR residual > 100 -> returns false
+        let sat = ProcessedSat {
+            sat_obs: &obs,
+            dt_sat_m: 0.0,
+            p1: 1000.0,
+            p2: None,
+            cp1: None,
+            cp2: None,
+            is_iono_free: true,
+            osb_p1: 0.0,
+            osb_p2: 0.0,
+            osb_cp1: 0.0,
+            osb_cp2: 0.0,
+            los: Vector3::zeros(),
+            dist: 0.0,
+            el: std::f64::consts::PI / 2.0,
+            snr: 45.0,
+            doppler: 0.0,
+            lam1: 0.19,
+            lam2: 0.24,
+            tropo_dry: 0.0,
+            map_wet: 0.0,
+            iono_delay: 0.0,
+            f1: 1.0,
+            f2: 1.0,
+            sat_pos_rot: Vector3::zeros(),
+            sat_vel: Vector3::zeros(),
+            sat_clock_drift: 0.0,
+            rcv_pos_ecef: Vector3::zeros(),
+            pcv_correction: 0.0,
+        };
+        let result = fg.push_sat_meas(
+            &mut meas, &state, &sat, &x_i, 0, &los, 5.0, 0.0, 0.0, &h_pos_att,
+        );
+        assert!(!result);
+        assert!(meas.is_empty());
+    }
+
+    #[test]
+    fn test_push_pr_measurement_iono_free_variance_ins() {
+        let fg = PppInsIteratedEkf::default();
+        let mut meas = Vec::new();
+        let state = dummy_rtk_state();
+        let sat_id = SatelliteId { constellation: Constellation::Gps, prn: 1 };
+        let obs = SatObs { sat: sat_id, observations: vec![] };
+        let x_i = DVector::zeros(CORE_STATE_SIZE);
+        let los = Vector3::new(0.0, 0.0, 1.0);
+        let h_pos_att = nalgebra::Matrix3::identity();
+
+        let sat = ProcessedSat {
+            sat_obs: &obs,
+            dt_sat_m: 0.0,
+            p1: 10.0,
+            p2: None,
+            cp1: None,
+            cp2: None,
+            is_iono_free: true,
+            osb_p1: 0.0,
+            osb_p2: 0.0,
+            osb_cp1: 0.0,
+            osb_cp2: 0.0,
+            los: Vector3::zeros(),
+            dist: 0.0,
+            el: std::f64::consts::PI / 2.0,
+            snr: 45.0,
+            doppler: 0.0,
+            lam1: 0.19,
+            lam2: 0.24,
+            tropo_dry: 0.0,
+            map_wet: 1.0,
+            iono_delay: 5.0,
+            f1: 1.0,
+            f2: 1.0,
+            sat_pos_rot: Vector3::zeros(),
+            sat_vel: Vector3::zeros(),
+            sat_clock_drift: 0.0,
+            rcv_pos_ecef: Vector3::zeros(),
+            pcv_correction: 0.0,
+        };
+        fg.push_pr_measurement(
+            &mut meas, &state, &sat, &x_i, 0, &los, 5.0, 0.0, 0.0, &h_pos_att,
+        );
+        assert_eq!(meas.len(), 1);
+        // res_pr = 10.0 - 5.0 = 5.0
+        assert!((meas[0].res - 5.0).abs() < 1e-6);
+        // var_pr = 1.0 * 1.0 / 1.0 * 9.0 = 9.0 (iono-free amplifies noise)
+        assert!((meas[0].raw_var - 9.0).abs() < 1e-6);
+    }
 }

@@ -1156,6 +1156,112 @@ mod tests {
         assert_eq!(q_cycles.nrows(), 1);
         assert_eq!(q_cycles.ncols(), 1);
     }
+
+    #[test]
+    fn test_init_covariance_values() {
+        let cov = init_covariance(10.0);
+        assert_eq!(cov.nrows(), CORE_STATE_SIZE);
+        assert_eq!(cov.ncols(), CORE_STATE_SIZE);
+        for i in 0..3 {
+            assert_eq!(cov[(i, i)], 10.0);
+        }
+        for i in 3..6 {
+            assert_eq!(cov[(i, i)], 100.0);
+        }
+        for i in 6..9 {
+            assert!((cov[(i, i)] - (1.0f64.to_radians()).powi(2)).abs() < 1e-10);
+        }
+        for i in 9..12 {
+            assert!((cov[(i, i)] - 0.01).abs() < 1e-10);
+        }
+        for i in 12..15 {
+            assert!((cov[(i, i)] - 1e-6).abs() < 1e-10);
+        }
+        assert!((cov[(15, 15)] - 100000.0).abs() < 1e-10);
+        assert!((cov[(16, 16)] - 100000.0).abs() < 1e-10);
+        assert!((cov[(17, 17)] - 100000.0).abs() < 1e-10);
+        assert!((cov[(18, 18)] - 100000.0).abs() < 1e-10);
+        assert!((cov[(19, 19)] - 1000.0).abs() < 1e-10);
+        assert!((cov[(20, 20)] - 1.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_remove_ambiguity() {
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 1.0);
+        let sat = SatelliteId { constellation: Constellation::Gps, prn: 1 };
+        state.add_ambiguity(sat, 1, 10.0, 1.0);
+        assert_eq!(state.ambiguities.len(), 1);
+        assert_eq!(state.covariance.nrows(), CORE_STATE_SIZE + 1);
+        state.remove_ambiguity(sat, 1);
+        assert_eq!(state.ambiguities.len(), 0);
+        assert_eq!(state.covariance.nrows(), CORE_STATE_SIZE);
+    }
+
+    #[test]
+    fn test_add_ambiguity_resets_existing() {
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 1.0);
+        let sat = SatelliteId { constellation: Constellation::Gps, prn: 1 };
+        state.add_ambiguity(sat, 1, 10.0, 1.0);
+        assert_eq!(state.ambiguities[0], 10.0);
+        // Add same ambiguity again -> should reset
+        state.add_ambiguity(sat, 1, 20.0, 2.0);
+        assert_eq!(state.ambiguities.len(), 1);
+        assert_eq!(state.ambiguities[0], 20.0);
+        assert_eq!(state.ambiguity_keys[0], (sat, 1));
+    }
+
+    #[test]
+    fn test_reset_to_spp_clears_ambiguities() {
+        use gneiss_core::coords::Datum;
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::new(6378137.0, 0.0, 0.0), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 10.0);
+        let sat = SatelliteId { constellation: Constellation::Gps, prn: 1 };
+        state.add_ambiguity(sat, 1, 10.0, 1.0);
+        assert_eq!(state.ambiguities.len(), 1);
+
+        let new_pos = Coordinate::new(Vector3::new(6378137.0, 100.0, 0.0), Datum::WGS84, Frame::ECEF, time);
+        state.reset_to_spp(new_pos, None, false);
+        assert_eq!(state.ambiguities.len(), 0);
+        assert_eq!(state.position.vector.y, 100.0);
+        assert!(state.is_reset);
+    }
+
+    #[test]
+    fn test_reset_to_spp_with_spp_state_and_isbs() {
+        use gneiss_core::coords::Datum;
+        use crate::spp::SppState;
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::new(6378137.0, 0.0, 0.0), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 10.0);
+        let new_pos = Coordinate::new(Vector3::new(6378137.0, 100.0, 50.0), Datum::WGS84, Frame::ECEF, time);
+        let spp_state = SppState::new(new_pos, 100.0, 110.0, 120.0, 130.0);
+        state.reset_to_spp(new_pos, Some(&spp_state), true);
+        assert!((state.rcv_clk_bias - 100.0).abs() < 1e-10);
+        assert!((state.isb_glo - 30.0).abs() < 1e-10);
+        assert!((state.isb_gal - 10.0).abs() < 1e-10);
+        assert!((state.isb_bds - 20.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_reset_to_spp_without_isbs() {
+        use gneiss_core::coords::Datum;
+        use crate::spp::SppState;
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::new(6378137.0, 0.0, 0.0), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 10.0);
+        let new_pos = Coordinate::new(Vector3::new(6378137.0, 100.0, 50.0), Datum::WGS84, Frame::ECEF, time);
+        let spp_state = SppState::new(new_pos, 100.0, 110.0, 120.0, 130.0);
+        state.reset_to_spp(new_pos, Some(&spp_state), false);
+        assert!((state.rcv_clk_bias - 100.0).abs() < 1e-10);
+        assert!((state.isb_glo - 0.0).abs() < 1e-10);
+        assert!((state.isb_gal - 0.0).abs() < 1e-10);
+        assert!((state.isb_bds - 0.0).abs() < 1e-10);
+    }
 }
 pub fn select_ar_candidates(
     state: &RtkState,

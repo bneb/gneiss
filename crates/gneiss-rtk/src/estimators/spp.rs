@@ -51,6 +51,7 @@ pub struct SppMeasurement {
     pub time: GpsTime,
     pub eph: Ephemeris,
     pub is_iono_free: bool,
+    pub freq_band: u8,
 }
 
 /// Errors that can occur during an SPP WNLLS step.
@@ -131,18 +132,42 @@ fn build_single_measurement(
         f2 = f1;
     }
 
+    let mut freq_band = 1;
     let p1_opt = match sat_obs.sat.constellation {
         gneiss_core::sat::Constellation::Beidou => sat_obs.get_observable(2),
         _ => sat_obs.get_observable(1),
     };
     let p2_opt = match sat_obs.sat.constellation {
         gneiss_core::sat::Constellation::Galileo => {
-            sat_obs.get_observable(7).or(sat_obs.get_observable(5))
+            if let Some(obs) = sat_obs.get_observable(7) {
+                freq_band = 7;
+                Some(obs)
+            } else if let Some(obs) = sat_obs.get_observable(5) {
+                freq_band = 5;
+                Some(obs)
+            } else {
+                None
+            }
         }
         gneiss_core::sat::Constellation::Beidou => {
-            sat_obs.get_observable(7).or(sat_obs.get_observable(6))
+            if let Some(obs) = sat_obs.get_observable(7) {
+                freq_band = 7;
+                Some(obs)
+            } else if let Some(obs) = sat_obs.get_observable(6) {
+                freq_band = 6;
+                Some(obs)
+            } else {
+                None
+            }
         }
-        _ => sat_obs.get_observable(2),
+        _ => {
+            if let Some(obs) = sat_obs.get_observable(2) {
+                freq_band = 2;
+                Some(obs)
+            } else {
+                None
+            }
+        }
     };
 
     let (raw_pr, is_iono_free) = if let (Some(p1), Some(p2)) = (p1_opt, p2_opt) {
@@ -150,6 +175,7 @@ fn build_single_measurement(
         let f2_sq = f2 * f2;
         ((f1_sq * p1 - f2_sq * p2) / (f1_sq - f2_sq), true)
     } else {
+        freq_band = 1;
         (p1_opt?, false)
     };
 
@@ -161,6 +187,7 @@ fn build_single_measurement(
         time: epoch_time,
         eph: eph.clone(),
         is_iono_free,
+        freq_band,
     })
 }
 
@@ -184,6 +211,8 @@ fn compute_sat_state(m: &SppMeasurement, receiver_cdt: f64) -> (Coordinate, f64)
 
     let (_, _, sat_clk_err_rough, _) = if m.is_iono_free {
         m.eph.position_iono_free(t_tx_sat_gps)
+    } else if m.freq_band == 7 {
+        m.eph.position_e5b(t_tx_sat_gps)
     } else {
         m.eph.position(t_tx_sat_gps)
     };
@@ -193,6 +222,8 @@ fn compute_sat_state(m: &SppMeasurement, receiver_cdt: f64) -> (Coordinate, f64)
 
     let (sat_pos, _, sat_clk_err, _) = if m.is_iono_free {
         m.eph.position_iono_free(t_tx_true_gps)
+    } else if m.freq_band == 7 {
+        m.eph.position_e5b(t_tx_true_gps)
     } else {
         m.eph.position(t_tx_true_gps)
     };
@@ -654,6 +685,7 @@ fn apply_height_constraint(
 mod tests {
     use super::*;
     use gneiss_core::obs::ObsType;
+    use gneiss_core::sat::SatelliteId;
 
     #[test]
     fn test_compute_spp() {
@@ -843,6 +875,7 @@ mod tests {
                 iodc: 1,
             }),
             is_iono_free: false,
+            freq_band: 1,
         };
 
         let config = SppConfig {
@@ -1074,6 +1107,7 @@ mod tests {
             idot: 0.0,
             omega: 0.0,
             tgd1: 0.0,
+            tgd2: 0.0,
             aode: 1,
             aodc: 1,
         };
@@ -1121,5 +1155,148 @@ mod tests {
             _ => panic!("Wrong ephemeris type"),
         }
         assert!(!measurements[0].is_iono_free); // missing L2
+    }
+
+    #[test]
+    fn test_compute_sagnac_correction() {
+        let sat_ecef = Vector3::new(20000000.0, 5000000.0, 5000000.0);
+        let corrected = compute_sagnac_correction(sat_ecef, 25000000.0);
+        assert!((corrected.norm() - sat_ecef.norm()).abs() < 1e-6, "Sagnac should preserve norm");
+        assert_ne!(corrected.x, sat_ecef.x); // Should rotate
+    }
+
+    #[test]
+    fn test_compute_atmospheric_delays_below_min_earth_radius() {
+        let rec_ecef = Vector3::new(1.0, 0.0, 0.0);
+        let (tropo, iono) = compute_atmospheric_delays(
+            rec_ecef, Vector3::zeros(), 0.0, 0.5, GpsTime::new(0, 0.0), None, &SppConfig::default(),
+        );
+        assert_eq!(tropo, 0.0);
+        assert_eq!(iono, 0.0);
+    }
+
+    #[test]
+    fn test_apply_height_constraint_sets_correct_structure() {
+        let llh = Vector3::new(0.5, 1.0, 100.0); // lat=0.5rad, lon=1.0rad
+        let mut h = DMatrix::zeros(5, 4);
+        let mut w = DMatrix::identity(5, 5);
+        let mut dz = DVector::zeros(5);
+        apply_height_constraint(llh, 4, &mut h, &mut w, &mut dz);
+        let sin_lat = 0.5f64.sin();
+        let cos_lat = 0.5f64.cos();
+        let sin_lon = 1.0f64.sin();
+        let cos_lon = 1.0f64.cos();
+        assert!((h[(4, 0)] - cos_lat * cos_lon).abs() < 1e-10);
+        assert!((h[(4, 1)] - cos_lat * sin_lon).abs() < 1e-10);
+        assert!((h[(4, 2)] - sin_lat).abs() < 1e-10);
+        assert_eq!(dz[4], 0.0);
+        assert!((w[(4, 4)] - 1.0 / 100.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_spp_state_get_cdt() {
+        use gneiss_core::sat::Constellation;
+        let state = SppState::new(
+            Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, GpsTime::new(0, 0.0)),
+            1.0, 2.0, 3.0, 4.0,
+        );
+        assert_eq!(state.get_cdt(Constellation::Gps), 1.0);
+        assert_eq!(state.get_cdt(Constellation::Galileo), 2.0);
+        assert_eq!(state.get_cdt(Constellation::Beidou), 3.0);
+        assert_eq!(state.get_cdt(Constellation::Glonass), 4.0);
+        assert_eq!(state.get_cdt(Constellation::Qzss), 1.0);
+        assert_eq!(state.get_cdt(Constellation::Navic), 1.0);
+    }
+
+    #[test]
+    fn test_find_clock_cols_gps_only() {
+        use gneiss_core::sat::{Constellation, SatelliteId};
+        let t = GpsTime::new(2000, 100000.0);
+        let m1 = SppMeasurement {
+            constellation: Constellation::Gps,
+            raw_pr: 20000000.0, snr: 45.0, doppler: 0.0, time: t,
+            eph: Ephemeris::Gps(gneiss_core::ephemeris::GpsEphemeris {
+                sat: SatelliteId { constellation: Constellation::Gps, prn: 1 },
+                toe: t, toc: t, af0: 0.0, af1: 0.0, af2: 0.0,
+                crs: 0.0, crc: 0.0, cuc: 0.0, cus: 0.0,
+                cic: 0.0, cis: 0.0, m0: 0.0, e: 0.0, sqrt_a: 5153.6,
+                delta_n: 0.0, omega0: 0.0, omega_dot: 0.0,
+                i0: 0.95, idot: 0.0, omega: 0.0, tgd: 0.0, iode: 1, iodc: 1,
+            }),
+            is_iono_free: false,
+            freq_band: 1,
+        };
+        let (cols, clk) = find_clock_cols(&[m1]);
+        assert_eq!(cols, 4);
+        assert_eq!(clk.0, Some(3));
+        assert!(clk.1.is_none());
+        assert!(clk.2.is_none());
+        assert!(clk.3.is_none());
+    }
+
+    #[test]
+    fn test_find_clock_cols_multi_constellation() {
+        use gneiss_core::sat::{Constellation, SatelliteId};
+        let t = GpsTime::new(2000, 100000.0);
+        let eph_base = || -> Ephemeris {
+            Ephemeris::Gps(gneiss_core::ephemeris::GpsEphemeris {
+                sat: SatelliteId { constellation: Constellation::Gps, prn: 1 },
+                toe: t, toc: t, af0: 0.0, af1: 0.0, af2: 0.0,
+                crs: 0.0, crc: 0.0, cuc: 0.0, cus: 0.0,
+                cic: 0.0, cis: 0.0, m0: 0.0, e: 0.0, sqrt_a: 5153.6,
+                delta_n: 0.0, omega0: 0.0, omega_dot: 0.0,
+                i0: 0.95, idot: 0.0, omega: 0.0, tgd: 0.0, iode: 1, iodc: 1,
+            })
+        };
+        let ms: Vec<SppMeasurement> = vec![
+            SppMeasurement { constellation: Constellation::Gps, raw_pr: 20000000.0, snr: 45.0, doppler: 0.0, time: t, eph: eph_base(), is_iono_free: false, freq_band: 1 },
+            SppMeasurement { constellation: Constellation::Galileo, raw_pr: 20000000.0, snr: 45.0, doppler: 0.0, time: t, eph: eph_base(), is_iono_free: false, freq_band: 1 },
+            SppMeasurement { constellation: Constellation::Beidou, raw_pr: 20000000.0, snr: 45.0, doppler: 0.0, time: t, eph: eph_base(), is_iono_free: false, freq_band: 1 },
+            SppMeasurement { constellation: Constellation::Glonass, raw_pr: 20000000.0, snr: 45.0, doppler: 0.0, time: t, eph: eph_base(), is_iono_free: false, freq_band: 1 },
+        ];
+        let (cols, clk) = find_clock_cols(&ms);
+        assert_eq!(cols, 7);
+        assert!(clk.0.is_some());
+        assert!(clk.1.is_some());
+        assert!(clk.2.is_some());
+        assert!(clk.3.is_some());
+    }
+
+    #[test]
+    fn test_spp_wnlls_step_not_enough_measurements_height_constrained() {
+        use gneiss_core::sat::{Constellation, SatelliteId};
+        let t = GpsTime::new(2000, 100000.0);
+        // 3 GPS measurements with cols=4 -> height constraint applied but still underdetermined
+        let ms: Vec<SppMeasurement> = (0..3)
+            .map(|_| SppMeasurement {
+                constellation: Constellation::Gps,
+                raw_pr: 20000000.0, snr: 45.0, doppler: 0.0, time: t,
+                eph: Ephemeris::Gps(gneiss_core::ephemeris::GpsEphemeris {
+                    sat: SatelliteId { constellation: Constellation::Gps, prn: 1 },
+                    toe: t, toc: t, af0: 0.0, af1: 0.0, af2: 0.0,
+                    crs: 0.0, crc: 0.0, cuc: 0.0, cus: 0.0,
+                    cic: 0.0, cis: 0.0, m0: 0.0, e: 0.0, sqrt_a: 5153.6,
+                    delta_n: 0.0, omega0: 0.0, omega_dot: 0.0,
+                    i0: 0.95, idot: 0.0, omega: 0.0, tgd: 0.0, iode: 1, iodc: 1,
+                }),
+                is_iono_free: false,
+                freq_band: 1,
+            })
+            .collect();
+        let state = SppState::new(
+            Coordinate::new(Vector3::new(10000000.0, 10000000.0, 0.0), Datum::WGS84, Frame::ECEF, t),
+            0.0, 0.0, 0.0, 0.0,
+        );
+        let config = SppConfig {
+            elevation_mask_rad: -core::f64::consts::PI,
+            enable_sagnac: false,
+            enable_tropo: false,
+            enable_iono: false,
+            ..Default::default()
+        };
+        let res = spp_wnlls_step(&state, &ms, None, &config);
+        // With 3 measurements and height constraint (4 total eqns, 4 unknowns),
+        // identical geometry makes the matrix singular -> inversion fails
+        assert!(res.is_err());
     }
 }

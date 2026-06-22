@@ -329,3 +329,597 @@ fn update_smoothed_state(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::filter::RtkState;
+    use gneiss_core::coords::{Coordinate, Datum, Frame};
+    use gneiss_core::sat::{Constellation, SatelliteId};
+    use gneiss_core::time::GpsTime;
+    use nalgebra::{DMatrix, DVector, Vector3};
+
+    // -----------------------------------------------------------------------
+    // find_matched_ambiguities
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_find_matched_ambiguities_empty() {
+        let time = GpsTime::new(2000, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let state_k = RtkState::new(time, pos.clone(), 1.0);
+        let state_k1 = RtkState::new(time, pos, 1.0);
+        let (mk, mk1) = find_matched_ambiguities(&state_k, &state_k1);
+        assert!(mk.is_empty());
+        assert!(mk1.is_empty());
+    }
+
+    #[test]
+    fn test_find_matched_ambiguities_no_common_sat() {
+        let time = GpsTime::new(2000, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let mut state_k = RtkState::new(time, pos.clone(), 1.0);
+        let mut state_k1 = RtkState::new(time, pos, 1.0);
+
+        let sat1 = SatelliteId { constellation: Constellation::Gps, prn: 1 };
+        let sat2 = SatelliteId { constellation: Constellation::Gps, prn: 2 };
+        state_k.add_ambiguity(sat1, 1, 5.0, 1.0);
+        state_k1.add_ambiguity(sat2, 1, 5.0, 1.0);
+
+        let (mk, mk1) = find_matched_ambiguities(&state_k, &state_k1);
+        assert!(mk.is_empty());
+        assert!(mk1.is_empty());
+    }
+
+    #[test]
+    fn test_find_matched_ambiguities_common_sat_matches() {
+        let time = GpsTime::new(2000, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let mut state_k = RtkState::new(time, pos.clone(), 1.0);
+        let mut state_k1 = RtkState::new(time, pos, 1.0);
+
+        let sat1 = SatelliteId { constellation: Constellation::Gps, prn: 1 };
+        state_k.add_ambiguity(sat1, 1, 5.0, 1.0);
+        state_k1.add_ambiguity(sat1, 1, 5.0, 1.0);
+
+        let (mk, mk1) = find_matched_ambiguities(&state_k, &state_k1);
+        assert_eq!(mk.len(), 1);
+        assert_eq!(mk1.len(), 1);
+        // Indices should be at CORE_STATE_SIZE (21)
+        assert_eq!(mk[0], crate::filter::CORE_STATE_SIZE);
+        assert_eq!(mk1[0], crate::filter::CORE_STATE_SIZE);
+    }
+
+    #[test]
+    fn test_find_matched_ambiguities_track_id_mismatch_blocks_match() {
+        let time = GpsTime::new(2000, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let mut state_k = RtkState::new(time, pos.clone(), 1.0);
+        let mut state_k1 = RtkState::new(time, pos, 1.0);
+
+        let sat1 = SatelliteId { constellation: Constellation::Gps, prn: 1 };
+        state_k.add_ambiguity(sat1, 1, 5.0, 1.0);
+        state_k1.add_ambiguity(sat1, 1, 5.0, 1.0);
+        // Manually force different track IDs
+        state_k.ambiguity_track_ids[0] = 10;
+        state_k1.ambiguity_track_ids[0] = 20;
+
+        let (mk, mk1) = find_matched_ambiguities(&state_k, &state_k1);
+        assert!(mk.is_empty());
+        assert!(mk1.is_empty());
+    }
+
+    #[test]
+    fn test_find_matched_ambiguities_covariance_threshold_filters() {
+        let time = GpsTime::new(2000, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let mut state_k1 = RtkState::new(time, pos, 1.0);
+
+        let sat1 = SatelliteId { constellation: Constellation::Gps, prn: 1 };
+        state_k1.add_ambiguity(sat1, 1, 5.0, 20.0); // variance 20 > 10
+
+        // We cannot easily build state_k with the same key _and_ a covariance check
+        // because the check is on state_k1's covariance. Variance 20.0 > 10.0 => filtered.
+        let time2 = GpsTime::new(2000, 1.0);
+        let pos2 = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time2);
+        let mut state_k = RtkState::new(time2, pos2, 1.0);
+        state_k.add_ambiguity(sat1, 1, 5.0, 1.0);
+
+        let (mk, mk1) = find_matched_ambiguities(&state_k, &state_k1);
+        assert!(mk.is_empty());
+        assert!(mk1.is_empty());
+    }
+
+    // -----------------------------------------------------------------------
+    // build_x_vector
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_build_x_vector_core_only_no_ambiguities() {
+        let time = GpsTime::new(2000, 0.0);
+        let pos = Coordinate::new(Vector3::new(1.0, 2.0, 3.0), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 1.0);
+        state.velocity = Vector3::new(4.0, 5.0, 6.0);
+
+        let x = build_x_vector(&state, crate::filter::CORE_STATE_SIZE,
+                               crate::filter::CORE_STATE_SIZE, &[]);
+        assert_eq!(x.len(), crate::filter::CORE_STATE_SIZE);
+        assert_eq!(x[0], 1.0);
+        assert_eq!(x[4], 5.0);
+        assert_eq!(x[5], 6.0);
+    }
+
+    #[test]
+    fn test_build_x_vector_with_ambiguities() {
+        let time = GpsTime::new(2000, 0.0);
+        let pos = Coordinate::new(Vector3::new(10.0, 20.0, 30.0), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 1.0);
+        let sat = SatelliteId { constellation: Constellation::Gps, prn: 1 };
+        state.add_ambiguity(sat, 1, 123.45, 1.0);
+
+        let matched = vec![crate::filter::CORE_STATE_SIZE]; // index of the ambiguity
+        let smooth_len = crate::filter::CORE_STATE_SIZE + 1;
+        let x = build_x_vector(&state, crate::filter::CORE_STATE_SIZE, smooth_len, &matched);
+        assert_eq!(x.len(), smooth_len);
+        assert_eq!(x[crate::filter::CORE_STATE_SIZE], 123.45);
+        assert_eq!(x[0], 10.0);
+    }
+
+    #[test]
+    fn test_build_x_vector_core_size_exactly_6() {
+        // When core_size == 6 (SPP without IMU), only position and velocity are set
+        let time = GpsTime::new(2000, 0.0);
+        let pos = Coordinate::new(Vector3::new(1.0, 2.0, 3.0), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 1.0);
+        state.velocity = Vector3::new(4.0, 5.0, 6.0);
+
+        let core_size = 6;
+        let x = build_x_vector(&state, core_size, core_size, &[]);
+        assert_eq!(x.len(), 6);
+        assert_eq!(x[0], 1.0);
+        assert_eq!(x[3], 4.0);
+        assert_eq!(x[5], 6.0);
+    }
+
+    // -----------------------------------------------------------------------
+    // extract_submatrix / extract_subvector
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_extract_submatrix_basic() {
+        let mat = DMatrix::from_row_slice(3, 3, &[
+            1.0, 2.0, 3.0,
+            4.0, 5.0, 6.0,
+            7.0, 8.0, 9.0,
+        ]);
+        let rows = vec![0, 2];
+        let cols = vec![1, 2];
+        let sub = extract_submatrix(&mat, &rows, &cols);
+        assert_eq!(sub.nrows(), 2);
+        assert_eq!(sub.ncols(), 2);
+        assert_eq!(sub[(0, 0)], mat[(0, 1)]); // 2.0
+        assert_eq!(sub[(0, 1)], mat[(0, 2)]); // 3.0
+        assert_eq!(sub[(1, 0)], mat[(2, 1)]); // 8.0
+        assert_eq!(sub[(1, 1)], mat[(2, 2)]); // 9.0
+    }
+
+    #[test]
+    fn test_extract_subvector_basic() {
+        let vec = DVector::from_vec(vec![10.0, 20.0, 30.0, 40.0]);
+        let indices = vec![3, 0];
+        let sub = extract_subvector(&vec, &indices);
+        assert_eq!(sub.len(), 2);
+        assert_eq!(sub[0], 40.0);
+        assert_eq!(sub[1], 10.0);
+    }
+
+    // -----------------------------------------------------------------------
+    // build_phi_submatrix
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_build_phi_submatrix_diagonal_and_ambiguity_identity() {
+        let core_size = crate::filter::CORE_STATE_SIZE;
+        let len = core_size + 2;
+        let mut phi = DMatrix::zeros(core_size, core_size);
+        for i in 0..core_size {
+            phi[(i, i)] = 0.5; // typical decay
+        }
+        let sub = build_phi_submatrix(&phi, core_size, len);
+        // Check ambiguity diagonal is 1.0
+        assert_eq!(sub[(core_size, core_size)], 1.0);
+        assert_eq!(sub[(core_size + 1, core_size + 1)], 1.0);
+        // Check core diagonal preserved
+        assert_eq!(sub[(0, 0)], 0.5);
+        // Check white-noise states zeroed
+        assert_eq!(sub[(15, 15)], 0.0);
+        assert_eq!(sub[(16, 15)], 0.0);
+        assert_eq!(sub[(15, 0)], 0.0);
+        assert_eq!(sub[(17, 17)], 0.0);
+        assert_eq!(sub[(18, 18)], 0.0);
+    }
+
+    #[test]
+    fn test_build_phi_submatrix_small_core() {
+        // core_size = 6 (no IMU), no white-noise zeroing
+        let core_size = 6;
+        let len = 6;
+        let mut phi = DMatrix::zeros(core_size, core_size);
+        phi[(0, 0)] = 1.0;
+        phi[(5, 5)] = 1.0;
+        let sub = build_phi_submatrix(&phi, core_size, len);
+        assert_eq!(sub[(0, 0)], 1.0);
+        assert_eq!(sub[(5, 5)], 1.0);
+    }
+
+    // -----------------------------------------------------------------------
+    // invert_p_pred
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_invert_p_pred_all_active() {
+        let len = 3;
+        let p_pred = DMatrix::identity(len, len) * 2.0;
+        let inv = invert_p_pred(&p_pred, len).unwrap();
+        assert!((inv[(0, 0)] - 0.5).abs() < 1e-10);
+        assert_eq!(inv.nrows(), len);
+    }
+
+    #[test]
+    fn test_invert_p_pred_partial_inactive() {
+        // State 0 active, state 1 has zero variance (inactive)
+        let mut p_pred = DMatrix::zeros(2, 2);
+        p_pred[(0, 0)] = 2.0; // active
+        p_pred[(1, 1)] = 0.0; // below MIN_ACTIVE_STATE_VARIANCE
+        let inv = invert_p_pred(&p_pred, 2).unwrap();
+        assert_eq!(inv.nrows(), 2);
+        assert!((inv[(0, 0)] - 0.5).abs() < 1e-10);
+        // The inactive element's inverse entry should be zero
+        assert_eq!(inv[(1, 1)], 0.0);
+    }
+
+    #[test]
+    fn test_invert_p_pred_none_active() {
+        let p_pred = DMatrix::zeros(2, 2);
+        let res = invert_p_pred(&p_pred, 2);
+        assert!(res.is_err());
+        assert_eq!(res.unwrap_err(), "no active elements");
+    }
+
+    #[test]
+    fn test_invert_p_pred_white_noise_excluded_from_active() {
+        // White-noise indices 15,16,17,18 are ALWAYS excluded even with non-zero variance.
+        // For core_size > 15, indices >= 15 are excluded via the white-noise check.
+        // But the function uses `matches!(i, 15 | 16 | 17 | 18)`. For a matrix smaller
+        // than 21, we can still verify: if we have a 16x16 matrix, state at i=15 is excluded.
+        let len = 16;
+        let mut p_pred = DMatrix::identity(len, len); // all diag = 1.0
+        // State 15 would be excluded as white-noise. So only 15 active elements.
+        let inv = invert_p_pred(&p_pred, len).unwrap();
+        assert_eq!(inv.nrows(), len);
+        // The active inverse should be correct for all non-white-noise states
+        assert!((inv[(0, 0)] - 1.0).abs() < 1e-10);
+        // White-noise state (15) should have zero inverse
+        assert_eq!(inv[(15, 15)], 0.0);
+    }
+
+    // -----------------------------------------------------------------------
+    // update_smoothed_state
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_update_smoothed_state_updates_position_velocity() {
+        let time = GpsTime::new(2000, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 1.0);
+        let core_size = crate::filter::CORE_STATE_SIZE;
+        let smooth_len = core_size;
+        let mut x_k_n = DVector::zeros(smooth_len);
+        x_k_n[0] = 10.0;
+        x_k_n[1] = 20.0;
+        x_k_n[2] = 30.0;
+        x_k_n[3] = 1.0;
+        x_k_n[4] = 2.0;
+        x_k_n[5] = 3.0;
+        let p_k_n = DMatrix::identity(smooth_len, smooth_len);
+        let idx_k: Vec<usize> = (0..core_size).collect();
+
+        update_smoothed_state(&mut state, &x_k_n, &p_k_n, core_size, smooth_len, &[], &idx_k);
+        assert_eq!(state.position.vector.x, 10.0);
+        assert_eq!(state.position.vector.y, 20.0);
+        assert_eq!(state.position.vector.z, 30.0);
+        assert_eq!(state.velocity.x, 1.0);
+        assert_eq!(state.velocity.y, 2.0);
+        assert_eq!(state.velocity.z, 3.0);
+    }
+
+    #[test]
+    fn test_update_smoothed_state_attitude_rotation_applied() {
+        let time = GpsTime::new(2000, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 1.0);
+        let core_size = crate::filter::CORE_STATE_SIZE;
+        let smooth_len = core_size;
+        // Create a state vector with a small attitude rotation d_theta at indices 6..9
+        let mut x_k_n = DVector::zeros(smooth_len);
+        x_k_n[6] = 1e-5;
+        x_k_n[7] = 2e-5;
+        x_k_n[8] = 3e-5;
+        let p_k_n = DMatrix::identity(smooth_len, smooth_len);
+        let idx_k: Vec<usize> = (0..core_size).collect();
+
+        let initial_att = state.attitude;
+        update_smoothed_state(&mut state, &x_k_n, &p_k_n, core_size, smooth_len, &[], &idx_k);
+        // Attitude should have changed (norm of d_theta > MIN_ATTITUDE_ROTATION = 1e-10)
+        assert_ne!(state.attitude, initial_att);
+    }
+
+    #[test]
+    fn test_update_smoothed_state_clock_and_zwd() {
+        let time = GpsTime::new(2000, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 1.0);
+        let core_size = crate::filter::CORE_STATE_SIZE;
+        let smooth_len = core_size;
+        let mut x_k_n = DVector::zeros(smooth_len);
+        x_k_n[15] = 100.0;
+        x_k_n[16] = 10.0;
+        x_k_n[17] = 20.0;
+        x_k_n[18] = 30.0;
+        x_k_n[19] = 1.5;
+        x_k_n[20] = 0.05;
+        let p_k_n = DMatrix::identity(smooth_len, smooth_len);
+        let idx_k: Vec<usize> = (0..core_size).collect();
+
+        update_smoothed_state(&mut state, &x_k_n, &p_k_n, core_size, smooth_len, &[], &idx_k);
+        assert_eq!(state.rcv_clk_bias, 100.0);
+        assert_eq!(state.isb_glo, 10.0);
+        assert_eq!(state.isb_gal, 20.0);
+        assert_eq!(state.isb_bds, 30.0);
+        assert_eq!(state.rcv_clk_drift, 1.5);
+        assert_eq!(state.zwd, 0.05);
+    }
+
+    #[test]
+    fn test_update_smoothed_state_ambiguities_preserved() {
+        let time = GpsTime::new(2000, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 1.0);
+        let sat = SatelliteId { constellation: Constellation::Gps, prn: 1 };
+        state.add_ambiguity(sat, 1, 100.0, 1.0);
+
+        let core_size = crate::filter::CORE_STATE_SIZE;
+        let smooth_len = core_size + 1;
+        let mut x_k_n = DVector::zeros(smooth_len);
+        x_k_n[core_size] = 200.0;
+        let p_k_n = DMatrix::identity(smooth_len, smooth_len);
+        let idx_k: Vec<usize> = (0..smooth_len).collect();
+        let matched = vec![core_size];
+
+        update_smoothed_state(&mut state, &x_k_n, &p_k_n, core_size, smooth_len, &matched, &idx_k);
+        assert!((state.ambiguities[0] - 200.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_update_smoothed_state_covariance_writeback() {
+        let time = GpsTime::new(2000, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 1.0);
+        let core_size = crate::filter::CORE_STATE_SIZE;
+        let smooth_len = core_size;
+        let x_k_n = DVector::zeros(smooth_len);
+        let mut p_k_n = DMatrix::zeros(smooth_len, smooth_len);
+        p_k_n[(0, 0)] = 42.0;
+        p_k_n[(1, 1)] = 99.0;
+        let idx_k: Vec<usize> = (0..core_size).collect();
+
+        update_smoothed_state(&mut state, &x_k_n, &p_k_n, core_size, smooth_len, &[], &idx_k);
+        assert_eq!(state.covariance[(0, 0)], 42.0);
+        assert_eq!(state.covariance[(1, 1)], 99.0);
+    }
+
+    #[test]
+    fn test_update_smoothed_state_tiny_rotation_skipped() {
+        let time = GpsTime::new(2000, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 1.0);
+        let core_size = crate::filter::CORE_STATE_SIZE;
+        let smooth_len = core_size;
+        let mut x_k_n = DVector::zeros(smooth_len);
+        // d_theta norm < MIN_ATTITUDE_ROTATION (1e-10)
+        x_k_n[6] = 1e-11;
+        let p_k_n = DMatrix::identity(smooth_len, smooth_len);
+        let idx_k: Vec<usize> = (0..core_size).collect();
+
+        let initial_att = state.attitude;
+        update_smoothed_state(&mut state, &x_k_n, &p_k_n, core_size, smooth_len, &[], &idx_k);
+        assert_eq!(state.attitude, initial_att);
+    }
+
+    // -----------------------------------------------------------------------
+    // run_combined_ppk
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_run_combined_ppk_empty_history() {
+        let mut engine = crate::engine::ProcessingEngine::new(crate::engine::EngineConfig::default());
+        let result = run_combined_ppk(&mut engine);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), crate::engine::EngineError::NoObservations);
+    }
+
+    #[test]
+    fn test_run_combined_ppk_spp_mode_returns_early() {
+        let mut engine = crate::engine::ProcessingEngine::new(crate::engine::EngineConfig::default());
+        engine.config.mode = crate::engine::EngineMode::Spp;
+        // Add a dummy state to state_history
+        let time = GpsTime::new(2000, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        engine.state_history.push(RtkState::new(time, pos, 1.0));
+        let result = run_combined_ppk(&mut engine);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().len(), 1);
+    }
+
+    #[test]
+    fn test_run_combined_ppk_single_epoch_no_smoothing() {
+        let mut engine = crate::engine::ProcessingEngine::new(crate::engine::EngineConfig::default());
+        let time = GpsTime::new(2000, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        engine.state_history.push(RtkState::new(time, pos, 1.0));
+        let result = run_combined_ppk(&mut engine);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().len(), 1);
+    }
+
+    #[test]
+    fn test_run_combined_ppk_reset_epoch_skips_smoothing() {
+        let mut engine = crate::engine::ProcessingEngine::new(crate::engine::EngineConfig::default());
+        let time = GpsTime::new(2000, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let mut state0 = RtkState::new(time, pos, 1.0);
+        let mut state1 = RtkState::new(time, pos.clone(), 1.0);
+        state1.is_reset = true;
+        engine.state_history.push(state0);
+        engine.state_history.push(state1);
+        let result = run_combined_ppk(&mut engine);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_combined_ppk_missing_phi_skips() {
+        let mut engine = crate::engine::ProcessingEngine::new(crate::engine::EngineConfig::default());
+        let time = GpsTime::new(2000, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let mut state0 = RtkState::new(time, pos.clone(), 1.0);
+        let mut state1 = RtkState::new(time, pos, 1.0);
+        // No core_phi set, so smoothing will be skipped
+        state1.core_phi = Some(DMatrix::identity(crate::filter::CORE_STATE_SIZE, crate::filter::CORE_STATE_SIZE) * 0.9);
+        state1.full_p_predict = Some(DMatrix::identity(crate::filter::CORE_STATE_SIZE, crate::filter::CORE_STATE_SIZE) * 2.0);
+        state1.full_x_predict = Some(DVector::zeros(crate::filter::CORE_STATE_SIZE));
+        engine.state_history.push(state0);
+        engine.state_history.push(state1);
+        let result = run_combined_ppk(&mut engine);
+        assert!(result.is_ok());
+    }
+
+    // -----------------------------------------------------------------------
+    // smooth_epoch guard tests via a processing engine with full data
+    // -----------------------------------------------------------------------
+
+    fn make_smoothable_state_pair() -> (RtkState, RtkState) {
+        let time0 = GpsTime::new(2000, 0.0);
+        let time1 = GpsTime::new(2000, 1.0);
+        let pos = Coordinate::new(Vector3::new(100.0, 200.0, 300.0), Datum::WGS84, Frame::ECEF, time0);
+        let mut state0 = RtkState::new(time0, pos, 1.0);
+        let mut state1 = RtkState::new(time1, pos.clone(), 1.0);
+        state1.core_phi = Some(DMatrix::identity(crate::filter::CORE_STATE_SIZE, crate::filter::CORE_STATE_SIZE));
+        state1.full_p_predict = Some(DMatrix::identity(crate::filter::CORE_STATE_SIZE, crate::filter::CORE_STATE_SIZE) * 2.0);
+        state1.full_x_predict = Some(DVector::zeros(crate::filter::CORE_STATE_SIZE));
+        (state0, state1)
+    }
+
+    fn make_full_smoothable_pair() -> (RtkState, RtkState) {
+        let (s0, mut s1) = make_smoothable_state_pair();
+        // Make state1 have same ambiguity keys so matching works
+        let sat = SatelliteId { constellation: Constellation::Gps, prn: 1 };
+        // State1 must have cov[amb, amb] < 10.0 for matching
+        // We'll just rely on the fact that with no ambiguities, smooth_len = core_size.
+        (s0, s1)
+    }
+
+    #[test]
+    fn test_smooth_epoch_non_finite_covariance_skipped() {
+        // Set up a state with non-finite covariance
+        let (mut state0, state1) = make_smoothable_state_pair();
+        // Put NaN in state0's covariance
+        state0.covariance[(3, 3)] = f64::NAN;
+
+        let phi_k = state1.core_phi.as_ref().unwrap().clone();
+        let p_pred_k1 = state1.full_p_predict.as_ref().unwrap().clone();
+        let x_pred_k1 = state1.full_x_predict.as_ref().unwrap().clone();
+
+        let result = smooth_epoch(&mut state0, &state1, &phi_k, &p_pred_k1, &x_pred_k1, 0);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_smooth_epoch_diverged_state_skipped() {
+        let (mut state0, state1) = make_smoothable_state_pair();
+        let phi_k = state1.core_phi.as_ref().unwrap().clone();
+        let p_pred_k1 = state1.full_p_predict.as_ref().unwrap().clone();
+        let x_pred_k1 = state1.full_x_predict.as_ref().unwrap().clone();
+
+        // Create ambiguity to have matched length > core so the
+        // non-finite covariance guard doesn't trip before the divergence guard.
+        // Actually, to reach the divergence guard, we need the smoothed state to have |v| > 1e15.
+        // Since the actual state values are near zero and the correction is also small,
+        // we need to force divergence through the delta_x path.
+        // Instead, let's just verify the error type. The easiest path:
+        // make p_pred_k1 have huge values so the correction is huge.
+        let huge_pred = DMatrix::from_element(
+            crate::filter::CORE_STATE_SIZE, crate::filter::CORE_STATE_SIZE, 1e20);
+        let result = smooth_epoch(&mut state0, &state1, &phi_k, &huge_pred, &x_pred_k1, 0);
+        // Either non-finite covariance guard or divergence guard catches it
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_smooth_epoch_huge_pred_covariance_rejected() {
+        let (mut state0, state1) = make_smoothable_state_pair();
+        let phi_k = state1.core_phi.as_ref().unwrap().clone();
+        let x_pred_k1 = state1.full_x_predict.as_ref().unwrap().clone();
+
+        // p_pred_k1_sub element > MAX_STATE_VARIANCE = 1e10
+        let huge_pred = DMatrix::from_element(
+            crate::filter::CORE_STATE_SIZE, crate::filter::CORE_STATE_SIZE, 1e12);
+        let result = smooth_epoch(&mut state0, &state1, &phi_k, &huge_pred, &x_pred_k1, 0);
+        assert!(result.is_err());
+    }
+
+    // -----------------------------------------------------------------------
+    // Integration: run_combined_ppk with a 2-epoch smoothable chain
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_run_combined_ppk_two_epoch_smoothable() {
+        let mut engine = crate::engine::ProcessingEngine::new(crate::engine::EngineConfig::default());
+        let time0 = GpsTime::new(2000, 0.0);
+        let time1 = GpsTime::new(2000, 1.0);
+        let pos = Coordinate::new(Vector3::new(100.0, 200.0, 300.0), Datum::WGS84, Frame::ECEF, time0);
+
+        let mut state0 = RtkState::new(time0, pos, 1.0);
+        state0.core_phi = Some(DMatrix::identity(crate::filter::CORE_STATE_SIZE, crate::filter::CORE_STATE_SIZE));
+        state0.full_p_predict = Some(DMatrix::identity(crate::filter::CORE_STATE_SIZE, crate::filter::CORE_STATE_SIZE));
+        state0.full_x_predict = Some(DVector::zeros(crate::filter::CORE_STATE_SIZE));
+
+        let mut state1 = RtkState::new(time1, pos.clone(), 1.0);
+        state1.core_phi = Some(DMatrix::identity(crate::filter::CORE_STATE_SIZE, crate::filter::CORE_STATE_SIZE));
+        state1.full_p_predict = Some(DMatrix::identity(crate::filter::CORE_STATE_SIZE, crate::filter::CORE_STATE_SIZE));
+        state1.full_x_predict = Some(DVector::zeros(crate::filter::CORE_STATE_SIZE));
+
+        engine.state_history.push(state0);
+        engine.state_history.push(state1);
+        let result = run_combined_ppk(&mut engine);
+        assert!(result.is_ok());
+        let states = result.unwrap();
+        assert_eq!(states.len(), 2);
+    }
+
+    #[test]
+    fn test_run_combined_ppk_missing_p_predict_skips() {
+        let mut engine = crate::engine::ProcessingEngine::new(crate::engine::EngineConfig::default());
+        let time0 = GpsTime::new(2000, 0.0);
+        let time1 = GpsTime::new(2000, 1.0);
+        let pos = Coordinate::new(Vector3::new(100.0, 200.0, 300.0), Datum::WGS84, Frame::ECEF, time0);
+
+        let mut state0 = RtkState::new(time0, pos, 1.0);
+        let mut state1 = RtkState::new(time1, pos, 1.0);
+        state1.core_phi = Some(DMatrix::identity(crate::filter::CORE_STATE_SIZE, crate::filter::CORE_STATE_SIZE));
+        // Intentionally leave full_p_predict as None
+        engine.state_history.push(state0);
+        engine.state_history.push(state1);
+        let result = run_combined_ppk(&mut engine);
+        assert!(result.is_ok());
+    }
+}

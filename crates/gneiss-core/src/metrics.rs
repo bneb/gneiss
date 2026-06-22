@@ -116,6 +116,7 @@ pub fn compute_statistics(errors: &[f64]) -> Option<ErrorStats> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::format;
     use nalgebra::Vector3;
 
     #[test]
@@ -219,5 +220,167 @@ mod tests {
         let stats = compute_statistics(&errors).unwrap();
         let expected_rms = libm::sqrt(12.5);
         assert!((stats.rms - expected_rms).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_compute_statistics_odd_count() {
+        // Odd element count: median is middle element
+        let errors = [10.0, 20.0, 30.0, 40.0, 50.0];
+        let stats = compute_statistics(&errors).unwrap();
+        assert_eq!(stats.count, 5);
+        assert!((stats.median - 30.0).abs() < 1e-10, "Odd-count median should be 30.0, got {}", stats.median);
+    }
+
+    #[test]
+    fn test_compute_statistics_unsorted_input() {
+        // Input order should not matter; function sorts internally
+        let errors = [5.0, 1.0, 3.0, 9.0, 7.0];
+        let stats = compute_statistics(&errors).unwrap();
+        assert_eq!(stats.count, 5);
+        assert!((stats.median - 5.0).abs() < 1e-10);
+        assert!((stats.max - 9.0).abs() < 1e-10);
+        // p95 with n=5: ceil(5*0.95)=5, sorted[4] = 9.0
+        assert!((stats.p95 - 9.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_compute_statistics_negative_values() {
+        let errors = [-5.0, -3.0, 0.0, 3.0, 5.0];
+        let stats = compute_statistics(&errors).unwrap();
+        assert_eq!(stats.count, 5);
+        assert!((stats.median - 0.0).abs() < 1e-10);
+        assert!((stats.rms - libm::sqrt((25.0 + 9.0 + 0.0 + 9.0 + 25.0) / 5.0)).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_compute_statistics_identical_values() {
+        let errors = [7.0, 7.0, 7.0, 7.0, 7.0];
+        let stats = compute_statistics(&errors).unwrap();
+        assert!((stats.median - 7.0).abs() < 1e-10);
+        assert!((stats.mean - 7.0).abs() < 1e-10);
+        assert!((stats.p95 - 7.0).abs() < 1e-10);
+        assert!((stats.p99 - 7.0).abs() < 1e-10);
+        assert!((stats.max - 7.0).abs() < 1e-10);
+        assert!((stats.rms - 7.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_error_3d_matches_pythagorean() {
+        let truth = Vector3::new(0.0, 0.0, 0.0);
+        let pos = Vector3::new(3.0, 4.0, 12.0); // norm = 13
+        let err = error_3d(pos, truth);
+        assert!((err - 13.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_horizontal_error_at_mid_latitude() {
+        // At ~45 deg latitude on prime meridian, a purely east displacement should
+        // produce a horizontal error approximately equal to the east displacement.
+        let lat_45 = 45.0_f64.to_radians();
+        let lon_0 = 0.0_f64.to_radians();
+        let a = crate::constants::WGS84_SEMI_MAJOR_AXIS_M;
+        let f = 1.0 / 298.257223563;
+        let b = a * (1.0 - f);
+        let e2 = 1.0 - (b / a).powi(2);
+        let sin_lat = lat_45.sin();
+        let n = a / libm::sqrt(1.0 - e2 * sin_lat * sin_lat);
+        let x = (n + 0.0) * lat_45.cos() * lon_0.cos();
+        let y = (n + 0.0) * lat_45.cos() * lon_0.sin();
+        let z = (n * (1.0 - e2) + 0.0) * sin_lat;
+
+        let truth = Vector3::new(x, y, z);
+        // 1 meter east = small change in x,y (tiny; approximate)
+        let pos_east = Vector3::new(x + 1.0, y, z);
+        let h_err = horizontal_error(pos_east, truth);
+        // At equator east = ~1m; at higher latitude the ENU east component still
+        // captures the full x-displacement. Should be near 1m.
+        assert!(h_err > 0.5 && h_err < 2.0);
+    }
+
+    #[test]
+    fn test_vertical_error_zero_horizontal() {
+        // Purely horizontal displacement should give ~0 vertical error
+        let truth = Vector3::new(crate::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0);
+        let pos = Vector3::new(crate::constants::WGS84_SEMI_MAJOR_AXIS_M, 100.0, 0.0);
+        let v_err = vertical_error(pos, truth);
+        // East displacement at equator should produce very small vertical component
+        assert!(
+            v_err.abs() < 0.5,
+            "East displacement should have near-zero vertical error, got {}",
+            v_err
+        );
+    }
+
+    #[test]
+    fn test_error_stats_partial_eq() {
+        let a = ErrorStats {
+            count: 5,
+            median: 1.0,
+            p95: 2.0,
+            p99: 3.0,
+            mean: 1.5,
+            rms: 2.0,
+            max: 3.0,
+        };
+        let b = ErrorStats {
+            count: 5,
+            median: 1.0,
+            p95: 2.0,
+            p99: 3.0,
+            mean: 1.5,
+            rms: 2.0,
+            max: 3.0,
+        };
+        assert_eq!(a, b);
+        let c = ErrorStats {
+            count: 6,
+            median: 1.0,
+            p95: 2.0,
+            p99: 3.0,
+            mean: 1.5,
+            rms: 2.0,
+            max: 3.0,
+        };
+        assert_ne!(a, c);
+    }
+
+    #[test]
+    fn test_error_stats_debug() {
+        let stats = ErrorStats {
+            count: 3,
+            median: 1.0,
+            p95: 2.0,
+            p99: 3.0,
+            mean: 1.5,
+            rms: 2.0,
+            max: 3.0,
+        };
+        let debug = format!("{:?}", stats);
+        assert!(debug.contains("ErrorStats"));
+        assert!(debug.contains("count: 3"));
+    }
+
+    #[test]
+    fn test_compute_statistics_p95_p99_small_sample() {
+        // With a small sample (say n=2), p95 and p99 should both equal the max
+        let errors = [1.0, 100.0];
+        let stats = compute_statistics(&errors).unwrap();
+        assert_eq!(stats.count, 2);
+        assert!((stats.p95 - 100.0).abs() < 1e-10, "P95 should be max for n=2, got {}", stats.p95);
+        assert!((stats.p99 - 100.0).abs() < 1e-10, "P99 should be max for n=2, got {}", stats.p99);
+    }
+
+    #[test]
+    fn test_compute_statistics_large_values() {
+        // Large coordinate values typical in GNSS
+        let errors = [1.0, 10.0, 100.0, 1000.0, 10000.0];
+        let stats = compute_statistics(&errors).unwrap();
+        assert_eq!(stats.count, 5);
+        assert!((stats.median - 100.0).abs() < 1e-6);
+        assert!((stats.max - 10000.0).abs() < 1e-6);
+        // RMS = sqrt((1 + 100 + 10000 + 1e6 + 1e8) / 5)
+        let sum_sq = 1.0 + 100.0 + 10000.0 + 1_000_000.0 + 100_000_000.0;
+        let expected_rms = libm::sqrt(sum_sq / 5.0);
+        assert!((stats.rms - expected_rms).abs() < 1e-6);
     }
 }

@@ -37,7 +37,7 @@ pub fn apply_joseph_scalar(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nalgebra::dmatrix;
+    use nalgebra::{dmatrix, dvector};
 
     #[test]
     fn test_apply_joseph_covariance_update() {
@@ -49,5 +49,146 @@ mod tests {
         let p_new = apply_joseph_covariance_update(&p, &k, &h, &r);
         assert!((p_new[(0, 0)] - 0.75).abs() < 1e-6);
         assert!((p_new[(1, 1)] - 2.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_apply_joseph_scalar_corrects_state_and_covariance() {
+        // 2x2 diagonal covariance, 2-element state vector, single measurement
+        let mut p = CovMatrix::from_diagonal(&dvector![4.0, 1.0]);
+        let mut dx = dvector![0.0, 0.0];
+        let h = dmatrix![1.0, 0.5];
+        // measurement at index 0 with variance 1.0, innovation 2.0, innovation variance s_i
+        let r_i = 1.0;
+        let v_i = 2.0;
+        // s_i = H * P * H^T + R = [1.0, 0.5] * diag(4, 1) * [1.0; 0.5] + 1.0
+        //     = 4.0 + 0.25 + 1.0 = 5.25
+        let s_i = 5.25;
+
+        apply_joseph_scalar(&mut p, &mut dx, &h, 0, r_i, v_i, s_i);
+
+        // Kalman gain K_i = P * H^T / s_i = [4.0; 0.5] / 5.25
+        // dx += K_i * v_i = [4.0; 0.5] / 5.25 * 2.0
+        let expected_dx_0 = 4.0 / 5.25 * 2.0;
+        let expected_dx_1 = 0.5 / 5.25 * 2.0;
+        assert!((dx[0] - expected_dx_0).abs() < 1e-10);
+        assert!((dx[1] - expected_dx_1).abs() < 1e-10);
+
+        // Covariance should be reduced after measurement update
+        assert!(p[(0, 0)] < 4.0);
+        assert!(p[(1, 1)] < 1.0);
+        // Result must be symmetric
+        assert!((p[(0, 1)] - p[(1, 0)]).abs() < 1e-12);
+    }
+
+    #[test]
+    fn test_apply_joseph_scalar_zero_innovation() {
+        // When v_i = 0, dx should remain unchanged
+        let mut p = CovMatrix::identity(2, 2);
+        let mut dx = dvector![1.0, 2.0];
+        let h = dmatrix![1.0, 0.0];
+
+        apply_joseph_scalar(&mut p, &mut dx, &h, 0, 1.0, 0.0, 2.0);
+
+        // dx unchanged
+        assert!((dx[0] - 1.0).abs() < 1e-10);
+        assert!((dx[1] - 2.0).abs() < 1e-10);
+        // Covariance still reduced
+        assert!(p[(0, 0)] < 1.0);
+    }
+
+    #[test]
+    fn test_apply_joseph_covariance_update_non_diagonal() {
+        // Non-diagonal P and K, single measurement
+        let p = dmatrix![4.0, 1.0; 1.0, 2.0];
+        let k = dmatrix![0.8; 0.4];
+        let h = dmatrix![1.0, 0.5];
+        let r = dmatrix![2.0];
+
+        let p_new = apply_joseph_covariance_update(&p, &k, &h, &r);
+        // Result must be symmetric
+        assert!((p_new[(0, 1)] - p_new[(1, 0)]).abs() < 1e-12);
+        // Covariance should be reduced (measurement provides information)
+        assert!(p_new[(0, 0)] < p[(0, 0)]);
+        assert!(p_new[(1, 1)] < p[(1, 1)]);
+    }
+
+    #[test]
+    fn test_apply_joseph_covariance_update_scalar() {
+        // 1x1 case
+        let p = dmatrix![4.0];
+        let k = dmatrix![0.5];
+        let h = dmatrix![1.0];
+        let r = dmatrix![1.0];
+
+        let p_new = apply_joseph_covariance_update(&p, &k, &h, &r);
+        // I - K*H = 1.0 - 0.5 = 0.5
+        // (I-KH)*P*(I-KH)^T = 0.5 * 4 * 0.5 = 1.0
+        // K*R*K^T = 0.5 * 1 * 0.5 = 0.25
+        // P_new = 1.0 + 0.25 = 1.25
+        assert!((p_new[(0, 0)] - 1.25).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_apply_joseph_covariance_update_identity() {
+        // If K = 0, P should remain unchanged
+        let p = dmatrix![2.0, 0.5; 0.5, 3.0];
+        let k = dmatrix![0.0; 0.0];
+        let h = dmatrix![1.0, 0.0];
+        let r = dmatrix![1.0];
+
+        let p_new = apply_joseph_covariance_update(&p, &k, &h, &r);
+        assert!((p_new[(0, 0)] - p[(0, 0)]).abs() < 1e-10);
+        assert!((p_new[(1, 1)] - p[(1, 1)]).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_apply_joseph_scalar_larger_state() {
+        // 4-element state with single measurement on the third element
+        let mut p = CovMatrix::from_diagonal(&dvector![1.0, 1.0, 1.0, 1.0]);
+        let mut dx = dvector![0.0, 0.0, 0.0, 0.0];
+        // Measurement of third state element only
+        let h = dmatrix![0.0, 0.0, 1.0, 0.0];
+        let r_i = 0.5;
+        let v_i = 3.0;
+        // s_i = H*P*H^T + R = [0,0,1,0]*diag(1,1,1,1)*[0,0,1,0]^T + 0.5 = 1.0 + 0.5 = 1.5
+        let s_i = 1.5;
+
+        apply_joseph_scalar(&mut p, &mut dx, &h, 0, r_i, v_i, s_i);
+
+        // Only the third element should be corrected
+        assert!((dx[0] - 0.0).abs() < 1e-10);
+        assert!((dx[1] - 0.0).abs() < 1e-10);
+        // K_i[2] = P[2,2] / s_i = 1.0 / 1.5
+        // dx[2] = K_i[2] * v_i = (1.0 / 1.5) * 3.0 = 2.0
+        assert!((dx[2] - 2.0).abs() < 1e-10);
+        assert!((dx[3] - 0.0).abs() < 1e-10);
+
+        // Covariance of measured state should be reduced
+        assert!(p[(2, 2)] < 1.0);
+        // Off-diagonal terms should be non-zero (correlation introduced)
+        assert!((p[(0, 2)] - p[(2, 0)]).abs() < 1e-12);
+    }
+
+    #[test]
+    fn test_apply_joseph_scalar_high_innovation_variance() {
+        // When R is very large relative to P, the gain should be near zero
+        let mut p = CovMatrix::identity(2, 2);
+        let mut dx = dvector![1.0, 2.0];
+        let h = dmatrix![1.0, 0.0];
+        // Large R_i -> s_i is dominated by R_i -> K_i is very small
+        let r_i = 1e6;
+        let v_i = 100.0;
+        let s_i = 1.0 + r_i; // H*P*H^T = 1.0
+
+        apply_joseph_scalar(&mut p, &mut dx, &h, 0, r_i, v_i, s_i);
+
+        // dx should barely change (very small gain)
+        assert!((dx[0] - 1.0).abs() < 1e-3);
+        assert!((dx[1] - 2.0).abs() < 1e-10);
+
+        // Covariance should remain almost unchanged
+        assert!((p[(0, 0)] - 1.0).abs() < 1e-3);
+        assert!((p[(1, 1)] - 1.0).abs() < 1e-10);
+        assert!((p[(0, 1)] - p[(1, 0)]).abs() < 1e-12);
     }
 }

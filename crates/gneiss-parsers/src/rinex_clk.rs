@@ -116,6 +116,7 @@ impl RinexClock {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use gneiss_core::sat::Constellation;
 
     fn make_record(tow: f64, bias: f64) -> ClockRecord {
         ClockRecord {
@@ -220,5 +221,145 @@ mod tests {
         // After last record (t = 3301.0)
         let result_extrap_after = clk.get_clock_bias(sat, GpsTime::new(2000, 3301.0));
         assert!(result_extrap_after.is_none());
+    }
+
+    // ------------------------------------------------------------------
+    // Tests for RinexClock::parse (AS-format clock file parsing)
+    // ------------------------------------------------------------------
+
+    /// Helper: build a RINEX CLK "AS" line.
+    ///
+    /// Fixed-width column positions (0-indexed):
+    ///   [0..2]   "AS"
+    ///   [3..6]   satellite PRN (e.g. "G01")
+    ///   [8..12]  year
+    ///   [13..15] month
+    ///   [16..18] day
+    ///   [19..21] hour
+    ///   [22..24] minute
+    ///   [25..34] seconds  (9 chars, right-aligned)
+    ///   [40..59] bias     (19 chars, D-exponent notation)
+    fn as_line(sat: &str, year: i32, month: i32, day: i32, hour: i32, min: i32, sec: f64, bias: f64) -> String {
+        let sec_fmt = format!("{:>9.6}", sec);
+        // Bias with D exponent notation, padded to 19 chars.
+        let bias_str = format!("{:.10e}", bias).replace('e', "D");
+        format!(
+            "AS {:<3}  {:4} {:02} {:02} {:02} {:02} {:<9}      {:>19}\n",
+            sat, year, month, day, hour, min, sec_fmt, bias_str,
+        )
+    }
+
+    #[test]
+    fn test_parse_single_valid_as_line() {
+        let line = as_line("G01", 2024, 3, 15, 12, 0, 0.0, 1.23456789e-7);
+        let clk = RinexClock::parse(&line);
+
+        assert_eq!(clk.satellites.len(), 1);
+        let sat = SatelliteId {
+            constellation: Constellation::Gps,
+            prn: 1,
+        };
+        let records = clk.satellites.get(&sat).unwrap();
+        assert_eq!(records.len(), 1);
+        assert!(
+            (records[0].bias - 1.23456789e-7).abs() < 1e-18,
+            "bias mismatch: got {}",
+            records[0].bias
+        );
+    }
+
+    #[test]
+    fn test_parse_multiple_epochs_same_satellite() {
+        let content = format!(
+            "{}{}",
+            as_line("G01", 2024, 3, 15, 12, 0, 0.0, 1.0e-7),
+            as_line("G01", 2024, 3, 15, 12, 15, 0.0, 2.0e-7),
+        );
+        let clk = RinexClock::parse(&content);
+
+        let sat = SatelliteId {
+            constellation: Constellation::Gps,
+            prn: 1,
+        };
+        let records = clk.satellites.get(&sat).unwrap();
+        assert_eq!(records.len(), 2);
+        assert!((records[0].bias - 1.0e-7).abs() < 1e-18);
+        assert!((records[1].bias - 2.0e-7).abs() < 1e-18);
+    }
+
+    #[test]
+    fn test_parse_all_constellations() {
+        let content = format!(
+            "{}{}{}{}{}",
+            as_line("G01", 2024, 3, 15, 12, 0, 0.0, 1.0e-7),
+            as_line("R02", 2024, 3, 15, 12, 0, 0.0, 2.0e-7),
+            as_line("E03", 2024, 3, 15, 12, 0, 0.0, 3.0e-7),
+            as_line("C04", 2024, 3, 15, 12, 0, 0.0, 4.0e-7),
+            as_line("J05", 2024, 3, 15, 12, 0, 0.0, 5.0e-7),
+        );
+        let clk = RinexClock::parse(&content);
+        assert_eq!(clk.satellites.len(), 5);
+
+        let cases = [
+            (Constellation::Gps, 1, 1.0e-7),
+            (Constellation::Glonass, 2, 2.0e-7),
+            (Constellation::Galileo, 3, 3.0e-7),
+            (Constellation::Beidou, 4, 4.0e-7),
+            (Constellation::Qzss, 5, 5.0e-7),
+        ];
+        for (constell, prn, expected_bias) in cases {
+            let sat = SatelliteId { constellation: constell, prn };
+            let recs = clk.satellites.get(&sat).unwrap_or_else(|| panic!("missing {constell:?} PRN {prn}"));
+            assert!(
+                (recs[0].bias - expected_bias).abs() < 1e-18,
+                "bias mismatch for {constell:?} PRN {prn}: got {}",
+                recs[0].bias
+            );
+        }
+    }
+
+    #[test]
+    fn test_parse_empty_content() {
+        let clk = RinexClock::parse("");
+        assert!(clk.satellites.is_empty());
+    }
+
+    #[test]
+    fn test_parse_non_as_lines_yield_empty() {
+        let content = "COMMENT line\nanother line\n";
+        let clk = RinexClock::parse(content);
+        assert!(clk.satellites.is_empty());
+    }
+
+    #[test]
+    fn test_parse_unknown_constellation_skipped() {
+        // 'S' is not in the recognised set -> continue
+        let line = as_line("S01", 2024, 3, 15, 12, 0, 0.0, 1.0e-7);
+        let clk = RinexClock::parse(&line);
+        assert!(clk.satellites.is_empty());
+    }
+
+    #[test]
+    fn test_parse_invalid_prn_skipped() {
+        // Non-numeric PRN portion ("G  " -> "  " after trimming) -> continue
+        let line = "AS G   2024 03 15 12 00  0.000000      0.100000000D-06     \n";
+        let clk = RinexClock::parse(line);
+        assert!(clk.satellites.is_empty());
+    }
+
+    #[test]
+    fn test_parse_invalid_bias_skipped() {
+        // Build a line via as_line (well-padded) then overwrite the bias
+        // portion with non-numeric characters so parsing fails.
+        let line = as_line("G01", 2024, 3, 15, 12, 0, 0.0, 0.0);
+        // The bias safely occupies [40..59] in a well-padded line.
+        // Replace that span with 'x' characters.
+        let mut bytes: Vec<u8> = line.into_bytes();
+        for i in 40..59 {
+            bytes[i] = b'x';
+        }
+        let content = String::from_utf8(bytes).unwrap();
+        let clk = RinexClock::parse(&content);
+        assert!(clk.satellites.is_empty());
     }
 }

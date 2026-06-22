@@ -210,4 +210,83 @@ mod tests {
         let h2 = build_iono_constraint_row(22, 21);
         assert_eq!(h2[21], 1.0);
     }
+
+    #[test]
+    fn test_invert_matrix_valid() {
+        let m = DMatrix::from_row_slice(2, 2, &[4.0, 1.0, 1.0, 3.0]);
+        let inv = invert_matrix(&m);
+        assert!(inv.is_some());
+        let inv = inv.unwrap();
+        assert!((inv[(0, 0)] - 0.272727).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_invert_matrix_nan() {
+        let m = DMatrix::from_row_slice(2, 2, &[f64::NAN, 1.0, 1.0, 3.0]);
+        assert!(invert_matrix(&m).is_none());
+    }
+
+    #[test]
+    fn test_build_weight_matrix() {
+        let meas = vec![
+            FgMeasurement { res: 1.0, h_row: DVector::zeros(3), weight: 4.0, raw_var: 2.0, is_phase: false, sat: None },
+            FgMeasurement { res: 2.0, h_row: DVector::zeros(3), weight: 9.0, raw_var: 3.0, is_phase: true, sat: None },
+        ];
+        let r_mat = DMatrix::from_diagonal(&DVector::from_vec(vec![4.0, 9.0]));
+        let w = build_weight_matrix(&meas, &r_mat);
+        assert!((w[(0, 0)] - 0.25).abs() < 1e-10);
+        assert!((w[(1, 1)] - (1.0 / 9.0)).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_assemble_matrices_with_data() {
+        let meas = vec![
+            FgMeasurement { res: 1.5, h_row: DVector::from_vec(vec![1.0, 0.0]), weight: 2.0, raw_var: 1.0, is_phase: false, sat: None },
+            FgMeasurement { res: 3.0, h_row: DVector::from_vec(vec![0.0, 1.0]), weight: 5.0, raw_var: 2.0, is_phase: true, sat: None },
+        ];
+        let (h, z, r) = assemble_matrices(&meas, 2);
+        assert_eq!(h.nrows(), 2);
+        assert_eq!(h.ncols(), 2);
+        assert!((h[(0, 0)] - 1.0).abs() < 1e-10);
+        assert!((z[1] - 3.0).abs() < 1e-10);
+        assert!((r[(0, 0)] - 2.0).abs() < 1e-10);
+        assert!((r[(1, 1)] - 5.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_extract_state_vector_with_ambiguities() {
+        let mut state = make_state();
+        state.position.vector = Vector3::new(1.0, 2.0, 3.0);
+        state.velocity = Vector3::new(4.0, 5.0, 6.0);
+        state.rcv_clk_bias = 100.0;
+        state.ambiguities = vec![0.5, 1.5];
+        state.ambiguity_keys = vec![
+            (gneiss_core::sat::SatelliteId { constellation: gneiss_core::sat::Constellation::Gps, prn: 1 }, 1),
+            (gneiss_core::sat::SatelliteId { constellation: gneiss_core::sat::Constellation::Gps, prn: 2 }, 1),
+        ];
+        // Manually resize covariance to include amb cols
+        state.covariance = state.covariance.clone().insert_row(21, 0.0).insert_column(21, 0.0);
+        state.covariance = state.covariance.clone().insert_row(22, 0.0).insert_column(22, 0.0);
+        let x = extract_state_vector(&state);
+        assert_eq!(x.len(), 23);
+        assert_eq!(x[21], 0.5);
+        assert_eq!(x[22], 1.5);
+    }
+
+    #[test]
+    fn test_find_amb_idx_found() {
+        let mut state = make_state();
+        let sat = gneiss_core::sat::SatelliteId {
+            constellation: gneiss_core::sat::Constellation::Gps,
+            prn: 1,
+        };
+        state.ambiguity_keys = vec![(sat, 1), (sat, 2)];
+        state.ambiguities = vec![0.0, 0.0];
+        state.covariance = state.covariance.clone().insert_row(21, 0.0).insert_column(21, 0.0);
+        state.covariance = state.covariance.clone().insert_row(22, 0.0).insert_column(22, 0.0);
+        assert_eq!(find_amb_idx(&state, sat, 1), Some(0));
+        assert_eq!(find_amb_idx(&state, sat, 2), Some(1));
+        // find_ambiguity_index only matches f==0, so it won't find frequency band 1
+        assert_eq!(find_ambiguity_index(&state, sat), None);
+    }
 }
