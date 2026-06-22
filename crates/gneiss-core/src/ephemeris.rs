@@ -54,6 +54,13 @@ impl Ephemeris {
         }
     }
 
+    pub fn position_e5b(&self, t: GpsTime) -> (Vector3<f64>, Vector3<f64>, f64, f64) {
+        match self {
+            Ephemeris::Galileo(e) => e.position_e5b(t),
+            other => other.position(t),
+        }
+    }
+
     pub fn toe(&self) -> GpsTime {
         match self {
             Ephemeris::Gps(e) => e.toe,
@@ -175,6 +182,7 @@ pub struct BeidouEphemeris {
     pub idot: f64,
     pub omega: f64,
     pub tgd1: f64,
+    pub tgd2: f64,
     pub aode: u32,
     pub aodc: u32,
 }
