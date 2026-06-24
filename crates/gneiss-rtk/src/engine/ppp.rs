@@ -69,13 +69,11 @@ pub fn process_ppp<'a>(
     // Dispatch to appropriate solver based on engine mode
     let solve_result = if engine.config.mode == EngineMode::PppMultiEpoch {
         let mut opt = engine.ppp_multi_epoch_opt.take();
-        let result = if let Some(ref mut solver) = opt {
-            solver.solve(state, &sats, position_prior)
-        } else {
+        let mut solver = opt.unwrap_or_else(|| {
             crate::engine::ppp_multi_epoch::MultiEpochOptimizer::new(2)
-                .solve(state, &sats, position_prior)
-        };
-        engine.ppp_multi_epoch_opt = opt;
+        });
+        let result = solver.solve(state, &sats, position_prior);
+        engine.ppp_multi_epoch_opt = Some(solver);
         result
     } else {
         let mut opt = engine.ppp_factor_opt.take();
