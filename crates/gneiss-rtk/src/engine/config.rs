@@ -213,11 +213,11 @@ impl Default for EngineConfig {
             enable_tropo_gradients: false,
             enable_ar: false,
             process_noise_cb: 1.0,    // σ=1 m/s for TCXO random walk
-            process_noise_cd: 1e4,
+            process_noise_cd: 10.0,   // σ=0.55 m/s per epoch (RALPH: was 1e4)
             process_noise_isb: 0.1,   // ~0.3 m/hr random walk
             process_noise_zwd: 1e-8,
             process_noise_iono: 1e-6,
-            process_noise_amb_float: 1e-8,
+            process_noise_amb_float: 1e-4,   // allows ambiguity re-convergence (RALPH: was 1e-8)
             process_noise_amb_fixed: 1e-12,
             tuning: Default::default(),
             uduc_ar: false,

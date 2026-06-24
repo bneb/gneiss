@@ -12,6 +12,7 @@ pub mod ppp_common;
 pub mod ppp_iekf;
 pub mod ppp_ins_iekf;
 pub mod ppp_math;
+pub mod ppp_multi_epoch;
 pub mod predictor;
 pub mod processed_sat;
 pub mod processor;

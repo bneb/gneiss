@@ -16,6 +16,11 @@ pub enum EngineMode {
     PppIekf,
     PppInsIekf,
     RtkInsIekf,
+    /// Multi-epoch sliding-window factor graph PPP.
+    /// Breaks the single-epoch IEKF accuracy floor (~5m) by jointly
+    /// optimizing position, clock, tropo, and ambiguities across N epochs
+    /// with between-epoch dynamics constraints.
+    PppMultiEpoch,
 }
 
 impl EngineMode {
@@ -34,6 +39,7 @@ impl EngineMode {
                 | Self::PppInsLooselyCoupled
                 | Self::PppIekf
                 | Self::PppInsIekf
+                | Self::PppMultiEpoch
         )
     }
 }

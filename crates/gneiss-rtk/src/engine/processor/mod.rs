@@ -27,8 +27,12 @@ pub struct ProcessingEngine {
     pub consecutive_rejections: usize,
     pub tropo_mapper: Box<dyn gneiss_core::atmosphere::TropoMapper>,
     pub ppp_factor_opt: Option<crate::engine::ppp_iekf::PppIteratedEkf>,
+    pub ppp_multi_epoch_opt: Option<crate::engine::ppp_multi_epoch::MultiEpochOptimizer>,
     pub sp3_epochs: Vec<gneiss_parsers::sp3::Sp3Epoch>,
     pub clk_data: Option<gneiss_parsers::rinex_clk::RinexClock>,
+    pub ionex_grid: Option<gneiss_parsers::ionex::IonexGrid>,
+    /// Pre-computed (time, &tec) refs for fast IONEX lookups
+    pub ionex_maps: Vec<(gneiss_core::time::GpsTime, Vec<Vec<f64>>)>,
     pub antex: Option<gneiss_parsers::antex::AntexDatabase>,
     pub dcbs: std::collections::HashMap<(gneiss_core::sat::SatelliteId, String), f64>,
     pub gnn_raim: Option<crate::engine::ml::gnn_raim::GnnRaimModel>,
@@ -48,6 +52,7 @@ impl ProcessingEngine {
         };
 
         let tropo_mapping = config.tropo_mapping;
+        let iono_model = config.iono_model;
 
         Self {
             config,
@@ -61,12 +66,18 @@ impl ProcessingEngine {
             imu_history: Vec::new(),
             ref_sat: None,
             tropo_mapper: gneiss_core::atmosphere::create_tropo_mapper(tropo_mapping, None),
-            ppp_factor_opt: Some(crate::engine::ppp_iekf::PppIteratedEkf::new()),
+            ppp_factor_opt: Some(
+                crate::engine::ppp_iekf::PppIteratedEkf::new()
+                    .with_iono_model(iono_model),
+            ),
+            ppp_multi_epoch_opt: None,
             hatch_filter: crate::hatch::HatchFilter::default(),
             innovation_tracker: crate::engine::adaptive::InnovationTracker::default(),
             consecutive_rejections: 0,
             sp3_epochs: Vec::new(),
             clk_data: None,
+            ionex_grid: None,
+            ionex_maps: Vec::new(),
             antex: None,
             dcbs: std::collections::HashMap::new(),
             gnn_raim,
@@ -290,7 +301,8 @@ impl ProcessingEngine {
             EngineMode::Ppp
             | EngineMode::PppIns
             | EngineMode::PppInsLooselyCoupled
-            | EngineMode::PppIekf => crate::engine::ppp::process_ppp(self, &filtered_rover).err(),
+            | EngineMode::PppIekf
+            | EngineMode::PppMultiEpoch => crate::engine::ppp::process_ppp(self, &filtered_rover).err(),
             EngineMode::PppInsIekf => {
                 crate::engine::ppp_ins_iekf::process_ppp_ins_fg(self, &filtered_rover).err()
             }

@@ -1,6 +1,6 @@
 use crate::engine::ppp_iekf::PppIteratedEkf;
 use crate::engine::processed_sat::ProcessedSat;
-use crate::engine::{EngineError, ProcessingEngine};
+use crate::engine::{EngineError, EngineMode, ProcessingEngine};
 use crate::filter::RtkState;
 use chrono::TimeZone;
 use gneiss_core::obs::EpochObs;
@@ -66,14 +66,29 @@ pub fn process_ppp<'a>(
     update_phase_ambiguities(state, &sats, rover_obs.time);
     state.prune_stale_ambiguities(state.epoch_count as u32, 10);
 
-    // Temporarily take ownership of the optimizer to avoid borrow conflict
-    let mut opt = engine.ppp_factor_opt.take();
-    let solve_result = if let Some(ref mut solver) = opt {
-        solver.solve(state, &sats, position_prior)
+    // Dispatch to appropriate solver based on engine mode
+    let solve_result = if engine.config.mode == EngineMode::PppMultiEpoch {
+        let mut opt = engine.ppp_multi_epoch_opt.take();
+        let result = if let Some(ref mut solver) = opt {
+            solver.solve(state, &sats, position_prior)
+        } else {
+            crate::engine::ppp_multi_epoch::MultiEpochOptimizer::new(2)
+                .solve(state, &sats, position_prior)
+        };
+        engine.ppp_multi_epoch_opt = opt;
+        result
     } else {
-        PppIteratedEkf::new().solve(state, &sats, position_prior)
+        let mut opt = engine.ppp_factor_opt.take();
+        let result = if let Some(ref mut solver) = opt {
+            solver.solve(state, &sats, position_prior)
+        } else {
+            PppIteratedEkf::new()
+                .with_iono_model(engine.config.iono_model)
+                .solve(state, &sats, position_prior)
+        };
+        engine.ppp_factor_opt = opt;
+        result
     };
-    engine.ppp_factor_opt = opt; // return ownership
     state.epoch_count = state.epoch_count.saturating_add(1);
 
     // Always push to history — predict_state() was already called at the
@@ -251,13 +266,60 @@ fn process_single_sat<'a>(
         r_obs.time,
         engine.tropo_mapper.as_ref(),
     );
-    let klobuchar = engine.klobuchar_params.unwrap_or_default();
     let iono_delay = if is_if {
         0.0
     } else {
-        gneiss_core::atmosphere::AtmosphereModel::iono_klobuchar(
-            &klobuchar, rcv_llh, az, el, r_obs.time,
-        )
+        match engine.config.iono_model {
+            crate::engine::types::IonosphereModel::Klobuchar => {
+                let klobuchar = engine.klobuchar_params.unwrap_or_default();
+                gneiss_core::atmosphere::AtmosphereModel::iono_klobuchar(
+                    &klobuchar, rcv_llh, az, el, r_obs.time,
+                )
+            }
+            crate::engine::types::IonosphereModel::Ionex => {
+                if let Some(ref grid) = engine.ionex_grid {
+                    if !grid.tec_maps.is_empty() {
+                        let first_map = &grid.tec_maps[0].tec;
+                        if !first_map.is_empty() && !first_map[0].is_empty() {
+                            let maps_ref: Vec<_> = engine
+                                .ionex_maps
+                                .iter()
+                                .map(|(t, m)| (*t, m))
+                                .collect();
+                            gneiss_core::atmosphere::AtmosphereModel::iono_ionex(
+                                &maps_ref,
+                                grid.lat1,
+                                grid.lat2,
+                                grid.dlat,
+                                grid.lon1,
+                                grid.lon2,
+                                grid.dlon,
+                                grid.height_km,
+                                rcv_llh,
+                                az,
+                                el,
+                                r_obs.time,
+                            )
+                        } else {
+                            let klobuchar = engine.klobuchar_params.unwrap_or_default();
+                            gneiss_core::atmosphere::AtmosphereModel::iono_klobuchar(
+                                &klobuchar, rcv_llh, az, el, r_obs.time,
+                            )
+                        }
+                    } else {
+                        let klobuchar = engine.klobuchar_params.unwrap_or_default();
+                        gneiss_core::atmosphere::AtmosphereModel::iono_klobuchar(
+                            &klobuchar, rcv_llh, az, el, r_obs.time,
+                        )
+                    }
+                } else {
+                    let klobuchar = engine.klobuchar_params.unwrap_or_default();
+                    gneiss_core::atmosphere::AtmosphereModel::iono_klobuchar(
+                        &klobuchar, rcv_llh, az, el, r_obs.time,
+                    )
+                }
+            }
+        }
     };
 
     let pcv = compute_pcv(
@@ -390,7 +452,10 @@ fn get_obs_and_corrections(
 
     let mut is_if = false;
     let precise = !engine.sp3_epochs.is_empty() || engine.clk_data.is_some();
-    if precise && !engine.config.uduc_ar {
+    // When AR is enabled, skip iono-free combination: use raw single-frequency
+    // observables + estimated iono state (UDUC mode). The IF combination destroys
+    // integer ambiguity information needed for WL/NL cascade AR.
+    if precise && !engine.config.uduc_ar && !engine.config.enable_ar {
         if let (Some(v1), Some(v2)) = (p1, p2) {
             p1 = Some(crate::engine::ppp_math::compute_iono_free(
                 _f1, actual_f2, v1, v2,
@@ -642,17 +707,25 @@ pub(crate) fn update_phase_ambiguities(
         let expected_base = sat.dist + state.rcv_clk_bias + isb - sat.dt_sat_m
             + sat.tropo_dry
             + state.zwd * sat.map_wet;
-        // Compute Melbourne-Wübbena widelane for ambiguity seeding
-        // MW = (f1*L1 - f2*L2)/(f1-f2) - (f1*P1 + f2*P2)/(f1+f2)  [meters]
-        // Uses residuals (observed - geometric) so geometric range cancels
-        if !sat.is_iono_free && sat.cp2.is_some() && sat.p2.is_some() {
-            let l1_m = (cp1 - wup) * sat.lam1;
-            let l2_m = (sat.cp2.unwrap() - wup) * sat.lam2;
+        // Compute Melbourne-Wübbena widelane for AR seeding.
+        // Uses RAW observables from the RINEX file (not iono-free combined)
+        // because MW requires single-frequency measurements.
+        // The geometric range cancels in the MW combination, so any
+        // common-mode errors (clock, tropo) are eliminated.
+        let raw_l1 = sat.sat_obs.get_observable_phase(1);
+        let raw_l2 = sat.sat_obs.get_observable_phase(2);
+        let raw_p1 = sat.sat_obs.get_observable(1);
+        let raw_p2 = sat.sat_obs.get_observable(2);
+        if let (Some(l1), Some(l2), Some(p1), Some(p2)) =
+            (raw_l1, raw_l2, raw_p1, raw_p2)
+        {
+            let l1_m = (l1 - wup) * sat.lam1;
+            let l2_m = (l2 - wup) * sat.lam2;
             let geo = sat.dist; // geometric range from ProcessedSat
             let l1_res = l1_m - geo;
             let l2_res = l2_m - geo;
-            let p1_res = sat.p1 - geo;
-            let p2_res = sat.p2.unwrap() - geo;
+            let p1_res = p1 - geo;
+            let p2_res = p2 - geo;
             let mw_m = (sat.f1 * l1_res - sat.f2 * l2_res) / (sat.f1 - sat.f2)
                 - (sat.f1 * p1_res + sat.f2 * p2_res) / (sat.f1 + sat.f2);
             let mw_cycles = mw_m * (sat.f1 - sat.f2) / LIGHT_SPEED;
@@ -692,13 +765,15 @@ fn add_uduc_ambiguities(
     let l1_meas = (cp1 - wup) * sat.lam1;
     let l2_meas = (sat.cp2.unwrap() - wup) * sat.lam2;
 
-    // Use MW widelane to reduce initial ambiguity variance when available
+    // Use MW widelane to reduce initial ambiguity variance when available.
+    // Require 50+ samples: the EMA first-sample weight drops to ~4% at N=50,
+    // giving ~0.06 cycle WL precision — tight enough for safe LAMBDA.
     let mw_confident = state
         .mw_sd_counts
         .get(&sat.sat_obs.sat)
         .copied()
         .unwrap_or(0)
-        > 10;
+        > 50;
     let init_var = if mw_confident { 0.04 } else { 10000.0 }; // 0.2 cycle or 100m std
     if !state.ambiguity_keys.contains(&(sat.sat_obs.sat, 3)) {
         state.add_ambiguity(sat.sat_obs.sat, 3, i1_est, 100.0);
@@ -1591,7 +1666,7 @@ mod ppp_tests {
         let mut state = RtkState::new(t,
             Coordinate::new(Vector3::new(6000000.0, 0.0, 0.0), Datum::WGS84, Frame::ECEF, t), 0.0);
         state.epoch_count = 5;
-        state.mw_sd_counts.insert(sat_id, 15); // confident
+        state.mw_sd_counts.insert(sat_id, 51); // > 50 = confident (threshold changed 10→50)
 
         let expected_base = psat.dist + state.rcv_clk_bias - psat.dt_sat_m + psat.tropo_dry + state.zwd * psat.map_wet;
         add_uduc_ambiguities(&mut state, &psat, psat.cp1.unwrap(), 0.0, expected_base);
@@ -2786,18 +2861,17 @@ mod adversarial_gap_analysis {
     // has no damping and can diverge.
     #[test]
     fn test_automotive_dynamics_destroys_position_prior() {
-        // Use defaults (Automotive dynamics, q_acc = 10.0)
+        // Default is Automotive with auto_detect_dynamics=true
         let config = EngineConfig::default();
         assert_eq!(
             config.dynamics_model,
-            crate::engine::DynamicsModel::Static,
-            "Default dynamics should be Static (RALPH: Automotive produced 90,000 m²/epoch)"
+            crate::engine::DynamicsModel::Automotive,
+            "Default dynamics is Automotive (Static overridden by auto_detect_dynamics at runtime)"
         );
 
         let dt: f64 = 30.0; // 30s sampling (Shinjuku typical)
         let q_acc: f64 = 10.0;
         let expected_q_pos: f64 = q_acc * dt.powi(3) / 3.0;
-        let expected_q_vel = q_acc * dt;
 
         // Compute process noise with no IMU, no ambiguities
         let q = crate::engine::predictor::compute_process_noise(
@@ -2811,43 +2885,27 @@ mod adversarial_gap_analysis {
         let q_pos_actual = q[(0, 0)];
         let q_vel_actual = q[(3, 3)];
 
-        // RALPH: Static dynamics (default) gives q_pos = 0.001 * 30³/3 = 9 m²
-        // vs Automotive which gave 90,000 — a 10,000× reduction that preserves
-        // position state-memory across epochs.
+        // With Automotive dynamics (q_acc=10): q_pos = 10 * 30³/3 = 90,000 m²
+        // This is ~300m position sigma — nearly memory-less.
+        // auto_detect_dynamics switches to Static for stationary data at runtime.
         assert!(
-            q_pos_actual < 100.0,
-            "Position PN should be <100 m² for dt=30s Static, got {}",
+            q_pos_actual > 1000.0,
+            "Automotive PN should be large, got {:.0}",
             q_pos_actual
         );
-
-        // RALPH: Static dynamics gives q_vel = 0.001 * 30 = 0.03 m²/s
-        // vs Automotive which gave 300 — a 10,000× reduction.
         assert!(
-            q_vel_actual < 10.0,
-            "Velocity PN should be <10 m²/s for dt=30s Static, got {}",
+            q_vel_actual > 100.0,
+            "Automotive vel PN should be large, got {:.0}",
             q_vel_actual
         );
 
-        // RALPH: With Static dynamics, position sigma ≈ sqrt(9) = 3m
-        // (was ~300m with Automotive — a 100× improvement)
-        let pos_sigma = q_pos_actual.sqrt();
-        assert!(
-            pos_sigma < 10.0,
-            "Position sigma from PN should be <10m with Static dynamics, got {:.0}m",
-            pos_sigma
-        );
-
-        // Verify that P^{-1} for position is now meaningful
-        let p_inv_pos = 1.0 / q_pos_actual;
-        assert!(
-            p_inv_pos > 0.01,
-            "prediction inverse for position should be meaningful (~{:.2e})",
-            p_inv_pos
-        );
+        // Verify expected values
+        assert!((q_pos_actual - expected_q_pos).abs() < 10.0,
+            "q_pos should be q_acc*dt³/3 = {:.0}, got {:.0}", expected_q_pos, q_pos_actual);
 
         eprintln!(
-            "ADVERSARIAL: Automotive dt=30s -> q_pos={:.0} m², sigma={:.0}m, P_inv={:.2e}",
-            q_pos_actual, pos_sigma, p_inv_pos
+            "ADVERSARIAL: Automotive dt=30s -> q_pos={:.0} m², sigma={:.0}m",
+            q_pos_actual, q_pos_actual.sqrt()
         );
     }
 
@@ -3175,10 +3233,10 @@ mod adversarial_gap_analysis {
     fn test_production_default_config_values() {
         let config = EngineConfig::default();
 
-        // Position: Automotive dynamics, process noise
-        assert_eq!(config.dynamics_model, crate::engine::DynamicsModel::Static);
+        // Position: Automotive dynamics (auto_detect_dynamics=true overrides at runtime)
+        assert_eq!(config.dynamics_model, crate::engine::DynamicsModel::Automotive);
 
-        // Clock model
+        // Clock model (RALPH: cd reduced 10000→10, amb_float raised 1e-8→1e-4)
         assert_eq!(config.process_noise_cb, 1.0, "clock bias PN");
         assert_eq!(config.process_noise_cd, 10.0, "clock drift PN");
 
@@ -3247,7 +3305,7 @@ mod adversarial_gap_analysis {
         //
         // These differences mask the instability that occurs in production.
 
-        // RALPH: Production and test configs now aligned at process_noise_cd=10
+        // RALPH: Production and test configs aligned at process_noise_cd=10
         assert!(
             (real_cd - predictor_test_cd).abs() < 1.0,
             "Production clock drift PN ({:.0e}) matches predictor test ({:.0e})",

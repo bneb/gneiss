@@ -4,6 +4,7 @@ use crate::engine::ppp_common::{
     FgMeasurement,
 };
 use crate::engine::processed_sat::ProcessedSat;
+use crate::engine::types::IonosphereModel;
 use crate::engine::EngineError;
 use crate::filter::{RtkState, CORE_STATE_SIZE};
 use crate::math::{inversion::solve_cholesky_svd, thresholding::apply_huber};
@@ -33,6 +34,9 @@ pub struct PppIteratedEkf {
     pub max_iterations: usize,
     pub convergence_threshold: f64,
     pub huber_k: f64,
+    /// Ionosphere model — controls iono prior variance in UDUC measurements.
+    /// Klobuchar: 9.0 m² (3m std). IONEX: 0.0025 m² (0.05m std).
+    pub iono_model: IonosphereModel,
 }
 
 impl Default for PppIteratedEkf {
@@ -41,6 +45,7 @@ impl Default for PppIteratedEkf {
             max_iterations: 15,
             convergence_threshold: 1e-3,
             huber_k: 3.0,
+            iono_model: IonosphereModel::Klobuchar,
         }
     }
 }
@@ -48,6 +53,11 @@ impl Default for PppIteratedEkf {
 impl PppIteratedEkf {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn with_iono_model(mut self, model: IonosphereModel) -> Self {
+        self.iono_model = model;
+        self
     }
 
     pub fn solve(
@@ -65,9 +75,18 @@ impl PppIteratedEkf {
                 break;
             }
         }
-        if state.epoch_count > 10 {
-            if let Err(e) = self.resolve_cascade_ar(state, sats) {
-                tracing::info!("Cascade AR did not fix: {:?}", e);
+        // Skip AR if already fixed and no new satellites appeared.
+        // Re-fixing every epoch after a correct fix wastes compute and risks
+        // an incorrect subsequent fix corrupting a converged solution.
+        let has_new_sats = sats.iter().any(|s| {
+            let key = (s.sat_obs.sat, 0);
+            state.last_observed.get(&key).copied().unwrap_or(0) == state.epoch_count as u32
+        });
+        if !state.is_fixed || has_new_sats {
+            if state.epoch_count > 10 {
+                if let Err(e) = self.resolve_cascade_ar(state, sats) {
+                    tracing::info!("Cascade AR did not fix: {:?}", e);
+                }
             }
         }
         Ok(())
@@ -132,7 +151,7 @@ impl PppIteratedEkf {
         Self::find_worst_outlier_sat(&final_meas)
     }
 
-    fn find_worst_outlier_sat(meas: &[FgMeasurement]) -> Option<gneiss_core::sat::SatelliteId> {
+    fn find_worst_outlier_sat(_meas: &[FgMeasurement]) -> Option<gneiss_core::sat::SatelliteId> {
         // Disabled: outlier removal cascades during convergence — removing
         // one ambiguity degrades remaining measurements, triggering more
         // removals, until all CP is lost.  The Huber estimator handles
@@ -451,10 +470,12 @@ impl PppIteratedEkf {
                 if cov_ok {
                     return true;
                 }
-                // MW-based: accept if both rover and reference have >10 MW samples
+                // MW-based: accept if both rover and reference have >50 MW samples.
+                // 50 samples gives ~0.06 cycle WL precision vs ~0.12 at 10 samples,
+                // and reduces first-sample EMA bias from ~15% to ~4%.
                 let (c, ref_sat) = &subset[i];
-                let mw_ok = state.mw_sd_counts.get(&c.0).unwrap_or(&0) > &10
-                    && state.mw_sd_counts.get(&ref_sat.0).unwrap_or(&0) > &10;
+                let mw_ok = state.mw_sd_counts.get(&c.0).unwrap_or(&0) > &50
+                    && state.mw_sd_counts.get(&ref_sat.0).unwrap_or(&0) > &50;
                 mw_ok
             })
             .collect();
@@ -478,16 +499,51 @@ impl PppIteratedEkf {
             let (c, ref_sat) = &subset[idx];
             let cnt_c = state.mw_sd_counts.get(&c.0).copied().unwrap_or(0);
             let cnt_ref = state.mw_sd_counts.get(&ref_sat.0).copied().unwrap_or(0);
-            if cnt_c > 10 && cnt_ref > 10 {
+            if cnt_c > 50 && cnt_ref > 50 {
                 let mw_c = state.mw_sd_ema.get(&c.0).copied().unwrap_or(0.0);
                 let mw_ref = state.mw_sd_ema.get(&ref_sat.0).copied().unwrap_or(0.0);
                 a_wl[i] = mw_c - mw_ref;
             }
         }
-        let mut q_wl = &d_wl * p * d_wl.transpose();
-        for i in 0..q_wl.nrows() {
-            q_wl[(i, i)] = q_wl[(i, i)].max(0.01);
-        }
+        let q_wl_ekf = &d_wl * p * d_wl.transpose();
+        // When all kept pairs have sufficient MW samples, use MW-based
+        // covariance instead of the EKF state covariance.  The MW EMA
+        // converges at ~0.42/sqrt(N) cycles whereas the EKF ambiguity
+        // states start at 10_000 m² (≈277_000 cycles² on WL).  Using the
+        // EKF covariance makes LAMBDA think every integer set is equally
+        // likely, yielding ratio ≈ 1.0.
+        let all_mw_confident = keep_indices.iter().all(|&idx| {
+            let (c, ref_sat) = &subset[idx];
+            state.mw_sd_counts.get(&c.0).copied().unwrap_or(0) > 50
+                && state.mw_sd_counts.get(&ref_sat.0).copied().unwrap_or(0) > 50
+        });
+        let q_wl = if all_mw_confident {
+            // MW per-sample DD variance: each single-epoch MW measurement has
+            // ~0.42 cycle std on GPS L1/L2, so 0.18 cycles² per sample.
+            // Reference satellite noise is shared across all DD pairs.
+            let mw_var_per_sample: f64 = 0.18; // 0.42² cycles²
+            let mut q = DMatrix::zeros(n, n);
+            for i in 0..n {
+                let (c_i, ref_sat_i) = &subset[keep_indices[i]];
+                let cnt_i = state.mw_sd_counts.get(&c_i.0).copied().unwrap_or(1);
+                let cnt_ref = state.mw_sd_counts.get(&ref_sat_i.0).copied().unwrap_or(1);
+                let var_i = mw_var_per_sample / cnt_i as f64;
+                let var_ref = mw_var_per_sample / cnt_ref as f64;
+                q[(i, i)] = (var_i + var_ref).max(0.0025); // 0.05² floor
+                for j in (i + 1)..n {
+                    // Shared reference → off-diagonal covariance
+                    q[(i, j)] = var_ref;
+                    q[(j, i)] = var_ref;
+                }
+            }
+            q
+        } else {
+            let mut q = q_wl_ekf;
+            for i in 0..q.nrows() {
+                q[(i, i)] = q[(i, i)].max(0.01);
+            }
+            q
+        };
         let res_wl = crate::ambiguity::lambda::resolve_lambda(&a_wl, &q_wl)
             .map_err(|_| "WL LAMBDA Failed")?;
 
@@ -774,7 +830,10 @@ impl PppIteratedEkf {
             if let Some(i1_idx) = find_amb_idx(state, sat.sat_obs.sat, 3) {
                 let i1_est = x_i.get(CORE_STATE_SIZE + i1_idx).copied().unwrap_or(0.0);
                 let res_i1 = sat.iono_delay - i1_est;
-                let var_i1 = 9.0; // 3m std for Klobuchar accuracy
+                let var_i1 = match self.iono_model {
+                    IonosphereModel::Klobuchar => 9.0,    // 3m std
+                    IonosphereModel::Ionex => 0.0025,     // 0.05m std (5cm)
+                };
                 meas.push(FgMeasurement {
                     res: res_i1,
                     h_row: build_iono_constraint_row(x_i.len(), CORE_STATE_SIZE + i1_idx),

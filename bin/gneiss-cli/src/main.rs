@@ -54,6 +54,8 @@ enum Commands {
         clk: Option<String>,
         #[arg(long, help = "Path to antenna exchange file (.atx)")]
         antex: Option<String>,
+        #[arg(long, help = "Path to IONEX TEC map file (.??i)")]
+        ionex: Option<String>,
         #[arg(long, help = "Path to differential code bias files (.dcb)")]
         dcb: Vec<String>,
         #[arg(long, help = "Path to phase/code bias file (.bia/.bsx)")]
@@ -196,6 +198,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         gneiss_rtk::engine::EngineMode::RtkInsIekf
                     }
                     "ppp-fg" | "ppp-iekf" => gneiss_rtk::engine::EngineMode::PppIekf,
+                    "ppp-me" | "ppp-multi-epoch" => gneiss_rtk::engine::EngineMode::PppMultiEpoch,
                     "ppp-ins-fg" | "tight-fg" | "ppp-ins-iekf" => {
                         gneiss_rtk::engine::EngineMode::PppInsIekf
                     }
@@ -223,6 +226,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             sp3,
             clk,
             antex,
+            ionex,
             dcb,
             bia,
             config,
@@ -434,20 +438,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         gneiss_rtk::engine::EngineMode::RtkInsIekf
                     }
                     "ppp-fg" | "ppp-iekf" => gneiss_rtk::engine::EngineMode::PppIekf,
+                    "ppp-me" | "ppp-multi-epoch" => gneiss_rtk::engine::EngineMode::PppMultiEpoch,
                     "ppp-ins-fg" | "tight-fg" | "ppp-ins-iekf" => {
                         gneiss_rtk::engine::EngineMode::PppInsIekf
                     }
                     _ => return Err("Invalid engine mode specified".into()),
                 };
 
-                let is_ppp = matches!(
-                    engine_config.mode,
-                    gneiss_rtk::engine::EngineMode::Ppp
-                        | gneiss_rtk::engine::EngineMode::PppIns
-                        | gneiss_rtk::engine::EngineMode::PppInsLooselyCoupled
-                        | gneiss_rtk::engine::EngineMode::PppIekf
-                        | gneiss_rtk::engine::EngineMode::PppInsIekf
-                );
+                let is_ppp = engine_config.mode.is_ppp();
 
                 if is_ppp && (sp3.is_none() || clk.is_none()) {
                     tracing::warn!("Warning: SP3 and CLK files are missing for PPP. Using broadcast ephemeris, which will result in large drift.");
@@ -602,6 +600,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         engine.antex = Some(db);
                     }
                     Err(e) => error!("Failed to parse ANTEX file {}: {:?}", atx_file, e),
+                }
+            }
+
+            if let Some(ionex_path) = ionex {
+                if let Ok(file) = std::fs::File::open(&ionex_path) {
+                    match gneiss_parsers::ionex::parse_ionex(std::io::BufReader::new(file)) {
+                        Ok(grid) => {
+                            info!(
+                                "Loaded IONEX grid from {} ({} maps, {:.0}°×{:.0}° @ {:.0}°/{:.0}° step)",
+                                ionex_path,
+                                grid.tec_maps.len(),
+                                (grid.lat1 - grid.lat2).abs(),
+                                (grid.lon2 - grid.lon1),
+                                grid.dlat.abs(),
+                                grid.dlon.abs(),
+                            );
+                            engine.ionex_maps = grid
+                                .tec_maps
+                                .iter()
+                                .map(|m| (m.time, m.tec.clone()))
+                                .collect();
+                            engine.ionex_grid = Some(grid);
+                        }
+                        Err(e) => error!("Failed to parse IONEX file {}: {}", ionex_path, e),
+                    }
                 }
             }
 
