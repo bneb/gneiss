@@ -44,14 +44,14 @@ pub fn process_ppp<'a>(
             state.position = spp.position;
             state.rcv_clk_bias = spp.cdt;
         } else {
-            // Prior variance clamped to [1, 25] m².  1.0 floor prevents
-            // the prior from dominating carrier-phase after convergence;
-            // 25.0 cap limits SPP systematic errors from corrupting the
-            // filter when it's uncertain.
+            // Prior variance clamped to [prior_floor, 25] m². After convergence
+            // (50+ epochs with < 0.1 m² position cov), lower the floor to 0.01 m²
+            // so CP-derived cm-level accuracy is not dominated by the SPP prior.
             let pos_cov = state.covariance[(0, 0)]
                 .min(state.covariance[(1, 1)])
                 .min(state.covariance[(2, 2)]);
-            let prior_var = pos_cov.min(25.0).max(1.0);
+            let prior_floor = if state.epoch_count > 50 && pos_cov < 0.1 { 0.01 } else { 1.0 };
+            let prior_var = pos_cov.min(25.0).max(prior_floor);
             position_prior = Some((spp.position.vector, prior_var));
         }
     }

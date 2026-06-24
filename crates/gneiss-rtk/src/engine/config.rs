@@ -161,6 +161,8 @@ pub struct EngineConfig {
     pub process_noise_isb: f64,
     pub process_noise_zwd: f64,
     pub process_noise_iono: f64,
+    /// Ambiguity float process noise (m²/s).  RALPH value 1e-4 allows
+    /// slow re-convergence after cycle slips.  Was 1e-8 (too stiff).
     pub process_noise_amb_float: f64,
     pub process_noise_amb_fixed: f64,
 
