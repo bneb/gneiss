@@ -7,6 +7,7 @@ pub mod matcher;
 pub mod measurement;
 pub mod measurement_math;
 pub mod ml;
+pub mod ppp_ar;
 pub mod ppp;
 pub mod ppp_common;
 pub mod ppp_iekf;
