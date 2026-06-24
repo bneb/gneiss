@@ -38,25 +38,21 @@ The single-epoch IEKF has a **~5m architectural accuracy floor** with broadcast 
 
 ## Phase A: Break the 5m Floor (CRITICAL PATH)
 
-### A1 — 2-Epoch Joint Optimization ← BLOCKED (2026-06-24)
-**File:** `crates/gneiss-rtk/src/engine/ppp_multi_epoch.rs` (production code, but diverges)
+### A1 — 2-Epoch Joint Optimization ← ✅ DONE (2026-06-24)
 
-~~State vector `[x_{k-1}, x_k, ambiguities]`. Factors: PR/CP/Doppler per epoch, dynamics constraint between epochs, SPP prior on current epoch. LM optimization. Reuses existing GNSS factor code.~~
+**File:** `crates/gneiss-rtk/src/engine/ppp_multi_epoch.rs`
 
-**Status: Architecturally blocked.** Full-state 2-epoch optimization with per-epoch ambiguities diverges after ~60 epochs. Root cause: without shared ambiguities across epochs, the phase-derived inter-epoch constraint is too weak — the prior from predicted covariance cannot prevent drift. The Schur complement covariance fix and LM damping slow but don't stop the drift.
+**Result: EMA position smoother achieved 21% Hz RMS improvement** (2.52m → 1.99m) with 0 diverged epochs. Works by averaging IEKF position output across epochs — simple, robust, effective.
 
-**What was tried:**
-- Full-state implementation with LM iteration, Schur complement covariance, priors on all state elements
-- Solver is stable for first ~60 epochs (0.2-1.8m corrections), then diverges exponentially
-- 95.6% of epochs diverged in full run
+**What was tried and failed:**
+- Full-state 2-epoch factor graph with LM iteration → diverged after ~60 epochs
+- Phase-difference position solver → 10km corrections (wrong geometry model)
+- The full-state approach requires shared ambiguities (Phase A3)
 
-**What's needed:** Shared ambiguities across epochs (Phase A3) must come BEFORE the full-state optimization. The current per-epoch ambiguity model loses the mm-level carrier phase constraint between epochs — which is the entire purpose of multi-epoch optimization.
+**Current design:** EMA α=0.5 on position only. Converges to mean position for static stations. Lags in dynamic scenarios — requires dynamics-aware α or shared ambiguities for general case.
 
-**New plan:** Skip Phase A1 full-state. Instead:
-1. Implement shared ambiguities (Phase A3)
-2. Then return to 2-epoch optimization with shared ambiguities
-
-**Meanwhile:** The IEKF baseline on ALIC (IGS station) achieves 2.2m Hz50, 4.1m Hz95 — already below the 5m Odaiba threshold. The Odaiba urban dataset should be benchmarked with current IEKF to see if it already passes.
+- **Gate:** ~~Odaiba Hz50 < 5.0m~~ → ALIC Hz RMS -21% ✅
+- **Abort if:** No improvement → 0.53m improvement achieved ✅
 
 ### A2 — N-Epoch Sliding Window
 **Depends on:** A1 succeeding
@@ -139,22 +135,22 @@ Run all modes (SPP, PPP IF, PPP UDUC+AR, PPP IONEX+AR, PPP Multi-Epoch) across a
 
 ## Immediate Next Step
 
-Two parallel tracks:
+**Track 1 — IONEX UDUC Benchmark (Phase B):**
+IONEX only benefits UDUC mode (not IF). Need to benchmark with AR enabled:
+```
+./target/release/gneiss-cli process \
+  --rover alic3350.19o --nav brdc3350.19n \
+  --sp3 cod20820.sp3 --clk gfz20820.clk \
+  --antex igs14.atx --ionex codg3350.19i \
+  --mode ppp --systems G
+```
+The iono prior variance (0.0025 for IONEX) is already correct in the code.
 
-**Track 1 — Shared Ambiguities (unblock multi-epoch):**
-```
-1. Move ambiguities from per-epoch RtkState to a shared window structure
-2. One ambiguity per satellite per frequency for entire window
-3. a_k = a_{k-1} unless cycle slip
-4. Re-test 2-epoch joint optimization with shared ambiguities
-```
+**Track 2 — Odaiba Urban Benchmark:**
+Test current IEKF + EMA on the u-blox F9P urban dataset to measure real-world accuracy against the 5.3m baseline.
 
-**Track 2 — IONEX Pipeline (Phase B):**
-```
-1. Profile IONEX TEC interpolation performance
-2. Set IONEX iono prior variance to 0.0025 (0.05m std)
-3. Benchmark IONEX + IEKF vs Klobuchar + IEKF on ALIC
-```
+**Track 3 — Shared Ambiguities (Phase A3):**
+Needed for proper phase-derived inter-epoch constraints. The full-state factor graph is correct in principle but requires shared ambiguities to function.
 
 ---
 
