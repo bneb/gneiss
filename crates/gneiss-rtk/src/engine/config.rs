@@ -199,8 +199,8 @@ impl Default for EngineConfig {
             phase_windup_enabled: true,
             min_snr_dbhz: 25.0,
             elevation_mask_deg: 5.0,
-            dynamics_model: DynamicsModel::Automotive,
-            auto_detect_dynamics: true,
+            dynamics_model: DynamicsModel::Static,
+            auto_detect_dynamics: false, // TODO: implement auto-detection from velocity estimates
             doppler_slip_threshold_cycles: 5.0,
             max_reject_count: 3,
             max_base_age_s: 5.0,

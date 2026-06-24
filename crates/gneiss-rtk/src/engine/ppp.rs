@@ -2864,7 +2864,7 @@ mod adversarial_gap_analysis {
         assert_eq!(
             config.dynamics_model,
             crate::engine::DynamicsModel::Automotive,
-            "Default dynamics is Automotive (Static overridden by auto_detect_dynamics at runtime)"
+            "Default dynamics MUST be Static — Automotive PN=90,000 m² destroys inter-epoch memory"
         );
 
         let dt: f64 = 30.0; // 30s sampling (Shinjuku typical)
@@ -2881,29 +2881,29 @@ mod adversarial_gap_analysis {
         );
 
         let q_pos_actual = q[(0, 0)];
-        let q_vel_actual = q[(3, 3)];
 
-        // With Automotive dynamics (q_acc=10): q_pos = 10 * 30³/3 = 90,000 m²
-        // This is ~300m position sigma — nearly memory-less.
-        // auto_detect_dynamics switches to Static for stationary data at runtime.
+        // Static dynamics: q_pos = 0.001 * 30³/3 = 9 m² (σ≈3m)
+        // This preserves inter-epoch position memory for static stations.
+        // Automotive would give 90,000 m² (σ≈300m) — 100× worse.
         assert!(
-            q_pos_actual > 1000.0,
-            "Automotive PN should be large, got {:.0}",
-            q_pos_actual
-        );
-        assert!(
-            q_vel_actual > 100.0,
-            "Automotive vel PN should be large, got {:.0}",
-            q_vel_actual
+            q_pos_actual < 100.0,
+            "Static PN should be <100 m², got {:.0}", q_pos_actual
         );
 
-        // Verify expected values
-        assert!((q_pos_actual - expected_q_pos).abs() < 10.0,
-            "q_pos should be q_acc*dt³/3 = {:.0}, got {:.0}", expected_q_pos, q_pos_actual);
+        // Verify Automotive is 100× larger for comparison
+        let mut auto_config = EngineConfig::default();
+        auto_config.dynamics_model = crate::engine::DynamicsModel::Automotive;
+        let q_auto = crate::engine::predictor::compute_process_noise(
+            30.0, &auto_config, false, false, &[],
+        );
+        assert!(
+            q_auto[(0, 0)] > 1000.0,
+            "Automotive PN should be >1000 m² for comparison, got {:.0}", q_auto[(0, 0)]
+        );
 
         eprintln!(
-            "ADVERSARIAL: Automotive dt=30s -> q_pos={:.0} m², sigma={:.0}m",
-            q_pos_actual, q_pos_actual.sqrt()
+            "ADVERSARIAL: Static q_pos={:.0} vs Automotive q_pos={:.0} ({}× ratio)",
+            q_pos_actual, q_auto[(0, 0)], q_auto[(0, 0)] / q_pos_actual
         );
     }
 
@@ -3232,7 +3232,7 @@ mod adversarial_gap_analysis {
         let config = EngineConfig::default();
 
         // Position: Automotive dynamics (auto_detect_dynamics=true overrides at runtime)
-        assert_eq!(config.dynamics_model, crate::engine::DynamicsModel::Automotive);
+        assert_eq!(config.dynamics_model, crate::engine::DynamicsModel::Static);
 
         // Clock model (RALPH: cd reduced 10000→10, amb_float raised 1e-8→1e-4)
         assert_eq!(config.process_noise_cb, 1.0, "clock bias PN");
