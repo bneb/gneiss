@@ -111,7 +111,7 @@ fn compute_receiver_pco(
         Some(t) => t,
         None => return Vector3::zeros(),
     };
-    let antenna = match db.antennas.iter().find(|a| a.antenna_type == ant_type) {
+    let antenna = match db.get_antenna(ant_type) {
         Some(a) => a,
         None => return Vector3::zeros(),
     };
@@ -150,7 +150,7 @@ fn compute_receiver_pcv(
         Some(t) => t,
         None => return 0.0,
     };
-    let antenna = match db.antennas.iter().find(|a| a.antenna_type == ant_type) {
+    let antenna = match db.get_antenna(ant_type) {
         Some(a) => a,
         None => return 0.0,
     };
@@ -1296,7 +1296,7 @@ mod ppp_tests {
             dzen: 1.0, zen1: 0.0, zen2: 0.0, dazi: 0.0,
             frequencies: freqs,
         };
-        let db = AntexDatabase { antennas: vec![ant] };
+        let db = AntexDatabase::new(vec![ant]);
 
         // At equator (lat=0, lon=0): R = [[0,0,1],[0,1,0],[1,0,0]]
         // [N=100, E=200, U=300] → [X=300, Y=200, Z=100]
@@ -1326,7 +1326,7 @@ mod ppp_tests {
             dzen: 1.0, zen1: 0.0, zen2: 0.0, dazi: 0.0,
             frequencies: freqs,
         };
-        let db = AntexDatabase { antennas: vec![ant] };
+        let db = AntexDatabase::new(vec![ant]);
 
         // At lat=45°, lon=0: slat=clat=√2/2, slon=0, clon=1
         // x = -s*N + c*U = 141.42, y = E = 200, z = c*N + s*U = 282.84
@@ -1361,7 +1361,7 @@ mod ppp_tests {
             dzen: 1.0, zen1: 0.0, zen2: 0.0, dazi: 0.0,
             frequencies: freqs,
         };
-        let db = AntexDatabase { antennas: vec![ant] };
+        let db = AntexDatabase::new(vec![ant]);
 
         let pco = compute_receiver_pco(Some(&db), Some("TRM59800.00"), "G01", Vector3::zeros());
         assert_eq!(pco, Vector3::zeros(), "Should return zeros for missing freq");
@@ -1385,7 +1385,7 @@ mod ppp_tests {
             dzen: 1.0, zen1: 0.0, zen2: 0.0, dazi: 0.0,
             frequencies: freqs,
         };
-        let db = AntexDatabase { antennas: vec![ant] };
+        let db = AntexDatabase::new(vec![ant]);
 
         let pco = compute_receiver_pco(Some(&db), Some("NONEXISTENT"), "G01", Vector3::zeros());
         assert_eq!(pco, Vector3::zeros(), "Should return zeros for unknown antenna type");
@@ -1418,7 +1418,7 @@ mod ppp_tests {
             dzen: 1.0, zen1: 0.0, zen2: 1.0, dazi: 0.0,
             frequencies: freqs,
         };
-        let db = AntexDatabase { antennas: vec![ant] };
+        let db = AntexDatabase::new(vec![ant]);
 
         let pcv = compute_receiver_pcv(Some(&db), None, "G01", 1.2);
         assert_eq!(pcv, 0.0, "Should return 0 without antenna type");
@@ -1441,7 +1441,7 @@ mod ppp_tests {
             dzen: 1.0, zen1: 0.0, zen2: 1.0, dazi: 0.0,
             frequencies: freqs,
         };
-        let db = AntexDatabase { antennas: vec![ant] };
+        let db = AntexDatabase::new(vec![ant]);
 
         let pcv = compute_receiver_pcv(Some(&db), Some("NONEXISTENT"), "G01", 1.2);
         assert_eq!(pcv, 0.0, "Should return 0 for unknown antenna type");
@@ -1464,7 +1464,7 @@ mod ppp_tests {
             dzen: 1.0, zen1: 0.0, zen2: 4.0, dazi: 0.0,
             frequencies: freqs,
         };
-        let db = AntexDatabase { antennas: vec![ant] };
+        let db = AntexDatabase::new(vec![ant]);
 
         // el=90° → zenith=0° → noazi[0] = 0.0 mm = 0.0 m
         let pcv = compute_receiver_pcv(Some(&db), Some("TRM59800.00"), "G01", std::f64::consts::FRAC_PI_2);
@@ -1488,7 +1488,7 @@ mod ppp_tests {
             dzen: 1.0, zen1: 0.0, zen2: 4.0, dazi: 0.0,
             frequencies: freqs,
         };
-        let db = AntexDatabase { antennas: vec![ant] };
+        let db = AntexDatabase::new(vec![ant]);
 
         // el=87° → zenith=3° → noazi[3] = 3.0 mm = 0.003 m
         let pcv = compute_receiver_pcv(Some(&db), Some("TRM59800.00"), "G01", 87.0_f64.to_radians());
@@ -1516,7 +1516,7 @@ mod ppp_tests {
             dzen: 1.0, zen1: 0.0, zen2: 4.0, dazi: 0.0,
             frequencies: freqs,
         };
-        let db = AntexDatabase { antennas: vec![ant] };
+        let db = AntexDatabase::new(vec![ant]);
 
         // el=0° → zenith=90° → clamped to zen2=4° → noazi[4] = 4.0 mm = 0.004 m
         let pcv = compute_receiver_pcv(Some(&db), Some("TRM59800.00"), "G01", 0.0);
@@ -1544,7 +1544,7 @@ mod ppp_tests {
             dzen: 1.0, zen1: 0.0, zen2: 4.0, dazi: 0.0,
             frequencies: freqs,
         };
-        let db = AntexDatabase { antennas: vec![ant] };
+        let db = AntexDatabase::new(vec![ant]);
 
         let pcv = compute_receiver_pcv(Some(&db), Some("TRM59800.00"), "G01", std::f64::consts::FRAC_PI_2);
         assert_eq!(pcv, 0.0, "Should return 0 when noazi is empty");
@@ -1790,7 +1790,7 @@ mod ppp_tests {
             dzen: 1.0, zen1: 0.0, zen2: 4.0, dazi: 0.0,
             frequencies: freqs,
         };
-        engine.antex = Some(AntexDatabase { antennas: vec![ant] });
+        engine.antex = Some(AntexDatabase::new(vec![ant]));
 
         let sat_obs = SatObs { sat: sat_id, observations: vec![] };
         let mut p2 = Some(1.0);
@@ -1828,7 +1828,7 @@ mod ppp_tests {
             dzen: 1.0, zen1: 0.0, zen2: 4.0, dazi: 0.0,
             frequencies: freqs,
         };
-        engine.antex = Some(AntexDatabase { antennas: vec![ant] });
+        engine.antex = Some(AntexDatabase::new(vec![ant]));
 
         let sat_obs = SatObs { sat: sat_id, observations: vec![] };
         let mut p2 = Some(1.0);
@@ -1875,7 +1875,7 @@ mod ppp_tests {
             dzen: 1.0, zen1: 0.0, zen2: 4.0, dazi: 0.0,
             frequencies: freqs,
         };
-        engine.antex = Some(AntexDatabase { antennas: vec![ant] });
+        engine.antex = Some(AntexDatabase::new(vec![ant]));
 
         // L2 phase observation → enters L2 branch
         let sat_obs = SatObs {

@@ -1981,7 +1981,11 @@ mod mutant_killer_tests {
             },
         ];
 
-        assert_eq!(PppIteratedEkf::find_worst_outlier_sat(&meas), Some(sat2));
+        // Outlier detection disabled during convergence to prevent cascade:
+        // removing one ambiguity degrades remaining measurements, causing
+        // more removals until all CP is lost.  The Huber estimator handles
+        // outlier down-weighting without removing the ambiguity.
+        assert_eq!(PppIteratedEkf::find_worst_outlier_sat(&meas), None);
 
         let meas_no_outlier = vec![FgMeasurement {
             res: 10.0,

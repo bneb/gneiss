@@ -38,9 +38,33 @@ impl From<IoError> for AntexError {
 
 pub struct AntexDatabase {
     pub antennas: Vec<AntennaPcv>,
+    /// Index: antenna_type → position in `antennas` Vec. Built at end of parse.
+    by_type: HashMap<String, usize>,
+    /// Index: serial_num → list of positions for O(1) satellite lookups.
+    by_sat: HashMap<String, Vec<usize>>,
 }
 
 impl AntexDatabase {
+    /// Construct from a pre-built antenna list, indexing for O(1) lookup.
+    pub fn new(antennas: Vec<AntennaPcv>) -> Self {
+        let by_type: HashMap<String, usize> = antennas
+            .iter()
+            .enumerate()
+            .map(|(i, a)| (a.antenna_type.clone(), i))
+            .collect();
+        let mut by_sat: HashMap<String, Vec<usize>> = HashMap::new();
+        for (i, a) in antennas.iter().enumerate() {
+            by_sat.entry(a.serial_num.clone()).or_default().push(i);
+        }
+        Self { antennas, by_type, by_sat }
+    }
+
+    /// O(1) lookup by antenna type. Returns None if not found.
+    pub fn get_antenna(&self, antenna_type: &str) -> Option<&AntennaPcv> {
+        self.by_type
+            .get(antenna_type)
+            .and_then(|&idx| self.antennas.get(idx))
+    }
     pub fn parse<P: AsRef<std::path::Path>>(path: P) -> Result<Self, AntexError> {
         let file = File::open(path)?;
         let reader = BufReader::new(file);
@@ -141,18 +165,18 @@ impl AntexDatabase {
             }
         }
 
-        Ok(AntexDatabase { antennas })
+        Ok(AntexDatabase::new(antennas))
     }
 
     pub fn find_satellite(&self, prn: &str, time: DateTime<Utc>) -> Option<&AntennaPcv> {
-        self.antennas.iter().find(|a| {
-            if a.serial_num == prn {
+        // O(1) lookup via sat index, then scan only matching entries for time window
+        self.by_sat.get(prn).and_then(|indices| {
+            indices.iter().find_map(|&idx| {
+                let a = &self.antennas[idx];
                 let after_from = a.valid_from.is_none_or(|from| time >= from);
                 let before_until = a.valid_until.is_none_or(|until| time <= until);
-                after_from && before_until
-            } else {
-                false
-            }
+                if after_from && before_until { Some(a) } else { None }
+            })
         })
     }
 }
