@@ -259,6 +259,17 @@ pub fn predict(
         )
         .copy_from(state.core_phi.as_ref().unwrap());
 
+    // Clamp extreme covariance values to prevent overflow in Phi*P*Phi^T.
+    // Cycle slip inflation (×4 per slip) can push position variance toward
+    // f64 overflow.  Cap at 1e10 m² (σ=100 km) — any real filter would
+    // have been reset long before reaching this.
+    for i in 0..state.covariance.nrows() {
+        for j in 0..state.covariance.ncols() {
+            let v = &mut state.covariance[(i, j)];
+            if v.abs() > 1e10 { *v = v.signum() * 1e10; }
+        }
+    }
+
     state.covariance = &phi_full * &state.covariance * phi_full.transpose() + q;
 
     // NaN can enter through numerical overflow in Phi*P*Phi^T.  Once
