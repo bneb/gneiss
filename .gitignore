@@ -14,3 +14,4 @@ evaluate_static.rs
 find_errors
 find_errors.rs
 .env
+build_rs_cov.profraw
