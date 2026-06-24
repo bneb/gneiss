@@ -1515,13 +1515,14 @@ mod nan_tests {
 
     #[test]
     fn test_solve_matrix_inversion_failure() {
+        // NaN is now sanitized — solve proceeds to the measurement phase.
         let fg = PppInsIteratedEkf::new();
         let mut state = dummy_rtk_state();
         state.covariance = DMatrix::from_element(CORE_STATE_SIZE, CORE_STATE_SIZE, f64::NAN);
         let sats = vec![];
         let lever_arm = nalgebra::Vector3::zeros();
         let res = fg.solve(&mut state, &sats, &[], None, &lever_arm);
-        assert!(matches!(res, Err(EngineError::StateDisappeared)));
+        assert!(matches!(res, Err(EngineError::InsufficientSatellites)));
     }
 }
 

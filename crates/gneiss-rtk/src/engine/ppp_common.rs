@@ -11,8 +11,22 @@ pub(crate) fn snr_scale(snr: i32) -> f64 {
 }
 
 pub(crate) fn invert_matrix(mat: &DMatrix<f64>) -> Option<DMatrix<f64>> {
+    // If NaN detected, sanitize the matrix: replace NaN diagonals with a
+    // large value (10,000 m² variance) and NaN off-diagonals with zero.
+    // This prevents a single NaN from cascading into a full state reset
+    // (StateDisappeared) which causes 30m position jumps in the output.
     if mat.iter().any(|x| x.is_nan()) {
-        return None;
+        let mut sanitized = mat.clone();
+        for i in 0..sanitized.nrows() {
+            for j in 0..sanitized.ncols() {
+                if sanitized[(i, j)].is_nan() {
+                    sanitized[(i, j)] = if i == j { 10000.0 } else { 0.0 };
+                }
+            }
+        }
+        tracing::warn!("NaN detected in covariance matrix — sanitized {} entries",
+            mat.iter().filter(|x| x.is_nan()).count());
+        return Some(invert_matrix_robust(&sanitized));
     }
     Some(invert_matrix_robust(mat))
 }
@@ -222,8 +236,14 @@ mod tests {
 
     #[test]
     fn test_invert_matrix_nan() {
+        // NaN entries are now sanitized (replaced with 10000 on diag, 0 off-diag)
+        // rather than returning None, to prevent cascading StateDisappeared errors.
         let m = DMatrix::from_row_slice(2, 2, &[f64::NAN, 1.0, 1.0, 3.0]);
-        assert!(invert_matrix(&m).is_none());
+        let result = invert_matrix(&m);
+        assert!(result.is_some(), "NaN should be sanitized, not rejected");
+        // Verify result is finite
+        let inv = result.unwrap();
+        assert!(inv.iter().all(|x| x.is_finite()));
     }
 
     #[test]
