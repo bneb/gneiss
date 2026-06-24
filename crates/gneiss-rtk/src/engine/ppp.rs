@@ -714,7 +714,21 @@ pub(crate) fn update_phase_ambiguities(
         let raw_l2 = sat.sat_obs.get_observable_phase(2);
         let raw_p1 = sat.sat_obs.get_observable(1);
         let raw_p2 = sat.sat_obs.get_observable(2);
-        if let (Some(l1), Some(l2), Some(p1), Some(p2)) =
+        // BUGFIX: In IF mode, push_cp_measurement() looks up band-0 ambiguity
+        // via find_ambiguity_index().  If we create UDUC-style bands 1/2/3
+        // (which the old code always did when raw L1/L2 exist), the CP
+        // measurement is silently dropped — the IEKF degrades to PR-only.
+        // Check is_iono_free FIRST to ensure band-0 exists in IF mode.
+        if sat.is_iono_free {
+            let l_meas = (cp1 - wup) * sat.lam1;
+            let exp = expected_base;
+            if !state.ambiguity_keys.contains(&(sat.sat_obs.sat, 0)) {
+                state.add_ambiguity(sat.sat_obs.sat, 0, l_meas - exp, 10000.0);
+            }
+            state
+                .last_observed
+                .insert((sat.sat_obs.sat, 0), state.epoch_count as u32);
+        } else if let (Some(l1), Some(l2), Some(p1), Some(p2)) =
             (raw_l1, raw_l2, raw_p1, raw_p2)
         {
             let l1_m = (l1 - wup) * sat.lam1;
@@ -729,18 +743,6 @@ pub(crate) fn update_phase_ambiguities(
             let mw_cycles = mw_m * (sat.f1 - sat.f2) / LIGHT_SPEED;
             state.update_mw(sat.sat_obs.sat, mw_cycles);
             add_uduc_ambiguities(state, sat, cp1, wup, expected_base);
-        } else {
-            let exp = if sat.is_iono_free && sat.cp2.is_some() {
-                expected_base
-            } else {
-                expected_base - sat.iono_delay
-            };
-            if !state.ambiguity_keys.contains(&(sat.sat_obs.sat, 0)) {
-                state.add_ambiguity(sat.sat_obs.sat, 0, l_meas - exp, 10000.0);
-            }
-            state
-                .last_observed
-                .insert((sat.sat_obs.sat, 0), state.epoch_count as u32);
         }
     }
 }
