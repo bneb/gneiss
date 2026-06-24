@@ -743,6 +743,17 @@ pub(crate) fn update_phase_ambiguities(
             let mw_cycles = mw_m * (sat.f1 - sat.f2) / LIGHT_SPEED;
             state.update_mw(sat.sat_obs.sat, mw_cycles);
             add_uduc_ambiguities(state, sat, cp1, wup, expected_base);
+        } else {
+            // Fallback: non-IF, no raw L2/P2 — use band-0
+            // (e.g., single-frequency receivers)
+            let l_meas = (cp1 - wup) * sat.lam1;
+            let exp = expected_base - sat.iono_delay;
+            if !state.ambiguity_keys.contains(&(sat.sat_obs.sat, 0)) {
+                state.add_ambiguity(sat.sat_obs.sat, 0, l_meas - exp, 10000.0);
+            }
+            state
+                .last_observed
+                .insert((sat.sat_obs.sat, 0), state.epoch_count as u32);
         }
     }
 }
@@ -2254,6 +2265,78 @@ mod ppp_tests {
         assert!(state.last_observed.contains_key(&(sat, 0)), "last_observed freq 0");
     }
 
+    /// Regression test: IF-mode satellite WITH L1+L2 observations must still
+    /// create a band-0 ambiguity.  Before the fix, the UDUC branch intercepted
+    /// and created bands 1/2/3 instead — push_cp_measurement() then silently
+    /// dropped the CP measurement because find_ambiguity_index() only finds
+    /// band 0.
+    #[test]
+    fn test_if_mode_creates_band0_with_l1_l2_present() {
+        use gneiss_core::obs::{Observation, SatObs};
+        use gneiss_core::sat::{Constellation, SatelliteId};
+        use gneiss_core::time::GpsTime;
+
+        let t = GpsTime::new(2156, 0.0);
+        let sat = SatelliteId { constellation: Constellation::Gps, prn: 1 };
+
+        // Realistic scenario: satellite HAS L1, L2, C1, C2 — the common case
+        let sat_obs = SatObs {
+            sat,
+            observations: vec![
+                Observation { code: "C1C".parse().unwrap(), value: 20485741.0, lli: None, lock_time: None },
+                Observation { code: "C2W".parse().unwrap(), value: 20485742.0, lli: None, lock_time: None },
+                Observation { code: "L1C".parse().unwrap(), value: 107631028.0, lli: None, lock_time: Some(100) },
+                Observation { code: "L2W".parse().unwrap(), value: 83832419.0, lli: None, lock_time: Some(100) },
+            ],
+        };
+
+        let lam1 = LIGHT_SPEED / 1575.42e6;
+        let psat = ProcessedSat {
+            sat_obs: &sat_obs,
+            dt_sat_m: 0.0, p1: 20485741.0, p2: Some(20485742.0),
+            cp1: Some(107631028.0), cp2: Some(83832419.0),
+            is_iono_free: true,  // <-- IF mode
+            osb_p1: 0.0, osb_p2: 0.0, osb_cp1: 0.0, osb_cp2: 0.0,
+            los: Vector3::new(0.5, 0.3, -0.8).normalize(),
+            dist: 22000000.0, el: 1.2, snr: 45.0, doppler: 0.0,
+            lam1, lam2: LIGHT_SPEED / 1227.60e6,
+            tropo_dry: 2.0, map_wet: 0.5, iono_delay: 5.0,
+            f1: 1575.42e6, f2: 1227.60e6,
+            sat_pos_rot: Vector3::new(20000000.0, 5000000.0, 3000000.0),
+            sat_vel: Vector3::zeros(), sat_clock_drift: 0.0,
+            rcv_pos_ecef: Vector3::new(6000000.0, 0.0, 0.0),
+            pcv_correction: 0.0,
+        };
+
+        let mut state = RtkState::new(t,
+            Coordinate::new(Vector3::new(6000000.0, 0.0, 0.0), Datum::WGS84, Frame::ECEF, t), 0.0);
+        state.epoch_count = 5;
+        state.locktimes.insert((sat, 1), 100);
+
+        update_phase_ambiguities(&mut state, &vec![psat], t);
+
+        // CRITICAL: IF mode must create band-0 even when raw L1/L2 exist.
+        // Before the fix, UDUC bands 1/2/3 were created instead, and
+        // push_cp_measurement silently dropped CP (find_ambiguity_index only
+        // finds band 0).
+        assert!(
+            state.ambiguity_keys.contains(&(sat, 0)),
+            "IF mode with L1+L2 MUST create band-0 ambiguity for push_cp_measurement"
+        );
+        assert!(
+            !state.ambiguity_keys.contains(&(sat, 1)),
+            "IF mode must NOT create UDUC L1 ambiguity"
+        );
+        assert!(
+            !state.ambiguity_keys.contains(&(sat, 2)),
+            "IF mode must NOT create UDUC L2 ambiguity"
+        );
+        assert!(
+            !state.ambiguity_keys.contains(&(sat, 3)),
+            "IF mode must NOT create UDUC iono ambiguity"
+        );
+    }
+
     #[test]
     fn test_update_phase_ambiguities_no_l2_path() {
         use gneiss_core::obs::{Observation, SatObs};
@@ -2861,11 +2944,12 @@ mod adversarial_gap_analysis {
     // has no damping and can diverge.
     #[test]
     fn test_automotive_dynamics_destroys_position_prior() {
-        // Default is Automotive with auto_detect_dynamics=true
+        // Default MUST be Static — Automotive produces 90,000 m² PN
+        // which destroys inter-epoch memory.
         let config = EngineConfig::default();
         assert_eq!(
             config.dynamics_model,
-            crate::engine::DynamicsModel::Automotive,
+            crate::engine::DynamicsModel::Static,
             "Default dynamics MUST be Static — Automotive PN=90,000 m² destroys inter-epoch memory"
         );
 
