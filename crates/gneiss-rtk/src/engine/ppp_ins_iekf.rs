@@ -24,7 +24,7 @@ pub fn process_ppp_ins_fg<'a>(
     let state = engine.current_state.as_mut().unwrap();
     state.time = rover_obs.time;
     state.position.epoch = rover_obs.time;
-    let sats = crate::engine::ppp::build_sats(engine, rover_obs);
+    let sats = crate::engine::ppp_antenna::build_sats(engine, rover_obs);
     if sats.is_empty() {
         return Err(EngineError::InsufficientSatellites);
     }
