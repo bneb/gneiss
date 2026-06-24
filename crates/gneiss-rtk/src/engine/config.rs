@@ -137,8 +137,16 @@ pub struct EngineConfig {
     pub ar_ffrt_prob: f64,
 
     // Process Noise
+    /// Receiver clock bias process noise (m²/s).  For white-noise clock
+    /// (phi=0), this is the per-epoch reset variance; for random-walk
+    /// clock (phi=1), this is the continuous process noise.
     pub process_noise_cb: f64,
+    /// Receiver clock drift process noise (m²/s³).
     pub process_noise_cd: f64,
+    /// Inter-system bias process noise (m²/s).  ISBs are modelled as
+    /// piece-wise constants with small random-walk drift (~0.3 m/hr
+    /// for stable receivers per CODE/WHU analysis).
+    pub process_noise_isb: f64,
     pub process_noise_zwd: f64,
     pub process_noise_iono: f64,
     pub process_noise_amb_float: f64,
@@ -187,8 +195,9 @@ impl Default for EngineConfig {
             ar_min_epoch_count: 5,
             ar_min_lock: 3,
             ar_ffrt_prob: 0.001,
-            process_noise_cb: 1e6,
+            process_noise_cb: 1.0,    // σ=1 m/s for TCXO random walk
             process_noise_cd: 1e4,
+            process_noise_isb: 0.1,   // ~0.3 m/hr random walk
             process_noise_zwd: 1e-8,
             process_noise_iono: 1e-6,
             process_noise_amb_float: 1e-8,

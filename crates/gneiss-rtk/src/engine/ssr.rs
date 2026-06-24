@@ -329,7 +329,7 @@ mod tests {
         };
         let mut epochs = Vec::new();
         for i in 0..=5 {
-            let t = GpsTime { week: 2200, tow: i as f64 * 300.0 };
+            let _t = GpsTime { week: 2200, tow: i as f64 * 300.0 };
             let pos = Vector3::new(
                 10000000.0 + i as f64 * 100.0,
                 20000000.0 + i as f64 * 50.0,
@@ -386,7 +386,7 @@ mod tests {
         // Epochs too far from target (> 2 hours)
         let mut epochs = Vec::new();
         for i in 0..5 {
-            let t = GpsTime { week: 2200, tow: 10000.0 + i as f64 * 300.0 };
+            let _t = GpsTime { week: 2200, tow: 10000.0 + i as f64 * 300.0 };
             epochs.push(epoch_at(2200, 10000.0 + i as f64 * 300.0, "G01", Vector3::new(1.0, 0.0, 0.0), 0.0));
         }
         // Target at 0.0, but earliest epoch is at 10000 (2.78 hours away)

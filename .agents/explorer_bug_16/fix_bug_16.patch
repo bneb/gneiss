@@ -1,0 +1,183 @@
+diff --git a/crates/gneiss-core/src/ephemeris.rs b/crates/gneiss-core/src/ephemeris.rs
+index 8e458ef..e8c148a 100644
+--- a/crates/gneiss-core/src/ephemeris.rs
++++ b/crates/gneiss-core/src/ephemeris.rs
+@@ -54,6 +54,13 @@ impl Ephemeris {
+             Ephemeris::Glonass(e) => e.position(t),
+         }
+     }
+ 
++    pub fn position_e5b(&self, t: GpsTime) -> (Vector3<f64>, Vector3<f64>, f64, f64) {
++        match self {
++            Ephemeris::Galileo(e) => e.position_e5b(t),
++            other => other.position(t),
++        }
++    }
++
+     pub fn toe(&self) -> GpsTime {
+         match self {
+             Ephemeris::Gps(e) => e.toe,
+diff --git a/crates/gneiss-core/src/signal.rs b/crates/gneiss-core/src/signal.rs
+index f112a9e..7a83421 100644
+--- a/crates/gneiss-core/src/signal.rs
++++ b/crates/gneiss-core/src/signal.rs
+@@ -48,6 +48,11 @@ pub fn get_frequency(sat: SatelliteId, freq_band: u8, freq_num: i8) -> f64 {
+             Constellation::Beidou => FREQ_GPS_L5,
+             _ => FREQ_GPS_L5,
+         },
++        7 => match sat.constellation {
++            Constellation::Galileo => FREQ_GAL_E5B,
++            Constellation::Beidou => FREQ_GAL_E5B,
++            _ => FREQ_GPS_L1,
++        },
+         _ => FREQ_GPS_L1,
+     }
+ }
+diff --git a/crates/gneiss-rtk/src/estimators/spp.rs b/crates/gneiss-rtk/src/estimators/spp.rs
+index b8a211e..dc8a00b 100644
+--- a/crates/gneiss-rtk/src/estimators/spp.rs
++++ b/crates/gneiss-rtk/src/estimators/spp.rs
+@@ -51,6 +51,7 @@ pub struct SppMeasurement {
+     pub time: GpsTime,
+     pub eph: Ephemeris,
+     pub is_iono_free: bool,
++    pub freq_band: u8,
+ }
+ 
+ /// Errors that can occur during an SPP WNLLS step.
+@@ -145,12 +146,20 @@ fn build_single_measurement(
+         _ => sat_obs.get_observable(2),
+     };
+ 
+-    let (raw_pr, is_iono_free) = if let (Some(p1), Some(p2)) = (p1_opt, p2_opt) {
++    let (raw_pr, is_iono_free, freq_band) = if let (Some(p1), Some(p2)) = (p1_opt, p2_opt) {
+         let f1_sq = f1 * f1;
+         let f2_sq = f2 * f2;
+-        ((f1_sq * p1 - f2_sq * p2) / (f1_sq - f2_sq), true)
+-    } else {
+-        (p1_opt?, false)
++        ((f1_sq * p1 - f2_sq * p2) / (f1_sq - f2_sq), true, 0)
++    } else if let Some(p1) = p1_opt {
++        (p1, false, 1)
++    } else if let Some(p2) = p2_opt {
++        let band = match sat_obs.sat.constellation {
++            Constellation::Galileo => 7,
++            Constellation::Beidou => 7,
++            _ => 2,
++        };
++        (p2, false, band)
++    } else {
++        return None;
+     };
+ 
+     Some(SppMeasurement {
+@@ -161,6 +170,7 @@ fn build_single_measurement(
+         time: epoch_time,
+         eph: eph.clone(),
+         is_iono_free,
++        freq_band,
+     })
+ }
+ 
+@@ -183,7 +193,9 @@ fn compute_sat_state(m: &SppMeasurement, receiver_cdt: f64) -> (Coordinate, f64)
+     let t_tx_sat_gps = GpsTime::new(m.time.week, t_tx_sat);
+ 
+     let (_, _, sat_clk_err_rough, _) = if m.is_iono_free {
+         m.eph.position_iono_free(t_tx_sat_gps)
++    } else if m.freq_band == 7 {
++        m.eph.position_e5b(t_tx_sat_gps)
+     } else {
+         m.eph.position(t_tx_sat_gps)
+     };
+@@ -192,7 +204,9 @@ fn compute_sat_state(m: &SppMeasurement, receiver_cdt: f64) -> (Coordinate, f64)
+     let t_tx_true_gps = GpsTime::new(m.time.week, t_tx_true);
+ 
+     let (sat_pos, _, sat_clk_err, _) = if m.is_iono_free {
+         m.eph.position_iono_free(t_tx_true_gps)
++    } else if m.freq_band == 7 {
++        m.eph.position_e5b(t_tx_true_gps)
+     } else {
+         m.eph.position(t_tx_true_gps)
+     };
+@@ -825,6 +839,7 @@ mod tests {
+                 delta_n: 0.0, omega0: 0.0, omega_dot: 0.0, i0: 0.95, idot: 0.0, omega: 0.0, tgd: 0.0, iode: 1, iodc: 1,
+             }),
+             is_iono_free: false,
++            freq_band: 1,
+         };
+         let res = spp_wnlls_step(&[m1], &mut state, &config);
+         assert_eq!(res, Err(SppError::NotEnoughMeasurements));
+@@ -1191,6 +1206,7 @@ mod tests {
+                 i0: 0.95, idot: 0.0, omega: 0.0, tgd: 0.0, iode: 1, iodc: 1,
+             }),
+             is_iono_free: false,
++            freq_band: 1,
+         };
+         let (cols, clk) = find_clock_cols(&[m1]);
+         assert_eq!(cols, 4);
+@@ -1216,10 +1232,10 @@ mod tests {
+         };
+ 
+         let measurements = vec![
+-            SppMeasurement { constellation: Constellation::Gps, raw_pr: 20000000.0, snr: 45.0, doppler: 0.0, time: t, eph: eph_base(), is_iono_free: false },
+-            SppMeasurement { constellation: Constellation::Galileo, raw_pr: 20000000.0, snr: 45.0, doppler: 0.0, time: t, eph: eph_base(), is_iono_free: false },
+-            SppMeasurement { constellation: Constellation::Beidou, raw_pr: 20000000.0, snr: 45.0, doppler: 0.0, time: t, eph: eph_base(), is_iono_free: false },
+-            SppMeasurement { constellation: Constellation::Glonass, raw_pr: 20000000.0, snr: 45.0, doppler: 0.0, time: t, eph: eph_base(), is_iono_free: false },
++            SppMeasurement { constellation: Constellation::Gps, raw_pr: 20000000.0, snr: 45.0, doppler: 0.0, time: t, eph: eph_base(), is_iono_free: false, freq_band: 1 },
++            SppMeasurement { constellation: Constellation::Galileo, raw_pr: 20000000.0, snr: 45.0, doppler: 0.0, time: t, eph: eph_base(), is_iono_free: false, freq_band: 1 },
++            SppMeasurement { constellation: Constellation::Beidou, raw_pr: 20000000.0, snr: 45.0, doppler: 0.0, time: t, eph: eph_base(), is_iono_free: false, freq_band: 1 },
++            SppMeasurement { constellation: Constellation::Glonass, raw_pr: 20000000.0, snr: 45.0, doppler: 0.0, time: t, eph: eph_base(), is_iono_free: false, freq_band: 1 },
+         ];
+         let (cols, clk) = find_clock_cols(&measurements);
+         assert_eq!(cols, 7); // 3 (pos) + 4 (clocks)
+@@ -1235,6 +1251,7 @@ mod tests {
+                 time: t,
+                 eph: eph.clone(),
+                 is_iono_free: false,
++                freq_band: 1,
+             })
+             .collect();
+ 
+diff --git a/crates/gneiss-rtk/src/engine/spp_tight.rs b/crates/gneiss-rtk/src/engine/spp_tight.rs
+index ad28b9c..9cbfa12 100644
+--- a/crates/gneiss-rtk/src/engine/spp_tight.rs
++++ b/crates/gneiss-rtk/src/engine/spp_tight.rs
+@@ -211,11 +211,19 @@ fn process_measurement(ctx: &EkfContext, m: &SppMeasurement, target: &mut Matrix
+     let t_rcv_true = m.time.tow - cdt_rx / SPEED_OF_LIGHT_M_S;
+     let t_tx_nom =
+         gneiss_core::time::GpsTime::new(m.time.week, t_rcv_true - m.raw_pr / SPEED_OF_LIGHT_M_S);
+-    let (_, _, dt_s, _) = m.eph.position(t_tx_nom);
++    let (_, _, dt_s, _) = if m.freq_band == 7 {
++        m.eph.position_e5b(t_tx_nom)
++    } else {
++        m.eph.position(t_tx_nom)
++    };
+     let t_tx_true = gneiss_core::time::GpsTime::new(
+         m.time.week,
+         t_rcv_true - m.raw_pr / SPEED_OF_LIGHT_M_S - dt_s,
+     );
+-    let (sat_pos_raw, sat_vel_raw, sat_clk, sat_drift) = m.eph.position(t_tx_true);
++    let (sat_pos_raw, sat_vel_raw, sat_clk, sat_drift) = if m.freq_band == 7 {
++        m.eph.position_e5b(t_tx_true)
++    } else {
++        m.eph.position(t_tx_true)
++    };
+ 
+     let sat_ecef = compute_sagnac_correction(sat_pos_raw, m.raw_pr - cdt_rx);
+     let sat_vel = compute_sagnac_velocity_correction(sat_vel_raw, m.raw_pr - cdt_rx);
+@@ -1112,6 +1120,7 @@ mod tests {
+             time: GpsTime::new(2000, 0.0),
+             eph: eph.clone(),
+             is_iono_free: false,
++            freq_band: 1,
+         };
+ 
+         // Set up matrix target with one row
+@@ -1205,6 +1214,7 @@ mod tests {
+             time: GpsTime::new(2000, 0.0),
+             eph: eph.clone(),
+             is_iono_free: false,
++            freq_band: 1,
+         };
+ 
+         // Set up matrix target with one row

@@ -1531,6 +1531,7 @@ mod mutant_killer_tests {
     use crate::engine::processed_sat::ProcessedSat;
     use gneiss_core::coords::{Coordinate, Datum, Frame};
     use gneiss_core::obs::SatObs;
+    use gneiss_core::imu::ImuMeasurement;
     use gneiss_core::sat::{Constellation, SatelliteId};
     use gneiss_core::time::GpsTime;
     use nalgebra::{DMatrix, DVector, Vector3};
@@ -2498,5 +2499,639 @@ mod mutant_killer_tests {
         assert!((meas[0].res - 5.0).abs() < 1e-6);
         // var_pr = 1.0 * 1.0 / 1.0 * 9.0 = 9.0 (iono-free amplifies noise)
         assert!((meas[0].raw_var - 9.0).abs() < 1e-6);
+    }
+
+    // ========== build_imu_preint_factor ==========
+
+    #[test]
+    fn test_build_imu_preint_factor_construction() {
+        let preint = crate::estimators::factor_graph::imu_factors::ImuPreintegration::new();
+        let mut last = dummy_rtk_state();
+        last.position.vector = Vector3::new(6378137.0, 0.0, 0.0);
+        last.velocity = Vector3::new(1.0, 2.0, 3.0);
+        last.attitude =
+            nalgebra::UnitQuaternion::from_scaled_axis(Vector3::new(0.1, 0.2, 0.3));
+        last.accel_bias = Vector3::new(0.01, 0.02, 0.03);
+        last.gyro_bias = Vector3::new(0.001, 0.002, 0.003);
+        let x_i = DVector::from_fn(30, |i, _| (i as f64) * 10.0);
+
+        let factor = PppInsIteratedEkf::build_imu_preint_factor(preint, &last, &x_i);
+
+        let grav_mag = factor.gravity.norm();
+        assert!(grav_mag > 9.0 && grav_mag < 10.0);
+
+        assert_eq!(factor.nominal_p_i, last.position.vector);
+        assert_eq!(factor.nominal_v_i, last.velocity);
+        assert_eq!(factor.nominal_q_i, last.attitude);
+        assert_eq!(factor.nominal_ba_i, last.accel_bias);
+        assert_eq!(factor.nominal_bg_i, last.gyro_bias);
+
+        assert_eq!(factor.nominal_p_j, Vector3::new(x_i[0], x_i[1], x_i[2]));
+        assert_eq!(factor.nominal_v_j, Vector3::new(x_i[3], x_i[4], x_i[5]));
+
+        let expected_q =
+            nalgebra::UnitQuaternion::from_scaled_axis(Vector3::new(x_i[6], x_i[7], x_i[8]));
+        assert!(
+            (factor.nominal_q_j.scaled_axis() - expected_q.scaled_axis()).norm() < 1e-10
+        );
+        assert_eq!(factor.nominal_ba_j, Vector3::new(x_i[9], x_i[10], x_i[11]));
+        assert_eq!(
+            factor.nominal_bg_j,
+            Vector3::new(x_i[12], x_i[13], x_i[14])
+        );
+
+        assert_eq!(factor.idx_p_i, 0);
+        assert_eq!(factor.idx_v_i, 3);
+        assert_eq!(factor.idx_q_i, 6);
+        assert_eq!(factor.idx_ba_i, 9);
+        assert_eq!(factor.idx_bg_i, 12);
+        assert_eq!(factor.idx_p_j, 15);
+        assert_eq!(factor.idx_v_j, 18);
+        assert_eq!(factor.idx_q_j, 21);
+        assert_eq!(factor.idx_ba_j, 24);
+        assert_eq!(factor.idx_bg_j, 27);
+    }
+
+    #[test]
+    fn test_build_imu_preint_factor_zero_rotation() {
+        let preint = crate::estimators::factor_graph::imu_factors::ImuPreintegration::new();
+        let last = dummy_rtk_state();
+        let x_i = DVector::zeros(30);
+
+        let factor = PppInsIteratedEkf::build_imu_preint_factor(preint, &last, &x_i);
+
+        assert!(factor.nominal_q_j.angle() < 1e-10);
+    }
+
+    // ========== accumulate_single_imu_factor ==========
+
+    #[test]
+    fn test_accumulate_single_imu_factor_updates_htwh_and_htwr() {
+        let factor = crate::estimators::factor_graph::imu_factors::ImuPreintegrationFactor {
+            preint: crate::estimators::factor_graph::imu_factors::ImuPreintegration::new(),
+            gravity: Vector3::new(0.0, 0.0, -9.80665),
+            nominal_p_i: Vector3::zeros(),
+            nominal_v_i: Vector3::zeros(),
+            nominal_q_i: nalgebra::UnitQuaternion::identity(),
+            nominal_ba_i: Vector3::zeros(),
+            nominal_bg_i: Vector3::zeros(),
+            nominal_p_j: Vector3::zeros(),
+            nominal_v_j: Vector3::zeros(),
+            nominal_q_j: nalgebra::UnitQuaternion::identity(),
+            nominal_ba_j: Vector3::zeros(),
+            nominal_bg_j: Vector3::zeros(),
+            idx_p_i: 0,
+            idx_v_i: 3,
+            idx_q_i: 6,
+            idx_ba_i: 9,
+            idx_bg_i: 12,
+            idx_p_j: 15,
+            idx_v_j: 18,
+            idx_q_j: 21,
+            idx_ba_j: 24,
+            idx_bg_j: 27,
+        };
+        let state_size = 30;
+        let mut htwh = DMatrix::zeros(state_size, state_size);
+        let mut htwr = DVector::zeros(state_size);
+
+        PppInsIteratedEkf::accumulate_single_imu_factor(
+            &factor,
+            state_size,
+            &mut htwh,
+            Some(&mut htwr),
+        );
+
+        assert!(htwh.iter().any(|x| x.abs() > 1e-10));
+        // htwh should be symmetric (information matrix contribution)
+        for i in 0..state_size {
+            for j in 0..state_size {
+                assert!(
+                    (htwh[(i, j)] - htwh[(j, i)]).abs() < 1e-8,
+                    "htwh asymmetry at ({}, {}): {} vs {}",
+                    i,
+                    j,
+                    htwh[(i, j)],
+                    htwh[(j, i)]
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_accumulate_single_imu_factor_no_htwr() {
+        let mut preint = crate::estimators::factor_graph::imu_factors::ImuPreintegration::new();
+        preint.dt = 0.1;
+        preint.dv = Vector3::new(1.0, 0.0, 0.0);
+        let factor = crate::estimators::factor_graph::imu_factors::ImuPreintegrationFactor {
+            preint,
+            gravity: Vector3::new(0.0, 0.0, -9.80665),
+            nominal_p_i: Vector3::zeros(),
+            nominal_v_i: Vector3::zeros(),
+            nominal_q_i: nalgebra::UnitQuaternion::identity(),
+            nominal_ba_i: Vector3::zeros(),
+            nominal_bg_i: Vector3::zeros(),
+            nominal_p_j: Vector3::zeros(),
+            nominal_v_j: Vector3::zeros(),
+            nominal_q_j: nalgebra::UnitQuaternion::identity(),
+            nominal_ba_j: Vector3::zeros(),
+            nominal_bg_j: Vector3::zeros(),
+            idx_p_i: 0,
+            idx_v_i: 3,
+            idx_q_i: 6,
+            idx_ba_i: 9,
+            idx_bg_i: 12,
+            idx_p_j: 15,
+            idx_v_j: 18,
+            idx_q_j: 21,
+            idx_ba_j: 24,
+            idx_bg_j: 27,
+        };
+        let state_size = 30;
+        let mut htwh = DMatrix::zeros(state_size, state_size);
+
+        PppInsIteratedEkf::accumulate_single_imu_factor(&factor, state_size, &mut htwh, None);
+
+        assert!(htwh.iter().any(|x| x.abs() > 1e-10));
+    }
+
+    // ========== accumulate_imu_factors early returns ==========
+
+    #[test]
+    fn test_accumulate_imu_factors_no_last_state() {
+        let fg = PppInsIteratedEkf::default();
+        let x_i = DVector::zeros(30);
+        let mut htwh = DMatrix::zeros(30, 30);
+
+        fg.accumulate_imu_factors(&x_i, &[], None, &mut htwh, None);
+        assert!(htwh.iter().all(|x| x.abs() < 1e-10));
+    }
+
+    #[test]
+    fn test_accumulate_imu_factors_empty_history() {
+        let fg = PppInsIteratedEkf::default();
+        let x_i = DVector::zeros(30);
+        let last = dummy_rtk_state();
+        let mut htwh = DMatrix::zeros(30, 30);
+
+        fg.accumulate_imu_factors(&x_i, &[], Some(&last), &mut htwh, None);
+        assert!(htwh.iter().all(|x| x.abs() < 1e-10));
+    }
+
+    #[test]
+    fn test_accumulate_imu_factors_empty_imu_buf() {
+        let fg = PppInsIteratedEkf::default();
+        let x_i = DVector::zeros(30);
+        let last = dummy_rtk_state();
+        let mut htwh = DMatrix::zeros(30, 30);
+        let imu_history: Vec<Vec<ImuMeasurement>> = vec![vec![]];
+
+        fg.accumulate_imu_factors(&x_i, &imu_history, Some(&last), &mut htwh, None);
+        assert!(htwh.iter().all(|x| x.abs() < 1e-10));
+    }
+
+    #[test]
+    fn test_accumulate_imu_factors_not_aligned() {
+        let fg = PppInsIteratedEkf::default();
+        let x_i = DVector::zeros(30);
+        let mut last = dummy_rtk_state();
+        last.ins_aligned = false;
+        let mut htwh = DMatrix::zeros(30, 30);
+        let imu_history: Vec<Vec<ImuMeasurement>> = vec![vec![ImuMeasurement::new(
+            0,
+            Vector3::zeros(),
+            Vector3::zeros(),
+        )]];
+
+        fg.accumulate_imu_factors(&x_i, &imu_history, Some(&last), &mut htwh, None);
+        assert!(htwh.iter().all(|x| x.abs() < 1e-10));
+    }
+
+    // ========== push_uduc_pr_measurements ==========
+
+    #[test]
+    fn test_push_uduc_pr_measurements_both_freq() {
+        let fg = PppInsIteratedEkf::default();
+        let mut meas = Vec::new();
+        let sat_id = SatelliteId {
+            constellation: Constellation::Gps,
+            prn: 1,
+        };
+        let obs = SatObs {
+            sat: sat_id,
+            observations: vec![],
+        };
+        let x_i = DVector::zeros(CORE_STATE_SIZE + 2);
+        let los = Vector3::new(0.0, 0.0, 1.0);
+        let h_pos_att = nalgebra::Matrix3::identity();
+
+        let sat = ProcessedSat {
+            sat_obs: &obs,
+            dt_sat_m: 0.0,
+            p1: 50.0,
+            p2: Some(100.0),
+            cp1: None,
+            cp2: None,
+            is_iono_free: false,
+            osb_p1: 0.0,
+            osb_p2: 0.0,
+            osb_cp1: 0.0,
+            osb_cp2: 0.0,
+            los: Vector3::zeros(),
+            dist: 0.0,
+            el: std::f64::consts::PI / 2.0,
+            snr: 45.0,
+            doppler: 0.0,
+            lam1: 0.19,
+            lam2: 0.24,
+            tropo_dry: 0.0,
+            map_wet: 1.0,
+            iono_delay: 5.0,
+            f1: 1575.42e6,
+            f2: 1227.60e6,
+            sat_pos_rot: Vector3::zeros(),
+            sat_vel: Vector3::zeros(),
+            sat_clock_drift: 0.0,
+            rcv_pos_ecef: Vector3::zeros(),
+            pcv_correction: 0.0,
+        };
+
+        let gamma_val =
+            (1575.42e6 * 1575.42e6) / (1227.60e6 * 1227.60e6);
+        let idx = UducIndices {
+            i1_idx: Some(CORE_STATE_SIZE),
+            n1_idx: None,
+            n2_idx: None,
+            i1: 2.0,
+            n1: 0.0,
+            n2: 0.0,
+            gamma: gamma_val,
+        };
+
+        fg.push_uduc_pr_measurements(&mut meas, &sat, &x_i, &los, 40.0, &h_pos_att, &idx);
+
+        assert_eq!(meas.len(), 2);
+        assert!((meas[0].res - 8.0).abs() < 1e-6);
+        assert!(!meas[0].is_phase);
+        let expected_p2 = 100.0 - (40.0 + gamma_val * 2.0);
+        assert!((meas[1].res - expected_p2).abs() < 1e-6);
+        assert!(!meas[1].is_phase);
+        assert!(meas[1].raw_var > meas[0].raw_var);
+    }
+
+    // ========== push_uduc_cp_measurements ==========
+
+    #[test]
+    fn test_push_uduc_cp_measurements_with_windup() {
+        let fg = PppInsIteratedEkf::default();
+        let mut meas = Vec::new();
+        let mut state = dummy_rtk_state();
+        let sat_id = SatelliteId {
+            constellation: Constellation::Gps,
+            prn: 1,
+        };
+        state.windup.insert(sat_id, 0.5);
+
+        let obs = SatObs {
+            sat: sat_id,
+            observations: vec![],
+        };
+        let x_i = DVector::zeros(CORE_STATE_SIZE + 3);
+        let los = Vector3::new(0.0, 0.0, 1.0);
+        let h_pos_att = nalgebra::Matrix3::identity();
+
+        let sat = ProcessedSat {
+            sat_obs: &obs,
+            dt_sat_m: 0.0,
+            p1: 0.0,
+            p2: None,
+            cp1: Some(100.0),
+            cp2: Some(200.0),
+            is_iono_free: false,
+            osb_p1: 0.0,
+            osb_p2: 0.0,
+            osb_cp1: 0.0,
+            osb_cp2: 0.0,
+            los: Vector3::zeros(),
+            dist: 0.0,
+            el: std::f64::consts::PI / 2.0,
+            snr: 45.0,
+            doppler: 0.0,
+            lam1: 0.19,
+            lam2: 0.24,
+            tropo_dry: 0.0,
+            map_wet: 1.0,
+            iono_delay: 5.0,
+            f1: 1575.42e6,
+            f2: 1227.60e6,
+            sat_pos_rot: Vector3::zeros(),
+            sat_vel: Vector3::zeros(),
+            sat_clock_drift: 0.0,
+            rcv_pos_ecef: Vector3::zeros(),
+            pcv_correction: 0.0,
+        };
+
+        let gamma_val =
+            (1575.42e6 * 1575.42e6) / (1227.60e6 * 1227.60e6);
+        let idx = UducIndices {
+            i1_idx: Some(CORE_STATE_SIZE),
+            n1_idx: Some(CORE_STATE_SIZE + 1),
+            n2_idx: Some(CORE_STATE_SIZE + 2),
+            i1: 2.0,
+            n1: 10.0,
+            n2: 20.0,
+            gamma: gamma_val,
+        };
+
+        fg.push_uduc_cp_measurements(
+            &mut meas, &state, &sat, &x_i, &los, 40.0, &h_pos_att, &idx,
+        );
+
+        assert_eq!(meas.len(), 2);
+        let expected_l1 = (100.0 - 0.5) * 0.19 - (40.0 - idx.i1 + idx.n1);
+        assert!((meas[0].res - expected_l1).abs() < 1e-6);
+        assert!(meas[0].is_phase);
+        let expected_l2 = (200.0 - 0.5) * 0.24 - (40.0 - gamma_val * idx.i1 + idx.n2);
+        assert!((meas[1].res - expected_l2).abs() < 1e-6);
+        assert!(meas[1].is_phase);
+    }
+
+    // ========== push_uduc_measurements (wrapper) ==========
+
+    #[test]
+    fn test_push_uduc_measurements_produces_four() {
+        let fg = PppInsIteratedEkf::default();
+        let mut meas = Vec::new();
+        let mut state = dummy_rtk_state();
+        let sat_id = SatelliteId {
+            constellation: Constellation::Gps,
+            prn: 1,
+        };
+        state.ambiguity_keys.push((sat_id, 1));
+        state.ambiguity_keys.push((sat_id, 2));
+        state.ambiguity_keys.push((sat_id, 3));
+        state.ambiguities = vec![10.0, 20.0, 2.0];
+        state.windup.insert(sat_id, 0.5);
+
+        let obs = SatObs {
+            sat: sat_id,
+            observations: vec![],
+        };
+        let x_i = DVector::from_fn(CORE_STATE_SIZE + 3, |i, _| (i as f64) * 0.1);
+        let los = Vector3::new(0.0, 0.0, 1.0);
+        let h_pos_att = nalgebra::Matrix3::identity();
+
+        let sat = ProcessedSat {
+            sat_obs: &obs,
+            dt_sat_m: 0.0,
+            p1: 50.0,
+            p2: Some(100.0),
+            cp1: Some(100.0),
+            cp2: Some(200.0),
+            is_iono_free: false,
+            osb_p1: 0.0,
+            osb_p2: 0.0,
+            osb_cp1: 0.0,
+            osb_cp2: 0.0,
+            los: Vector3::zeros(),
+            dist: 0.0,
+            el: std::f64::consts::PI / 2.0,
+            snr: 45.0,
+            doppler: 0.0,
+            lam1: 0.19,
+            lam2: 0.24,
+            tropo_dry: 0.0,
+            map_wet: 1.0,
+            iono_delay: 5.0,
+            f1: 1575.42e6,
+            f2: 1227.60e6,
+            sat_pos_rot: Vector3::zeros(),
+            sat_vel: Vector3::zeros(),
+            sat_clock_drift: 0.0,
+            rcv_pos_ecef: Vector3::zeros(),
+            pcv_correction: 0.0,
+        };
+
+        fg.push_uduc_measurements(
+            &mut meas, &state, &sat, &x_i, 0, &los, 40.0, 0.0, 0.0, &h_pos_att,
+        );
+
+        assert_eq!(meas.len(), 4);
+        assert!(!meas[0].is_phase);
+        assert!(!meas[1].is_phase);
+        assert!(meas[2].is_phase);
+        assert!(meas[3].is_phase);
+    }
+
+    // ========== push_doppler_measurement ==========
+
+    #[test]
+    fn test_push_doppler_measurement_basic() {
+        let fg = PppInsIteratedEkf::default();
+        let mut meas = Vec::new();
+        let sat_id = SatelliteId {
+            constellation: Constellation::Gps,
+            prn: 1,
+        };
+        let obs = SatObs {
+            sat: sat_id,
+            observations: vec![],
+        };
+        let x_i = DVector::zeros(CORE_STATE_SIZE);
+        let los = Vector3::new(1.0, 0.0, 0.0);
+        let h_vel_att = nalgebra::Matrix3::zeros();
+        let h_vel_bg = nalgebra::Matrix3::zeros();
+        let v_apc = Vector3::zeros();
+
+        let sat = ProcessedSat {
+            sat_obs: &obs,
+            dt_sat_m: 0.0,
+            p1: 0.0,
+            p2: None,
+            cp1: None,
+            cp2: None,
+            is_iono_free: false,
+            osb_p1: 0.0,
+            osb_p2: 0.0,
+            osb_cp1: 0.0,
+            osb_cp2: 0.0,
+            los: Vector3::zeros(),
+            dist: 0.0,
+            el: std::f64::consts::PI / 2.0,
+            snr: 45.0,
+            doppler: 1000.0,
+            lam1: 0.19,
+            lam2: 0.24,
+            tropo_dry: 0.0,
+            map_wet: 0.0,
+            iono_delay: 0.0,
+            f1: 1.0,
+            f2: 1.0,
+            sat_pos_rot: Vector3::zeros(),
+            sat_vel: Vector3::new(100.0, 0.0, 0.0),
+            sat_clock_drift: 0.0,
+            rcv_pos_ecef: Vector3::zeros(),
+            pcv_correction: 0.0,
+        };
+
+        fg.push_doppler_measurement(&mut meas, &sat, &x_i, &los, &h_vel_att, &h_vel_bg, &v_apc);
+
+        assert_eq!(meas.len(), 1);
+        assert!(!meas[0].is_phase);
+        assert!((meas[0].res - (-290.0)).abs() < 1e-6);
+        assert!((meas[0].raw_var - 0.25).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_push_doppler_measurement_with_drift() {
+        let fg = PppInsIteratedEkf::default();
+        let mut meas = Vec::new();
+        let sat_id = SatelliteId {
+            constellation: Constellation::Gps,
+            prn: 1,
+        };
+        let obs = SatObs {
+            sat: sat_id,
+            observations: vec![],
+        };
+        let mut x_i = DVector::zeros(CORE_STATE_SIZE + 1);
+        x_i[19] = 2.0;
+        let los = Vector3::new(1.0, 0.0, 0.0);
+        let h_vel_att = nalgebra::Matrix3::zeros();
+        let h_vel_bg = nalgebra::Matrix3::zeros();
+        let v_apc = Vector3::new(5.0, 0.0, 0.0);
+
+        let sat = ProcessedSat {
+            sat_obs: &obs,
+            dt_sat_m: 0.0,
+            p1: 0.0,
+            p2: None,
+            cp1: None,
+            cp2: None,
+            is_iono_free: false,
+            osb_p1: 0.0,
+            osb_p2: 0.0,
+            osb_cp1: 0.0,
+            osb_cp2: 0.0,
+            los: Vector3::zeros(),
+            dist: 0.0,
+            el: std::f64::consts::PI / 2.0,
+            snr: 45.0,
+            doppler: 1000.0,
+            lam1: 0.19,
+            lam2: 0.24,
+            tropo_dry: 0.0,
+            map_wet: 0.0,
+            iono_delay: 0.0,
+            f1: 1.0,
+            f2: 1.0,
+            sat_pos_rot: Vector3::zeros(),
+            sat_vel: Vector3::new(100.0, 0.0, 0.0),
+            sat_clock_drift: 1.0,
+            rcv_pos_ecef: Vector3::zeros(),
+            pcv_correction: 0.0,
+        };
+
+        fg.push_doppler_measurement(&mut meas, &sat, &x_i, &los, &h_vel_att, &h_vel_bg, &v_apc);
+
+        assert_eq!(meas.len(), 1);
+        let expected_rr = 100.0 - 5.0 + 2.0 - 1.0 * SPEED_OF_LIGHT;
+        let expected_res = -190.0 - expected_rr;
+        assert!((meas[0].res - expected_res).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_push_doppler_measurement_small_state() {
+        let fg = PppInsIteratedEkf::default();
+        let mut meas = Vec::new();
+        let sat_id = SatelliteId {
+            constellation: Constellation::Gps,
+            prn: 1,
+        };
+        let obs = SatObs {
+            sat: sat_id,
+            observations: vec![],
+        };
+        let x_i = DVector::zeros(15);
+        let los = Vector3::new(1.0, 0.0, 0.0);
+        let h_vel_att = nalgebra::Matrix3::zeros();
+        let h_vel_bg = nalgebra::Matrix3::zeros();
+        let v_apc = Vector3::zeros();
+
+        let sat = ProcessedSat {
+            sat_obs: &obs,
+            dt_sat_m: 0.0,
+            p1: 0.0,
+            p2: None,
+            cp1: None,
+            cp2: None,
+            is_iono_free: false,
+            osb_p1: 0.0,
+            osb_p2: 0.0,
+            osb_cp1: 0.0,
+            osb_cp2: 0.0,
+            los: Vector3::zeros(),
+            dist: 0.0,
+            el: std::f64::consts::PI / 2.0,
+            snr: 45.0,
+            doppler: 1000.0,
+            lam1: 0.19,
+            lam2: 0.24,
+            tropo_dry: 0.0,
+            map_wet: 0.0,
+            iono_delay: 0.0,
+            f1: 1.0,
+            f2: 1.0,
+            sat_pos_rot: Vector3::zeros(),
+            sat_vel: Vector3::new(100.0, 0.0, 0.0),
+            sat_clock_drift: 0.0,
+            rcv_pos_ecef: Vector3::zeros(),
+            pcv_correction: 0.0,
+        };
+
+        fg.push_doppler_measurement(&mut meas, &sat, &x_i, &los, &h_vel_att, &h_vel_bg, &v_apc);
+
+        assert_eq!(meas.len(), 1);
+        assert!(meas[0].h_row.iter().all(|x| x.abs() < 1e-10));
+    }
+
+    // ========== accumulate_imu_factors happy path ==========
+
+    #[test]
+    fn test_accumulate_imu_factors_happy_path() {
+        let fg = PppInsIteratedEkf::default();
+        let x_i = DVector::zeros(30);
+        let mut last = dummy_rtk_state();
+        last.ins_aligned = true;
+        last.position.vector = Vector3::new(100.0, 200.0, 300.0);
+        let mut htwh = DMatrix::zeros(30, 30);
+        let mut htwr = DVector::zeros(30);
+        let imu_history: Vec<Vec<ImuMeasurement>> = vec![vec![
+            ImuMeasurement::new(0, Vector3::new(0.0, 0.0, 9.8), Vector3::zeros()),
+            ImuMeasurement::new(10, Vector3::new(0.0, 0.0, 9.8), Vector3::zeros()),
+        ]];
+
+        fg.accumulate_imu_factors(
+            &x_i,
+            &imu_history,
+            Some(&last),
+            &mut htwh,
+            Some(&mut htwr),
+        );
+
+        assert!(htwh.iter().any(|x| x.abs() > 1e-10));
+        for i in 0..30 {
+            for j in 0..30 {
+                assert!(
+                    (htwh[(i, j)] - htwh[(j, i)]).abs() < 1e-8,
+                    "htwh asymmetry at ({}, {}): {} vs {}",
+                    i,
+                    j,
+                    htwh[(i, j)],
+                    htwh[(j, i)]
+                );
+            }
+        }
+        assert!(htwr.iter().any(|x| x.abs() > 1e-10));
     }
 }

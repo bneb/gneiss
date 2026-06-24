@@ -1157,4 +1157,193 @@ mod tests {
         let result = engine.apply_observations(&rover, Some(&base), spp_pos, None);
         assert!(result.is_ok());
     }
+
+    #[test]
+    fn test_process_rtk_basic_flow() {
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        engine.config.base_position = Some([100.0, 200.0, 300.0]);
+
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(
+            Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+        engine.current_state = Some(RtkState::new(time, pos, 1.0));
+
+        let rover = EpochObs { time, satellites: vec![] };
+        let base = EpochObs { time, satellites: vec![] };
+
+        let result = engine.process_rtk(&rover, Some(&base));
+        assert!(result.is_ok(), "process_rtk should succeed: {:?}", result.err());
+        assert_eq!(engine.state_history.len(), 1);
+        assert_eq!(engine.obs_history.len(), 1);
+    }
+
+    #[test]
+    fn test_process_rtk_update_rejection() {
+        let config = EngineConfig::default();
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 1.0);
+        let base_coord = Coordinate::new(
+            Vector3::new(100.0, 200.0, 300.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+
+        let ctx = RtkUpdateContext {
+            config: &config,
+            ephemerides: &[],
+            imu_history: &[],
+            rover_obs: &EpochObs { time, satellites: vec![] },
+            base_obs: &EpochObs { time, satellites: vec![] },
+            matched_obs: &[],
+            base_coord: &base_coord,
+            spp_pos: None,
+            spp_state_ref: None,
+            gnn_variances: std::collections::HashMap::new(),
+        };
+
+        let mut tracker = crate::engine::adaptive::InnovationTracker::new();
+        let rejections_before = state.consecutive_rejections;
+        process_rtk_update::<TightCoupling>(&mut state, &mut tracker, &ctx);
+
+        assert!(
+            state.consecutive_rejections > rejections_before,
+            "Rejections should increase after empty update"
+        );
+    }
+
+    #[test]
+    fn test_execute_ekf_update_rejection_nan() {
+        let config = EngineConfig::default();
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 1.0);
+        let base_coord = Coordinate::new(
+            Vector3::new(100.0, 200.0, 300.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+
+        let ctx = RtkUpdateContext {
+            config: &config,
+            ephemerides: &[],
+            imu_history: &[],
+            rover_obs: &EpochObs { time, satellites: vec![] },
+            base_obs: &EpochObs { time, satellites: vec![] },
+            matched_obs: &[],
+            base_coord: &base_coord,
+            spp_pos: None,
+            spp_state_ref: None,
+            gnn_variances: std::collections::HashMap::new(),
+        };
+
+        let core_size = CORE_STATE_SIZE;
+        let m = crate::engine::measurement::EkfMeasurementMatrices {
+            z: DVector::from_vec(vec![f64::NAN]),
+            h: DMatrix::zeros(1, core_size),
+            r: DMatrix::identity(1, 1),
+            mt: vec![(make_test_sat(1), 0, 1575.42e6)],
+        };
+
+        let rejections_before = state.consecutive_rejections;
+        execute_ekf_update::<TightCoupling>(&mut state, &ctx, &m);
+
+        assert!(
+            state.consecutive_rejections > rejections_before,
+            "NaN innovation should trigger rejection"
+        );
+    }
+
+    #[test]
+    fn test_execute_ekf_update_acceptance() {
+        let config = EngineConfig::default();
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 1.0);
+        state.covariance = DMatrix::identity(CORE_STATE_SIZE, CORE_STATE_SIZE);
+        state.consecutive_rejections = 3;
+
+        let base_coord = Coordinate::new(
+            Vector3::new(100.0, 200.0, 300.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+
+        let ctx = RtkUpdateContext {
+            config: &config,
+            ephemerides: &[],
+            imu_history: &[],
+            rover_obs: &EpochObs { time, satellites: vec![] },
+            base_obs: &EpochObs { time, satellites: vec![] },
+            matched_obs: &[],
+            base_coord: &base_coord,
+            spp_pos: None,
+            spp_state_ref: None,
+            gnn_variances: std::collections::HashMap::new(),
+        };
+
+        let core_size = CORE_STATE_SIZE;
+        let mut h = DMatrix::zeros(1, core_size);
+        h[(0, 0)] = 1.0;
+        let m = crate::engine::measurement::EkfMeasurementMatrices {
+            z: DVector::from_vec(vec![0.0]),
+            h,
+            r: DMatrix::identity(1, 1),
+            mt: vec![(make_test_sat(1), 0, 1575.42e6)],
+        };
+
+        execute_ekf_update::<TightCoupling>(&mut state, &ctx, &m);
+
+        assert_eq!(state.consecutive_rejections, 0, "Acceptance should clear rejections");
+    }
+
+    #[test]
+    fn test_build_measurement_environment_with_imu_and_lever_arm() {
+        let mut config = EngineConfig::default();
+        config.imu_to_antenna_lever_arm = [0.5, 0.0, 1.0];
+
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(
+            Vector3::new(100.0, 200.0, 300.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+        let mut state = RtkState::new(time, pos, 1.0);
+        state.ins_aligned = true;
+        state.gyro_bias = Vector3::new(0.01, 0.02, 0.03);
+
+        let base_coord = Coordinate::new(
+            Vector3::new(110.0, 210.0, 310.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+
+        let imu_history = vec![vec![gneiss_core::imu::ImuMeasurement {
+            accel: Vector3::new(0.0, 0.0, 9.8),
+            gyro: Vector3::new(0.1, 0.0, 0.0),
+            time_tag: 0,
+            temperature: None,
+        }]];
+
+        let env = build_measurement_environment(
+            &config,
+            &imu_history,
+            &state,
+            &[],
+            &base_coord,
+            time,
+        );
+
+        assert!(env.lever_arm.norm() > 0.0, "Lever arm should be non-zero when ins_aligned");
+        assert!(env.omega_b.norm() > 0.0, "Omega should be non-zero with gyro data and bias");
+    }
 }

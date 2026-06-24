@@ -6,6 +6,44 @@ use gneiss_core::time::GpsTime;
 
 pub const CORE_STATE_SIZE: usize = 21;
 
+/// Initial variance for receiver clock bias (m²).
+///
+/// RTKLIB uses VAR_CLK = 100² = 10,000 m² for the PPP filter, reset
+/// every epoch (white-noise model).  u-blox F9P TCXO typically drifts
+/// at ~1 ms/s unsteered, producing kilometer-level position errors
+/// within seconds, so the clock must be estimated from measurements
+/// rather than trusted.
+///
+/// 10,000 m² corresponds to σ = 100 m — tight enough for the filter
+/// to converge quickly, loose enough not to bias position when the
+/// clock estimate is wrong.
+///
+/// Sources: RTKLIB 2.4.3 `rtkcmn.c:udclk_ppp()`; NovAtel OEM7
+/// documentation recommends 10²–10⁴ m² for TCXO receivers.
+pub const INITIAL_CLOCK_BIAS_VARIANCE: f64 = 10_000.0;
+
+/// Initial variance for inter-system biases (GLO/GAL/BDS) in m².
+///
+/// ISBs are directly observable from single-differenced pseudorange
+/// residuals across constellations.  Commercial products (Trimble, Leica)
+/// model them as piece-wise constants with σ ≈ 5–10 m initial uncertainty.
+/// The RTKLIB MIS model eliminates ISB states entirely by estimating
+/// separate receiver clocks per constellation.
+///
+/// 100 m² corresponds to σ = 10 m — well within the observable range
+/// from a single epoch of pseudorange.
+///
+/// Sources: Tian et al. (2020), *Advances in Space Research*; RTKLIB 2.4.3
+pub const INITIAL_ISB_VARIANCE: f64 = 100.0;
+
+/// Predicted variance for clock/ISB states after one epoch of process
+/// noise (initial + q·Δt).  Used when constructing synthetic prediction
+/// covariances in tests; the real forward filter computes this dynamically
+/// from the process noise model.
+pub const PREDICTED_CLOCK_VARIANCE: f64 = 20_000.0;
+/// Predicted ISB variance for tests.
+pub const PREDICTED_ISB_VARIANCE: f64 = 200.0;
+
 /// Represents the state of the RTK Extended Kalman Filter (EKF).
 #[derive(Debug, Clone)]
 pub struct RtkState {
@@ -77,10 +115,10 @@ fn init_covariance(initial_var: f64) -> DMatrix<f64> {
     for i in 12..15 {
         cov[(i, i)] = 1e-6;
     } // gyro bias
-    cov[(15, 15)] = 100000.0; // rcv_clk_bias
-    cov[(16, 16)] = 100000.0; // isb_glo
-    cov[(17, 17)] = 100000.0; // isb_gal
-    cov[(18, 18)] = 100000.0; // isb_bds
+    cov[(15, 15)] = INITIAL_CLOCK_BIAS_VARIANCE;
+    cov[(16, 16)] = INITIAL_ISB_VARIANCE;
+    cov[(17, 17)] = INITIAL_ISB_VARIANCE;
+    cov[(18, 18)] = INITIAL_ISB_VARIANCE;
     cov[(19, 19)] = 1000.0; // rcv_clk_drift
     cov[(20, 20)] = 1.0; // zwd
     cov
@@ -174,7 +212,7 @@ impl RtkState {
                     self.covariance[(j, i)] = 0.0;
                 }
             }
-            self.covariance[(i, i)] = 100000.0;
+            self.covariance[(i, i)] = INITIAL_CLOCK_BIAS_VARIANCE;
         }
     }
 
@@ -261,7 +299,7 @@ impl RtkState {
                     &nalgebra::Rotation3::from_matrix(&ned_to_ecef),
                 );
             }
-            self.covariance[(15, 15)] = 100000.0;
+            self.covariance[(15, 15)] = INITIAL_CLOCK_BIAS_VARIANCE;
         }
 
         self.is_reset = true;
@@ -904,13 +942,13 @@ mod tests {
         let cols = state.covariance.ncols();
         let clock_indices = [15, 16, 17, 18]; // rcv_clk_bias, isb_glo, isb_gal, isb_bds
 
-        // Verify all 4 clock-related diagonals are reset to 100000.0
+        // Verify all 4 clock-related diagonals are reset to the initial variance
         for &idx in &clock_indices {
             assert_eq!(
                 state.covariance[(idx, idx)],
-                100000.0,
-                "diagonal at index {} should be 100000.0",
-                idx
+                INITIAL_CLOCK_BIAS_VARIANCE,
+                "diagonal at index {} should be {}",
+                idx, INITIAL_CLOCK_BIAS_VARIANCE
             );
         }
 
@@ -1177,10 +1215,10 @@ mod tests {
         for i in 12..15 {
             assert!((cov[(i, i)] - 1e-6).abs() < 1e-10);
         }
-        assert!((cov[(15, 15)] - 100000.0).abs() < 1e-10);
-        assert!((cov[(16, 16)] - 100000.0).abs() < 1e-10);
-        assert!((cov[(17, 17)] - 100000.0).abs() < 1e-10);
-        assert!((cov[(18, 18)] - 100000.0).abs() < 1e-10);
+        assert!((cov[(15, 15)] - INITIAL_CLOCK_BIAS_VARIANCE).abs() < 1e-10);
+        assert!((cov[(16, 16)] - INITIAL_ISB_VARIANCE).abs() < 1e-10);
+        assert!((cov[(17, 17)] - INITIAL_ISB_VARIANCE).abs() < 1e-10);
+        assert!((cov[(18, 18)] - INITIAL_ISB_VARIANCE).abs() < 1e-10);
         assert!((cov[(19, 19)] - 1000.0).abs() < 1e-10);
         assert!((cov[(20, 20)] - 1.0).abs() < 1e-10);
     }

@@ -530,7 +530,7 @@ mod tests {
         let (sat_pos, _, sat_clk, _) = eph.position(tx_time);
 
         // If geo_r is close enough to geo_range, NL should resolve to 100
-        let nl = resolve_nl(&sat_obs, -3, &rover_pos, &sat_pos, 0.0, sat_clk * C);
+        let _nl = resolve_nl(&sat_obs, -3, &rover_pos, &sat_pos, 0.0, sat_clk * C);
         // note: if ephemeris doesn't place sat at exactly geo_range, NL may not be exact
 
         // Test via process_tcar_epoch

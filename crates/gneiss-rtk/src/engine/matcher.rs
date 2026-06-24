@@ -557,4 +557,184 @@ mod tests {
         assert_eq!(result[0].0.pr_l1, 100.0);
         assert_eq!(result[0].1.pr_l1, 101.0);
     }
+
+    #[test]
+    fn test_some_ephemeris_present_some_missing() {
+        let rover = make_epoch(
+            vec![
+                make_full_obs(sat(Constellation::Gps, 1), 100.0, 200.0, 300.0, 400.0),
+                make_full_obs(sat(Constellation::Gps, 2), 500.0, 600.0, 700.0, 800.0),
+            ],
+            2000,
+            1.0,
+        );
+        let base = make_epoch(
+            vec![
+                make_full_obs(sat(Constellation::Gps, 1), 101.0, 201.0, 301.0, 401.0),
+                make_full_obs(sat(Constellation::Gps, 2), 501.0, 601.0, 701.0, 801.0),
+            ],
+            2000,
+            1.0,
+        );
+        // Only provide ephemeris for G01, NOT for G02
+        let ephemerides = vec![make_ephemeris(sat(Constellation::Gps, 1))];
+
+        let result = match_observations(&rover, &base, &ephemerides);
+        // G02 should be skipped because no ephemeris exists for it
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].0.sat, sat(Constellation::Gps, 1));
+        assert_eq!(result[0].0.pr_l1, 100.0);
+        assert_eq!(result[0].1.pr_l1, 101.0);
+    }
+
+    #[test]
+    fn test_base_missing_cp_l1() {
+        let rover_sat = SatObs {
+            sat: sat(Constellation::Gps, 1),
+            observations: vec![
+                make_obs(100.0, ObsType::Pseudorange, 1, None),
+                make_obs(300.0, ObsType::CarrierPhase, 1, None),
+                make_obs(50.0, ObsType::Doppler, 1, None),
+                make_obs(45.0, ObsType::Snr, 1, None),
+            ],
+        };
+        // Base has PR L1 and doppler, but NO CP at all (neither L1 nor L2)
+        let base_sat = SatObs {
+            sat: sat(Constellation::Gps, 1),
+            observations: vec![
+                make_obs(101.0, ObsType::Pseudorange, 1, None),
+                make_obs(51.0, ObsType::Doppler, 1, None),
+            ],
+        };
+        let rover = make_epoch(vec![rover_sat], 2000, 1.0);
+        let base = make_epoch(vec![base_sat], 2000, 1.0);
+        let ephemerides = vec![make_ephemeris(sat(Constellation::Gps, 1))];
+
+        let result = match_observations(&rover, &base, &ephemerides);
+        assert_eq!(result.len(), 1);
+        // Rover CP L1 is present
+        assert_eq!(result[0].0.cp_l1, Some(300.0));
+        // Base CP L1 is None (no CP L1 observation on base)
+        assert_eq!(result[0].1.cp_l1, None);
+        // Base CP L2 is also None (no CP L2 provided either)
+        assert_eq!(result[0].1.cp_l2, None);
+        // Doppler values correct on both sides
+        assert_eq!(result[0].0.doppler, 50.0);
+        assert_eq!(result[0].1.doppler, 51.0);
+    }
+
+    #[test]
+    fn test_rover_missing_cp_l1() {
+        let rover_sat = SatObs {
+            sat: sat(Constellation::Gps, 1),
+            observations: vec![
+                make_obs(100.0, ObsType::Pseudorange, 1, None),
+                make_obs(200.0, ObsType::Pseudorange, 2, None),
+                // No CP L1, no CP L2, no doppler
+            ],
+        };
+        let base = make_epoch(
+            vec![make_full_obs(sat(Constellation::Gps, 1), 101.0, 201.0, 301.0, 401.0)],
+            2000,
+            1.0,
+        );
+        let rover = make_epoch(vec![rover_sat], 2000, 1.0);
+        let ephemerides = vec![make_ephemeris(sat(Constellation::Gps, 1))];
+
+        let result = match_observations(&rover, &base, &ephemerides);
+        assert_eq!(result.len(), 1);
+        // PR L1 matched
+        assert_eq!(result[0].0.pr_l1, 100.0);
+        // Rover CP L1 is None
+        assert_eq!(result[0].0.cp_l1, None);
+        // Rover CP L2 is None
+        assert_eq!(result[0].0.cp_l2, None);
+        // Rover doppler defaults to 0.0 (no doppler observation)
+        assert_eq!(result[0].0.doppler, 0.0);
+    }
+
+    #[test]
+    fn test_rover_no_snr_uses_default() {
+        let rover_sat = SatObs {
+            sat: sat(Constellation::Gps, 1),
+            observations: vec![
+                make_obs(100.0, ObsType::Pseudorange, 1, None),
+                make_obs(300.0, ObsType::CarrierPhase, 1, None),
+                make_obs(50.0, ObsType::Doppler, 1, None),
+                // No SNR observation
+            ],
+        };
+        let base_sat = SatObs {
+            sat: sat(Constellation::Gps, 1),
+            observations: vec![
+                make_obs(101.0, ObsType::Pseudorange, 1, None),
+                make_obs(301.0, ObsType::CarrierPhase, 1, None),
+            ],
+        };
+        let rover = make_epoch(vec![rover_sat], 2000, 1.0);
+        let base = make_epoch(vec![base_sat], 2000, 1.0);
+        let ephemerides = vec![make_ephemeris(sat(Constellation::Gps, 1))];
+
+        let result = match_observations(&rover, &base, &ephemerides);
+        assert_eq!(result.len(), 1);
+        // Rover SNR defaults to 25.0 when missing
+        assert_eq!(result[0].0.snr, 25.0);
+        // Base SNR is always set to 25.0 in match_observations
+        assert_eq!(result[0].1.snr, 25.0);
+    }
+
+    #[test]
+    fn test_rover_lock_time_captured() {
+        let rover_sat = SatObs {
+            sat: sat(Constellation::Gps, 1),
+            observations: vec![
+                make_obs(100.0, ObsType::Pseudorange, 1, None),
+                make_obs(300.0, ObsType::CarrierPhase, 1, Some(42)),
+            ],
+        };
+        let base_sat = SatObs {
+            sat: sat(Constellation::Gps, 1),
+            observations: vec![
+                make_obs(101.0, ObsType::Pseudorange, 1, None),
+                make_obs(301.0, ObsType::CarrierPhase, 1, None),
+            ],
+        };
+        let rover = make_epoch(vec![rover_sat], 2000, 1.0);
+        let base = make_epoch(vec![base_sat], 2000, 1.0);
+        let ephemerides = vec![make_ephemeris(sat(Constellation::Gps, 1))];
+
+        let result = match_observations(&rover, &base, &ephemerides);
+        assert_eq!(result.len(), 1);
+        // Rover locktime comes from CP L1 observation
+        assert_eq!(result[0].0.locktime, Some(42));
+        // Base locktime is hardcoded to Some(1000) in match_observations
+        assert_eq!(result[0].1.locktime, Some(1000));
+    }
+
+    #[test]
+    fn test_rover_no_doppler_uses_default_zero() {
+        let rover_sat = SatObs {
+            sat: sat(Constellation::Gps, 1),
+            observations: vec![
+                make_obs(100.0, ObsType::Pseudorange, 1, None),
+                make_obs(300.0, ObsType::CarrierPhase, 1, None),
+                // No doppler observation
+            ],
+        };
+        let base_sat = SatObs {
+            sat: sat(Constellation::Gps, 1),
+            observations: vec![
+                make_obs(101.0, ObsType::Pseudorange, 1, None),
+                make_obs(301.0, ObsType::CarrierPhase, 1, None),
+            ],
+        };
+        let rover = make_epoch(vec![rover_sat], 2000, 1.0);
+        let base = make_epoch(vec![base_sat], 2000, 1.0);
+        let ephemerides = vec![make_ephemeris(sat(Constellation::Gps, 1))];
+
+        let result = match_observations(&rover, &base, &ephemerides);
+        assert_eq!(result.len(), 1);
+        // Rover doppler defaults to 0.0 when no doppler observation exists
+        assert_eq!(result[0].0.doppler, 0.0);
+    }
 }

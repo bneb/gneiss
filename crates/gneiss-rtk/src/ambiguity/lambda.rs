@@ -566,7 +566,7 @@ mod tests {
         // When delta < d[k_u] - 1e-6, swap should be triggered
         let n = 2;
         let mut l = DMatrix::identity(n, n);
-        let mut d = DVector::from_vec(vec![10.0, 1.0]);
+        let _d = DVector::from_vec(vec![10.0, 1.0]);
         l[(1, 0)] = 3.0;
         // delta = d[1] + l[1,0]^2 * d[0] = 1.0 + 9 * 10 = 91.0
         // 91.0 < 10.0 - 1e-6? No, that's false.

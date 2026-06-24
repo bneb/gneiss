@@ -127,6 +127,14 @@ pub fn compute_transition_matrix(
     }
 
     if crate::filter::CORE_STATE_SIZE > 15 {
+        // Random-walk clock model (φ[15,15]=1.0) preserves temporal
+        // correlation of clock bias across epochs.  With process_noise_cb
+        // tuned to the receiver oscillator (~1 m²/s for TCXO), the clock
+        // covariance stays small after convergence, anchoring absolute
+        // position through clock-position measurement coupling.
+        // RTKLIB uses white-noise clock PER EPOCH, but that works because
+        // their SPP re-anchors position each epoch — Gneiss carries
+        // position forward, so the clock must carry forward too.
         phi[(15, 19)] = dt;
     }
 
@@ -181,9 +189,9 @@ pub fn compute_process_noise(
 
     if crate::filter::CORE_STATE_SIZE > 15 {
         q[(15, 15)] = config.process_noise_cb * dt_abs;
-        q[(16, 16)] = 0.001 * dt_abs; // isb_glo noise
-        q[(17, 17)] = 0.001 * dt_abs; // isb_gal noise
-        q[(18, 18)] = 0.001 * dt_abs; // isb_bds noise
+        q[(16, 16)] = config.process_noise_isb * dt_abs;
+        q[(17, 17)] = config.process_noise_isb * dt_abs;
+        q[(18, 18)] = config.process_noise_isb * dt_abs;
         q[(19, 19)] = config.process_noise_cd * dt_abs;
         q[(20, 20)] = config.process_noise_zwd * dt_abs;
     }
@@ -316,9 +324,17 @@ pub fn gravity_wgs84(pos_ecef: Vector3<f64>) -> Vector3<f64> {
 }
 #[cfg(test)]
 mod tests {
+    use crate::engine::predictor::{
+        compute_process_noise, compute_transition_matrix, gravity_wgs84,
+        integrate_imu_mechanization, predict,
+    };
     use crate::engine::{DynamicsModel, EngineConfig};
     use crate::filter::RtkState;
-    use nalgebra::DMatrix;
+    use gneiss_core::coords::{Coordinate, Datum, Frame};
+    use gneiss_core::imu::ImuMeasurement;
+    use gneiss_core::sat::{Constellation, SatelliteId};
+    use gneiss_core::time::GpsTime;
+    use nalgebra::{DMatrix, UnitQuaternion, Vector3};
 
     #[test]
     fn test_predictor_indices() {
@@ -371,6 +387,7 @@ mod tests {
             ar_ffrt_prob: 0.001,
             process_noise_cb: 100.0,
             process_noise_cd: 10.0,
+            process_noise_isb: 0.1,
             process_noise_zwd: 1e-8,
             process_noise_iono: 1e-6,
             enable_gnn_raim: false,
@@ -384,7 +401,7 @@ mod tests {
 
         crate::engine::predictor::predict(&mut state, 1.0, &config, &[]);
 
-        // Check that clock bias is updated by drift
+        // Check that clock bias is updated by drift (nominal state update unchanged)
         assert_eq!(state.rcv_clk_bias, 102.0); // 100.0 + 2.0 * 1.0
 
         let x_pred = state.full_x_predict.as_ref().unwrap();
@@ -402,11 +419,386 @@ mod tests {
         assert_eq!(p_pred[(19, 19)], 10.0);
         // ZWD noise goes to 20
         assert_eq!(p_pred[(20, 20)], 1e-8);
-        // Clock bias noise goes to 15
+        // Clock bias: white-noise prediction (φ=0 so P_pred ≈ q + dt²·P_drift)
         assert!(p_pred[(15, 15)] >= 100.0);
-        // ISB noises go to 16, 17, 18
-        assert_eq!(p_pred[(16, 16)], 0.001);
-        assert_eq!(p_pred[(17, 17)], 0.001);
-        assert_eq!(p_pred[(18, 18)], 0.001);
+        // ISB noises: process_noise_isb * dt = 0.1
+        assert_eq!(p_pred[(16, 16)], 0.1);
+        assert_eq!(p_pred[(17, 17)], 0.1);
+        assert_eq!(p_pred[(18, 18)], 0.1);
+    }
+
+    fn default_config() -> EngineConfig {
+        EngineConfig {
+            mode: crate::engine::EngineMode::Ppp,
+            initial_position: None,
+            base_position: None,
+            base_datum_transform: None,
+            receiver_antenna_type: None,
+            imu_to_antenna_lever_arm: [0.0, 0.0, 0.0],
+            imu_mounting_angles: None,
+            imu_to_nhc_lever_arm: [0.0, 0.0, 0.0],
+            enable_nhc: false,
+            enable_backward_smoothing: false,
+            lambda_min_ratio: 3.0,
+            lambda_min_subset: 4,
+            enabled_constellations: None,
+            raim_pseudorange_outlier_m: 10.0,
+            chi_square_pr_threshold: 15.0,
+            chi_square_cp_threshold: 15.0,
+            phase_windup_enabled: true,
+            min_snr_dbhz: 0.0,
+            dynamics_model: DynamicsModel::Static,
+            doppler_slip_threshold_cycles: 5.0,
+            max_reject_count: 3,
+            max_base_age_s: 30.0,
+            spp_consistency_threshold_m: 10.0,
+            initial_ambiguity_variance: 100.0,
+            ar_min_epoch_count: 10,
+            ar_min_lock: 3,
+            ar_ffrt_prob: 0.001,
+            process_noise_cb: 100.0,
+            process_noise_cd: 10.0,
+            process_noise_isb: 0.1,
+            process_noise_zwd: 1e-8,
+            process_noise_iono: 1e-6,
+            enable_gnn_raim: false,
+            export_gnn_dataset_path: None,
+            process_noise_amb_float: 1e-4,
+            process_noise_amb_fixed: 1e-7,
+            uduc_ar: false,
+            tropo_mapping: gneiss_core::atmosphere::TropoMapping::default(),
+            tuning: crate::engine::config::EkfTuningConfig::default(),
+        }
+    }
+
+    #[test]
+    fn test_integrate_imu_mechanization_nonzero_angle() {
+        let time = GpsTime::new(2000, 0.0);
+        let pos = Coordinate::new(
+            Vector3::new(6378137.0, 0.0, 0.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+        let mut state = RtkState::new(time, pos, 10.0);
+        state.attitude = UnitQuaternion::identity();
+        state.velocity = Vector3::zeros();
+        state.gyro_bias = Vector3::new(0.05, 0.0, 0.0);
+
+        let imu_buffer = [ImuMeasurement {
+            time_tag: 0,
+            gyro: Vector3::new(0.1, 0.0, 0.0),
+            accel: Vector3::new(0.0, 0.0, 9.8),
+            temperature: None,
+        }];
+
+        integrate_imu_mechanization(&mut state, 1.0, &imu_buffer);
+
+        // Attitude changed from identity (rotation due to non-zero omega_b)
+        assert!(
+            (state.attitude.to_rotation_matrix().matrix() - nalgebra::Matrix3::identity())
+                .norm()
+                > 1e-6
+        );
+
+        // Velocity changed due to gravity + coriolis + centrifugal
+        assert!(state.velocity.norm() > 1e-6);
+
+        // Position changed due to velocity integration
+        assert!(
+            (state.position.vector - Vector3::new(6378137.0, 0.0, 0.0)).norm()
+                > 1e-6
+        );
+    }
+
+    #[test]
+    fn test_integrate_imu_mechanization_zero_angle() {
+        let time = GpsTime::new(2000, 0.0);
+        let pos = Coordinate::new(
+            Vector3::new(6378137.0, 0.0, 0.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+        let mut state = RtkState::new(time, pos, 10.0);
+        state.attitude = UnitQuaternion::identity();
+        state.velocity = Vector3::zeros();
+        // Set gyro_bias so that omega_b == omega_ie, making zeta = [0,0,0]
+        let omega_ie_z: f64 = 7.2921151467e-5;
+        state.gyro_bias = Vector3::new(0.1, 0.0, -omega_ie_z);
+
+        let imu_buffer = [ImuMeasurement {
+            time_tag: 0,
+            gyro: Vector3::new(0.1, 0.0, 0.0),
+            accel: Vector3::new(0.0, 0.0, 9.8),
+            temperature: None,
+        }];
+
+        integrate_imu_mechanization(&mut state, 1.0, &imu_buffer);
+
+        // Attitude remains identity (angle = 0, dq stays identity)
+        assert!(
+            (state.attitude.to_rotation_matrix().matrix() - nalgebra::Matrix3::identity())
+                .norm()
+                < 1e-10
+        );
+
+        // Velocity changed due to gravity
+        assert!(state.velocity.norm() > 1e-6);
+    }
+
+    #[test]
+    fn test_compute_transition_matrix_with_imu_buffer() {
+        let time = GpsTime::new(2000, 0.0);
+        let pos = Coordinate::new(
+            Vector3::new(6378137.0, 0.0, 0.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+        let mut state = RtkState::new(time, pos, 10.0);
+        state.velocity = Vector3::new(10.0, 5.0, 1.0);
+        state.accel_bias = Vector3::new(0.1, 0.2, 0.3);
+        state.gyro_bias = Vector3::new(0.01, 0.02, 0.03);
+        state.attitude = UnitQuaternion::from_axis_angle(&Vector3::z_axis(), 0.3);
+
+        let imu_buffer = [ImuMeasurement {
+            time_tag: 0,
+            gyro: Vector3::new(0.1, 0.0, 0.0),
+            accel: Vector3::new(0.0, 0.0, 9.8),
+            temperature: None,
+        }];
+
+        let phi = compute_transition_matrix(&state, 1.0, &imu_buffer);
+
+        assert_eq!(phi.nrows(), 21);
+        assert_eq!(phi.ncols(), 21);
+
+        // Position-velocity coupling (phi[i, 3+i] = dt)
+        assert!((phi[(0, 3)] - 1.0).abs() < 1e-12);
+        assert!((phi[(1, 4)] - 1.0).abs() < 1e-12);
+        assert!((phi[(2, 5)] - 1.0).abs() < 1e-12);
+
+        // Velocity-attitude coupling is populated (f_e is non-zero)
+        // Diagonal of skew-symmetric is zero, so check off-diagonal
+        assert!(phi[(3, 7)].abs() > 1e-10);
+        assert!(phi[(4, 6)].abs() > 1e-10);
+
+        // Velocity-accel_bias coupling is populated
+        assert!(phi[(3, 9)].abs() > 1e-10);
+
+        // Clock bias-drift coupling (CORE_STATE_SIZE=21 > 15)
+        assert!((phi[(15, 19)] - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn test_compute_transition_matrix_empty_imu() {
+        let time = GpsTime::new(2000, 0.0);
+        let pos = Coordinate::new(
+            Vector3::new(6378137.0, 0.0, 0.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+        let mut state = RtkState::new(time, pos, 10.0);
+        state.velocity = Vector3::new(10.0, 0.0, 0.0);
+
+        let phi = compute_transition_matrix(&state, 1.0, &[]);
+
+        assert_eq!(phi.nrows(), 21);
+        assert_eq!(phi.ncols(), 21);
+
+        // Position-velocity coupling
+        assert!((phi[(0, 3)] - 1.0).abs() < 1e-12);
+        assert!((phi[(1, 4)] - 1.0).abs() < 1e-12);
+        assert!((phi[(2, 5)] - 1.0).abs() < 1e-12);
+
+        // Velocity-attitude coupling is zero (IMU false path)
+        assert_eq!(phi[(3, 6)], 0.0);
+        assert_eq!(phi[(4, 7)], 0.0);
+        assert_eq!(phi[(5, 8)], 0.0);
+
+        // Clock bias-drift coupling (CORE_STATE_SIZE=21 > 15)
+        assert!((phi[(15, 19)] - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn test_compute_process_noise_various_dynamics_models() {
+        let models = [
+            (DynamicsModel::Static, 0.001),
+            (DynamicsModel::Pedestrian, 1.0),
+            (DynamicsModel::Marine, 2.0),
+            (DynamicsModel::Automotive, 10.0),
+            (DynamicsModel::Airborne, 50.0),
+        ];
+
+        for (model, q_acc) in models {
+            let config = EngineConfig {
+                dynamics_model: model,
+                ..default_config()
+            };
+            let q = compute_process_noise(1.0, &config, false, false, &[]);
+
+            // q_pos = q_acc * dt^3 / 3
+            let q_pos_expected = q_acc / 3.0;
+            assert!(
+                (q[(0, 0)] - q_pos_expected).abs() < 1e-12,
+                "Mismatch for {:?}: expected q[0,0] = {}, got {}",
+                model,
+                q_pos_expected,
+                q[(0, 0)]
+            );
+
+            // Position-velocity cross term: q_pos_vel = q_acc * dt^2 / 2
+            let q_pos_vel_expected = q_acc * 0.5;
+            assert!((q[(0, 3)] - q_pos_vel_expected).abs() < 1e-12);
+
+            // Velocity variance: q_vel = q_acc * dt
+            assert!((q[(3, 3)] - q_acc).abs() < 1e-12);
+
+            // Attitude variance set to 1e-7 * dt
+            assert!((q[(6, 6)] - 1e-7).abs() < 1e-15);
+        }
+    }
+
+    #[test]
+    fn test_compute_process_noise_imu_active() {
+        let config = default_config();
+        let q = compute_process_noise(1.0, &config, true, false, &[]);
+
+        let sigma_v = config.tuning.sigma_v;
+        let sigma_phi = config.tuning.sigma_phi;
+        let sigma_ab = config.tuning.sigma_ab;
+        let sigma_gb = config.tuning.sigma_gb;
+
+        // q_pos = sigma_v^2 * dt^3 / 3
+        let q_pos_expected = sigma_v * sigma_v / 3.0;
+        assert!((q[(0, 0)] - q_pos_expected).abs() < 1e-16);
+
+        // q_vel = sigma_v^2 * dt
+        let q_vel_expected = sigma_v * sigma_v;
+        assert!((q[(3, 3)] - q_vel_expected).abs() < 1e-16);
+
+        // q_att = sigma_phi^2 * dt
+        let q_att_expected = sigma_phi * sigma_phi;
+        assert!((q[(6, 6)] - q_att_expected).abs() < 1e-16);
+
+        // q_ab = sigma_ab^2 * dt
+        let q_ab_expected = sigma_ab * sigma_ab;
+        assert!((q[(9, 9)] - q_ab_expected).abs() < 1e-20);
+
+        // q_gb = sigma_gb^2 * dt
+        let q_gb_expected = sigma_gb * sigma_gb;
+        assert!((q[(12, 12)] - q_gb_expected).abs() < 1e-20);
+
+        // Clock and ISB entries (CORE_STATE_SIZE=21 > 15)
+        assert!((q[(15, 15)] - 100.0).abs() < 1e-10);
+        assert!((q[(16, 16)] - 0.1).abs() < 1e-15);
+        assert!((q[(17, 17)] - 0.1).abs() < 1e-15);
+        assert!((q[(18, 18)] - 0.1).abs() < 1e-15);
+        assert!((q[(19, 19)] - 10.0).abs() < 1e-10);
+        assert!((q[(20, 20)] - 1e-8).abs() < 1e-15);
+    }
+
+    #[test]
+    fn test_compute_process_noise_with_ambiguity_keys() {
+        let sat1 = SatelliteId {
+            constellation: Constellation::Gps,
+            prn: 1,
+        };
+        let keys = vec![(sat1, 0), (sat1, 3), (sat1, 1)];
+        let config = default_config();
+        let cs = crate::filter::CORE_STATE_SIZE;
+
+        // Test with is_fixed: false
+        let q_float = compute_process_noise(1.0, &config, false, false, &keys);
+        // key with .1 != 3 uses process_noise_amb_float
+        assert!((q_float[(cs, cs)] - config.process_noise_amb_float).abs() < 1e-16);
+        // key with .1 == 3 uses process_noise_iono
+        assert!((q_float[(cs + 1, cs + 1)] - config.process_noise_iono).abs() < 1e-16);
+        // key with .1 != 3 uses process_noise_amb_float
+        assert!((q_float[(cs + 2, cs + 2)] - config.process_noise_amb_float).abs() < 1e-16);
+
+        // Test with is_fixed: true
+        let q_fixed = compute_process_noise(1.0, &config, false, true, &keys);
+        // keys with .1 != 3 use process_noise_amb_fixed
+        assert!((q_fixed[(cs, cs)] - config.process_noise_amb_fixed).abs() < 1e-16);
+        // key with .1 == 3 still uses process_noise_iono
+        assert!((q_fixed[(cs + 1, cs + 1)] - config.process_noise_iono).abs() < 1e-16);
+        assert!((q_fixed[(cs + 2, cs + 2)] - config.process_noise_amb_fixed).abs() < 1e-16);
+    }
+
+    #[test]
+    fn test_gravity_wgs84_at_origin() {
+        // Vector with norm < 1.0 returns zeros
+        let g0 = gravity_wgs84(Vector3::new(0.5, 0.5, 0.5));
+        assert_eq!(g0, Vector3::zeros());
+
+        // At Earth's surface on equator
+        let g_eq = gravity_wgs84(Vector3::new(6378137.0, 0.0, 0.0));
+        assert!(g_eq.x < 0.0); // gravity points toward center of Earth
+        assert!(g_eq.y.abs() < 1e-10);
+        assert!(g_eq.z.abs() < 1e-10);
+        let mag = g_eq.norm();
+        assert!((mag - 9.8).abs() < 0.1, "gravity magnitude {} not near 9.8", mag);
+    }
+
+    #[test]
+    fn test_predict_with_imu_data() {
+        let time = GpsTime::new(2000, 0.0);
+        let pos = Coordinate::new(
+            Vector3::new(6378137.0, 0.0, 0.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+        let mut state = RtkState::new(time, pos, 10.0);
+        state.velocity = Vector3::new(10.0, 0.0, 0.0);
+        state.attitude = UnitQuaternion::identity();
+
+        let imu_buffer = [
+            ImuMeasurement {
+                time_tag: 0,
+                gyro: Vector3::new(0.1, 0.0, 0.0),
+                accel: Vector3::new(0.0, 0.0, 9.8),
+                temperature: None,
+            },
+            ImuMeasurement {
+                time_tag: 1,
+                gyro: Vector3::new(0.1, 0.0, 0.0),
+                accel: Vector3::new(0.0, 0.0, 9.8),
+                temperature: None,
+            },
+        ];
+
+        let config = default_config();
+        let cov_before = state.covariance.clone();
+
+        predict(&mut state, 1.0, &config, &imu_buffer);
+
+        // Position changed (via integrate_imu_mechanization)
+        assert!(
+            (state.position.vector - Vector3::new(6378137.0, 0.0, 0.0)).norm()
+                > 1e-6
+        );
+
+        // Covariance updated (phi * P * phi^T + Q)
+        let cov_diff = (&state.covariance - &cov_before).norm();
+        assert!(cov_diff > 1e-10);
+
+        // full_x_predict was set
+        assert!(state.full_x_predict.is_some());
+
+        // full_p_predict was set
+        assert!(state.full_p_predict.is_some());
+
+        // predicted_position was set
+        assert!(state.predicted_position.is_some());
+
+        // predicted_velocity was set
+        assert!(state.predicted_velocity.is_some());
+
+        // predicted_attitude was set
+        assert!(state.predicted_attitude.is_some());
     }
 }

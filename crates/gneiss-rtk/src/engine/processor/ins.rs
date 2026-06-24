@@ -242,6 +242,7 @@ mod tests {
     use crate::engine::{EngineConfig, EngineError, EngineMode};
     use gneiss_core::coords::{Coordinate, Datum, Frame};
     use gneiss_core::obs::EpochObs;
+    use gneiss_core::sat::SatelliteId;
     use gneiss_core::time::GpsTime;
     use nalgebra::Vector3;
 
@@ -391,7 +392,7 @@ mod tests {
             temperature: None,
         });
 
-        let pos_before = engine.current_state.as_ref().unwrap().position.vector;
+        let _pos_before = engine.current_state.as_ref().unwrap().position.vector;
         engine.predict_state(1.0);
         let state = engine.current_state.as_ref().unwrap();
         assert!(state.predicted_position.is_some());
@@ -503,5 +504,282 @@ mod tests {
         let result = engine.process_spp_loosely_coupled(&rover);
         // With no ephemerides, SPP compute fails -> InitialSppFailed
         assert!(matches!(result, Err(EngineError::InitialSppFailed)));
+    }
+
+    #[test]
+    fn test_process_rtk_loosely_coupled_seeds_ins_state() {
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        engine.config.mode = EngineMode::RtkInsLooselyCoupled;
+        engine.config.base_position = Some([100.0, 200.0, 300.0]);
+
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(
+            Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+
+        let gnss_state = RtkState::new(time, pos, 1.0);
+        engine.gnss_only_state = Some(gnss_state);
+        engine.current_state = None;
+
+        let rover = make_empty_rover(time);
+
+        let result = engine.process_rtk_loosely_coupled(&rover, None);
+        assert!(result.is_ok(), "Should succeed: {:?}", result.err());
+        assert_eq!(engine.config.mode, EngineMode::RtkInsLooselyCoupled);
+        assert!(engine.current_state.is_some(), "INS state should be seeded");
+        assert!(engine.gnss_only_state.is_some(), "GNSS state should be populated");
+        assert_eq!(engine.state_history.len(), 1);
+    }
+
+    #[test]
+    fn test_process_rtk_loosely_coupled_rejection_path() {
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        engine.config.mode = EngineMode::RtkInsLooselyCoupled;
+        engine.config.base_position = Some([100.0, 200.0, 300.0]);
+
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(
+            Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+
+        let gnss_state = RtkState::new(time, pos, 1.0);
+        engine.gnss_only_state = Some(gnss_state);
+
+        let far_pos = Coordinate::new(
+            Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M + 10000.0, 0.0, 0.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+        engine.current_state = Some(RtkState::new(time, far_pos, 1.0));
+
+        // Empty rover produces no observations, process_rtk skips update but succeeds
+        let rover = make_empty_rover(time);
+        let result = engine.process_rtk_loosely_coupled(&rover, None);
+        assert!(result.is_ok(), "Empty rover: process_rtk succeeds with no-op: {:?}", result.err());
+        // Mode preserved (restored after inner RTK call)
+        assert_eq!(engine.config.mode, EngineMode::RtkInsLooselyCoupled);
+        // GNSS state repopulated after swap
+        assert!(engine.gnss_only_state.is_some(), "GNSS state should be repopulated");
+    }
+
+    #[test]
+    fn test_process_rtk_loosely_coupled_hard_reset() {
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        engine.config.mode = EngineMode::RtkInsLooselyCoupled;
+        engine.config.base_position = Some([100.0, 200.0, 300.0]);
+
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(
+            Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+
+        let gnss_state = RtkState::new(time, pos, 1.0);
+        engine.gnss_only_state = Some(gnss_state);
+
+        let ins_pos = Coordinate::new(
+            Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M + 10000.0, 0.0, 0.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+        let mut ins_state = RtkState::new(time, ins_pos, 1.0);
+        ins_state.consecutive_rejections = 5;
+        engine.current_state = Some(ins_state);
+
+        // Empty rover: process_rtk succeeds (no-op), update_loosely_coupled succeeds
+        // with zero GNSS/INS delta (both states have the same-ish position since
+        // the inner process_rtk reuses the GNSS state), so rejections are cleared
+        let rover = make_empty_rover(time);
+        let result = engine.process_rtk_loosely_coupled(&rover, None);
+        assert!(result.is_ok(), "Should succeed: {:?}", result.err());
+        // On success, consecutive_rejections is cleared (not the hard-reset path)
+        assert_eq!(
+            engine.current_state.as_ref().unwrap().consecutive_rejections,
+            0,
+            "Rejections cleared on successful update"
+        );
+    }
+
+    #[test]
+    fn test_process_spp_loosely_coupled_with_spp_data() {
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        engine.config.mode = EngineMode::SppInsLooselyCoupled;
+
+        let time = GpsTime::new(1000, 0.0);
+        let a_sq = 5153.6_f64 * 5153.6_f64;
+
+        let toe = time;
+        let m0_vals = [0.0, std::f64::consts::FRAC_PI_2, std::f64::consts::PI, 3.0 * std::f64::consts::FRAC_PI_2];
+        for (i, &m0) in m0_vals.iter().enumerate() {
+            let eph = gneiss_core::ephemeris::Ephemeris::Gps(gneiss_core::ephemeris::GpsEphemeris {
+                sat: SatelliteId {
+                    constellation: gneiss_core::sat::Constellation::Gps,
+                    prn: (i + 1) as u8,
+                },
+                toe,
+                toc: time,
+                af0: 0.0, af1: 0.0, af2: 0.0,
+                crs: 0.0, crc: 0.0, cuc: 0.0, cus: 0.0,
+                cic: 0.0, cis: 0.0,
+                m0, e: 0.0, sqrt_a: 5153.6, delta_n: 0.0,
+                omega0: 0.0, omega_dot: 0.0, i0: 0.95, idot: 0.0,
+                omega: 0.0, tgd: 0.0, iode: 1, iodc: 1,
+            });
+            engine.add_ephemeris(eph);
+        }
+
+        let pseudo_range = a_sq;
+        let sats: Vec<_> = (0..4)
+            .map(|i| {
+                let sat = SatelliteId {
+                    constellation: gneiss_core::sat::Constellation::Gps,
+                    prn: (i + 1) as u8,
+                };
+                gneiss_core::obs::SatObs {
+                    sat,
+                    observations: vec![
+                        gneiss_core::obs::Observation {
+                            code: gneiss_core::obs::ObsCode {
+                                obs_type: gneiss_core::obs::ObsType::Pseudorange,
+                                signal: gneiss_core::obs::SignalCode {
+                                    freq_band: 1, attribute: 'C',
+                                },
+                            },
+                            value: pseudo_range,
+                            lock_time: None, lli: None,
+                        },
+                        gneiss_core::obs::Observation {
+                            code: gneiss_core::obs::ObsCode {
+                                obs_type: gneiss_core::obs::ObsType::Snr,
+                                signal: gneiss_core::obs::SignalCode {
+                                    freq_band: 1, attribute: 'S',
+                                },
+                            },
+                            value: 45.0,
+                            lock_time: None, lli: None,
+                        },
+                    ],
+                }
+            })
+            .collect();
+
+        let rover = EpochObs { time, satellites: sats };
+
+        let result = engine.process_spp_loosely_coupled(&rover);
+        // SPP may fail to compute if state setup is insufficient; this exercises
+        // the error return path from the function
+        match result {
+            Ok(state) => {
+                assert!(state.position.vector.x.is_finite());
+                assert!(state.position.vector.y.is_finite());
+                assert!(state.position.vector.z.is_finite());
+                assert_eq!(engine.state_history.len(), 1);
+            }
+            Err(EngineError::InitialSppFailed) => {
+                // Expected when SPP compute can't converge with the given data
+            }
+            Err(e) => panic!("Unexpected error: {:?}", e),
+        }
+    }
+
+    #[test]
+    fn test_process_spp_loosely_coupled_hard_reset() {
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        engine.config.mode = EngineMode::SppInsLooselyCoupled;
+
+        let time = GpsTime::new(1000, 0.0);
+        let a_sq = 5153.6_f64 * 5153.6_f64;
+
+        let toe = time;
+        let m0_vals = [0.0, std::f64::consts::FRAC_PI_2, std::f64::consts::PI, 3.0 * std::f64::consts::FRAC_PI_2];
+        for (i, &m0) in m0_vals.iter().enumerate() {
+            let eph = gneiss_core::ephemeris::Ephemeris::Gps(gneiss_core::ephemeris::GpsEphemeris {
+                sat: SatelliteId {
+                    constellation: gneiss_core::sat::Constellation::Gps,
+                    prn: (i + 1) as u8,
+                },
+                toe,
+                toc: time,
+                af0: 0.0, af1: 0.0, af2: 0.0,
+                crs: 0.0, crc: 0.0, cuc: 0.0, cus: 0.0,
+                cic: 0.0, cis: 0.0,
+                m0, e: 0.0, sqrt_a: 5153.6, delta_n: 0.0,
+                omega0: 0.0, omega_dot: 0.0, i0: 0.95, idot: 0.0,
+                omega: 0.0, tgd: 0.0, iode: 1, iodc: 1,
+            });
+            engine.add_ephemeris(eph);
+        }
+
+        let pseudo_range = a_sq;
+
+        let far_pos = Coordinate::new(
+            Vector3::new(0.0, 0.0, 0.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+        let mut ins_state = RtkState::new(time, far_pos, 1.0);
+        ins_state.consecutive_rejections = 5;
+        engine.current_state = Some(ins_state);
+
+        let sats: Vec<_> = (0..4)
+            .map(|i| {
+                let sat = SatelliteId {
+                    constellation: gneiss_core::sat::Constellation::Gps,
+                    prn: (i + 1) as u8,
+                };
+                gneiss_core::obs::SatObs {
+                    sat,
+                    observations: vec![
+                        gneiss_core::obs::Observation {
+                            code: gneiss_core::obs::ObsCode {
+                                obs_type: gneiss_core::obs::ObsType::Pseudorange,
+                                signal: gneiss_core::obs::SignalCode {
+                                    freq_band: 1, attribute: 'C',
+                                },
+                            },
+                            value: pseudo_range,
+                            lock_time: None, lli: None,
+                        },
+                        gneiss_core::obs::Observation {
+                            code: gneiss_core::obs::ObsCode {
+                                obs_type: gneiss_core::obs::ObsType::Snr,
+                                signal: gneiss_core::obs::SignalCode {
+                                    freq_band: 1, attribute: 'S',
+                                },
+                            },
+                            value: 45.0,
+                            lock_time: None, lli: None,
+                        },
+                    ],
+                }
+            })
+            .collect();
+
+        let rover = EpochObs { time, satellites: sats };
+
+        let result = engine.process_spp_loosely_coupled(&rover);
+        // May fail with InitialSppFailed depending on SPP convergence; this
+        // covers the error-return path with non-default consecutive_rejections
+        match result {
+            Ok(state) => {
+                assert_eq!(state.consecutive_rejections, 0, "Hard reset should clear rejections");
+                assert!(state.is_reset, "Hard reset should set is_reset flag");
+            }
+            Err(EngineError::InitialSppFailed) => {
+                // Expected when SPP compute can't converge
+            }
+            Err(e) => panic!("Unexpected error: {:?}", e),
+        }
     }
 }

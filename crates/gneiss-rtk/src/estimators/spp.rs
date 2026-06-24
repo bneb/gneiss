@@ -685,7 +685,7 @@ fn apply_height_constraint(
 mod tests {
     use super::*;
     use gneiss_core::obs::ObsType;
-    use gneiss_core::sat::SatelliteId;
+    
 
     #[test]
     fn test_compute_spp() {
@@ -1298,5 +1298,477 @@ mod tests {
         // With 3 measurements and height constraint (4 total eqns, 4 unknowns),
         // identical geometry makes the matrix singular -> inversion fails
         assert!(res.is_err());
+    }
+
+    #[test]
+    fn test_compute_sat_state_iono_free_path() {
+        use gneiss_core::sat::{Constellation, SatelliteId};
+        use gneiss_core::time::GpsTime;
+
+        let t = GpsTime::new(2000, 100000.0);
+        let raw_pr = 20000000.0;
+
+        let m = SppMeasurement {
+            constellation: Constellation::Gps,
+            raw_pr,
+            snr: 45.0,
+            doppler: 0.0,
+            time: t,
+            eph: Ephemeris::Gps(gneiss_core::ephemeris::GpsEphemeris {
+                sat: SatelliteId { constellation: Constellation::Gps, prn: 1 },
+                toe: t,
+                toc: t,
+                af0: 1e-6, // positive clock bias so corrected_pr > raw_pr
+                af1: 0.0,
+                af2: 0.0,
+                crs: 0.0,
+                crc: 0.0,
+                cuc: 0.0,
+                cus: 0.0,
+                cic: 0.0,
+                cis: 0.0,
+                m0: 0.0,
+                e: 0.01,
+                sqrt_a: 5153.6,
+                delta_n: 0.0,
+                omega0: 0.0,
+                omega_dot: 0.0,
+                i0: 0.95,
+                idot: 0.0,
+                omega: 0.0,
+                tgd: 0.0,
+                iode: 1,
+                iodc: 1,
+            }),
+            is_iono_free: true,
+            freq_band: 1,
+        };
+
+        let (coord, corrected_pr) = compute_sat_state(&m, 0.0);
+        // Returns without panicking — coordinate should be non-zero
+        assert!(
+            coord.vector.norm() > 0.0,
+            "satellite position should be non-zero"
+        );
+        // sat_clk_err (positive due to af0 > 0) is *added* to raw_pr,
+        // so corrected_pr should be larger
+        assert!(
+            corrected_pr > raw_pr,
+            "corrected_pr ({}) should be > raw_pr ({})",
+            corrected_pr,
+            raw_pr
+        );
+    }
+
+    #[test]
+    fn test_compute_sat_state_freq_band_7() {
+        use gneiss_core::sat::{Constellation, SatelliteId};
+        use gneiss_core::time::GpsTime;
+
+        let t = GpsTime::new(2000, 100000.0);
+
+        let m = SppMeasurement {
+            constellation: Constellation::Gps,
+            raw_pr: 20000000.0,
+            snr: 45.0,
+            doppler: 0.0,
+            time: t,
+            eph: Ephemeris::Gps(gneiss_core::ephemeris::GpsEphemeris {
+                sat: SatelliteId { constellation: Constellation::Gps, prn: 1 },
+                toe: t,
+                toc: t,
+                af0: 0.0,
+                af1: 0.0,
+                af2: 0.0,
+                crs: 0.0,
+                crc: 0.0,
+                cuc: 0.0,
+                cus: 0.0,
+                cic: 0.0,
+                cis: 0.0,
+                m0: 0.0,
+                e: 0.01,
+                sqrt_a: 5153.6,
+                delta_n: 0.0,
+                omega0: 0.0,
+                omega_dot: 0.0,
+                i0: 0.95,
+                idot: 0.0,
+                omega: 0.0,
+                tgd: 0.0,
+                iode: 1,
+                iodc: 1,
+            }),
+            is_iono_free: false,
+            freq_band: 7,
+        };
+
+        // For GPS, freq_band 7 falls through to position() in compute_sat_state
+        let (coord, corrected_pr) = compute_sat_state(&m, 0.0);
+        assert!(
+            coord.vector.norm() > 0.0,
+            "satellite position should be non-zero"
+        );
+        assert!(
+            corrected_pr > 0.0,
+            "corrected_pr should be positive"
+        );
+    }
+
+    #[test]
+    fn test_spp_wnlls_step_poor_geometry() {
+        use gneiss_core::ephemeris::GpsEphemeris;
+        use gneiss_core::sat::{Constellation, SatelliteId};
+        use gneiss_core::time::GpsTime;
+
+        let t = GpsTime::new(2000, 100000.0);
+
+        let eph = Ephemeris::Gps(GpsEphemeris {
+            sat: SatelliteId { constellation: Constellation::Gps, prn: 1 },
+            toe: t, toc: t, af0: 0.0, af1: 0.0, af2: 0.0,
+            crs: 0.0, crc: 0.0, cuc: 0.0, cus: 0.0,
+            cic: 0.0, cis: 0.0, m0: 0.0, e: 0.01, sqrt_a: 5153.6,
+            delta_n: 0.0, omega0: 0.0, omega_dot: 0.0,
+            i0: 0.95, idot: 0.0, omega: 0.0, tgd: 0.0, iode: 1, iodc: 1,
+        });
+
+        // All 4 measurements use the SAME ephemeris and SAME raw_pr,
+        // producing IDENTICAL line-of-sight rows in the H matrix.
+        // This makes H^T W H exactly singular -> MatrixInversionFailed.
+        let ms: Vec<SppMeasurement> = (0..4)
+            .map(|_| SppMeasurement {
+                constellation: Constellation::Gps,
+                raw_pr: 20000000.0,
+                snr: 45.0,
+                doppler: 0.0,
+                time: t,
+                eph: eph.clone(),
+                is_iono_free: false,
+                freq_band: 1,
+            })
+            .collect();
+
+        let state = SppState::new(
+            Coordinate::new(
+                Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0),
+                Datum::WGS84,
+                Frame::ECEF,
+                t,
+            ),
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+        );
+
+        let config = SppConfig {
+            enable_sagnac: false,
+            enable_tropo: false,
+            enable_iono: false,
+            elevation_mask_rad: -core::f64::consts::PI,
+            geometry_variance_threshold: 0.0,
+            ..Default::default()
+        };
+
+        let res = spp_wnlls_step(&state, &ms, None, &config);
+        // With 4 identical measurements, the trace of (H^T W H)^{-1} is
+        // positive (~39) but well below the default threshold (10000).
+        // Set threshold=0 so that any positive trace triggers PoorGeometry.
+        assert!(res.is_err(), "expected poor-geometry error, got Ok");
+    }
+
+    #[test]
+    fn test_build_design_matrix_elevation_mask() {
+        use gneiss_core::sat::{Constellation, SatelliteId};
+        use gneiss_core::time::GpsTime;
+
+        let t = GpsTime::new(2000, 100000.0);
+
+        // 4 GPS measurements with identical ephemeris
+        let eph = Ephemeris::Gps(gneiss_core::ephemeris::GpsEphemeris {
+            sat: SatelliteId { constellation: Constellation::Gps, prn: 1 },
+            toe: t,
+            toc: t,
+            af0: 0.0,
+            af1: 0.0,
+            af2: 0.0,
+            crs: 0.0,
+            crc: 0.0,
+            cuc: 0.0,
+            cus: 0.0,
+            cic: 0.0,
+            cis: 0.0,
+            m0: 0.0,
+            e: 0.01,
+            sqrt_a: 5153.6,
+            delta_n: 0.0,
+            omega0: 0.0,
+            omega_dot: 0.0,
+            i0: 0.95,
+            idot: 0.0,
+            omega: 0.0,
+            tgd: 0.0,
+            iode: 1,
+            iodc: 1,
+        });
+
+        let ms: Vec<SppMeasurement> = (0..4)
+            .map(|i| SppMeasurement {
+                constellation: Constellation::Gps,
+                raw_pr: 20000000.0 + i as f64 * 1000000.0,
+                snr: 45.0,
+                doppler: 0.0,
+                time: t,
+                eph: eph.clone(),
+                is_iono_free: false,
+                freq_band: 1,
+            })
+            .collect();
+
+        let state = SppState::new(
+            Coordinate::new(
+                Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0),
+                Datum::WGS84,
+                Frame::ECEF,
+                t,
+            ),
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+        );
+
+        // elevation_mask_rad = 100.0 rad — all elevations are below this (max el ~ PI/2)
+        let config = SppConfig {
+            elevation_mask_rad: 100.0,
+            enable_sagnac: false,
+            enable_tropo: false,
+            enable_iono: false,
+            ..Default::default()
+        };
+
+        let result = build_design_matrix(&state, &ms, None, &config);
+
+        // build_design_matrix returns Ok even when all sats are masked
+        assert!(result.is_ok(), "build_design_matrix should return Ok");
+
+        let (h_matrix, w_matrix, _dz_vector, _cols, _clocks) = result.unwrap();
+
+        // Every measurement is masked — W diagonal should be MIN_WEIGHT
+        for i in 0..ms.len() {
+            assert!(
+                (w_matrix[(i, i)] - MIN_WEIGHT).abs() < 1e-15,
+                "w_matrix[{}] should be MIN_WEIGHT, got {}",
+                i,
+                w_matrix[(i, i)]
+            );
+        }
+
+        // H rows for real measurements should be zero (never set due to continue)
+        for i in 0..ms.len() {
+            assert_eq!(
+                h_matrix.row(i).iter().sum::<f64>(),
+                0.0,
+                "h_matrix row {} should be all zeros for masked sat",
+                i
+            );
+        }
+    }
+
+    #[test]
+    fn test_compute_atmospheric_delays_disabled_features() {
+        let rec_ecef =
+            Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0);
+        let rec_llh = ecef_to_llh(rec_ecef);
+        let config = SppConfig {
+            enable_tropo: false,
+            enable_iono: false,
+            ..Default::default()
+        };
+        let (tropo, iono) = compute_atmospheric_delays(
+            rec_ecef,
+            rec_llh,
+            0.0,
+            0.5,
+            GpsTime::new(0, 0.0),
+            None,
+            &config,
+        );
+        assert_eq!(tropo, 0.0, "tropo should be 0.0 when disabled");
+        assert_eq!(iono, 0.0, "iono should be 0.0 when disabled");
+    }
+
+    #[test]
+    fn test_compute_atmospheric_delays_min_earth_radius() {
+        // At exactly MIN_EARTH_RADIUS_M (6,000,000), the norm check returns (0, 0)
+        let rec_ecef = Vector3::new(MIN_EARTH_RADIUS_M, 0.0, 0.0);
+        let (tropo, iono) = compute_atmospheric_delays(
+            rec_ecef,
+            Vector3::zeros(),
+            0.0,
+            0.5,
+            GpsTime::new(0, 0.0),
+            None,
+            &SppConfig::default(),
+        );
+        assert_eq!(tropo, 0.0, "tropo should be 0.0 at MIN_EARTH_RADIUS boundary");
+        assert_eq!(iono, 0.0, "iono should be 0.0 at MIN_EARTH_RADIUS boundary");
+    }
+
+    #[test]
+    fn test_solve_spp_iteratively_convergence_failure() {
+        use gneiss_core::sat::{Constellation, SatelliteId};
+        use gneiss_core::time::GpsTime;
+
+        let t = GpsTime::new(2000, 100000.0);
+
+        let m = SppMeasurement {
+            constellation: Constellation::Gps,
+            raw_pr: 20000000.0,
+            snr: 45.0,
+            doppler: 0.0,
+            time: t,
+            eph: Ephemeris::Gps(gneiss_core::ephemeris::GpsEphemeris {
+                sat: SatelliteId { constellation: Constellation::Gps, prn: 1 },
+                toe: t,
+                toc: t,
+                af0: 0.0,
+                af1: 0.0,
+                af2: 0.0,
+                crs: 0.0,
+                crc: 0.0,
+                cuc: 0.0,
+                cus: 0.0,
+                cic: 0.0,
+                cis: 0.0,
+                m0: 0.0,
+                e: 0.01,
+                sqrt_a: 5153.6,
+                delta_n: 0.0,
+                omega0: 0.0,
+                omega_dot: 0.0,
+                i0: 0.95,
+                idot: 0.0,
+                omega: 0.0,
+                tgd: 0.0,
+                iode: 1,
+                iodc: 1,
+            }),
+            is_iono_free: false,
+            freq_band: 1,
+        };
+
+        let state = SppState::new(
+            Coordinate::new(
+                Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0),
+                Datum::WGS84,
+                Frame::ECEF,
+                t,
+            ),
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+        );
+
+        // max_iterations = 0 means the loop never executes -> ConvergenceFailed
+        let config = SppConfig {
+            max_iterations: 0,
+            enable_sagnac: false,
+            enable_tropo: false,
+            enable_iono: false,
+            elevation_mask_rad: -core::f64::consts::PI,
+            ..Default::default()
+        };
+
+        let res = solve_spp_iteratively(state, &[m], None, &config);
+        assert_eq!(
+            res.unwrap_err(),
+            SppError::ConvergenceFailed,
+            "with max_iterations=0, should immediately return ConvergenceFailed"
+        );
+    }
+
+    #[test]
+    fn test_seed_initial_state_with_previous() {
+        use gneiss_core::sat::{Constellation, SatelliteId};
+        use gneiss_core::time::GpsTime;
+
+        let t = GpsTime::new(2000, 100000.0);
+
+        // Previous state with a non-origin position
+        let prev_position = Coordinate::new(
+            Vector3::new(6000000.0, 6000000.0, 0.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            t,
+        );
+        let prev_state = SppState::new(prev_position, 100.0, 0.0, 0.0, 0.0);
+
+        let m = SppMeasurement {
+            constellation: Constellation::Gps,
+            raw_pr: 20000000.0,
+            snr: 45.0,
+            doppler: 0.0,
+            time: t,
+            eph: Ephemeris::Gps(gneiss_core::ephemeris::GpsEphemeris {
+                sat: SatelliteId { constellation: Constellation::Gps, prn: 1 },
+                toe: t,
+                toc: t,
+                af0: 0.0,
+                af1: 0.0,
+                af2: 0.0,
+                crs: 0.0,
+                crc: 0.0,
+                cuc: 0.0,
+                cus: 0.0,
+                cic: 0.0,
+                cis: 0.0,
+                m0: 0.0,
+                e: 0.01,
+                sqrt_a: 5153.6,
+                delta_n: 0.0,
+                omega0: 0.0,
+                omega_dot: 0.0,
+                i0: 0.95,
+                idot: 0.0,
+                omega: 0.0,
+                tgd: 0.0,
+                iode: 1,
+                iodc: 1,
+            }),
+            is_iono_free: false,
+            freq_band: 1,
+        };
+
+        let state = seed_initial_state(&[m], Some(&prev_state));
+
+        // Position should come from prev_state (not compute_seed_position)
+        assert_eq!(
+            state.position.vector.x, 6000000.0,
+            "seed x should match prev_state x"
+        );
+        assert_eq!(
+            state.position.vector.y, 6000000.0,
+            "seed y should match prev_state y"
+        );
+        assert_eq!(
+            state.position.vector.z, 0.0,
+            "seed z should match prev_state z"
+        );
+
+        // Clock biases should be computed from the measurement relative to the seed position.
+        // With the receiver at (6000000, 6000000, 0) and the satellite computed from the
+        // ephemeris, cdt = corrected_pr - geometric_range should be some non-zero value.
+        assert!(
+            state.cdt != 0.0,
+            "cdt should be non-zero (computed from measurement)"
+        );
+    }
+
+    #[test]
+    fn test_compute_atmospheric_delays_below_min_earth_radius_matches_constant() {
+        // Verify the test uses the same constant as production code
+        assert_eq!(MIN_EARTH_RADIUS_M, 6_000_000.0);
     }
 }

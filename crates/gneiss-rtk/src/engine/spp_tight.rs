@@ -1325,4 +1325,490 @@ mod tests {
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), EngineError::NoObservations));
     }
+
+    // -------------------------------------------------------------------------
+    // process_pseudorange with small state (n_cols = 6, skip attitude/clock)
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_process_pseudorange_small_state_skips_attitude_and_clock_jacobians() {
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        let pos = Coordinate::new(
+            Vector3::new(0.0, 0.0, 0.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            GpsTime::new(2000, 0.0),
+        );
+        let state = RtkState::new(GpsTime::new(2000, 0.0), pos, 1.0);
+        engine.current_state = Some(state.clone());
+        let ctx = EkfContext {
+            pos_apc: Vector3::new(0.0, 0.0, 0.0),
+            v_apc: Vector3::zeros(),
+            r_b_e: nalgebra::Rotation3::identity(),
+            lever_arm: Vector3::zeros(),
+            omega_eb_b: Vector3::zeros(),
+            rec_llh: Vector3::new(0.0, 0.0, 0.0),
+            state: &state,
+            engine: &engine,
+            n_cols: 6,
+        };
+
+        let sat_id = gneiss_core::sat::SatelliteId {
+            constellation: Constellation::Gps,
+            prn: 1,
+        };
+        let eph = Ephemeris::Gps(gneiss_core::ephemeris::GpsEphemeris {
+            sat: sat_id,
+            toe: GpsTime::new(2000, 0.0),
+            toc: GpsTime::new(2000, 0.0),
+            af0: 0.0, af1: 0.0, af2: 0.0,
+            crs: 0.0, crc: 0.0, cuc: 0.0, cus: 0.0,
+            cic: 0.0, cis: 0.0,
+            m0: 0.0, e: 0.0, sqrt_a: 5153.6, delta_n: 0.0,
+            omega0: 0.0, omega_dot: 0.0, i0: 0.95, idot: 0.0,
+            omega: 0.0, tgd: 0.0, iode: 1, iodc: 1,
+        });
+
+        let meas = SppMeasurement {
+            constellation: Constellation::Gps,
+            raw_pr: 20_000_000.0,
+            snr: 45.0,
+            doppler: 0.0,
+            time: GpsTime::new(2000, 0.0),
+            eph: eph.clone(),
+            is_iono_free: false,
+            freq_band: 1,
+        };
+
+        let ncols = 6;
+        let mut z = DVector::zeros(1);
+        let mut h = DMatrix::zeros(1, ncols);
+        let mut r_mat = DMatrix::zeros(1, 1);
+        let mut types = Vec::new();
+        let mut row = 0usize;
+        let mut target = MatrixTarget {
+            z: &mut z,
+            h: &mut h,
+            r: &mut r_mat,
+            types: &mut types,
+            row: &mut row,
+        };
+
+        let geom = SatGeometry {
+            geom_r: 20_000_000.0,
+            los: Vector3::new(1.0, 0.0, 0.0),
+            el: 0.5,
+            az: 0.0,
+            cdt_rx: 0.0,
+            sat_clk: 0.0,
+            sat_vel: Vector3::zeros(),
+            sat_drift: 0.0,
+        };
+
+        process_pseudorange(&ctx, &meas, &mut target, &geom);
+
+        assert_eq!(row, 1);
+        assert_eq!(types.len(), 1);
+        assert_eq!(types[0].0, sat_id);
+        assert_eq!(types[0].1, 0);
+        assert!(z[0].is_finite());
+        // Position jacobian entries (cols 0-2) should be populated
+        assert!((h[(0, 0)] - 1.0).abs() < 1e-10);
+        assert!((h[(0, 1)]).abs() < 1e-10);
+        assert!((h[(0, 2)]).abs() < 1e-10);
+        // With n_cols=6, h has 6 cols; the if ctx.n_cols > 15 branch is skipped
+        assert_eq!(h.ncols(), 6);
+    }
+
+    // -------------------------------------------------------------------------
+    // process_pseudorange with Klobuchar parameters
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_process_pseudorange_with_klobuchar_params() {
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        engine.klobuchar_params = Some(gneiss_core::atmosphere::KlobucharParams::default());
+        let pos = Coordinate::new(
+            Vector3::new(0.0, 0.0, 0.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            GpsTime::new(2000, 0.0),
+        );
+        let state = RtkState::new(GpsTime::new(2000, 0.0), pos, 1.0);
+        engine.current_state = Some(state.clone());
+        let ctx = EkfContext {
+            pos_apc: Vector3::new(0.0, 0.0, 0.0),
+            v_apc: Vector3::zeros(),
+            r_b_e: nalgebra::Rotation3::identity(),
+            lever_arm: Vector3::zeros(),
+            omega_eb_b: Vector3::zeros(),
+            rec_llh: Vector3::new(0.0, 0.0, 0.0),
+            state: &state,
+            engine: &engine,
+            n_cols: 21,
+        };
+
+        let sat_id = gneiss_core::sat::SatelliteId {
+            constellation: Constellation::Gps,
+            prn: 1,
+        };
+        let eph = Ephemeris::Gps(gneiss_core::ephemeris::GpsEphemeris {
+            sat: sat_id,
+            toe: GpsTime::new(2000, 0.0),
+            toc: GpsTime::new(2000, 0.0),
+            af0: 0.0, af1: 0.0, af2: 0.0,
+            crs: 0.0, crc: 0.0, cuc: 0.0, cus: 0.0,
+            cic: 0.0, cis: 0.0,
+            m0: 0.0, e: 0.0, sqrt_a: 5153.6, delta_n: 0.0,
+            omega0: 0.0, omega_dot: 0.0, i0: 0.95, idot: 0.0,
+            omega: 0.0, tgd: 0.0, iode: 1, iodc: 1,
+        });
+
+        let meas = SppMeasurement {
+            constellation: Constellation::Gps,
+            raw_pr: 20_000_000.0,
+            snr: 45.0,
+            doppler: 0.0,
+            time: GpsTime::new(2000, 0.0),
+            eph: eph.clone(),
+            is_iono_free: false,
+            freq_band: 1,
+        };
+
+        let ncols = 21;
+        let mut z = DVector::zeros(1);
+        let mut h = DMatrix::zeros(1, ncols);
+        let mut r_mat = DMatrix::zeros(1, 1);
+        let mut types = Vec::new();
+        let mut row = 0usize;
+        let mut target = MatrixTarget {
+            z: &mut z,
+            h: &mut h,
+            r: &mut r_mat,
+            types: &mut types,
+            row: &mut row,
+        };
+
+        let geom = SatGeometry {
+            geom_r: 20_000_000.0,
+            los: Vector3::new(1.0, 0.0, 0.0),
+            el: 0.5,
+            az: 0.0,
+            cdt_rx: 0.0,
+            sat_clk: 0.0,
+            sat_vel: Vector3::zeros(),
+            sat_drift: 0.0,
+        };
+
+        process_pseudorange(&ctx, &meas, &mut target, &geom);
+        assert!(z[0].is_finite());
+    }
+
+    // -------------------------------------------------------------------------
+    // process_doppler with small state (n_cols = 15, skip extra jacobians)
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_process_doppler_small_state_skips_extra_jacobians() {
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        let pos = Coordinate::new(
+            Vector3::new(0.0, 0.0, 0.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            GpsTime::new(2000, 0.0),
+        );
+        let state = RtkState::new(GpsTime::new(2000, 0.0), pos, 1.0);
+        engine.current_state = Some(state.clone());
+        let ctx = EkfContext {
+            pos_apc: Vector3::new(0.0, 0.0, 0.0),
+            v_apc: Vector3::zeros(),
+            r_b_e: nalgebra::Rotation3::identity(),
+            lever_arm: Vector3::zeros(),
+            omega_eb_b: Vector3::zeros(),
+            rec_llh: Vector3::new(0.0, 0.0, 0.0),
+            state: &state,
+            engine: &engine,
+            n_cols: 15,
+        };
+
+        let sat_id = gneiss_core::sat::SatelliteId {
+            constellation: Constellation::Gps,
+            prn: 1,
+        };
+        let eph = Ephemeris::Gps(gneiss_core::ephemeris::GpsEphemeris {
+            sat: sat_id,
+            toe: GpsTime::new(2000, 0.0),
+            toc: GpsTime::new(2000, 0.0),
+            af0: 0.0, af1: 0.0, af2: 0.0,
+            crs: 0.0, crc: 0.0, cuc: 0.0, cus: 0.0,
+            cic: 0.0, cis: 0.0,
+            m0: 0.0, e: 0.0, sqrt_a: 5153.6, delta_n: 0.0,
+            omega0: 0.0, omega_dot: 0.0, i0: 0.95, idot: 0.0,
+            omega: 0.0, tgd: 0.0, iode: 1, iodc: 1,
+        });
+
+        let meas = SppMeasurement {
+            constellation: Constellation::Gps,
+            raw_pr: 20_000_000.0,
+            snr: 45.0,
+            doppler: 1000.0,
+            time: GpsTime::new(2000, 0.0),
+            eph: eph.clone(),
+            is_iono_free: false,
+            freq_band: 1,
+        };
+
+        let ncols = 15;
+        let mut z = DVector::zeros(1);
+        let mut h = DMatrix::zeros(1, ncols);
+        let mut r_mat = DMatrix::zeros(1, 1);
+        let mut types = Vec::new();
+        let mut row = 0usize;
+        let mut target = MatrixTarget {
+            z: &mut z,
+            h: &mut h,
+            r: &mut r_mat,
+            types: &mut types,
+            row: &mut row,
+        };
+
+        let geom = SatGeometry {
+            geom_r: 20_000_000.0,
+            los: Vector3::new(1.0, 0.0, 0.0),
+            el: 0.5,
+            az: 0.0,
+            cdt_rx: 0.0,
+            sat_clk: 0.0,
+            sat_vel: Vector3::new(1000.0, 0.0, 0.0),
+            sat_drift: 0.0,
+        };
+
+        process_doppler(&ctx, &meas, &mut target, &geom);
+
+        assert_eq!(row, 1);
+        assert_eq!(types.len(), 1);
+        assert_eq!(types[0].0, sat_id);
+        assert_eq!(types[0].1, 3);
+        assert!(z[0].is_finite());
+        // Velocity jacobian (cols 3-5) should be populated
+        assert!((h[(0, 3)] - 1.0).abs() < 1e-10);
+        assert!((h[(0, 4)]).abs() < 1e-10);
+        assert!((h[(0, 5)]).abs() < 1e-10);
+        // populate_dop_jacobian is skipped because n_cols (15) <= 19
+        assert_eq!(h.ncols(), 15);
+    }
+
+    // -------------------------------------------------------------------------
+    // update_ekf dimension mismatch returns rejected
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_update_ekf_dimension_mismatch_returns_rejected() {
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        let pos = Coordinate::new(
+            Vector3::new(0.0, 0.0, 0.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            GpsTime::new(2000, 0.0),
+        );
+        let state = RtkState::new(GpsTime::new(2000, 0.0), pos, 1.0);
+        engine.current_state = Some(state);
+
+        // z(3), h(3x6), r(3x3), empty types
+        // h.ncols() = 6, but state.covariance.ncols() = 21 -> dimension mismatch
+        let z = DVector::from_vec(vec![1.0, 2.0, 3.0]);
+        let h = DMatrix::zeros(3, 6);
+        let r_mat = DMatrix::identity(3, 3);
+        let types = vec![];
+
+        let rejected = update_ekf(&mut engine, &z, &h, &r_mat, &types);
+        assert!(rejected);
+    }
+
+    // -------------------------------------------------------------------------
+    // reset_state_from_spp with valid observations
+    // -------------------------------------------------------------------------
+
+    fn build_test_ephemerides_and_obs(
+    ) -> (Vec<Ephemeris>, EpochObs) {
+        use gneiss_core::obs::{ObsCode, ObsType, Observation, SatObs, SignalCode};
+        use gneiss_core::sat::SatelliteId;
+        use gneiss_core::coords::ecef_to_llh;
+        use gneiss_core::atmosphere::{AtmosphereModel, TropoParams};
+
+        let t = GpsTime::new(2000, 100000.0);
+        let true_pos =
+            nalgebra::Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0);
+        let rec_llh = ecef_to_llh(true_pos);
+        let true_cdt = 1000.0;
+
+        let mut ephemerides = Vec::new();
+        let mut satellites = Vec::new();
+
+        // Use verified (m0, omega0) pairs from elevation diagnostic that all
+        // produce >15-degree elevation from the receiver at (WGS84_SEMI_MAJOR_AXIS_M, 0, 0).
+        // Using 12 satellites for robust geometry.
+        let kepler_params: Vec<(f64, f64)> = vec![
+            (0.000, 0.785),    // el=73.2 deg
+            (2.618, 4.712),    // el=54.9 deg
+            (3.665, 3.927),    // el=58.8 deg
+            (5.760, 1.571),    // el=54.3 deg
+            (0.524, 0.785),    // el=57.3 deg
+            (3.142, 3.927),    // el=73.3 deg
+            (1.047, 0.000),    // el=31.7 deg
+            (3.665, 3.142),    // el=33.4 deg
+            (0.000, 1.571),    // el=48.6 deg
+            (2.094, 4.712),    // el=33.0 deg
+            (2.618, 3.927),    // el=41.5 deg
+            (5.760, 0.785),    // el=40.0 deg
+        ];
+
+        for (prn, (m0_val, omega0_val)) in kepler_params.iter().enumerate() {
+            let prn_u8 = (prn + 1) as u8;
+            let sat_id = SatelliteId {
+                constellation: Constellation::Gps,
+                prn: prn_u8,
+            };
+
+            let eph = Ephemeris::Gps(gneiss_core::ephemeris::GpsEphemeris {
+                sat: sat_id,
+                toe: t,
+                toc: t,
+                af0: 0.0, af1: 0.0, af2: 0.0,
+                crs: 0.0, crc: 0.0, cuc: 0.0, cus: 0.0,
+                cic: 0.0, cis: 0.0,
+                m0: *m0_val,
+                e: 0.01,
+                sqrt_a: 5153.6,
+                delta_n: 0.0,
+                omega0: *omega0_val,
+                omega_dot: 0.0,
+                i0: 0.95,
+                idot: 0.0,
+                omega: 0.0,
+                tgd: 0.0,
+                iode: 1,
+                iodc: 1,
+            });
+            ephemerides.push(eph.clone());
+
+            let light_speed = gneiss_core::constants::SPEED_OF_LIGHT_M_S;
+            let mut raw_pr = 20_000_000.0 + true_cdt;
+
+            // Compute satellite position and account for geometric + clock terms
+            for _iter in 0..5 {
+                let pr_time = raw_pr / light_speed;
+                let t_tx_sat = t.tow - pr_time;
+                let (_, _, sat_clk_err_rough, _) =
+                    eph.position(GpsTime::new(t.week, t_tx_sat));
+                let t_tx_true = t_tx_sat - sat_clk_err_rough;
+                let (sat_pos, _, sat_clk_err, _) =
+                    eph.position(GpsTime::new(t.week, t_tx_true));
+                let dx = true_pos.x - sat_pos.x;
+                let dy = true_pos.y - sat_pos.y;
+                let dz = true_pos.z - sat_pos.z;
+                let geometric_range = f64::sqrt(dx * dx + dy * dy + dz * dz);
+
+                // Add approximate tropo delay so residual is near zero at start
+                let (_, el) = gneiss_core::coords::az_el(rec_llh, true_pos, sat_pos);
+                let safe_el = el.max(5.0f64.to_radians());
+                let tropo = AtmosphereModel::tropo_nmf(
+                    &TropoParams::default(), rec_llh, safe_el, t,
+                );
+
+                raw_pr = geometric_range + true_cdt - (sat_clk_err * light_speed) + tropo;
+            }
+
+            satellites.push(SatObs {
+                sat: sat_id,
+                observations: vec![Observation {
+                    code: ObsCode {
+                        obs_type: ObsType::Pseudorange,
+                        signal: SignalCode {
+                            freq_band: 1,
+                            attribute: 'C',
+                        },
+                    },
+                    value: raw_pr,
+                    lock_time: None,
+                    lli: None,
+                }],
+            });
+        }
+
+        let obs = EpochObs {
+            time: t,
+            satellites,
+        };
+
+        (ephemerides, obs)
+    }
+
+    #[test]
+    fn test_reset_state_from_spp_success_resets_clock_indices() {
+        let (ephemerides, obs) = build_test_ephemerides_and_obs();
+
+        // Set up engine with ephemerides and a full 21x21 state
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        let pos = Coordinate::new(
+            Vector3::new(0.0, 0.0, 0.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            GpsTime::new(2000, 0.0),
+        );
+        let state = RtkState::new(GpsTime::new(2000, 0.0), pos, 1.0);
+        engine.current_state = Some(state);
+        engine.ephemerides = ephemerides;
+
+        let result = reset_state_from_spp(&mut engine, &obs);
+        assert!(result.is_ok(),
+            "reset_state_from_spp should succeed, got error: {:?}",
+            result.as_ref().err());
+
+        let final_state = engine.current_state.as_ref().unwrap();
+        assert!((final_state.covariance[(15, 15)] - COV_CLK_RESET).abs() < 1e-10,
+            "clock bias reset variance mismatch: {} != {}",
+            final_state.covariance[(15, 15)], COV_CLK_RESET);
+        assert!((final_state.covariance[(19, 19)] - COV_DRIFT_RESET).abs() < 1e-10,
+            "clock drift reset variance mismatch: {} != {}",
+            final_state.covariance[(19, 19)], COV_DRIFT_RESET);
+        // rcv_clk_bias should be set (non-zero from compute_spp)
+        assert!(final_state.rcv_clk_bias != 0.0,
+            "rcv_clk_bias should be non-zero after SPP reset, got 0.0");
+        // velocity should be reset to zeros
+        assert!((final_state.velocity.x).abs() < 1e-10);
+        assert!((final_state.velocity.y).abs() < 1e-10);
+        assert!((final_state.velocity.z).abs() < 1e-10);
+    }
+
+    // -------------------------------------------------------------------------
+    // bootstrap_clock_bias with valid observations
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_bootstrap_clock_bias_with_valid_observations() {
+        let (ephemerides, obs) = build_test_ephemerides_and_obs();
+
+        // Set up engine with ephemerides and a state that has a pre-existing clock bias
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        let pos = Coordinate::new(
+            Vector3::new(0.0, 0.0, 0.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            GpsTime::new(2000, 0.0),
+        );
+        let mut state = RtkState::new(GpsTime::new(2000, 0.0), pos, 1.0);
+        state.rcv_clk_bias = 42.0; // Pre-existing bias, should be overwritten
+        engine.current_state = Some(state);
+        engine.ephemerides = ephemerides;
+
+        bootstrap_clock_bias(&mut engine, &obs);
+
+        let final_state = engine.current_state.as_ref().unwrap();
+        // rcv_clk_bias should be updated from compute_spp result (different from initial 42.0)
+        assert!(final_state.rcv_clk_bias != 42.0,
+            "rcv_clk_bias should be updated from SPP result, was still {}", final_state.rcv_clk_bias);
+        // covariance[(15,15)] should be set to CLK_BIAS_VAR_RESET
+        assert!((final_state.covariance[(15, 15)] - CLK_BIAS_VAR_RESET).abs() < 1e-10);
+    }
 }

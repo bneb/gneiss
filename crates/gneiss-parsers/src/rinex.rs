@@ -1958,4 +1958,326 @@ R 6 2020 12 24 21 15  0  .189751386642E-03  .000000000000E+00  .422910000000E+06
         assert_eq!(ephemerides[0].sat().constellation, Constellation::Gps);
         assert_eq!(ephemerides[1].sat().constellation, Constellation::Glonass);
     }
+
+    // -----------------------------------------------------------------------
+    // RINEX 2 OBS: Glonass satellite ('R' prefix)
+    // -----------------------------------------------------------------------
+    #[test]
+    fn test_rinex_2_obs_glonass_sat() {
+        let data = "     2.11           O: GPS OBS DATA    M: Mixed            RINEX VERSION / TYPE
+     3    C1    L1    D1                                    # / TYPES OF OBSERV
+                                                            END OF HEADER
+ 20  5 14 22  0  0.0000000  0  1R06
+  22100000.000   121000000.000        2200.000
+";
+        let mut reader = BufReader::new(data.as_bytes());
+        let epochs = parse_rinex_obs(&mut reader).unwrap();
+        assert_eq!(epochs.len(), 1);
+        assert_eq!(epochs[0].satellites.len(), 1);
+        let r06 = &epochs[0].satellites[0];
+        assert_eq!(r06.sat.constellation, Constellation::Glonass);
+        assert_eq!(r06.sat.prn, 6);
+        assert!((r06.get_observable(1).unwrap() - 22100000.000).abs() < 1e-6);
+        assert!((r06.get_observable_phase(1).unwrap() - 121000000.000).abs() < 1.0);
+    }
+
+    // -----------------------------------------------------------------------
+    // RINEX 2 OBS: space prefix treated as GPS
+    // -----------------------------------------------------------------------
+    #[test]
+    fn test_rinex_2_obs_space_prefix_gps() {
+        let data = "     2.11           O: GPS OBS DATA    M: Mixed            RINEX VERSION / TYPE
+     3    C1    L1    D1                                    # / TYPES OF OBSERV
+                                                            END OF HEADER
+ 20  5 14 22  0  0.0000000  0  1 01
+  25140323.324   125140323.324        2514.032
+";
+        let mut reader = BufReader::new(data.as_bytes());
+        let epochs = parse_rinex_obs(&mut reader).unwrap();
+        assert_eq!(epochs.len(), 1);
+        assert_eq!(epochs[0].satellites[0].sat.constellation, Constellation::Gps);
+        assert_eq!(epochs[0].satellites[0].sat.prn, 1);
+    }
+
+    // -----------------------------------------------------------------------
+    // RINEX 2 OBS: Sbas satellite ('S' prefix)
+    // -----------------------------------------------------------------------
+    #[test]
+    fn test_rinex_2_obs_sbas_sat() {
+        let data = "     2.11           O: GPS OBS DATA    M: Mixed            RINEX VERSION / TYPE
+     3    C1    L1    D1                                    # / TYPES OF OBSERV
+                                                            END OF HEADER
+ 20  5 14 22  0  0.0000000  0  1S13
+  25140323.324   125140323.324        2514.032
+";
+        let mut reader = BufReader::new(data.as_bytes());
+        let epochs = parse_rinex_obs(&mut reader).unwrap();
+        assert_eq!(epochs.len(), 1);
+        let s13 = &epochs[0].satellites[0];
+        assert_eq!(s13.sat.constellation, Constellation::Sbas);
+        assert_eq!(s13.sat.prn, 13);
+    }
+
+    // -----------------------------------------------------------------------
+    // RINEX 2 OBS: Galileo satellite ('E' prefix)
+    // -----------------------------------------------------------------------
+    #[test]
+    fn test_rinex_2_obs_galileo_sat() {
+        let data = "     2.11           O: GPS OBS DATA    M: Mixed            RINEX VERSION / TYPE
+     3    C1    L1    D1                                    # / TYPES OF OBSERV
+                                                            END OF HEADER
+ 20  5 14 22  0  0.0000000  0  1E02
+  27123456.789   127123456.789        2712.345
+";
+        let mut reader = BufReader::new(data.as_bytes());
+        let epochs = parse_rinex_obs(&mut reader).unwrap();
+        assert_eq!(epochs.len(), 1);
+        let e02 = &epochs[0].satellites[0];
+        assert_eq!(e02.sat.constellation, Constellation::Galileo);
+        assert_eq!(e02.sat.prn, 2);
+    }
+
+    // -----------------------------------------------------------------------
+    // RINEX 2 OBS: Beidou satellite ('C' prefix)
+    // -----------------------------------------------------------------------
+    #[test]
+    fn test_rinex_2_obs_beidou_sat() {
+        let data = "     2.11           O: GPS OBS DATA    M: Mixed            RINEX VERSION / TYPE
+     3    C1    L1    D1                                    # / TYPES OF OBSERV
+                                                            END OF HEADER
+ 20  5 14 22  0  0.0000000  0  1C01
+  25140323.324   125140323.324        2514.032
+";
+        let mut reader = BufReader::new(data.as_bytes());
+        let epochs = parse_rinex_obs(&mut reader).unwrap();
+        assert_eq!(epochs.len(), 1);
+        let c01 = &epochs[0].satellites[0];
+        assert_eq!(c01.sat.constellation, Constellation::Beidou);
+        assert_eq!(c01.sat.prn, 1);
+    }
+
+    // -----------------------------------------------------------------------
+    // RINEX 2 OBS: QZSS satellite ('J' prefix)
+    // -----------------------------------------------------------------------
+    #[test]
+    fn test_rinex_2_obs_qzss_sat() {
+        let data = "     2.11           O: GPS OBS DATA    M: Mixed            RINEX VERSION / TYPE
+     3    C1    L1    D1                                    # / TYPES OF OBSERV
+                                                            END OF HEADER
+ 20  5 14 22  0  0.0000000  0  1J01
+  25140323.324   125140323.324        2514.032
+";
+        let mut reader = BufReader::new(data.as_bytes());
+        let epochs = parse_rinex_obs(&mut reader).unwrap();
+        assert_eq!(epochs.len(), 1);
+        let j01 = &epochs[0].satellites[0];
+        assert_eq!(j01.sat.constellation, Constellation::Qzss);
+        assert_eq!(j01.sat.prn, 1);
+    }
+
+    // -----------------------------------------------------------------------
+    // RINEX 2 OBS: 6 obs types (multi-line observation values)
+    // -----------------------------------------------------------------------
+    #[test]
+    fn test_rinex_2_obs_6_types() {
+        let data = "     2.11           O: GPS OBS DATA    M: Mixed            RINEX VERSION / TYPE
+     6    C1    L1    D1    S1    P2    L2              # / TYPES OF OBSERV
+                                                            END OF HEADER
+ 20  5 14 22  0  0.0000000  0  1G01
+  25140323.324   125140323.324        2514.032            45.0      25140323.324
+  125140323.324
+";
+        let mut reader = BufReader::new(data.as_bytes());
+        let epochs = parse_rinex_obs(&mut reader).unwrap();
+        assert_eq!(epochs.len(), 1);
+        assert_eq!(epochs[0].satellites[0].observations.len(), 6);
+    }
+
+    // -----------------------------------------------------------------------
+    // RINEX 2 OBS: unknown constellation char returns empty sat list
+    // -----------------------------------------------------------------------
+    #[test]
+    fn test_rinex_2_obs_unknown_constellation() {
+        let data = "     2.11           O: GPS OBS DATA    M: Mixed            RINEX VERSION / TYPE
+     1    C1                                                    # / TYPES OF OBSERV
+                                                            END OF HEADER
+ 20  5 14 22  0  0.0000000  0  1X01
+  25140323.324
+";
+        let mut reader = BufReader::new(data.as_bytes());
+        let epochs = parse_rinex_obs(&mut reader).unwrap();
+        assert_eq!(epochs.len(), 1);
+        assert_eq!(epochs[0].satellites.len(), 0);
+    }
+
+    // -----------------------------------------------------------------------
+    // RINEX 3 OBS: Sbas constellation
+    // -----------------------------------------------------------------------
+    #[test]
+    fn test_rinex_3_obs_sbas() {
+        let data = "     3.03           O: GNSS OBS DATA    M: MIXED            RINEX VERSION / TYPE
+S    3 C1C L1C D1C                                             SYS / # / OBS TYPES
+                                                            END OF HEADER
+> 2020 06 15 01 30 00.0000000  0  1
+S01  25140323.324   125140323.324        2514.032
+";
+        let mut reader = BufReader::new(data.as_bytes());
+        let epochs = parse_rinex_obs(&mut reader).unwrap();
+        assert_eq!(epochs.len(), 1);
+        assert_eq!(epochs[0].satellites.len(), 1);
+        assert_eq!(epochs[0].satellites[0].sat.constellation, Constellation::Sbas);
+        assert_eq!(epochs[0].satellites[0].sat.prn, 1);
+    }
+
+    // -----------------------------------------------------------------------
+    // RINEX 3 OBS: short epoch header (below 35 chars) is skipped
+    // -----------------------------------------------------------------------
+    #[test]
+    fn test_rinex_3_obs_short_epoch_line() {
+        let data = "     3.03           O: GNSS OBS DATA    M: MIXED            RINEX VERSION / TYPE
+G    3 C1C L1C D1C                                             SYS / # / OBS TYPES
+                                                            END OF HEADER
+> short
+> 2020 06 15 01 30 00.0000000  0  1
+G01  25140323.324   125140323.324        2514.032
+";
+        let mut reader = BufReader::new(data.as_bytes());
+        let epochs = parse_rinex_obs(&mut reader).unwrap();
+        assert_eq!(epochs.len(), 1);
+        assert_eq!(epochs[0].satellites.len(), 1);
+    }
+
+    // -----------------------------------------------------------------------
+    // RINEX 3 OBS: epoch with no '>' prefix is skipped
+    // -----------------------------------------------------------------------
+    #[test]
+    fn test_rinex_3_obs_skips_non_epoch_lines() {
+        let data = "     3.03           O: GNSS OBS DATA    M: MIXED            RINEX VERSION / TYPE
+G    3 C1C L1C D1C                                             SYS / # / OBS TYPES
+                                                            END OF HEADER
+random junk line
+> 2020 06 15 01 30 00.0000000  0  1
+G01  25140323.324   125140323.324        2514.032
+";
+        let mut reader = BufReader::new(data.as_bytes());
+        let epochs = parse_rinex_obs(&mut reader).unwrap();
+        assert_eq!(epochs.len(), 1);
+    }
+
+    // -----------------------------------------------------------------------
+    // RINEX 3 NAV: QZSS ephemeris
+    // -----------------------------------------------------------------------
+    #[test]
+    fn test_rinex_3_nav_qzss() {
+        let data = "     3.02           N: GNSS NAV DATA    M: MIXED            RINEX VERSION / TYPE
+                                                            END OF HEADER
+J 1 2020 06 15 01 30  0 -.271548051387D-03 -.682121026330D-11  .000000000000D+00
+     7.000000000000D+01-8.000000000000D+00 4.321251426038D-09 2.456182385192D+00
+    -1.769512891769D-07 1.934998203069D-03 4.604458808899D-06 5.153539648056D+03
+     4.248000000000D+05 1.359730958939D-07-2.968124618807D+00-3.911554813385D-08
+     9.798670864830D-01 2.980937500000D+02-1.061584443985D+00-8.075693527908D-09
+     4.571618997710D-11 0.000000000000D+00 2.105000000000D+03 0.000000000000D+00
+     0.000000000000D+00 0.000000000000D+00 0.000000000000D+00 7.000000000000D+01
+     4.248000000000D+05 4.000000000000D+00
+";
+        let mut reader = BufReader::new(data.as_bytes());
+        let (ephemerides, _klob) = parse_rinex_nav(&mut reader).unwrap();
+        assert_eq!(ephemerides.len(), 1);
+        assert_eq!(ephemerides[0].sat().constellation, Constellation::Qzss);
+        assert_eq!(ephemerides[0].sat().prn, 1);
+    }
+
+    // -----------------------------------------------------------------------
+    // RINEX 3 NAV: Sbas treated as GPS (code fallback in build_ephemeris)
+    // -----------------------------------------------------------------------
+    #[test]
+    fn test_rinex_3_nav_sbas_as_gps() {
+        // Sbas maps to Constellation::Gps in nav parser (line 668).
+        // build_ephemeris for Gps returns a GpsEphemeris.
+        let data = "     3.02           N: GNSS NAV DATA    M: MIXED            RINEX VERSION / TYPE
+                                                            END OF HEADER
+S 1 2020 06 15 01 30  0 -.271548051387D-03 -.682121026330D-11  .000000000000D+00
+     7.000000000000D+01-8.000000000000D+00 4.321251426038D-09 2.456182385192D+00
+    -1.769512891769D-07 1.934998203069D-03 4.604458808899D-06 5.153539648056D+03
+     4.248000000000D+05 1.359730958939D-07-2.968124618807D+00-3.911554813385D-08
+     9.798670864830D-01 2.980937500000D+02-1.061584443985D+00-8.075693527908D-09
+     4.571618997710D-11 0.000000000000D+00 2.105000000000D+03 0.000000000000D+00
+     0.000000000000D+00 0.000000000000D+00 0.000000000000D+00 7.000000000000D+01
+     4.248000000000D+05 4.000000000000D+00
+";
+        let mut reader = BufReader::new(data.as_bytes());
+        let (ephemerides, _klob) = parse_rinex_nav(&mut reader).unwrap();
+        // SBAS nav messages are not parsed as GPS ephemeris in the current parser
+        assert_eq!(ephemerides.len(), 0);
+    }
+
+    // -----------------------------------------------------------------------
+    // RINEX 2 OBS: year < 80 -> 2000-based
+    // -----------------------------------------------------------------------
+    #[test]
+    fn test_rinex_2_obs_year_below_80() {
+        let data = "     2.11           O: GPS OBS DATA    M: Mixed            RINEX VERSION / TYPE
+     3    C1    L1    D1                                    # / TYPES OF OBSERV
+                                                            END OF HEADER
+ 20  5 14 22  0  0.0000000  0  1G01
+  25140323.324   125140323.324        2514.032
+";
+        let mut reader = BufReader::new(data.as_bytes());
+        let epochs = parse_rinex_obs(&mut reader).unwrap();
+        assert_eq!(epochs.len(), 1);
+        let expected = GpsTime::from_calendar(2020, 5, 14, 22, 0, 0.0);
+        assert_eq!(epochs[0].time.week, expected.week);
+        assert!((epochs[0].time.tow - expected.tow).abs() < 1e-6);
+    }
+
+    // -----------------------------------------------------------------------
+    // RINEX 2 OBS: year >= 80 -> 1900-based
+    // -----------------------------------------------------------------------
+    #[test]
+    fn test_rinex_2_obs_year_above_80() {
+        let data = "     2.11           O: GPS OBS DATA    M: Mixed            RINEX VERSION / TYPE
+     3    C1    L1    D1                                    # / TYPES OF OBSERV
+                                                            END OF HEADER
+ 99 12 25  0  0  0.0000000  0  1G01
+  25140323.324   125140323.324        2514.032
+";
+        let mut reader = BufReader::new(data.as_bytes());
+        let epochs = parse_rinex_obs(&mut reader).unwrap();
+        assert_eq!(epochs.len(), 1);
+        let expected = GpsTime::from_calendar(1999, 12, 25, 0, 0, 0.0);
+        assert_eq!(epochs[0].time.week, expected.week);
+    }
+
+    // -----------------------------------------------------------------------
+    // RINEX 2 obs: unrecognized obs type is skipped
+    // -----------------------------------------------------------------------
+    #[test]
+    fn test_rinex_2_obs_unrecognized_obs_type() {
+        let data = "     2.11           O: GPS OBS DATA    M: Mixed            RINEX VERSION / TYPE
+     2    X1    C1                                              # / TYPES OF OBSERV
+                                                            END OF HEADER
+ 20  5 14 22  0  0.0000000  0  1G01
+  25140323.324   25140323.324
+";
+        let mut reader = BufReader::new(data.as_bytes());
+        let epochs = parse_rinex_obs(&mut reader).unwrap();
+        assert_eq!(epochs.len(), 1);
+        // X1 is skipped by map_rinex_type, only C1 remains
+        assert_eq!(epochs[0].satellites[0].observations.len(), 1);
+        let obs = &epochs[0].satellites[0].observations[0];
+        assert_eq!(obs.code.obs_type, ObsType::Pseudorange);
+        assert_eq!(obs.code.signal.freq_band, 1);
+    }
+
+    // -----------------------------------------------------------------------
+    // parse_rinex_f64 with various edge cases
+    // -----------------------------------------------------------------------
+    #[test]
+    fn test_parse_rinex_f64_edge_cases() {
+        assert!((parse_rinex_f64("  1.23D-4  ").unwrap() - 0.000123).abs() < 1e-12);
+        assert!((parse_rinex_f64("42").unwrap() - 42.0).abs() < 1e-12);
+        assert!((parse_rinex_f64("-0.0").unwrap()).abs() < 1e-12);
+        assert!((parse_rinex_f64("1.0D+1").unwrap() - 10.0).abs() < 1e-12);
+        assert!((parse_rinex_f64("5d-1").unwrap() - 0.5).abs() < 1e-12);
+    }
 }

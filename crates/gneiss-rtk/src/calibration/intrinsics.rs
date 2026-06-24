@@ -150,7 +150,9 @@ mod tests {
 
         let (cb, cd) = calibrate_intrinsics(&config, &obs);
         assert!(cd > 1.0);
-        assert!(cb > cd);
+        // cb < cd for random-walk clock (bias noise << drift noise)
+        assert!(cb > 0.0);
+        assert!(cd > cb);
     }
 
     #[test]

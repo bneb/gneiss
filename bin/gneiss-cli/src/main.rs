@@ -794,10 +794,41 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mut final_results = Vec::new();
             let mut final_processed_epochs = 0;
 
-            if calibrate {
-                info!("Starting Preprocessing and Calibration Pass...");
+            // --- Automatic clock calibration from first epochs ---
+            // Always run — replaces per-dataset config tuning with
+            // data-driven estimation.  RTKLIB avoids this by using a
+            // white-noise clock model; our random-walk clock needs
+            // process noise matched to the receiver oscillator.
+            let calib_slice = if let Some(ref r) = rover_rinex_epochs {
+                &r[..r.len().min(200)]
+            } else {
+                &[]
+            };
 
-                // --- Pass 1a: Intrinsics Calibration ---
+            if calib_slice.len() >= 10 {
+                let (bias_var, drift_var) =
+                    gneiss_rtk::calibration::intrinsics::calibrate_intrinsics(
+                        &engine_config,
+                        calib_slice,
+                    );
+                if bias_var != engine_config.process_noise_cb
+                    || drift_var != engine_config.process_noise_cd
+                {
+                    engine_config.process_noise_cb = bias_var;
+                    engine_config.process_noise_cd = drift_var;
+                    engine.config.process_noise_cb = bias_var;
+                    engine.config.process_noise_cd = drift_var;
+                    info!(
+                        "Clock calibrated from {} epochs: CB={:.2} CD={:.2}",
+                        calib_slice.len(), bias_var, drift_var
+                    );
+                }
+            }
+
+            if calibrate {
+                info!("Starting full calibration pass...");
+
+                // --- Extrinsics 6-DOF Optimization ---
                 let rover_slice = if let Some(ref r) = rover_rinex_epochs {
                     let start = r.len().min(3000);
                     let end = r.len().min(start + 500);
@@ -806,21 +837,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     &[]
                 };
 
-                let (bias_var, drift_var) =
-                    gneiss_rtk::calibration::intrinsics::calibrate_intrinsics(
-                        &engine_config,
-                        rover_slice,
-                    );
-                engine_config.process_noise_cb = bias_var;
-                engine_config.process_noise_cd = drift_var;
-                engine.config.process_noise_cb = bias_var;
-                engine.config.process_noise_cd = drift_var;
-                info!(
-                    "Intrinsics calibrated: Clock Bias Var = {:.4}, Clock Drift Var = {:.4}",
-                    bias_var, drift_var
-                );
-
-                // --- Pass 1b: Extrinsics 6-DOF Optimization ---
                 let eval_fn = |cfg: &EngineConfig| -> f64 {
                     let mut eval_engine = ProcessingEngine::new(cfg.clone());
                     eval_engine.ephemerides = engine.ephemerides.clone();

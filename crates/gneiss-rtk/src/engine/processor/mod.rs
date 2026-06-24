@@ -215,52 +215,61 @@ impl ProcessingEngine {
         self.ref_sat = None;
     }
 
+    /// Process one epoch of GNSS observations through the configured solver.
+    ///
+    /// When satellite visibility is poor (urban canyons), the observation
+    /// filter is relaxed to accept weaker signals rather than failing:
+    /// if strict (config) filtering leaves &lt; 4 satellites, the epoch is
+    /// retried with relaxed constraints (15 dB-Hz SNR, 5° elevation)
+    /// before falling back to coasting on the predicted state.
     pub fn process_epoch(
         &mut self,
         rover_obs: &EpochObs,
         base_obs: Option<&EpochObs>,
     ) -> Result<&RtkState, EngineError> {
-        let mut filtered_rover = rover_obs.clone();
-        if let Some(enabled) = &self.config.enabled_constellations {
-            filtered_rover
-                .satellites
-                .retain(|s| enabled.contains(&s.sat.constellation));
-        }
-        if self.config.min_snr_dbhz > 0.0 {
-            filtered_rover.satellites.retain(|s| {
-                let snr = s
-                    .observations
-                    .iter()
-                    .find(|o| o.code.obs_type == ObsType::Snr && o.code.signal.freq_band == 1)
-                    .map(|o| o.value)
-                    .unwrap_or(25.0);
-                snr >= self.config.min_snr_dbhz
-            });
-        }
-
-        let mut filtered_base_storage = None;
-        if let Some(b) = base_obs {
-            let mut clone = b.clone();
+        // --- observation filtering with urban-canyon fallback ---
+        let filter_obs = |obs: &EpochObs, snr_mask: f64| -> EpochObs {
+            let mut filtered = obs.clone();
             if let Some(enabled) = &self.config.enabled_constellations {
-                clone
+                filtered
                     .satellites
                     .retain(|s| enabled.contains(&s.sat.constellation));
             }
-            if self.config.min_snr_dbhz > 0.0 {
-                clone.satellites.retain(|s| {
+            if snr_mask > 0.0 {
+                filtered.satellites.retain(|s| {
                     let snr = s
                         .observations
                         .iter()
                         .find(|o| o.code.obs_type == ObsType::Snr && o.code.signal.freq_band == 1)
                         .map(|o| o.value)
                         .unwrap_or(25.0);
-                    snr >= self.config.min_snr_dbhz
+                    snr >= snr_mask
                 });
             }
-            filtered_base_storage = Some(clone);
-        }
+            filtered
+        };
+
+        let strict = filter_obs(rover_obs, self.config.min_snr_dbhz);
+        let filtered_rover = if strict.satellites.len() >= 4 {
+            strict
+        } else {
+            // Urban canyon: accept weaker signals rather than failing
+            let relaxed = filter_obs(rover_obs, 15.0);
+            if relaxed.satellites.len() > strict.satellites.len() {
+                tracing::debug!(
+                    "Relaxed SNR mask at epoch {}: {} sats (was {} with strict)",
+                    rover_obs.time.tow,
+                    relaxed.satellites.len(),
+                    strict.satellites.len()
+                );
+            }
+            relaxed
+        };
+
+        let filtered_base_storage = base_obs.map(|b| filter_obs(b, self.config.min_snr_dbhz));
         let filtered_base = filtered_base_storage.as_ref();
 
+        // --- dispatch ---
         let err = match self.config.mode {
             EngineMode::Spp => self.process_spp(&filtered_rover).err(),
             EngineMode::SppIns => {
@@ -286,41 +295,51 @@ impl ProcessingEngine {
                 crate::engine::ppp_ins_iekf::process_ppp_ins_fg(self, &filtered_rover).err()
             }
         };
-        if let Some(e) = err {
+
+        // --- error handling ---
+        if let Some(ref e) = err {
             match e {
                 EngineError::StateDisappeared => {
                     tracing::warn!("EKF unrecoverable divergence. Resetting state...");
                     self.current_state = None;
+                    self.consecutive_rejections = 0;
+                    return Err(EngineError::StateDisappeared);
                 }
                 EngineError::InsufficientSatellites => {
                     self.consecutive_rejections += 1;
-                    if self.consecutive_rejections >= 3 {
+                    const MAX_COAST: usize = 5;
+                    if self.consecutive_rejections > MAX_COAST {
                         tracing::warn!(
-                            "Insufficient satellites for {} consecutive epochs — resetting state",
+                            "Insufficient satellites for {} consecutive epochs — \
+                             decoupling position covariance to accept new anchor",
                             self.consecutive_rejections
                         );
-                        self.current_state = None;
+                        if let Some(ref mut state) = self.current_state {
+                            state.decouple_position();
+                            state.decouple_clock();
+                        }
                         self.consecutive_rejections = 0;
                     } else {
                         tracing::warn!(
-                            "Epoch processing failed: InsufficientSatellites (attempt {}/3). Preserving state.",
-                            self.consecutive_rejections
+                            "Insufficient satellites at epoch {} — coasting ({}/{})",
+                            rover_obs.time.tow,
+                            self.consecutive_rejections,
+                            MAX_COAST
                         );
                     }
                 }
                 _ => {
                     self.consecutive_rejections = 0;
-                    tracing::warn!(
-                        "Epoch processing failed: {:?}. Preserving state for next epoch.",
-                        e
-                    );
+                    return Err(e.clone());
                 }
             }
-            Err(e)
         } else {
             self.consecutive_rejections = 0;
-            Ok(self.current_state.as_ref().unwrap())
         }
+        if self.current_state.is_none() {
+            return Err(EngineError::InsufficientSatellites);
+        }
+        Ok(self.current_state.as_ref().unwrap())
     }
 }
 
@@ -378,10 +397,19 @@ mod tests {
         let mut state1 = RtkState::new(time1, pos1, 0.5);
         state1.is_fixed = true;
 
-        // Mock prediction values from 0 to 1
+        // Mock prediction with realistic p_pred for ISB/clock states.
+        // These states have cov=100000 in RtkState::new; p_pred must be
+        // >= p_k to avoid negative covariance updates.
         let core_size = crate::filter::CORE_STATE_SIZE;
         state1.core_phi = Some(DMatrix::identity(core_size, core_size));
-        state1.full_p_predict = Some(DMatrix::identity(core_size, core_size) * 1.5);
+        let mut p_pred = DMatrix::identity(core_size, core_size) * 1.5;
+        // Clock bias: white-noise prediction variance
+        p_pred[(15, 15)] = crate::filter::PREDICTED_CLOCK_VARIANCE;
+        // ISB: piece-wise constant prediction variance
+        for i in [16, 17, 18] {
+            p_pred[(i, i)] = crate::filter::PREDICTED_ISB_VARIANCE;
+        }
+        state1.full_p_predict = Some(p_pred);
         let mut x_pred = DVector::zeros(core_size);
         x_pred[0] = 10.0; // Assume velocity was 0, so predicted pos is 10
         state1.full_x_predict = Some(x_pred);
@@ -859,6 +887,233 @@ mod tests {
             time,
             satellites: vec![],
         }
+    }
+
+    #[test]
+    fn test_attempt_kinematic_alignment_success() {
+        let mut config = EngineConfig::default();
+        config.mode = EngineMode::RtkIns;
+        config.imu_to_antenna_lever_arm = [0.5, 0.0, 1.0];
+
+        let mut engine = ProcessingEngine::new(config);
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(
+            Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+        let mut state = RtkState::new(time, pos, 1.0);
+        state.velocity = Vector3::new(5.0, 0.0, 0.0);
+        engine.current_state = Some(state);
+
+        for _ in 0..5 {
+            let mut hist_state = RtkState::new(time, pos, 1.0);
+            hist_state.velocity = Vector3::new(5.0, 0.0, 0.0);
+            engine.state_history.push(hist_state);
+        }
+
+        engine.imu_history.push(vec![gneiss_core::imu::ImuMeasurement {
+            accel: Vector3::new(0.0, 0.0, 9.8),
+            gyro: Vector3::new(0.0, 0.0, 0.0),
+            time_tag: 0,
+            temperature: None,
+        }]);
+
+        let pos_before = engine.current_state.as_ref().unwrap().position.vector;
+        engine.attempt_kinematic_alignment();
+
+        let aligned_state = engine.current_state.as_ref().unwrap();
+        assert!(aligned_state.ins_aligned, "INS should be aligned");
+
+        let att_var = (15.0f64.to_radians()).powi(2);
+        for i in 6..9 {
+            assert!(
+                (aligned_state.covariance[(i, i)] - att_var).abs() < 1e-10,
+                "Covariance[{}] = {}, expected {}",
+                i,
+                aligned_state.covariance[(i, i)],
+                att_var
+            );
+        }
+
+        assert!(
+            (aligned_state.position.vector - pos_before).norm() > 0.0,
+            "Position should change due to lever arm correction"
+        );
+        assert!(engine.imu_buffer.is_empty());
+    }
+
+    #[test]
+    fn test_attempt_kinematic_alignment_insufficient_history() {
+        let mut config = EngineConfig::default();
+        config.mode = EngineMode::RtkIns;
+        let mut engine = ProcessingEngine::new(config);
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(
+            Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+        let mut state = RtkState::new(time, pos, 1.0);
+        state.velocity = Vector3::new(5.0, 0.0, 0.0);
+        engine.current_state = Some(state);
+
+        for _ in 0..3 {
+            let mut hist_state = RtkState::new(time, pos, 1.0);
+            hist_state.velocity = Vector3::new(5.0, 0.0, 0.0);
+            engine.state_history.push(hist_state);
+        }
+
+        engine.imu_history.push(vec![gneiss_core::imu::ImuMeasurement {
+            accel: Vector3::new(0.0, 0.0, 9.8),
+            gyro: Vector3::new(0.0, 0.0, 0.0),
+            time_tag: 0,
+            temperature: None,
+        }]);
+
+        engine.attempt_kinematic_alignment();
+        assert!(!engine.current_state.as_ref().unwrap().ins_aligned);
+    }
+
+    #[test]
+    fn test_attempt_kinematic_alignment_slow_speed() {
+        let mut config = EngineConfig::default();
+        config.mode = EngineMode::RtkIns;
+        let mut engine = ProcessingEngine::new(config);
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(
+            Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+        let mut state = RtkState::new(time, pos, 1.0);
+        state.velocity = Vector3::new(1.0, 0.0, 0.0);
+        engine.current_state = Some(state);
+
+        for _ in 0..5 {
+            let mut hist_state = RtkState::new(time, pos, 1.0);
+            hist_state.velocity = Vector3::new(5.0, 0.0, 0.0);
+            engine.state_history.push(hist_state);
+        }
+
+        engine.imu_history.push(vec![gneiss_core::imu::ImuMeasurement {
+            accel: Vector3::new(0.0, 0.0, 9.8),
+            gyro: Vector3::new(0.0, 0.0, 0.0),
+            time_tag: 0,
+            temperature: None,
+        }]);
+
+        engine.attempt_kinematic_alignment();
+        assert!(!engine.current_state.as_ref().unwrap().ins_aligned);
+    }
+
+    #[test]
+    fn test_attempt_kinematic_alignment_history_speed_too_low() {
+        let mut config = EngineConfig::default();
+        config.mode = EngineMode::RtkIns;
+        let mut engine = ProcessingEngine::new(config);
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(
+            Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+        let mut state = RtkState::new(time, pos, 1.0);
+        state.velocity = Vector3::new(5.0, 0.0, 0.0);
+        engine.current_state = Some(state);
+
+        for _ in 0..5 {
+            let mut hist_state = RtkState::new(time, pos, 1.0);
+            hist_state.velocity = Vector3::new(1.0, 0.0, 0.0);
+            engine.state_history.push(hist_state);
+        }
+
+        engine.imu_history.push(vec![gneiss_core::imu::ImuMeasurement {
+            accel: Vector3::new(0.0, 0.0, 9.8),
+            gyro: Vector3::new(0.0, 0.0, 0.0),
+            time_tag: 0,
+            temperature: None,
+        }]);
+
+        engine.attempt_kinematic_alignment();
+        assert!(!engine.current_state.as_ref().unwrap().ins_aligned);
+    }
+
+    #[test]
+    fn test_apply_nhc_updates_stationary_detected() {
+        let mut config = EngineConfig::default();
+        config.enable_nhc = true;
+        config.mode = EngineMode::RtkIns;
+
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 1.0);
+        state.ins_aligned = true;
+        state.velocity = Vector3::new(0.0, 0.0, 0.0);
+
+        let imu_measurements: Vec<_> = (0..12)
+            .map(|i| gneiss_core::imu::ImuMeasurement {
+                accel: Vector3::new(0.0, 0.0, 9.8),
+                gyro: Vector3::new(0.0, 0.0, 0.0),
+                time_tag: i,
+                temperature: None,
+            })
+            .collect();
+        let imu_history = vec![imu_measurements];
+
+        ProcessingEngine::apply_nhc_updates(&config, &imu_history, &mut state);
+        assert!(state.velocity.norm() < 1e-6);
+    }
+
+    #[test]
+    fn test_apply_nhc_updates_non_stationary_nhc() {
+        let mut config = EngineConfig::default();
+        config.enable_nhc = true;
+        config.mode = EngineMode::RtkIns;
+
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 1.0);
+        state.ins_aligned = true;
+        state.velocity = Vector3::new(10.0, 0.0, 0.0);
+
+        let imu_history = vec![vec![gneiss_core::imu::ImuMeasurement {
+            accel: Vector3::new(0.0, 0.0, 9.8),
+            gyro: Vector3::new(0.1, 0.0, 0.0),
+            time_tag: 0,
+            temperature: None,
+        }]];
+
+        ProcessingEngine::apply_nhc_updates(&config, &imu_history, &mut state);
+    }
+
+    #[test]
+    fn test_apply_nhc_updates_stationary_low_velocity() {
+        let mut config = EngineConfig::default();
+        config.enable_nhc = true;
+        config.mode = EngineMode::RtkIns;
+
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 1.0);
+        state.ins_aligned = true;
+        state.velocity = Vector3::new(0.02, 0.0, 0.0);
+
+        let imu_measurements: Vec<_> = (0..12)
+            .map(|i| gneiss_core::imu::ImuMeasurement {
+                accel: Vector3::new(i as f64 * 10.0, 0.0, 9.8),
+                gyro: Vector3::new(i as f64 * 0.1, 0.0, 0.0),
+                time_tag: i,
+                temperature: None,
+            })
+            .collect();
+        let imu_history = vec![imu_measurements];
+
+        ProcessingEngine::apply_nhc_updates(&config, &imu_history, &mut state);
     }
 }
 
