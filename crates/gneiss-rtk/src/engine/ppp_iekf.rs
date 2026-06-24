@@ -826,7 +826,7 @@ impl PppIteratedEkf {
 
         if !sat.is_iono_free && sat.cp1.is_some() && sat.cp2.is_some() && sat.p2.is_some() {
             self.push_uduc_measurements(meas, state, sat, x_i, iter, los, expected_base, dist, isb);
-            // Add ionospheric prior constraint: tie i1 state to Klobuchar prediction
+            // Add ionospheric prior constraint: tie i1 state to Klobuchar/Ionex prediction
             if let Some(i1_idx) = find_amb_idx(state, sat.sat_obs.sat, 3) {
                 let i1_est = x_i.get(CORE_STATE_SIZE + i1_idx).copied().unwrap_or(0.0);
                 let res_i1 = sat.iono_delay - i1_est;
@@ -842,6 +842,11 @@ impl PppIteratedEkf {
                     is_phase: false,
                     sat: Some(sat.sat_obs.sat),
                 });
+            } else {
+                tracing::debug!(
+                    "UDUC iono prior skipped: band-3 ambiguity missing for {}",
+                    sat.sat_obs.sat
+                );
             }
         } else {
             self.push_pr_measurement(meas, state, sat, x_i, iter, los, expected_base, dist, isb);
