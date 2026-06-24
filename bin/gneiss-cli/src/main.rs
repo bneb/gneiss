@@ -33,8 +33,10 @@ enum Commands {
         ntrip_pass: Option<String>,
         #[arg(long, help = "Engine configuration file (.json)")]
         config: Option<String>,
-        #[arg(long, help = "Engine mode (spp, spp-ins, rtk, rtk-ins, ppp, ppp-ins)")]
+        #[arg(long, help = "Engine mode (spp, spp-ins, rtk, rtk-ins, ppp, ppp-ins, ppp-me)")]
         mode: Option<String>,
+        #[arg(long, help = "Dynamics model (static, pedestrian, automotive, marine, airborne). Default: static")]
+        dynamics: Option<String>,
         #[arg(short, long, help = "Output trajectory stream to file (.pos)")]
         output: Option<String>,
     },
@@ -69,8 +71,10 @@ enum Commands {
             help = "Enable automatic multi-pass tuning of EKF hyperparameters"
         )]
         enable_auto_tune: bool,
-        #[arg(long, help = "Engine mode (spp, spp-ins, rtk, rtk-ins, ppp, ppp-ins)")]
+        #[arg(long, help = "Engine mode (spp, spp-ins, rtk, rtk-ins, ppp, ppp-ins, ppp-me)")]
         mode: Option<String>,
+        #[arg(long, help = "Dynamics model (static, pedestrian, automotive, marine, airborne). Default: static")]
+        dynamics: Option<String>,
         #[arg(long, help = "LAMBDA PAR min ratio threshold")]
         lambda_ratio: Option<f64>,
         #[arg(long, help = "LAMBDA PAR minimum subset size")]
@@ -168,6 +172,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             ntrip_pass,
             config,
             mode,
+            dynamics,
             output,
         } => {
             let mut engine_config = if let Some(config_path) = config {
@@ -205,6 +210,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     _ => return Err("Invalid engine mode specified".into()),
                 };
             }
+            if let Some(d) = dynamics {
+                engine_config.dynamics_model = match d.to_lowercase().as_str() {
+                    "static" => gneiss_rtk::engine::DynamicsModel::Static,
+                    "pedestrian" => gneiss_rtk::engine::DynamicsModel::Pedestrian,
+                    "automotive" => gneiss_rtk::engine::DynamicsModel::Automotive,
+                    "marine" => gneiss_rtk::engine::DynamicsModel::Marine,
+                    "airborne" => gneiss_rtk::engine::DynamicsModel::Airborne,
+                    _ => return Err("Invalid dynamics model specified".into()),
+                };
+            }
 
             let live_cfg = live::LiveConfig {
                 port,
@@ -233,6 +248,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             enable_backward_smoothing,
             enable_auto_tune,
             mode,
+            dynamics,
             lambda_ratio,
             lambda_subset,
             max_epochs,
@@ -450,6 +466,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if is_ppp && (sp3.is_none() || clk.is_none()) {
                     tracing::warn!("Warning: SP3 and CLK files are missing for PPP. Using broadcast ephemeris, which will result in large drift.");
                 }
+            }
+            if let Some(d) = dynamics {
+                engine_config.dynamics_model = match d.to_lowercase().as_str() {
+                    "static" => gneiss_rtk::engine::DynamicsModel::Static,
+                    "pedestrian" => gneiss_rtk::engine::DynamicsModel::Pedestrian,
+                    "automotive" => gneiss_rtk::engine::DynamicsModel::Automotive,
+                    "marine" => gneiss_rtk::engine::DynamicsModel::Marine,
+                    "airborne" => gneiss_rtk::engine::DynamicsModel::Airborne,
+                    _ => return Err("Invalid dynamics model specified".into()),
+                };
             }
             if let Some(lr) = lambda_ratio {
                 engine_config.lambda_min_ratio = lr;

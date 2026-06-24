@@ -659,9 +659,6 @@ pub(crate) fn update_phase_ambiguities(
             *state.windup.get(&sat.sat_obs.sat).unwrap_or(&0.0),
         );
         state.windup.insert(sat.sat_obs.sat, wup);
-        // cp1 is already iono-free combined in get_obs_and_corrections
-        // when precise products are loaded.  Do NOT double-apply.
-        let l_meas = (cp1 - wup) * sat.lam1;
         let prev = *state.locktimes.get(&(sat.sat_obs.sat, 1)).unwrap_or(&0);
         let mut gf_prev = state.gf_prev.get(&sat.sat_obs.sat).copied();
         let mut mw_prev = state.mw_prev.get(&sat.sat_obs.sat).copied();
