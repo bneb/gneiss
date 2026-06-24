@@ -1,4 +1,4 @@
-use crate::engine::types::{DynamicsModel, EngineMode};
+use crate::engine::types::{DynamicsModel, EngineMode, IonosphereModel};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -126,7 +126,11 @@ pub struct EngineConfig {
     pub chi_square_cp_threshold: f64,
     pub phase_windup_enabled: bool,
     pub min_snr_dbhz: f64,
+    /// Satellite elevation mask in degrees.
+    pub elevation_mask_deg: f64,
     pub dynamics_model: DynamicsModel,
+    /// Auto-detect dynamics from observations (overrides dynamics_model).
+    pub auto_detect_dynamics: bool,
     pub doppler_slip_threshold_cycles: f64,
     pub max_reject_count: usize,
     pub max_base_age_s: f64,
@@ -135,6 +139,14 @@ pub struct EngineConfig {
     pub ar_min_epoch_count: u32,
     pub ar_min_lock: u32,
     pub ar_ffrt_prob: f64,
+
+    // Solver Mode Flags
+    /// Ionosphere model selection.
+    pub iono_model: IonosphereModel,
+    /// Enable horizontal troposphere gradients (adds 2 state params).
+    pub enable_tropo_gradients: bool,
+    /// Enable integer ambiguity resolution.
+    pub enable_ar: bool,
 
     // Process Noise
     /// Receiver clock bias process noise (m²/s).  For white-noise clock
@@ -186,7 +198,9 @@ impl Default for EngineConfig {
             chi_square_cp_threshold: 1e6,
             phase_windup_enabled: true,
             min_snr_dbhz: 25.0,
+            elevation_mask_deg: 5.0,
             dynamics_model: DynamicsModel::Automotive,
+            auto_detect_dynamics: true,
             doppler_slip_threshold_cycles: 5.0,
             max_reject_count: 3,
             max_base_age_s: 5.0,
@@ -195,6 +209,9 @@ impl Default for EngineConfig {
             ar_min_epoch_count: 5,
             ar_min_lock: 3,
             ar_ffrt_prob: 0.001,
+            iono_model: IonosphereModel::default(),
+            enable_tropo_gradients: false,
+            enable_ar: false,
             process_noise_cb: 1.0,    // σ=1 m/s for TCXO random walk
             process_noise_cd: 1e4,
             process_noise_isb: 0.1,   // ~0.3 m/hr random walk

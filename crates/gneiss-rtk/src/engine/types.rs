@@ -48,6 +48,27 @@ pub enum DynamicsModel {
     Airborne,
 }
 
+impl Default for DynamicsModel {
+    fn default() -> Self {
+        DynamicsModel::Automotive
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum IonosphereModel {
+    /// Klobuchar model — free, broadcast parameters, 1–3 m accuracy.
+    Klobuchar,
+    /// IONEX grid maps — requires downloaded file, 1–5 cm accuracy.
+    Ionex,
+}
+
+impl Default for IonosphereModel {
+    fn default() -> Self {
+        IonosphereModel::Klobuchar
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum EngineError {
     NoObservations,
