@@ -260,6 +260,38 @@ pub fn predict(
         .copy_from(state.core_phi.as_ref().unwrap());
 
     state.covariance = &phi_full * &state.covariance * phi_full.transpose() + q;
+
+    // NaN can enter through numerical overflow in Phi*P*Phi^T.  Once
+    // present, it cascades into StateDisappeared errors that cause 30m
+    // position jumps.  Replace the entire matrix with a conservative
+    // diagonal (fast Cholesky path, no SVD hang).  This discards
+    // off-diagonal information but preserves filter continuity — far
+    // better than a full state reset.
+    if state.covariance.iter().any(|x| x.is_nan()) {
+        let n = state.covariance.nrows();
+        let core = crate::filter::CORE_STATE_SIZE.min(n);
+        let nan_count = state.covariance.iter().filter(|x| x.is_nan()).count();
+        tracing::warn!(
+            "NaN in predicted covariance ({}×{}, {} entries). Reinit diagonal.",
+            n, n, nan_count
+        );
+        state.covariance = DMatrix::zeros(n, n);
+        // Position: 25 m² (σ=5m), Velocity: 1 m²/s², Attitude: 0.01 rad²
+        for i in 0..3  { state.covariance[(i, i)] = 25.0; }
+        for i in 3..6  { state.covariance[(i, i)] = 1.0; }
+        for i in 6..9  { state.covariance[(i, i)] = 0.01; }
+        // Accel bias, gyro bias
+        for i in 9..15 { state.covariance[(i, i)] = 0.01; }
+        // Clock bias: 10000 m², ISBs: 100, clock drift: 100, ZWD: 0.01
+        if n > 15 { state.covariance[(15, 15)] = 10000.0; }
+        if n > 16 { state.covariance[(16, 16)] = 100.0; }
+        if n > 17 { state.covariance[(17, 17)] = 100.0; }
+        if n > 18 { state.covariance[(18, 18)] = 100.0; }
+        if n > 19 { state.covariance[(19, 19)] = 100.0; }
+        if n > 20 { state.covariance[(20, 20)] = 0.01; }
+        // Ambiguities: 10000 m²
+        for i in core..n { state.covariance[(i, i)] = 10000.0; }
+    }
     state.full_p_predict = Some(state.covariance.clone());
 
     let mut x_pred = DVector::zeros(state.covariance.nrows());

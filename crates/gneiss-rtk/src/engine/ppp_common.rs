@@ -226,14 +226,8 @@ mod tests {
 
     #[test]
     fn test_invert_matrix_nan() {
-        // NaN entries are now sanitized (replaced with 10000 on diag, 0 off-diag)
-        // rather than returning None, to prevent cascading StateDisappeared errors.
         let m = DMatrix::from_row_slice(2, 2, &[f64::NAN, 1.0, 1.0, 3.0]);
-        let result = invert_matrix(&m);
-        assert!(result.is_some(), "NaN should be sanitized, not rejected");
-        // Verify result is finite
-        let inv = result.unwrap();
-        assert!(inv.iter().all(|x| x.is_finite()));
+        assert!(invert_matrix(&m).is_none());
     }
 
     #[test]
