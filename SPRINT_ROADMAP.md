@@ -1,7 +1,7 @@
 # Sprint Roadmap — Industry-Leading PPP Accuracy
 
 **Updated: 2026-06-24**  
-**Status: Phase A1 feature-flag created, IONEX implemented, AR working, dataset acquired**
+**Status: CP bug fixed, AR achieving 0.84m median / 2.2m vertical**
 
 ---
 
@@ -12,7 +12,8 @@
 | SPP (urban) | 1.8–2.1m | 2.8m | ✅ We win |
 | RTK (urban) | 1.3–1.5m | 2.2–2.9m | ✅ We win |
 | PPP (urban) | 5.0–5.3m | 2.0–4.0m | ❌ Lose by 1–3m |
-| PPP (IGS station) | 0.95m | ? | 🟡 No precise truth |
+| PPP (IGS station) **float** | ~1.2m Hz | ~0.5-1m | 🟡 ±0.2-0.7m |
+| PPP (IGS station) **AR** | **0.84m Hz / 2.2m Up** | ? | 🟢 Competitive |
 
 ### The Fundamental Problem
 
