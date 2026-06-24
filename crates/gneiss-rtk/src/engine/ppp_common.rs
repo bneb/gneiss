@@ -289,4 +289,106 @@ mod tests {
         // find_ambiguity_index only matches f==0, so it won't find frequency band 1
         assert_eq!(find_ambiguity_index(&state, sat), None);
     }
+
+    #[test]
+    fn test_snr_scale_boundary_values() {
+        // Nominal SNR at 45 dB-Hz -> scale = 1.0
+        assert!((snr_scale(45) - 1.0).abs() < 1e-10);
+        // Very high SNR at 65 dB-Hz -> scale = 0.01 (0.1^2)
+        assert!((snr_scale(65) - 0.01).abs() < 1e-10);
+        // Very low SNR at 25 dB-Hz -> scale = 100.0 (10^2)
+        assert!((snr_scale(25) - 100.0).abs() < 1e-10);
+        // Exactly 0 dB-Hz -> scale = 10^(45/10) = 10^4.5 = 31622.77...
+        // The function does (10)^((45 - 0)/10) = 10^4.5
+        assert!((snr_scale(0) - 31622.776601683792).abs() < 1.0);
+    }
+
+    #[test]
+    fn test_build_iono_constraint_row_end_index() {
+        let h = build_iono_constraint_row(10, 9);
+        assert_eq!(h[9], 1.0);
+        assert_eq!(h[0], 0.0);
+    }
+
+    #[test]
+    fn test_invert_matrix_singular() {
+        // Singular matrix: all zeros -> not NaN, but singular
+        let m = DMatrix::from_row_slice(2, 2, &[0.0, 0.0, 0.0, 0.0]);
+        let inv = invert_matrix(&m);
+        // invert_matrix_robust should still compute a pseudo-inverse / fallback
+        // and return Some (no NaN in input).
+        assert!(inv.is_some());
+    }
+
+    #[test]
+    fn test_build_iono_constraint_row_out_of_bounds_handled_by_panics() {
+        // A one-element vector at index 0 works fine
+        let h = build_iono_constraint_row(1, 0);
+        assert_eq!(h[0], 1.0);
+    }
+
+    #[test]
+    fn test_extract_state_vector_zero_position() {
+        let state = make_state();
+        let x = extract_state_vector(&state);
+        assert_eq!(x.len(), CORE_STATE_SIZE);
+        // Position, velocity, attitude, biases, clock are all 0 at initialization
+        for i in 0..15 {
+            assert_eq!(x[i], 0.0, "x[{}] should be 0.0, got {}", i, x[i]);
+        }
+        assert_eq!(x[15], 0.0); // rcv_clk_bias
+        assert_eq!(x[16], 0.0); // isb_glo
+        assert_eq!(x[17], 0.0); // isb_gal
+        assert_eq!(x[18], 0.0); // isb_bds
+        assert_eq!(x[19], 0.0); // rcv_clk_drift
+        // zwd is initialized to 0.1 in RtkState::new()
+        assert!((x[20] - 0.1).abs() < 1e-10, "zwd should be 0.1, got {}", x[20]);
+    }
+
+    #[test]
+    fn test_apply_state_vector_empty_ambiguities() {
+        let mut state = make_state();
+        let x = extract_state_vector(&state);
+        // Modify x slightly
+        let mut x_mod = x.clone();
+        x_mod[0] = 10.0;
+        let p = DMatrix::identity(CORE_STATE_SIZE, CORE_STATE_SIZE);
+        apply_state_vector(&mut state, &x_mod, p);
+        assert!((state.position.vector.x - 10.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_apply_state_vector_resets_attitude_when_zero() {
+        let mut state = make_state();
+        let x = extract_state_vector(&state);
+        // When rotation vector is essentially zero (all states are 0),
+        // attitude should be identity
+        let p = DMatrix::identity(CORE_STATE_SIZE, CORE_STATE_SIZE);
+        apply_state_vector(&mut state, &x, p);
+        assert!((state.attitude.quaternion().w - 1.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_extract_apply_with_core_only_indices() {
+        // When CORE_STATE_SIZE is exactly 16 (checking the >16 path)
+        // We can't change the constant, but we can verify the path is there.
+        let mut state = make_state();
+        state.rcv_clk_bias = 42.0;
+        let x = extract_state_vector(&state);
+        assert_eq!(x[15], 42.0);
+    }
+
+    #[test]
+    fn test_apply_state_vector_with_large_rotation() {
+        let mut state = make_state();
+        let mut x = extract_state_vector(&state);
+        // Set a non-trivial rotation vector
+        x[6] = 0.5;
+        x[7] = 0.5;
+        x[8] = 0.5;
+        let p = DMatrix::identity(CORE_STATE_SIZE, CORE_STATE_SIZE);
+        apply_state_vector(&mut state, &x, p);
+        assert!(state.attitude.quaternion().w < 1.0);
+        assert!(state.attitude.quaternion().w > 0.0);
+    }
 }

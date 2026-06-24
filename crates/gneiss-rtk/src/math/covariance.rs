@@ -191,4 +191,84 @@ mod tests {
         assert!((p[(1, 1)] - 1.0).abs() < 1e-10);
         assert!((p[(0, 1)] - p[(1, 0)]).abs() < 1e-12);
     }
+
+    #[test]
+    fn test_apply_joseph_scalar_perfect_measurement() {
+        // r_i = 0.0 (perfect measurement): gain should fully commit to the innovation
+        let mut p = CovMatrix::from_diagonal(&dvector![9.0, 4.0]);
+        let mut dx = dvector![0.0, 0.0];
+        let h = dmatrix![1.0, 0.0];
+        // s_i = H*P*H^T + R = 9.0 + 0.0 = 9.0
+        // K_i = P*H^T / s_i = [9.0; 0.0] / 9.0 = [1.0; 0.0]
+        // dx[0] = K_i[0] * v_i = 1.0 * 5.0 = 5.0
+        // After update:
+        //   I - K*H = [[0,0],[0,1]], so P = [[0,0],[0,4]] (uncertainty on measured state goes to 0)
+        apply_joseph_scalar(&mut p, &mut dx, &h, 0, 0.0, 5.0, 9.0);
+
+        // dx reflects full innovation
+        assert!((dx[0] - 5.0).abs() < 1e-10);
+        assert!((dx[1] - 0.0).abs() < 1e-10);
+
+        // Covariance of measured element goes to zero
+        assert!((p[(0, 0)]).abs() < 1e-12);
+        // Unmeasured element unchanged
+        assert!((p[(1, 1)] - 4.0).abs() < 1e-10);
+        assert!((p[(0, 1)] - p[(1, 0)]).abs() < 1e-12);
+    }
+
+    #[test]
+    fn test_apply_joseph_scalar_sequential_updates() {
+        // Two sequential scalar updates on a 3-state system
+        let mut p = CovMatrix::from_diagonal(&dvector![4.0, 1.0, 9.0]);
+        let mut dx = dvector![0.0, 0.0, 0.0];
+
+        // Update 1: measure state 0 with v=2.0, r=1.0
+        let h1 = dmatrix![1.0, 0.0, 0.0];
+        let s1 = 4.0 + 1.0; // 5.0
+        apply_joseph_scalar(&mut p, &mut dx, &h1, 0, 1.0, 2.0, s1);
+
+        // After update 1: dx[0] = (4.0/5.0)*2.0 = 1.6
+        assert!((dx[0] - 1.6).abs() < 1e-10);
+        // Covariance should be reduced
+        assert!(p[(0, 0)] < 4.0);
+        assert!((p[(1, 1)] - 1.0).abs() < 1e-10);
+
+        // Update 2: measure state 2 with v=3.0, r=4.0
+        let h2 = dmatrix![0.0, 0.0, 1.0];
+        // P is now non-diagonal after first update, but row 2 hasn't been touched
+        // H*P*H^T = P[2,2] which is still 9.0 (first update didn't touch state 2)
+        let s2 = 9.0 + 4.0; // 13.0
+        apply_joseph_scalar(&mut p, &mut dx, &h2, 0, 4.0, 3.0, s2);
+
+        // After update 2: dx[2] += (9.0/13.0)*3.0 = 2.0769...
+        let expected_dx2 = 9.0 / 13.0 * 3.0;
+        assert!((dx[2] - expected_dx2).abs() < 1e-10);
+        // State 1 should be unchanged from first update
+        assert!((dx[1] - 0.0).abs() < 1e-10);
+
+        // Final covariance should be symmetric
+        assert!((p[(0, 1)] - p[(1, 0)]).abs() < 1e-12);
+        assert!((p[(0, 2)] - p[(2, 0)]).abs() < 1e-12);
+        assert!((p[(1, 2)] - p[(2, 1)]).abs() < 1e-12);
+    }
+
+    #[test]
+    fn test_apply_joseph_covariance_update_multiple_measurements() {
+        // Batch update with a 2x2 measurement matrix (two simultaneous measurements)
+        let p = CovMatrix::from_diagonal(&dvector![4.0, 1.0]);
+        // K is 2x2: columns = states, rows = measurements
+        let k = dmatrix![0.8, 0.1; 0.2, 0.5];
+        // H is 2x2
+        let h = dmatrix![1.0, 0.0; 0.0, 1.0];
+        // R is 2x2 diagonal
+        let r = dmatrix![1.0, 0.0; 0.0, 2.0];
+
+        let p_new = apply_joseph_covariance_update(&p, &k, &h, &r);
+
+        // Must be symmetric
+        assert!((p_new[(0, 1)] - p_new[(1, 0)]).abs() < 1e-12);
+        // Both diagonal elements should be reduced
+        assert!(p_new[(0, 0)] < p[(0, 0)]);
+        assert!(p_new[(1, 1)] < p[(1, 1)]);
+    }
 }

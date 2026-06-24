@@ -134,6 +134,7 @@ mod tests {
         assert!(EngineMode::PppInsLooselyCoupled.is_ppp());
         assert!(EngineMode::PppIekf.is_ppp());
         assert!(EngineMode::PppInsIekf.is_ppp());
+        assert!(EngineMode::PppMultiEpoch.is_ppp());
 
         assert!(!EngineMode::Spp.is_ppp());
         assert!(!EngineMode::SppIns.is_ppp());
@@ -190,6 +191,22 @@ mod tests {
     }
 
     #[test]
+    fn test_engine_mode_debug_clone_copy() {
+        // Verify Debug, Clone, and Copy work
+        let mode = EngineMode::PppIekf;
+        let _debug = format!("{:?}", mode);
+        let cloned = mode;
+        assert_eq!(mode, cloned);
+    }
+
+    #[test]
+    fn test_engine_error_debug() {
+        let err = EngineError::NoObservations;
+        let debug = format!("{:?}", err);
+        assert!(debug.contains("NoObservations"));
+    }
+
+    #[test]
     fn test_dynamics_model_variants() {
         assert_eq!(DynamicsModel::Static as u8, 0);
         assert_eq!(DynamicsModel::Pedestrian as u8, 1);
@@ -199,9 +216,90 @@ mod tests {
     }
 
     #[test]
+    fn test_dynamics_model_default() {
+        assert_eq!(DynamicsModel::default(), DynamicsModel::Automotive);
+    }
+
+    #[test]
     fn test_dynamics_model_debug_and_clone() {
         let model = DynamicsModel::Automotive;
         let cloned = model;
         assert_eq!(format!("{:?}", cloned), "Automotive");
+    }
+
+    #[test]
+    fn test_ionosphere_model_variants() {
+        assert_eq!(IonosphereModel::Klobuchar, IonosphereModel::Klobuchar);
+        assert_eq!(IonosphereModel::Ionex, IonosphereModel::Ionex);
+        assert_ne!(IonosphereModel::Klobuchar, IonosphereModel::Ionex);
+    }
+
+    #[test]
+    fn test_ionosphere_model_default() {
+        assert_eq!(IonosphereModel::default(), IonosphereModel::Klobuchar);
+    }
+
+    #[test]
+    fn test_ionosphere_model_debug_and_clone() {
+        let model = IonosphereModel::Klobuchar;
+        let cloned = model;
+        assert_eq!(format!("{:?}", cloned), "Klobuchar");
+    }
+
+    #[test]
+    fn test_ionosphere_model_partial_eq() {
+        assert_eq!(IonosphereModel::Ionex, IonosphereModel::Ionex);
+        assert_ne!(IonosphereModel::Klobuchar, IonosphereModel::Ionex);
+    }
+
+    #[test]
+    fn test_engine_mode_serde_traits() {
+        // Compile-time check: EngineMode implements Serialize + Deserialize
+        fn assert_serde<T: serde::Serialize + serde::de::DeserializeOwned>() {}
+        assert_serde::<EngineMode>();
+    }
+
+    #[test]
+    fn test_dynamics_model_serde_traits() {
+        fn assert_serde<T: serde::Serialize + serde::de::DeserializeOwned>() {}
+        assert_serde::<DynamicsModel>();
+    }
+
+    #[test]
+    fn test_ionosphere_model_serde_traits() {
+        fn assert_serde<T: serde::Serialize + serde::de::DeserializeOwned>() {}
+        assert_serde::<IonosphereModel>();
+    }
+
+    #[test]
+    fn test_engine_mode_is_ppp_multiepoch() {
+        assert!(EngineMode::PppMultiEpoch.is_ppp());
+    }
+
+    #[test]
+    fn test_engine_mode_is_tightly_coupled_all_variants() {
+        let tight: &[EngineMode] = &[
+            EngineMode::SppIns,
+            EngineMode::RtkIns,
+            EngineMode::PppIns,
+            EngineMode::PppInsIekf,
+            EngineMode::RtkInsIekf,
+        ];
+        for mode in tight {
+            assert!(mode.is_tightly_coupled(), "{:?} should be tightly coupled", mode);
+        }
+        let loose: &[EngineMode] = &[
+            EngineMode::Spp,
+            EngineMode::SppInsLooselyCoupled,
+            EngineMode::Rtk,
+            EngineMode::RtkInsLooselyCoupled,
+            EngineMode::Ppp,
+            EngineMode::PppInsLooselyCoupled,
+            EngineMode::PppIekf,
+            EngineMode::PppMultiEpoch,
+        ];
+        for mode in loose {
+            assert!(!mode.is_tightly_coupled(), "{:?} should not be tightly coupled", mode);
+        }
     }
 }

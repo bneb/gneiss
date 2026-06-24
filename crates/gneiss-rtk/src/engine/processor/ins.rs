@@ -782,4 +782,67 @@ mod tests {
             Err(e) => panic!("Unexpected error: {:?}", e),
         }
     }
+
+    #[test]
+    fn test_predict_state_rtk_ins_iekf_mode_with_imu() {
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        engine.config.mode = EngineMode::RtkInsIekf;
+
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(
+            Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+        let mut state = RtkState::new(time, pos, 1.0);
+        state.ins_aligned = true;
+        engine.current_state = Some(state);
+
+        engine.add_imu_measurement(gneiss_core::imu::ImuMeasurement {
+            accel: Vector3::new(0.0, 0.0, 9.8),
+            gyro: Vector3::new(0.0, 0.0, 0.0),
+            time_tag: 0,
+            temperature: None,
+        });
+
+        engine.predict_state(1.0);
+        let s = engine.current_state.as_ref().unwrap();
+        assert!(s.predicted_position.is_some());
+        assert!(s.predicted_velocity.is_some());
+        assert!(s.predicted_attitude.is_some());
+        // IMU data should have been used (ins_aligned + INS mode)
+        assert!(engine.imu_buffer.is_empty());
+        assert_eq!(engine.imu_history.len(), 1);
+    }
+
+    #[test]
+    fn test_predict_state_ppp_ins_mode_uses_imu_when_aligned() {
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        engine.config.mode = EngineMode::PppIns;
+
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(
+            Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+        let mut state = RtkState::new(time, pos, 1.0);
+        state.ins_aligned = true;
+        engine.current_state = Some(state);
+
+        engine.add_imu_measurement(gneiss_core::imu::ImuMeasurement {
+            accel: Vector3::new(0.0, 0.0, 9.8),
+            gyro: Vector3::new(0.0, 0.0, 0.0),
+            time_tag: 0,
+            temperature: None,
+        });
+
+        engine.predict_state(1.0);
+        let s = engine.current_state.as_ref().unwrap();
+        assert!(s.predicted_position.is_some());
+        assert!(engine.imu_buffer.is_empty());
+        assert_eq!(engine.imu_history.len(), 1);
+    }
 }

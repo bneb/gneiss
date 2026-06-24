@@ -1300,6 +1300,250 @@ mod tests {
         assert!((state.isb_gal - 0.0).abs() < 1e-10);
         assert!((state.isb_bds - 0.0).abs() < 1e-10);
     }
+
+    #[test]
+    fn test_init_attitude_produces_valid_quaternion() {
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::new(6378137.0, 0.0, 0.0), Datum::WGS84, Frame::ECEF, time);
+        let q = init_attitude(&pos);
+        // Attitude should be a valid unit quaternion
+        assert!((q.quaternion().w.powi(2) + q.quaternion().i.powi(2) + q.quaternion().j.powi(2) + q.quaternion().k.powi(2) - 1.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_reset_to_spp_ins_aligned_true() {
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::new(6378137.0, 0.0, 0.0), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 10.0);
+        state.ins_aligned = true;
+        let new_pos = Coordinate::new(Vector3::new(6378137.0, 100.0, 0.0), Datum::WGS84, Frame::ECEF, time);
+        state.reset_to_spp(new_pos, None, false);
+        // When ins_aligned is true, attitude/IMU biases should NOT be reset
+        assert!(state.ins_aligned);
+        assert_eq!(state.position.vector.y, 100.0);
+    }
+
+    #[test]
+    fn test_reset_to_spp_sanitizes_large_velocity() {
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::new(6378137.0, 0.0, 0.0), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 10.0);
+        state.velocity = Vector3::new(500.0, 0.0, 0.0); // > 100 -> should be zeroed
+        let new_pos = Coordinate::new(Vector3::new(6378137.0, 100.0, 0.0), Datum::WGS84, Frame::ECEF, time);
+        state.reset_to_spp(new_pos, None, false);
+        assert_eq!(state.velocity.norm(), 0.0);
+    }
+
+    #[test]
+    fn test_reset_to_spp_sanitizes_nan_velocity() {
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::new(6378137.0, 0.0, 0.0), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 10.0);
+        state.velocity = Vector3::new(f64::NAN, 0.0, 0.0);
+        let new_pos = Coordinate::new(Vector3::new(6378137.0, 100.0, 0.0), Datum::WGS84, Frame::ECEF, time);
+        state.reset_to_spp(new_pos, None, false);
+        assert_eq!(state.velocity.norm(), 0.0);
+    }
+
+    #[test]
+    fn test_reset_to_spp_sanitizes_large_clock_drift() {
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::new(6378137.0, 0.0, 0.0), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 10.0);
+        state.rcv_clk_drift = 50000.0; // > 10000 -> should be zeroed
+        let new_pos = Coordinate::new(Vector3::new(6378137.0, 100.0, 0.0), Datum::WGS84, Frame::ECEF, time);
+        state.reset_to_spp(new_pos, None, false);
+        assert_eq!(state.rcv_clk_drift, 0.0);
+    }
+
+    #[test]
+    fn test_reset_to_spp_sanitizes_nan_clock_drift() {
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::new(6378137.0, 0.0, 0.0), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 10.0);
+        state.rcv_clk_drift = f64::NAN;
+        let new_pos = Coordinate::new(Vector3::new(6378137.0, 100.0, 0.0), Datum::WGS84, Frame::ECEF, time);
+        state.reset_to_spp(new_pos, None, false);
+        assert_eq!(state.rcv_clk_drift, 0.0);
+    }
+
+    #[test]
+    fn test_reset_to_spp_covariance_reset_indices() {
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::new(6378137.0, 0.0, 0.0), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 10.0);
+        // Set all covariances to 1.0 first
+        state.covariance.fill(1.0);
+        let new_pos = Coordinate::new(Vector3::new(6378137.0, 100.0, 50.0), Datum::WGS84, Frame::ECEF, time);
+        state.reset_to_spp(new_pos, None, false);
+        // Position diagonals should be reset to 100.0
+        for i in 0..3 {
+            assert!((state.covariance[(i, i)] - 100.0).abs() < 1e-10);
+        }
+        // Clock bias should be reset
+        assert!((state.covariance[(15, 15)] - INITIAL_CLOCK_BIAS_VARIANCE).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_find_best_reference_sat_with_reject_count() {
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::new(6378137.0, 0.0, 0.0), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 10.0);
+        let sat1 = SatelliteId { constellation: Constellation::Gps, prn: 1 };
+        let sat2 = SatelliteId { constellation: Constellation::Gps, prn: 2 };
+        state.add_ambiguity(sat1, 1, 0.0, 1.0);
+        state.add_ambiguity(sat2, 1, 0.0, 1.0);
+        state.locktimes.insert((sat1, 1), 100);
+        state.locktimes.insert((sat2, 1), 200);
+        state.reject_counts.insert((sat2, 1), 1); // sat2 has rejections -> excluded
+
+        let constell = Constellation::Gps;
+        let result = find_best_reference_sat(&state, constell, 50);
+        // sat1 should be chosen (sat2 has reject count > 0)
+        assert_eq!(result, Some(0));
+    }
+
+    #[test]
+    fn test_find_best_reference_sat_all_rejected() {
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::new(6378137.0, 0.0, 0.0), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 10.0);
+        let sat1 = SatelliteId { constellation: Constellation::Gps, prn: 1 };
+        state.add_ambiguity(sat1, 1, 0.0, 1.0);
+        state.locktimes.insert((sat1, 1), 100);
+        state.reject_counts.insert((sat1, 1), 3); // rejected
+
+        let result = find_best_reference_sat(&state, Constellation::Gps, 50);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_collect_candidates_l2_reference() {
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::new(6378137.0, 0.0, 0.0), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 10.0);
+        let sat_ref = SatelliteId { constellation: Constellation::Gps, prn: 1 };
+        let sat_rov = SatelliteId { constellation: Constellation::Gps, prn: 2 };
+        // Add L1 and L2 for ref, L1 for rov
+        state.add_ambiguity(sat_ref, 1, 0.0, 1.0);
+        state.add_ambiguity(sat_ref, 2, 0.0, 1.0);
+        state.add_ambiguity(sat_rov, 1, 0.0, 1.0);
+        state.add_ambiguity(sat_rov, 2, 0.0, 1.0);
+        // Set locktimes so all pass filter
+        for &(s, f) in &[(sat_ref, 1), (sat_ref, 2), (sat_rov, 1), (sat_rov, 2)] {
+            state.locktimes.insert((s, f), 100);
+        }
+
+        let mut candidates = Vec::new();
+        // ref_idx = 0 (sat_ref, L1)
+        collect_candidates_for_constellation(&state, Constellation::Gps, 0, 50, &mut candidates);
+        // Should have: (rov L1 -> ref L1), (rov L2 -> ref L2)
+        // Excludes ref itself (idx 0) and ref L2 companion (idx 1)
+        assert_eq!(candidates.len(), 2);
+        // Candidate 0 should be rov L1 with ref L1 (idx 2 -> idx 0)
+        assert_eq!(candidates[0], (2, 0, 100));
+        // Candidate 1 should be rov L2 with ref L2 (idx 3 -> idx 1 because l2_ref_idx=1)
+        assert_eq!(candidates[1], (3, 1, 100));
+    }
+
+    #[test]
+    fn test_collect_candidates_rejected_satellite() {
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::new(6378137.0, 0.0, 0.0), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 10.0);
+        let sat_ref = SatelliteId { constellation: Constellation::Gps, prn: 1 };
+        let sat_rov = SatelliteId { constellation: Constellation::Gps, prn: 2 };
+        state.add_ambiguity(sat_ref, 1, 0.0, 1.0);
+        state.add_ambiguity(sat_rov, 1, 0.0, 1.0);
+        state.locktimes.insert((sat_ref, 1), 100);
+        state.locktimes.insert((sat_rov, 1), 100);
+        state.reject_counts.insert((sat_rov, 1), 2); // rejected
+
+        let mut candidates = Vec::new();
+        collect_candidates_for_constellation(&state, Constellation::Gps, 0, 50, &mut candidates);
+        assert_eq!(candidates.len(), 0, "Rejected satellite should be excluded");
+    }
+
+    #[test]
+    fn test_compute_candidate_variance_clamping() {
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::new(6378137.0, 0.0, 0.0), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 10.0);
+        let sat_ref = SatelliteId { constellation: Constellation::Gps, prn: 1 };
+        let sat_rov = SatelliteId { constellation: Constellation::Gps, prn: 2 };
+        state.add_ambiguity(sat_ref, 1, 0.0, 1.0);
+        state.add_ambiguity(sat_rov, 1, 0.0, 1.0);
+        // Set a very high variance on the ambiguity covariance elements to trigger clamping
+        let amb_idx = CORE_STATE_SIZE;
+        state.covariance[(amb_idx, amb_idx)] = 1e8; // Very large variance
+        state.covariance[(amb_idx + 1, amb_idx + 1)] = 1e8;
+        state.covariance[(amb_idx + 1, amb_idx)] = 0.0;
+        state.covariance[(amb_idx, amb_idx + 1)] = 0.0;
+
+        let candidates = vec![(1, 0, 100)];
+        let result = compute_candidate_variance(&state, &[], &candidates);
+        // With empty ephemerides, lam_rov = lam_ref = LIGHT_SPEED / 1575.42e6 ~ 0.19
+        // var_cycles = q_sd[1,1]/(0.19^2) + q_sd[0,0]/(0.19^2) = 2 * 1e8 / 0.0361 ~ 5.5e9 > 10000
+        // So the candidate should be excluded by clamping
+        assert_eq!(result.len(), 0, "High variance candidate should be excluded");
+    }
+
+    #[test]
+    fn test_build_lambda_variance_matrix_structure() {
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::new(6378137.0, 0.0, 0.0), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 10.0);
+        let sat_ref = SatelliteId { constellation: Constellation::Gps, prn: 1 };
+        let sat_rov1 = SatelliteId { constellation: Constellation::Gps, prn: 2 };
+        let sat_rov2 = SatelliteId { constellation: Constellation::Gps, prn: 3 };
+        state.add_ambiguity(sat_ref, 1, 10.0, 0.1);
+        state.add_ambiguity(sat_rov1, 1, 15.0, 0.1);
+        state.add_ambiguity(sat_rov2, 1, 20.0, 0.1);
+        let candidates = vec![
+            (1, 0, 100, 0.5),
+            (2, 0, 50, 0.8),
+        ];
+        let q = build_lambda_variance_matrix(&state, &candidates, 2, &[]);
+        assert_eq!(q.nrows(), 2);
+        assert_eq!(q.ncols(), 2);
+        // The matrix should be symmetric
+        assert!((q[(0, 1)] - q[(1, 0)]).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_filter_by_locktime_empty_constellations() {
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::new(6378137.0, 0.0, 0.0), Datum::WGS84, Frame::ECEF, time);
+        let state = RtkState::new(time, pos, 10.0);
+        // Empty constellations slice
+        let result = filter_by_locktime(&state, &[], 50);
+        assert_eq!(result.len(), 0);
+    }
+
+    #[test]
+    fn test_resolve_ambiguities_insufficient_data() {
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::new(6378137.0, 0.0, 0.0), Datum::WGS84, Frame::ECEF, time);
+        let state = RtkState::new(time, pos, 10.0);
+        let config = crate::engine::EngineConfig::default();
+        let result = state.resolve_ambiguities(&[], &config);
+        assert!(result.is_err(), "Expected error for insufficient data");
+    }
+
+    #[test]
+    fn test_resolve_ambiguities_insufficient_epochs() {
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::new(6378137.0, 0.0, 0.0), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 10.0);
+        state.epoch_count = 2; // Below ar_min_epoch_count (usually 5)
+        state.add_ambiguity(SatelliteId { constellation: Constellation::Gps, prn: 1 }, 1, 0.0, 1.0);
+        state.add_ambiguity(SatelliteId { constellation: Constellation::Gps, prn: 2 }, 1, 0.0, 1.0);
+        let mut config = crate::engine::EngineConfig::default();
+        config.lambda_min_subset = 2;
+        config.ar_min_epoch_count = 5;
+        let result = state.resolve_ambiguities(&[], &config);
+        assert!(result.is_err(), "Expected error for insufficient epochs");
+    }
 }
 pub fn select_ar_candidates(
     state: &RtkState,

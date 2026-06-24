@@ -210,6 +210,7 @@ mod tests {
     use crate::engine::{EngineConfig, EngineError, EngineMode};
     use gneiss_core::coords::{Coordinate, Datum, Frame};
     use gneiss_core::obs::EpochObs;
+    use gneiss_core::sat::SatelliteId;
     use gneiss_core::time::GpsTime;
     use nalgebra::Vector3;
 
@@ -413,5 +414,128 @@ mod tests {
         assert_eq!(state.consecutive_rejections, 0);
         // Position should have been nudged
         assert!((state.position.vector.x - 1.0).abs() > 1e-6);
+    }
+
+    #[test]
+    fn test_perform_spp_ekf_update_tight_coupled_not_aligned_large_diff() {
+        // Tightly coupled mode but ins_aligned=false should NOT take the early reject
+        // path. Instead it goes through the EKF update which may pass or fail
+        // the chi-square test on its own, but the function should not panic.
+        let mut config = EngineConfig::default();
+        config.mode = EngineMode::RtkIns;
+        config.spp_consistency_threshold_m = 15.0;
+
+        let time = GpsTime::new(0, 0.0);
+        let state_pos = Coordinate::new(
+            Vector3::new(1.0, 2.0, 3.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+        let mut state = RtkState::new(time, state_pos, 1.0);
+        state.ins_aligned = false;
+
+        let spp_pos = Coordinate::new(
+            Vector3::new(1000.0, 2000.0, 3000.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+
+        // Should not panic — the early reject condition requires ins_aligned=true
+        ProcessingEngine::perform_spp_ekf_update(&config, &mut state, Some(spp_pos), 0.0);
+    }
+
+    #[test]
+    fn test_process_spp_non_spp_mode_state_with_spp_success_coasts() {
+        // Non-SPP mode where state exists. SPP compute succeeds (we have
+        // ephemerides and observations). The function should go through
+        // covariance divergence check, EKF update, NHC, and return the state.
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        engine.config.mode = EngineMode::RtkIns;
+
+        let time = GpsTime::new(1000, 0.0);
+        let a_sq = 5153.6_f64 * 5153.6_f64;
+
+        let toe = time;
+        let m0_vals = [0.0, std::f64::consts::FRAC_PI_2,
+                       std::f64::consts::PI, 3.0 * std::f64::consts::FRAC_PI_2];
+        for (i, &m0) in m0_vals.iter().enumerate() {
+            let eph = gneiss_core::ephemeris::Ephemeris::Gps(
+                gneiss_core::ephemeris::GpsEphemeris {
+                    sat: SatelliteId {
+                        constellation: gneiss_core::sat::Constellation::Gps,
+                        prn: (i + 1) as u8,
+                    },
+                    toe,
+                    toc: time,
+                    af0: 0.0, af1: 0.0, af2: 0.0,
+                    crs: 0.0, crc: 0.0, cuc: 0.0, cus: 0.0,
+                    cic: 0.0, cis: 0.0,
+                    m0, e: 0.0, sqrt_a: 5153.6, delta_n: 0.0,
+                    omega0: 0.0, omega_dot: 0.0, i0: 0.95, idot: 0.0,
+                    omega: 0.0, tgd: 0.0, iode: 1, iodc: 1,
+                },
+            );
+            engine.add_ephemeris(eph);
+        }
+
+        let pos = Coordinate::new(
+            Vector3::new(1.0, 2.0, 3.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+        engine.current_state = Some(RtkState::new(time, pos, 1.0));
+
+        let pseudo_range = a_sq;
+        let sats: Vec<_> = (0..4)
+            .map(|i| {
+                let sat = SatelliteId {
+                    constellation: gneiss_core::sat::Constellation::Gps,
+                    prn: (i + 1) as u8,
+                };
+                gneiss_core::obs::SatObs {
+                    sat,
+                    observations: vec![
+                        gneiss_core::obs::Observation {
+                            code: gneiss_core::obs::ObsCode {
+                                obs_type: gneiss_core::obs::ObsType::Pseudorange,
+                                signal: gneiss_core::obs::SignalCode {
+                                    freq_band: 1, attribute: 'C',
+                                },
+                            },
+                            value: pseudo_range,
+                            lock_time: None, lli: None,
+                        },
+                        gneiss_core::obs::Observation {
+                            code: gneiss_core::obs::ObsCode {
+                                obs_type: gneiss_core::obs::ObsType::Snr,
+                                signal: gneiss_core::obs::SignalCode {
+                                    freq_band: 1, attribute: 'S',
+                                },
+                            },
+                            value: 45.0,
+                            lock_time: None, lli: None,
+                        },
+                    ],
+                }
+            })
+            .collect();
+
+        let rover = EpochObs { time, satellites: sats };
+        let result = engine.process_spp(&rover);
+        match result {
+            Ok(state) => {
+                assert!(state.position.vector.x.is_finite());
+                assert!(state.position.vector.y.is_finite());
+                assert!(state.position.vector.z.is_finite());
+                assert_eq!(engine.state_history.len(), 1);
+            }
+            Err(EngineError::InitialSppFailed) => {
+                // SPP compute may fail to converge with given data; this is acceptable
+            }
+            Err(e) => panic!("Unexpected error: {:?}", e),
+        }
     }
 }

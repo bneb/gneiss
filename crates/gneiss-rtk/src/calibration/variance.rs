@@ -126,4 +126,32 @@ mod tests {
         let expected = base_var * 1.0 * (1.0 / (sin_el * sin_el));
         assert!((var - expected).abs() < 1e-10);
     }
+
+    #[test]
+    fn test_dynamic_variance_zero_base_variance() {
+        let var = dynamic_variance(40.0, 1.0, 0.0);
+        assert!((var - 0.0).abs() < 1e-12, "zero base variance gives zero");
+    }
+
+    #[test]
+    fn test_dynamic_variance_extreme_elevation() {
+        // Very low elevation just above the sin clamp (sin(0.1005) > 0.1)
+        let el: f64 = 0.1005;
+        let sin_el = el.sin().max(0.1); // match function's internal clamp
+        let var = dynamic_variance(50.0, el, 1.0);
+        let expected = 1.0 / (sin_el * sin_el);
+        assert!((var - expected).abs() < 1e-10);
+
+        // Effect of sin clamp at very low elevation - should match the clamped value
+        let var_clamped = dynamic_variance(50.0, 0.001, 1.0);
+        let clamp_expected = 1.0 / (0.1 * 0.1); // sin clamped to 0.1
+        assert!((var_clamped - clamp_expected).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_dynamic_variance_mid_snr_scale() {
+        // SNR = 35: snr_scale = 10^((45-35)/10) = 10^1 = 10
+        let var = dynamic_variance(35.0, core::f64::consts::FRAC_PI_2, 1.0);
+        assert!((var - 10.0).abs() < 1e-10, "mid SNR gives scale of 10");
+    }
 }

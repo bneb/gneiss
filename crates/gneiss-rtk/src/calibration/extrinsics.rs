@@ -477,4 +477,37 @@ mod tests {
         assert!((nhc_arm[1] - 0.0).abs() < 1e-6);
         assert!((nhc_arm[2] - 1.0).abs() < 1e-6);
     }
+
+    #[test]
+    fn test_estimate_lever_arm_multi_axis_excitation() {
+        // Different rotation axes to ensure all three lever arm components observable
+        let true_arm = Vector3::new(0.5, 1.0, -0.3);
+        let n = 10;
+        let mut omega = Vec::with_capacity(n);
+        let mut omega_dot = Vec::with_capacity(n);
+        let mut v_gnss = Vec::with_capacity(n);
+        let mut v_imu = Vec::with_capacity(n);
+        let mut r_be = Vec::with_capacity(n);
+
+        for i in 0..n {
+            let t = i as f64 * 0.1;
+            // Varying rotation axis
+            let w = Vector3::new(t.sin(), t.cos(), (t * 0.5).sin());
+            let r = *nalgebra::Rotation3::from_euler_angles(t * 0.1, t * 0.2, t * 0.3).matrix();
+            let v_i = Vector3::new(5.0, 1.0, 0.0);
+            let v_g = v_i + r * w.cross(&true_arm);
+            omega.push(w);
+            omega_dot.push(Vector3::zeros());
+            v_gnss.push(v_g);
+            v_imu.push(v_i);
+            r_be.push(r);
+        }
+
+        let estimated = estimate_lever_arm(&omega, &omega_dot, &v_gnss, &v_imu, &r_be).unwrap();
+        assert!(
+            (estimated - true_arm).norm() < 1e-6,
+            "multi-axis lever arm: expected {:?}, got {:?}",
+            true_arm, estimated
+        );
+    }
 }

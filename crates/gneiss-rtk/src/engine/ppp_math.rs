@@ -950,4 +950,182 @@ mod tests {
             detect_mw_slip(slip_cp1_2, 0.19, cp2, 0.24, p1, p2, mw, true, 2.0);
         assert!(slip2, "2.001 cycles should trigger MW slip");
     }
+
+    #[test]
+    fn test_apply_osb_corrections_osb_p2_applied() {
+        use gneiss_parsers::sinex_bia::{BiasRecord, BiasType, SinexBias};
+        let sat_id = SatelliteId { constellation: Constellation::Gps, prn: 1 };
+        let bias_p2 = BiasRecord {
+            bias_type: BiasType::Osb,
+            sat: sat_id, station: None,
+            obs1: "C2W".parse().unwrap(), obs2: None,
+            start_time: GpsTime::new(0, 0.0), end_time: GpsTime::new(0, 100.0),
+            unit: "ns".to_string(), value: 3.0, std_dev: 0.0,
+        };
+        let sinex = SinexBias { records: vec![bias_p2] };
+        let mut obs = SatObs { sat: sat_id, observations: vec![] };
+        obs.observations.push(gneiss_core::obs::Observation {
+            code: ObsCode::from_str("C2W").unwrap(),
+            value: 150.0, lli: None, lock_time: None,
+        });
+        let out = apply_osb_corrections(Some(&sinex), &obs, GpsTime::new(0, 50.0), 1.5e9, 1.2e9, 1, 2);
+        let expected_osb = 3.0e-9 * LIGHT_SPEED;
+        assert!((out.osb_p2 - expected_osb).abs() < 1e-6);
+        assert!((out.p2.unwrap() - (150.0 - expected_osb)).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_apply_osb_corrections_cp1_carrier_phase() {
+        use gneiss_parsers::sinex_bia::{BiasRecord, BiasType, SinexBias};
+        let sat_id = SatelliteId { constellation: Constellation::Gps, prn: 1 };
+        let bias_cp1 = BiasRecord {
+            bias_type: BiasType::Osb,
+            sat: sat_id, station: None,
+            obs1: "L1C".parse().unwrap(), obs2: None,
+            start_time: GpsTime::new(0, 0.0), end_time: GpsTime::new(0, 100.0),
+            unit: "ns".to_string(), value: 4.0, std_dev: 0.0,
+        };
+        let sinex = SinexBias { records: vec![bias_cp1] };
+        let mut obs = SatObs { sat: sat_id, observations: vec![] };
+        let f1 = 1.57542e9;
+        obs.observations.push(gneiss_core::obs::Observation {
+            code: ObsCode::from_str("L1C").unwrap(),
+            value: 1000000.0, lli: None, lock_time: None,
+        });
+        let out = apply_osb_corrections(Some(&sinex), &obs, GpsTime::new(0, 50.0), f1, 1.2e9, 1, 2);
+        let osb_ns = 4.0e-9 * LIGHT_SPEED;
+        let cp_correction = osb_ns / (LIGHT_SPEED / f1);
+        assert!((out.cp1.unwrap() - (1000000.0 - cp_correction)).abs() < 1e-3);
+    }
+
+    #[test]
+    fn test_apply_osb_corrections_no_matching_observations() {
+        let sat_id = SatelliteId { constellation: Constellation::Gps, prn: 1 };
+        let mut obs = SatObs { sat: sat_id, observations: vec![] };
+        obs.observations.push(gneiss_core::obs::Observation {
+            code: ObsCode::from_str("C1C").unwrap(),
+            value: 100.0, lli: None, lock_time: None,
+        });
+        // f2_b=2 but no observation on band 2 -> p2/cp2 should be None
+        let out = apply_osb_corrections(None, &obs, GpsTime::new(0, 0.0), 1.5e9, 1.2e9, 1, 2);
+        assert_eq!(out.p1, Some(100.0));
+        assert_eq!(out.p2, None);
+        assert_eq!(out.cp1, None);
+        assert_eq!(out.cp2, None);
+    }
+
+    #[test]
+    fn test_detect_cycle_slip_no_carrier_phase_observations() {
+        let mut obs = SatObs { sat: SatelliteId { constellation: Constellation::Gps, prn: 1 }, observations: vec![] };
+        obs.observations.push(gneiss_core::obs::Observation {
+            code: ObsCode::from_str("C1C").unwrap(),
+            value: 100.0, lli: None, lock_time: None,
+        });
+        let (slip, lk) = detect_cycle_slip(&obs, 5);
+        assert!(!slip);
+        assert_eq!(lk, 6);
+    }
+
+    #[test]
+    fn test_detect_cycle_slip_locktime_none() {
+        let mut obs = SatObs { sat: SatelliteId { constellation: Constellation::Gps, prn: 1 }, observations: vec![] };
+        obs.observations.push(gneiss_core::obs::Observation {
+            code: ObsCode::from_str("L1C").unwrap(),
+            value: 100.0, lli: None, lock_time: None,
+        });
+        let (slip, lk) = detect_cycle_slip(&obs, 5);
+        assert!(!slip);
+        assert_eq!(lk, 6);
+    }
+
+    #[test]
+    fn test_detect_cycle_slip_multiple_obs_min_locktime() {
+        let mut obs = SatObs { sat: SatelliteId { constellation: Constellation::Gps, prn: 1 }, observations: vec![] };
+        obs.observations.push(gneiss_core::obs::Observation {
+            code: ObsCode::from_str("L1C").unwrap(), value: 100.0, lli: None, lock_time: Some(20),
+        });
+        obs.observations.push(gneiss_core::obs::Observation {
+            code: ObsCode::from_str("L2W").unwrap(), value: 80.0, lli: None, lock_time: Some(10),
+        });
+        let (slip, lk) = detect_cycle_slip(&obs, 3);
+        assert!(!slip);
+        assert_eq!(lk, 4);
+    }
+
+    #[test]
+    fn test_detect_slip_combined_hw_slip_locktime_decrease() {
+        let mut obs = SatObs { sat: SatelliteId { constellation: Constellation::Gps, prn: 1 }, observations: vec![] };
+        obs.observations.push(gneiss_core::obs::Observation {
+            code: ObsCode::from_str("L1C").unwrap(), value: 100.0, lli: None, lock_time: Some(3),
+        });
+        let mut gf_prev = Some(0.0);
+        let mut mw_prev = Some(0.0);
+        let (slip, lk) = detect_slip_combined(&obs, 5, Some(100.0), 0.19, Some(80.0), 0.24,
+            Some(20000000.0), Some(20000000.0), &mut gf_prev, &mut mw_prev);
+        assert!(slip);
+        assert_eq!(lk, 3);
+        assert!(gf_prev.is_none());
+        assert!(mw_prev.is_none());
+    }
+
+    #[test]
+    fn test_apply_earth_rotation_sagnac_norm_preserved() {
+        let raw_pos = Vector3::new(25000000.0, 0.0, 0.0);
+        let raw_vel = Vector3::new(0.0, 3000.0, 0.0);
+        let rcv_pos = Vector3::new(6378137.0, 0.0, 0.0);
+        let (rotated_pos, rotated_vel) = apply_earth_rotation(raw_pos, raw_vel, rcv_pos);
+        // Sagnac correction preserves position norm
+        assert!((rotated_pos.norm() - raw_pos.norm()).abs() < 1.0);
+        // The rotation produces a non-zero y-component (Earth rotated during signal travel)
+        assert!(rotated_pos.y != 0.0);
+        // Velocity should also be rotated
+        assert!(rotated_vel.y != raw_vel.y);
+    }
+
+    #[test]
+    fn test_compute_tropo_dry_north_pole() {
+        let mapper = gneiss_core::atmosphere::NmfMapper;
+        let (d, w) = compute_tropo_dry(Vector3::new(core::f64::consts::PI / 2.0, 0.0, 0.0),
+            0.3, GpsTime::new(0, 0.0), &mapper);
+        assert!(d > 0.0);
+        assert!(w > 0.0);
+    }
+
+    #[test]
+    fn test_apply_earth_rotation_receiver_at_origin() {
+        let sat_pos = Vector3::new(26000000.0, 10000000.0, 5000000.0);
+        let sat_vel = Vector3::new(500.0, 2000.0, 1500.0);
+        let rcv_pos = Vector3::new(0.0, 0.0, 0.0);
+        let (p, v) = apply_earth_rotation(sat_pos, sat_vel, rcv_pos);
+        let rng1 = sat_pos.norm();
+        let tau1 = rng1 / LIGHT_SPEED;
+        let th1 = gneiss_core::constants::EARTH_ROTATION_RATE_RAD_S * tau1;
+        let c1 = libm::cos(th1);
+        let s1 = libm::sin(th1);
+        let p1 = Vector3::new(
+            sat_pos.x * c1 + sat_pos.y * s1,
+            -sat_pos.x * s1 + sat_pos.y * c1,
+            sat_pos.z,
+        );
+        let rng2 = p1.norm();
+        let tau2 = rng2 / LIGHT_SPEED;
+        let th2 = gneiss_core::constants::EARTH_ROTATION_RATE_RAD_S * tau2;
+        let c2 = libm::cos(th2);
+        let s2 = libm::sin(th2);
+        let p2 = Vector3::new(
+            sat_pos.x * c2 + sat_pos.y * s2,
+            -sat_pos.x * s2 + sat_pos.y * c2,
+            sat_pos.z,
+        );
+        let omge = gneiss_core::constants::EARTH_ROTATION_RATE_RAD_S;
+        let v2 = Vector3::new(
+            sat_vel.x * c2 + sat_vel.y * s2 - omge * p2.y,
+            -sat_vel.x * s2 + sat_vel.y * c2 + omge * p2.x,
+            sat_vel.z,
+        );
+        assert!((p.x - p2.x).abs() < 1e-6);
+        assert!((p.y - p2.y).abs() < 1e-6);
+        assert!((v.x - v2.x).abs() < 1e-6);
+        assert!((v.y - v2.y).abs() < 1e-6);
+    }
 }

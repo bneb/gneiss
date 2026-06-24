@@ -607,4 +607,161 @@ mod tests {
         assert_eq!(r.n_ewl, Some(5));
         assert_eq!(r.n_wl, Some(-3));
     }
+
+    // -------------------------------------------------------------------------
+    // Rounding boundary and edge cases
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_resolve_wl_with_negative_ewl() {
+        // N1=100, N2=95, N5=100 => EWL = n2-n5 = -5, WL = n1-n2 = 5
+        let sat_obs = make_gps_obs(1, 20_200_000.0, 100, 95, 100);
+        assert_eq!(resolve_wl(&sat_obs, -5), Some(5));
+    }
+
+    #[test]
+    fn test_resolve_nl_both_clocks_negative() {
+        // Negative receiver and satellite clocks that partially cancel
+        let geo_range = 20_200_000.0;
+        let rcv_clk = -200.0;
+        let sat_clk = -150.0;
+        let r_eff = geo_range + rcv_clk - sat_clk;
+        fn obs(obs_type: ObsType, freq: u8, value: f64) -> Observation {
+            Observation {
+                code: ObsCode {
+                    obs_type,
+                    signal: SignalCode {
+                        freq_band: freq,
+                        attribute: 'X',
+                    },
+                },
+                value,
+                lock_time: None,
+                lli: None,
+            }
+        }
+        let cp1 = r_eff * F1 / C + 50.0;
+        let sat_obs = SatObs {
+            sat: SatelliteId {
+                constellation: Constellation::Gps,
+                prn: 1,
+            },
+            observations: vec![
+                obs(ObsType::Pseudorange, 1, r_eff),
+                obs(ObsType::CarrierPhase, 1, cp1),
+            ],
+        };
+        let rover_pos = Vector3::new(0.0, 0.0, 0.0);
+        let sat_pos = Vector3::new(geo_range, 0.0, 0.0);
+        assert_eq!(
+            resolve_nl(&sat_obs, 0, &rover_pos, &sat_pos, rcv_clk, sat_clk),
+            Some(50)
+        );
+    }
+
+    #[test]
+    fn test_resolve_nl_sat_clock_dominates() {
+        // Satellite clock is very negative (ahead of GPS time)
+        let geo_range = 20_200_000.0;
+        let rcv_clk = 100.0;
+        let sat_clk = -500.0;
+        let r_eff = geo_range + rcv_clk - sat_clk;
+        fn obs(obs_type: ObsType, freq: u8, value: f64) -> Observation {
+            Observation {
+                code: ObsCode {
+                    obs_type,
+                    signal: SignalCode {
+                        freq_band: freq,
+                        attribute: 'X',
+                    },
+                },
+                value,
+                lock_time: None,
+                lli: None,
+            }
+        }
+        let cp1 = r_eff * F1 / C + 200.0;
+        let sat_obs = SatObs {
+            sat: SatelliteId {
+                constellation: Constellation::Gps,
+                prn: 1,
+            },
+            observations: vec![
+                obs(ObsType::Pseudorange, 1, r_eff),
+                obs(ObsType::CarrierPhase, 1, cp1),
+            ],
+        };
+        let rover_pos = Vector3::new(0.0, 0.0, 0.0);
+        let sat_pos = Vector3::new(geo_range, 0.0, 0.0);
+        assert_eq!(
+            resolve_nl(&sat_obs, 0, &rover_pos, &sat_pos, rcv_clk, sat_clk),
+            Some(200)
+        );
+    }
+
+    #[test]
+    fn test_resolve_ewl_large_ambiguities() {
+        let sat_obs = make_gps_obs(1, 20_200_000.0, 10000, 10050, 10000);
+        assert_eq!(resolve_ewl(&sat_obs), Some(50));
+    }
+
+    #[test]
+    fn test_resolve_nl_large_ambiguity() {
+        let geo_range = 20_200_000.0;
+        let sat_obs = make_gps_obs(1, geo_range, 100000, 100003, 99998);
+        let rover_pos = Vector3::new(0.0, 0.0, 0.0);
+        let sat_pos = Vector3::new(geo_range, 0.0, 0.0);
+        assert_eq!(
+            resolve_nl(&sat_obs, 0, &rover_pos, &sat_pos, 0.0, 0.0),
+            Some(100000)
+        );
+    }
+
+    #[test]
+    fn test_process_tcar_epoch_missing_l1_phase() {
+        // EWL and WL need L2+L5 CP; with L1 CP missing, WL fails.
+        let geo_range = 20_200_000.0;
+        let sat_obs = SatObs {
+            sat: SatelliteId { constellation: Constellation::Gps, prn: 1 },
+            observations: vec![
+                Observation { code: ObsCode { obs_type: ObsType::Pseudorange, signal: SignalCode { freq_band: 1, attribute: 'X' } }, value: geo_range, lock_time: None, lli: None },
+                Observation { code: ObsCode { obs_type: ObsType::Pseudorange, signal: SignalCode { freq_band: 2, attribute: 'X' } }, value: geo_range, lock_time: None, lli: None },
+                Observation { code: ObsCode { obs_type: ObsType::Pseudorange, signal: SignalCode { freq_band: 5, attribute: 'X' } }, value: geo_range, lock_time: None, lli: None },
+                Observation { code: ObsCode { obs_type: ObsType::CarrierPhase, signal: SignalCode { freq_band: 2, attribute: 'X' } }, value: geo_range * F2 / C + 103.0, lock_time: None, lli: None },
+                Observation { code: ObsCode { obs_type: ObsType::CarrierPhase, signal: SignalCode { freq_band: 5, attribute: 'X' } }, value: geo_range * F5 / C + 98.0, lock_time: None, lli: None },
+            ],
+        };
+        let epoch = EpochObs {
+            time: GpsTime::new(2000, 100.0),
+            satellites: vec![sat_obs],
+        };
+        let rover_pos = Vector3::new(0.0, 0.0, 0.0);
+        let results = process_tcar_epoch(&epoch, None, &rover_pos, 0.0, &[]);
+        assert_eq!(results.len(), 1);
+        let r = &results[0];
+        assert_eq!(r.n_ewl, Some(5));
+        assert!(r.n_wl.is_none());
+    }
+
+    #[test]
+    fn test_process_tcar_epoch_mixed_obs_availability() {
+        let geo_range = 20_200_000.0;
+        // Sat 1: full L1+L2+L5
+        let sat1 = make_gps_obs(1, geo_range, 100, 103, 98);
+        // Sat 2: L1+L2 only (no L5) -> EWL fails, MW fallback used
+        let sat2 = make_gps_obs_no_l5(2, geo_range, 200, 198);
+        let epoch = EpochObs {
+            time: GpsTime::new(2000, 100.0),
+            satellites: vec![sat1, sat2],
+        };
+        let rover_pos = Vector3::new(0.0, 0.0, 0.0);
+        let results = process_tcar_epoch(&epoch, None, &rover_pos, 0.0, &[]);
+        assert_eq!(results.len(), 2);
+        // Sat 1: EWL=5, WL=-3
+        assert_eq!(results[0].n_ewl, Some(5));
+        assert_eq!(results[0].n_wl, Some(-3));
+        // Sat 2: EWL=None (no L5), MW WL = n1-n2 = 200-198 = 2
+        assert!(results[1].n_ewl.is_none());
+        assert_eq!(results[1].n_wl, Some(2));
+    }
 }

@@ -1127,6 +1127,96 @@ mod tests {
 
         ProcessingEngine::apply_nhc_updates(&config, &imu_history, &mut state);
     }
+
+    #[test]
+    fn test_snr_scale_extremes() {
+        let high_snr = snr_scale(100.0);
+        assert!(high_snr.is_finite() && high_snr > 0.0);
+
+        let low_snr = snr_scale(0.0);
+        assert!(low_snr.is_finite() && low_snr > 0.0);
+        assert!(low_snr > high_snr);
+    }
+
+    #[test]
+    fn test_process_epoch_ppp_mode_dispatch() {
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        engine.config.mode = EngineMode::Ppp;
+        let time = GpsTime::new(0, 0.0);
+        let rover = EpochObs { time, satellites: vec![] };
+        let err = engine.process_epoch(&rover, None).unwrap_err();
+        assert!(matches!(err, EngineError::InitialSppFailed));
+    }
+
+    #[test]
+    fn test_process_epoch_ppp_ins_lc_dispatch() {
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        engine.config.mode = EngineMode::PppInsLooselyCoupled;
+        let time = GpsTime::new(0, 0.0);
+        let rover = EpochObs { time, satellites: vec![] };
+        let err = engine.process_epoch(&rover, None).unwrap_err();
+        assert!(matches!(err, EngineError::InitialSppFailed));
+    }
+
+    #[test]
+    fn test_process_epoch_ppp_ins_dispatch() {
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        engine.config.mode = EngineMode::PppIns;
+        let time = GpsTime::new(0, 0.0);
+        let rover = EpochObs { time, satellites: vec![] };
+        let err = engine.process_epoch(&rover, None).unwrap_err();
+        assert!(matches!(err, EngineError::InitialSppFailed));
+    }
+
+    #[test]
+    fn test_process_epoch_rtkins_iekf_dispatch() {
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        engine.config.mode = EngineMode::RtkInsIekf;
+        let time = GpsTime::new(0, 0.0);
+        let rover = EpochObs { time, satellites: vec![] };
+        let err = engine.process_epoch(&rover, None).unwrap_err();
+        assert!(matches!(err, EngineError::InitialSppFailed));
+    }
+
+    #[test]
+    fn test_process_epoch_urban_canyon_relaxed_snr() {
+        // Test the urban canyon fallback path where strict SNR filtering
+        // leaves < 4 satellites but relaxed (15 dB-Hz) keeps them.
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        engine.config.mode = EngineMode::Spp;
+        engine.config.min_snr_dbhz = 30.0;
+
+        let time = GpsTime::new(0, 0.0);
+        // Create 3 satellites with SNR = 20, just above relaxed threshold
+        let sats: Vec<_> = (0..3)
+            .map(|i| {
+                let sat = SatelliteId {
+                    constellation: gneiss_core::sat::Constellation::Gps,
+                    prn: (i + 1) as u8,
+                };
+                gneiss_core::obs::SatObs {
+                    sat,
+                    observations: vec![
+                        gneiss_core::obs::Observation {
+                            code: gneiss_core::obs::ObsCode {
+                                obs_type: ObsType::Snr,
+                                signal: gneiss_core::obs::SignalCode {
+                                    freq_band: 1, attribute: 'C',
+                                },
+                            },
+                            value: 20.0,
+                            lock_time: None,
+                            lli: None,
+                        },
+                    ],
+                }
+            })
+            .collect();
+
+        let rover = EpochObs { time, satellites: sats };
+        let err = engine.process_epoch(&rover, None).unwrap_err();
+        assert!(matches!(err, EngineError::InitialSppFailed));
+    }
 }
 
 impl ProcessingEngine {

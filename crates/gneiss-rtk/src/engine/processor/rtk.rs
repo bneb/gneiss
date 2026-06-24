@@ -580,6 +580,7 @@ mod tests {
     use gneiss_core::obs::EpochObs;
     use gneiss_core::sat::Constellation;
     use gneiss_core::time::GpsTime;
+    use gneiss_geodesy::helmert::HelmertParams;
     use nalgebra::{DMatrix, DVector, Vector3};
 
     fn make_test_sat(prn: u8) -> SatelliteId {
@@ -1345,5 +1346,188 @@ mod tests {
 
         assert!(env.lever_arm.norm() > 0.0, "Lever arm should be non-zero when ins_aligned");
         assert!(env.omega_b.norm() > 0.0, "Omega should be non-zero with gyro data and bias");
+    }
+
+    #[test]
+    fn test_export_gnn_dataset_no_path_does_nothing() {
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let state = RtkState::new(time, pos, 1.0);
+        let config = EngineConfig::default();
+        let base_coord = Coordinate::new(
+            Vector3::new(110.0, 210.0, 310.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+        let ctx = RtkUpdateContext {
+            config: &config,
+            ephemerides: &[],
+            imu_history: &[],
+            rover_obs: &EpochObs { time, satellites: vec![] },
+            base_obs: &EpochObs { time, satellites: vec![] },
+            matched_obs: &[],
+            base_coord: &base_coord,
+            spp_pos: None,
+            spp_state_ref: None,
+            gnn_variances: std::collections::HashMap::new(),
+        };
+        export_gnn_dataset(
+            &state,
+            &ctx,
+            &crate::engine::measurement::EkfMeasurementMatrices {
+                z: DVector::from_vec(vec![0.0]),
+                h: DMatrix::zeros(CORE_STATE_SIZE, CORE_STATE_SIZE),
+                r: DMatrix::identity(1, 1),
+                mt: vec![(make_test_sat(1), 0, 1575.42e6)],
+            },
+            &[],
+            &DVector::from_vec(vec![0.0]),
+        );
+    }
+
+    #[test]
+    fn test_init_spp_state_fails_when_no_state_and_spp_fails() {
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        engine.current_state = None;
+        let time = GpsTime::new(0, 0.0);
+        let rover = EpochObs { time, satellites: vec![] };
+        let result = engine.init_spp_state(&rover);
+        assert!(matches!(result, Err(EngineError::InitialSppFailed)));
+    }
+
+    #[test]
+    fn test_get_base_coord_with_helmert_transform() {
+        let mut config = EngineConfig::default();
+        config.base_position = Some([100.0, 200.0, 300.0]);
+        config.base_datum_transform = Some(HelmertParams {
+            tx: 1.0, ty: 2.0, tz: 3.0,
+            rx: 0.0, ry: 0.0, rz: 0.0,
+            s: 0.0,
+            dtx: 0.0, dty: 0.0, dtz: 0.0,
+            drx: 0.0, dry: 0.0, drz: 0.0,
+            ds: 0.0,
+            ref_epoch: 2000.0,
+        });
+        let rover_obs = EpochObs {
+            time: GpsTime::new(0, 0.0),
+            satellites: vec![],
+        };
+        let coord = ProcessingEngine::get_base_coord(&config, &rover_obs).unwrap();
+        // Helmert applies [1,2,3]m translation with zero rates
+        assert!((coord.vector.x - 101.0).abs() < 1.0);
+        assert!((coord.vector.y - 202.0).abs() < 1.0);
+        assert!((coord.vector.z - 303.0).abs() < 1.0);
+    }
+
+    #[test]
+    fn test_process_rtk_fails_without_base_position() {
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        engine.config.base_position = None;
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(
+            Vector3::new(1.0, 2.0, 3.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+        engine.current_state = Some(RtkState::new(time, pos, 1.0));
+
+        let rover = EpochObs { time, satellites: vec![] };
+        let base = EpochObs { time, satellites: vec![] };
+        let err = engine.process_rtk(&rover, Some(&base)).unwrap_err();
+        assert!(matches!(err, EngineError::MissingBasePosition));
+    }
+
+    #[test]
+    fn test_perform_spp_fallback_update_large_diff_does_not_panic() {
+        let config = EngineConfig::default();
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(
+            Vector3::new(100.0, 200.0, 300.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+        let mut state = RtkState::new(time, pos, 1.0);
+        state.covariance = DMatrix::identity(CORE_STATE_SIZE, CORE_STATE_SIZE);
+
+        let new_pos = Coordinate::new(
+            Vector3::new(1000000.0, 2000000.0, 3000000.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+        ProcessingEngine::perform_spp_fallback_update(&config, &mut state, new_pos);
+    }
+
+    #[test]
+    fn test_handle_ekf_acceptance_extreme_variance_no_spp_does_not_reset() {
+        let config = EngineConfig::default();
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(
+            Vector3::new(5.0, 5.0, 5.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+        let mut state = RtkState::new(time, pos, 1.0);
+        state.covariance[(0, 0)] = 20000.0;
+        state.consecutive_rejections = 5;
+
+        handle_ekf_acceptance(&mut state, &config, &[], None, None);
+        assert_eq!(state.consecutive_rejections, 0);
+        assert!((state.position.vector.x - 5.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_apply_adaptive_r_scaling_with_freq2() {
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let state = RtkState::new(time, pos, 1.0);
+
+        let mut r = DMatrix::identity(1, 1);
+        let z = DVector::from_vec(vec![1.0]);
+        let mut h = DMatrix::zeros(1, CORE_STATE_SIZE);
+        h[(0, 0)] = 1.0;
+
+        let sat = make_test_sat(1);
+        let meas_types = vec![(sat, 2, 1227.6e6)];
+        let matched_obs = vec![(
+            make_dd_obs(sat, Some(100.0), None),
+            make_dd_obs(sat, Some(100.0), None),
+        )];
+
+        let mut tracker = crate::engine::adaptive::InnovationTracker::new();
+        apply_adaptive_r_scaling(
+            &mut tracker, &state, &z, &h, &mut r, &meas_types, &matched_obs,
+        );
+        assert!(r[(0, 0)] >= 1.0);
+    }
+
+    #[test]
+    fn test_apply_adaptive_r_scaling_no_matching_snr() {
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let state = RtkState::new(time, pos, 1.0);
+
+        let mut r = DMatrix::identity(1, 1);
+        let z = DVector::from_vec(vec![1.0]);
+        let mut h = DMatrix::zeros(1, CORE_STATE_SIZE);
+        h[(0, 0)] = 1.0;
+
+        let sat1 = make_test_sat(1);
+        let sat2 = make_test_sat(2);
+        let meas_types = vec![(sat2, 0, 1575.42e6)];
+        let matched_obs = vec![(
+            make_dd_obs(sat1, Some(100.0), None),
+            make_dd_obs(sat1, Some(100.0), None),
+        )];
+
+        let mut tracker = crate::engine::adaptive::InnovationTracker::new();
+        apply_adaptive_r_scaling(
+            &mut tracker, &state, &z, &h, &mut r, &meas_types, &matched_obs,
+        );
+        assert!(r[(0, 0)] >= 1.0);
     }
 }

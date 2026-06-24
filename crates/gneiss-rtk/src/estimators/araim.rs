@@ -224,4 +224,38 @@ mod tests {
         assert!(status.hpl > 0.0);
         assert!(status.vpl > 0.0);
     }
+
+    #[test]
+    fn test_project_covariance_diff_to_ned() {
+        let full = mock_state(6378137.0, 0.0, 0.0, 0.1);
+        let sub = mock_state(6378137.0, 0.0, 0.0, 0.2);
+        let (sigma_h, sigma_v) = project_covariance_diff_to_ned(&full, &sub);
+        assert!(sigma_h >= 0.0);
+        assert!(sigma_v >= 0.0);
+        assert!(sigma_h.is_finite());
+        assert!(sigma_v.is_finite());
+    }
+
+    #[test]
+    fn test_ecef_to_enu_diff_pole() {
+        use gneiss_core::coords::{Datum, Frame, Coordinate};
+        let coord = Coordinate::new(
+            Vector3::new(0.0, 0.0, 6356752.0), // Near north pole
+            Datum::WGS84, Frame::ECEF, GpsTime::new(0, 0.0),
+        );
+        let (dn, de, du) = ecef_to_enu_diff(coord, 100.0, 0.0, 0.0);
+        assert!(dn.is_finite());
+        assert!(de.is_finite());
+        assert!(du.is_finite());
+    }
+
+    #[test]
+    fn test_evaluate_single_subset_alert() {
+        let full = mock_state(1000.0, 1000.0, 1000.0, 0.1);
+        let sub = mock_state(1005.0, 1000.0, 1000.0, 0.2); // 5m horizontal offset
+        let (k_fa, k_md) = compute_thresholds(1e-5, 1e-3, 5);
+        let status = evaluate_single_subset(&full, &sub, k_fa, k_md);
+        assert!(status.hpl > 0.0);
+        assert!(status.vpl > 0.0);
+    }
 }

@@ -88,4 +88,54 @@ mod tests {
         assert!((inv[(1, 1)] - 0.0).abs() < 1e-12);
         assert!((inv[(2, 2)] - 0.25).abs() < 1e-6);
     }
+
+    #[test]
+    fn test_invert_matrix_robust_fallback_regularization() {
+        // Zero matrix: Cholesky fails (not SPD), SVD path succeeds and returns zero matrix.
+        // This exercises the SVD fallback code path.
+        let m = CovMatrix::zeros(2, 2);
+        let inv = invert_matrix_robust(&m);
+        // SVD pseudoinverse of zero matrix is zero matrix
+        assert!((inv[(0, 0)]).abs() < 1e-12);
+        assert!((inv[(1, 1)]).abs() < 1e-12);
+        assert!((inv[(0, 1)]).abs() < 1e-12);
+        assert!((inv[(1, 0)]).abs() < 1e-12);
+        // Must be symmetric
+        assert!((inv[(0, 1)] - inv[(1, 0)]).abs() < 1e-12);
+    }
+
+    #[test]
+    fn test_invert_matrix_robust_scalar() {
+        // 1x1 positive matrix
+        let m = dmatrix![16.0];
+        let inv = invert_matrix_robust(&m);
+        assert!((inv[(0, 0)] - 0.0625).abs() < 1e-12);
+    }
+
+    #[test]
+    fn test_solve_cholesky_svd_singular_matrix_svd_path() {
+        // Rank-1 singular matrix: the function must produce a valid solution
+        // regardless of whether Cholesky or SVD path is taken
+        let h = dmatrix![1.0, 2.0; 1.0, 2.0];
+        let b = nalgebra::DVector::from_vec(vec![5.0, 5.0]);
+        let x = solve_cholesky_svd(&h, &b, 1e-9).unwrap();
+        // Verify h*x ≈ b (residual small)
+        let residual = &h * &x - b;
+        assert!(residual.norm() < 1e-6);
+    }
+
+    #[test]
+    fn test_solve_cholesky_svd_non_square_not_applicable() {
+        // Non-square not possible since CovMatrix is always square via type constraint
+        // Test a nearly-singular but positive semidefinite matrix
+        let h = dmatrix![1.0, 1.0; 1.0, 1.0 + 1e-12]; // almost singular
+        let b = nalgebra::DVector::from_vec(vec![2.0, 3.0]);
+        // Cholesky on nearly-singular may fail, SVD fallback should handle it
+        let x = solve_cholesky_svd(&h, &b, 1e-15).unwrap_or_else(|_| {
+            // If SVD also fails with tight epsilon, relax it
+            solve_cholesky_svd(&h, &b, 1e-10).unwrap()
+        });
+        let residual = &h * &x - b;
+        assert!(residual.norm() < 1e-6);
+    }
 }

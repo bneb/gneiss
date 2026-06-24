@@ -259,4 +259,33 @@ mod tests {
         let lower_bound = config.process_noise_cb * 0.1;
         assert!(cb >= lower_bound, "bias_var {:.2} should be at least {:.2}", cb, lower_bound);
     }
+
+    #[test]
+    fn test_calibrate_intrinsics_dt_exactly_10_boundary() {
+        let config = EngineConfig::default();
+        let mut obs = Vec::new();
+
+        // dt = 10.0 exactly at the boundary; condition is `dt > 10.0` so dt=10.0 should NOT be skipped
+        obs.push(make_obs(0.0, 20000000.0, 21000000.0));
+        obs.push(make_obs(10.0, 20000100.0, 21000100.0));
+
+        let (_cb, cd) = calibrate_intrinsics(&config, &obs);
+        // With only one drift estimate (2 epochs, dt=10.0 which passes the <=10.0 check),
+        // drift_estimates has 1 element -> < 2 -> fallback to default
+        assert_eq!(cd, config.process_noise_cd);
+    }
+
+    #[test]
+    fn test_calibrate_intrinsics_dt_exactly_0_boundary() {
+        let config = EngineConfig::default();
+        let mut obs = Vec::new();
+
+        // dt = 0.0 exactly at the boundary; condition is `dt <= 0.0` so dt=0.0 should be skipped
+        obs.push(make_obs(0.0, 20000000.0, 21000000.0));
+        obs.push(make_obs(0.0, 20000100.0, 21000100.0)); // same time -> dt = 0
+
+        let (_cb, cd) = calibrate_intrinsics(&config, &obs);
+        // dt=0 skipped -> no drift estimates -> fallback to default
+        assert_eq!(cd, config.process_noise_cd);
+    }
 }

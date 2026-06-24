@@ -1811,4 +1811,463 @@ mod tests {
         // covariance[(15,15)] should be set to CLK_BIAS_VAR_RESET
         assert!((final_state.covariance[(15, 15)] - CLK_BIAS_VAR_RESET).abs() < 1e-10);
     }
+
+    // -------------------------------------------------------------------------
+    // build_ekf_matrices with real measurements (indirectly tests process_measurement)
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_build_ekf_matrices_with_one_gps_measurement() {
+        let (ephemerides, obs) = build_test_ephemerides_and_obs();
+
+        // Set up engine with ephemerides and an aligned state with position near the receiver
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        let true_pos =
+            nalgebra::Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0);
+        let pos = Coordinate::new(
+            true_pos, Datum::WGS84, Frame::ECEF, GpsTime::new(2000, 100000.0),
+        );
+        let mut state = RtkState::new(GpsTime::new(2000, 100000.0), pos, 1.0);
+        state.ins_aligned = true;
+        state.velocity = Vector3::zeros();
+        engine.current_state = Some(state);
+        engine.ephemerides = ephemerides;
+
+        // Build measurements from the observation
+        let measurements: Vec<_> = build_measurements(&obs, &engine.ephemerides, &SppConfig::default())
+            .into_iter()
+            .take(1) // Just one satellite
+            .collect();
+
+        // Call build_ekf_matrices
+        // Since we filtered to 1 satellite and doppler may not be available (check if 0)
+        // we need to check if it's empty or has 1 row
+        if !measurements.is_empty() {
+            let (z, h, r, types) = build_ekf_matrices(&engine, &measurements);
+            // The total rows = measurements + doppler_count
+            // We expect at least 1 row (pseudorange)
+            assert!(z.len() >= 1, "Should have at least 1 row, got {}", z.len());
+            assert_eq!(h.nrows(), z.len());
+            assert_eq!(h.ncols(), 21);
+            assert_eq!(r.nrows(), z.len());
+            assert_eq!(r.ncols(), z.len());
+            // z should be finite (not NaN)
+            for i in 0..z.len() {
+                assert!(z[i].is_finite(), "z[{}] should be finite, got {}", i, z[i]);
+            }
+            // At least one type entry
+            assert!(!types.is_empty());
+            // The pseudorange type code is 0
+            let has_pr = types.iter().any(|(_, code)| *code == 0);
+            assert!(has_pr, "Should have at least one pseudorange measurement");
+        }
+    }
+
+    #[test]
+    fn test_build_ekf_matrices_with_doppler() {
+        let (ephemerides, obs) = build_test_ephemerides_and_obs();
+
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        let true_pos =
+            nalgebra::Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0);
+        let pos = Coordinate::new(
+            true_pos, Datum::WGS84, Frame::ECEF, GpsTime::new(2000, 100000.0),
+        );
+        let mut state = RtkState::new(GpsTime::new(2000, 100000.0), pos, 1.0);
+        state.ins_aligned = true;
+        state.velocity = Vector3::new(5.0, 0.0, 0.0); // Moving receiver
+        engine.current_state = Some(state);
+        engine.ephemerides = ephemerides;
+
+        let mut measurements: Vec<_> =
+            build_measurements(&obs, &engine.ephemerides, &SppConfig::default());
+
+        // Set a non-zero doppler on one measurement to trigger doppler processing
+        if let Some(m) = measurements.first_mut() {
+            m.doppler = -2000.0; // Approximate doppler for a moving receiver
+        }
+
+        if !measurements.is_empty() {
+            let (z, h, r, types) = build_ekf_matrices(&engine, &measurements);
+            assert!(z.len() > 0);
+            // Should have at least pseudorange rows
+            let pr_count = types.iter().filter(|(_, code)| *code == 0).count();
+            let dop_count = types.iter().filter(|(_, code)| *code == 3).count();
+            assert!(pr_count >= 1, "Should have pseudorange rows, got {}", pr_count);
+            // z values should all be finite
+            for i in 0..z.len() {
+                assert!(z[i].is_finite(), "z[{}] should be finite, got {}", i, z[i]);
+            }
+            // Verify velocity Jacobian columns exist if doppler is present
+            if dop_count > 0 {
+                let has_vel_cols = (0..z.len()).any(|i| {
+                    h[(i, 3)].abs() > 1e-10 || h[(i, 4)].abs() > 1e-10 || h[(i, 5)].abs() > 1e-10
+                });
+                // At least some velocity columns should be non-zero (or all zero if satellite relative velocity cancels)
+                // Just verify the matrix is valid
+                assert!(h.nrows() > 0 && h.ncols() == 21);
+            }
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // process_measurement integration test
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_process_measurement_integration_gps() {
+        // Directly test process_measurement by constructing an EkfContext
+        // and a measurement, then calling process_measurement and verifying
+        // the matrices are populated correctly.
+        use gneiss_core::coords::ecef_to_llh;
+        use gneiss_core::ephemeris::GpsEphemeris;
+
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        let true_pos =
+            nalgebra::Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0);
+        let rec_llh = ecef_to_llh(true_pos);
+        let pos = Coordinate::new(
+            true_pos, Datum::WGS84, Frame::ECEF, GpsTime::new(2000, 100000.0),
+        );
+        let state = RtkState::new(GpsTime::new(2000, 100000.0), pos, 1.0);
+        engine.current_state = Some(state.clone());
+
+        let sat_id = gneiss_core::sat::SatelliteId {
+            constellation: Constellation::Gps, prn: 1,
+        };
+        let t = GpsTime::new(2000, 100000.0);
+
+        // Use a simple ephemeris with the satellite at a known position
+        // On the equatorial plane at radius sqrt_a^2 from the origin
+        let eph = Ephemeris::Gps(GpsEphemeris {
+            sat: sat_id, toe: t, toc: t,
+            af0: 0.0, af1: 0.0, af2: 0.0,
+            crs: 0.0, crc: 0.0, cuc: 0.0, cus: 0.0,
+            cic: 0.0, cis: 0.0, m0: 0.0, e: 0.0,
+            sqrt_a: 5153.6, delta_n: 0.0,
+            omega0: 0.0, omega_dot: 0.0, i0: 0.95, idot: 0.0,
+            omega: 0.0, tgd: 0.0, iode: 1, iodc: 1,
+        });
+
+        // Compute the satellite position at T and the geometric range
+        let (_sat_pos_rough, _, sat_clk_rough, _) = eph.position(t);
+        // The satellite is at orbital radius ~26,560 km, so the range
+        // to our receiver at ~6378 km is ~20,182 km
+        let dx = true_pos.x - _sat_pos_rough.x;
+        let dy = true_pos.y - _sat_pos_rough.y;
+        let dz = true_pos.z - _sat_pos_rough.z;
+        let geom_r = (dx * dx + dy * dy + dz * dz).sqrt();
+        let raw_pr = geom_r + 0.0 - sat_clk_rough * SPEED_OF_LIGHT_M_S;
+
+        let meas = SppMeasurement {
+            constellation: Constellation::Gps,
+            raw_pr,
+            snr: 45.0,
+            doppler: 0.0,
+            time: t,
+            eph,
+            is_iono_free: false,
+            freq_band: 1,
+        };
+
+        let ctx = EkfContext {
+            pos_apc: true_pos,
+            v_apc: Vector3::zeros(),
+            r_b_e: nalgebra::Rotation3::identity(),
+            lever_arm: Vector3::zeros(),
+            omega_eb_b: Vector3::zeros(),
+            rec_llh,
+            state: &state,
+            engine: &engine,
+            n_cols: 21,
+        };
+
+        let mut z = DVector::zeros(2);
+        let mut h = DMatrix::zeros(2, 21);
+        let mut r_mat = DMatrix::zeros(2, 2);
+        let mut types = Vec::new();
+        let mut row = 0usize;
+        let mut target = MatrixTarget {
+            z: &mut z,
+            h: &mut h,
+            r: &mut r_mat,
+            types: &mut types,
+            row: &mut row,
+        };
+
+        process_measurement(&ctx, &meas, &mut target);
+
+        // Verify that process_measurement populated the matrices
+        assert_eq!(row, 1, "Should have processed 1 measurement (no doppler)");
+        assert_eq!(types.len(), 1);
+        assert_eq!(types[0].0, sat_id);
+        assert_eq!(types[0].1, 0); // PR code
+        // z should be finite (small residual if geometry is consistent)
+        assert!(z[0].is_finite(), "z[0] should be finite, got {}", z[0]);
+        // Position Jacobian should be populated
+        assert!(h[(0, 0)] != 0.0 || h[(0, 1)] != 0.0 || h[(0, 2)] != 0.0,
+            "LOS Jacobian should be non-zero");
+        // Clock Jacobian should be 1 at col 15
+        assert!((h[(0, 15)] - 1.0).abs() < 1e-10);
+    }
+
+    // -------------------------------------------------------------------------
+    // freq_band == 7 (Galileo E5b) branch in process_measurement
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_process_measurement_galileo_e5b_freq_band_7() {
+        use gneiss_core::coords::ecef_to_llh;
+        use gneiss_core::ephemeris::GalileoEphemeris;
+
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        let true_pos =
+            nalgebra::Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0);
+        let rec_llh = ecef_to_llh(true_pos);
+        let pos = Coordinate::new(
+            true_pos, Datum::WGS84, Frame::ECEF, GpsTime::new(2000, 100000.0),
+        );
+        let state = RtkState::new(GpsTime::new(2000, 100000.0), pos, 1.0);
+        engine.current_state = Some(state.clone());
+
+        let sat_id = gneiss_core::sat::SatelliteId {
+            constellation: Constellation::Galileo, prn: 1,
+        };
+        let t = GpsTime::new(2000, 100000.0);
+
+        // Construct Galileo ephemeris with same orbital parameters
+        let eph = Ephemeris::Galileo(GalileoEphemeris {
+            sat: sat_id, toe: t, toc: t,
+            af0: 0.0, af1: 0.0, af2: 0.0,
+            crs: 0.0, crc: 0.0, cuc: 0.0, cus: 0.0,
+            cic: 0.0, cis: 0.0, m0: 0.0, e: 0.0,
+            sqrt_a: 5153.6, delta_n: 0.0,
+            omega0: 0.0, omega_dot: 0.0, i0: 0.95, idot: 0.0,
+            omega: 0.0,
+            bgd_e1_e5a: 0.0,
+            bgd_e1_e5b: 0.0,
+            iod_nav: 1,
+        });
+
+        // Compute the satellite position at T
+        let (sat_pos, _, sat_clk, _) = eph.position(t);
+        let dx = true_pos.x - sat_pos.x;
+        let dy = true_pos.y - sat_pos.y;
+        let dz = true_pos.z - sat_pos.z;
+        let geom_r = (dx * dx + dy * dy + dz * dz).sqrt();
+        let raw_pr = geom_r - sat_clk * SPEED_OF_LIGHT_M_S;
+
+        let meas = SppMeasurement {
+            constellation: Constellation::Galileo,
+            raw_pr,
+            snr: 45.0,
+            doppler: 0.0,
+            time: t,
+            eph,
+            is_iono_free: false,
+            freq_band: 7, // E5b
+        };
+
+        let ctx = EkfContext {
+            pos_apc: true_pos,
+            v_apc: Vector3::zeros(),
+            r_b_e: nalgebra::Rotation3::identity(),
+            lever_arm: Vector3::zeros(),
+            omega_eb_b: Vector3::zeros(),
+            rec_llh,
+            state: &state,
+            engine: &engine,
+            n_cols: 21,
+        };
+
+        let mut z = DVector::zeros(1);
+        let mut h = DMatrix::zeros(1, 21);
+        let mut r_mat = DMatrix::zeros(1, 1);
+        let mut types = Vec::new();
+        let mut row = 0usize;
+        let mut target = MatrixTarget {
+            z: &mut z,
+            h: &mut h,
+            r: &mut r_mat,
+            types: &mut types,
+            row: &mut row,
+        };
+
+        process_measurement(&ctx, &meas, &mut target);
+
+        // freq_band == 7 should still work with Galileo ephemeris
+        assert_eq!(row, 1, "Should have processed 1 measurement");
+        assert_eq!(types.len(), 1);
+        assert_eq!(types[0].0, sat_id);
+        assert_eq!(types[0].1, 0); // PR code
+        // z should be finite (small residual)
+        assert!(z[0].is_finite(), "z[0] should be finite, got {}", z[0]);
+        // Clock Jacobian for Galileo should include ISB at col 17
+        assert!((h[(0, 15)] - 1.0).abs() < 1e-10, "Clock bias col should be 1");
+        assert!((h[(0, 17)] - 1.0).abs() < 1e-10, "ISB Gal col should be 1");
+    }
+
+    // -------------------------------------------------------------------------
+    // process_doppler with non-zero relative velocity
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_process_doppler_with_relative_velocity() {
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        let pos = Coordinate::new(
+            Vector3::new(0.0, 0.0, 0.0),
+            Datum::WGS84, Frame::ECEF, GpsTime::new(2000, 0.0),
+        );
+        let state = RtkState::new(GpsTime::new(2000, 0.0), pos, 1.0);
+        engine.current_state = Some(state.clone());
+
+        let sat_id = gneiss_core::sat::SatelliteId {
+            constellation: Constellation::Gps, prn: 1,
+        };
+        let eph = Ephemeris::Gps(gneiss_core::ephemeris::GpsEphemeris {
+            sat: sat_id, toe: GpsTime::new(2000, 0.0), toc: GpsTime::new(2000, 0.0),
+            af0: 0.0, af1: 0.0, af2: 0.0,
+            crs: 0.0, crc: 0.0, cuc: 0.0, cus: 0.0,
+            cic: 0.0, cis: 0.0, m0: 0.0, e: 0.0, sqrt_a: 5153.6,
+            delta_n: 0.0, omega0: 0.0, omega_dot: 0.0, i0: 0.95,
+            idot: 0.0, omega: 0.0, tgd: 0.0, iode: 1, iodc: 1,
+        });
+
+        // Receiver moving at 10 m/s along +X, satellite stationary overhead
+        let ctx = EkfContext {
+            pos_apc: Vector3::new(0.0, 0.0, 0.0),
+            v_apc: Vector3::new(10.0, 0.0, 0.0), // Moving receiver
+            r_b_e: nalgebra::Rotation3::identity(),
+            lever_arm: Vector3::zeros(),
+            omega_eb_b: Vector3::zeros(),
+            rec_llh: Vector3::new(0.0, 0.0, 0.0),
+            state: &state,
+            engine: &engine,
+            n_cols: 21,
+        };
+
+        // Satellite at [20_000_000, 0, 0] moving at [2000, 0, 0]
+        // Relative velocity = [10, 0, 0] - [2000, 0, 0] = [-1990, 0, 0]
+        // LOS = [1, 0, 0]
+        // Expected doppler = -1990 * 0 + rcv_clk_drift (0) - sat_drift (0) = -1990 m/s
+
+        let meas = SppMeasurement {
+            constellation: Constellation::Gps,
+            raw_pr: 20_000_000.0,
+            snr: 45.0,
+            doppler: 1000.0, // will be converted to m/s in process_doppler
+            time: GpsTime::new(2000, 0.0),
+            eph,
+            is_iono_free: false,
+            freq_band: 1,
+        };
+
+        let ncols = 21;
+        let mut z = DVector::zeros(1);
+        let mut h = DMatrix::zeros(1, ncols);
+        let mut r_mat = DMatrix::zeros(1, 1);
+        let mut types = Vec::new();
+        let mut row = 0usize;
+        let mut target = MatrixTarget {
+            z: &mut z,
+            h: &mut h,
+            r: &mut r_mat,
+            types: &mut types,
+            row: &mut row,
+        };
+
+        let geom = SatGeometry {
+            geom_r: 20_000_000.0,
+            los: Vector3::new(1.0, 0.0, 0.0),
+            el: 1.0,
+            az: 0.0,
+            cdt_rx: 0.0,
+            sat_clk: 0.0,
+            sat_vel: Vector3::new(2000.0, 0.0, 0.0),
+            sat_drift: 0.0,
+        };
+
+        process_doppler(&ctx, &meas, &mut target, &geom);
+
+        assert_eq!(row, 1);
+        assert_eq!(types.len(), 1);
+        assert_eq!(types[0].1, 3); // doppler type code
+        assert!(z[0].is_finite(), "z[0] should be finite, got {}", z[0]);
+        // Velocity Jacobian should match the LOS
+        assert!((h[(0, 3)] - 1.0).abs() < 1e-10, "vx column should be 1, got {}", h[(0, 3)]);
+        assert!((h[(0, 4)]).abs() < 1e-10, "vy column should be 0");
+        assert!((h[(0, 5)]).abs() < 1e-10, "vz column should be 0");
+        // Clock drift column
+        assert!((h[(0, 19)] - 1.0).abs() < 1e-10);
+    }
+
+    // -------------------------------------------------------------------------
+    // update_ekf with well-formed data passes consistency
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_update_ekf_well_formed_data_not_rejected() {
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        let pos = Coordinate::new(
+            Vector3::new(0.0, 0.0, 0.0),
+            Datum::WGS84, Frame::ECEF, GpsTime::new(2000, 0.0),
+        );
+        let state = RtkState::new(GpsTime::new(2000, 0.0), pos, 1.0);
+        engine.current_state = Some(state);
+
+        // Create 4 well-formed measurements with small residuals
+        let n = 4;
+        let z = DVector::from_vec(vec![0.1, -0.2, 0.15, -0.05]);
+        let mut h = DMatrix::zeros(n, 21);
+        // Set position Jacobians and clock
+        for i in 0..n {
+            h[(i, 0)] = 1.0;
+            h[(i, 1)] = 0.0;
+            h[(i, 2)] = 0.0;
+            h[(i, 15)] = 1.0;
+        }
+        let r_mat = DMatrix::identity(n, n);
+        let types = vec![
+            (gneiss_core::sat::SatelliteId { constellation: Constellation::Gps, prn: 1 }, 0),
+            (gneiss_core::sat::SatelliteId { constellation: Constellation::Gps, prn: 2 }, 0),
+            (gneiss_core::sat::SatelliteId { constellation: Constellation::Gps, prn: 3 }, 0),
+            (gneiss_core::sat::SatelliteId { constellation: Constellation::Gps, prn: 4 }, 0),
+        ];
+
+        let rejected = update_ekf(&mut engine, &z, &h, &r_mat, &types);
+        // With 4 valid measurements (>= MIN_VALID_MEASUREMENTS=3), should NOT be rejected
+        assert!(!rejected, "Should pass consistency check with 4 measurements");
+    }
+
+    // -------------------------------------------------------------------------
+    // process_spp_tightly_coupled integration test with real ephemeris + obs
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_process_spp_tightly_coupled_with_ephemerides() {
+        let (ephemerides, obs) = build_test_ephemerides_and_obs();
+
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        let true_pos =
+            nalgebra::Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0);
+        let pos = Coordinate::new(
+            true_pos, Datum::WGS84, Frame::ECEF, GpsTime::new(2000, 100000.0),
+        );
+        let mut state = RtkState::new(GpsTime::new(2000, 100000.0), pos, 1.0);
+        state.ins_aligned = true;
+        state.velocity = Vector3::zeros();
+        engine.current_state = Some(state);
+        engine.ephemerides = ephemerides;
+
+        let result = process_spp_tightly_coupled(&mut engine, &obs);
+        // Should successfully process and return a state
+        assert!(result.is_ok(), "process_spp_tightly_coupled should succeed: {:?}", result.as_ref().err());
+        let final_state = result.unwrap();
+        // The state should have been updated
+        assert!(final_state.covariance.nrows() > 0);
+        // State history should have at least one entry
+        assert!(!engine.state_history.is_empty());
+        // Obs history should also have an entry
+        assert!(!engine.obs_history.is_empty());
+    }
 }

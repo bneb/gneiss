@@ -72,4 +72,22 @@ mod tests {
         // Depending on internal TightFactorGraph behavior, this may succeed or fail
         // But it should not panic
     }
+
+    #[test]
+    fn test_process_rtk_factor_graph_missing_base_position() {
+        let mut engine = ProcessingEngine::new(crate::engine::EngineConfig::default());
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(
+            Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+        engine.current_state = Some(RtkState::new(time, pos, 1.0));
+
+        let rover = make_empty_rover(time);
+        let base = make_empty_rover(time);
+        let err = process_rtk_factor_graph(&mut engine, &rover, Some(&base)).unwrap_err();
+        assert!(matches!(err, EngineError::MissingBasePosition));
+    }
 }

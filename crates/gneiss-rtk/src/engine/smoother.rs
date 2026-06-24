@@ -925,8 +925,19 @@ mod tests {
         let pos = Coordinate::new(Vector3::new(100.0, 200.0, 300.0), Datum::WGS84, Frame::ECEF, time0);
         let state0 = RtkState::new(time0, pos, 1.0);
         let mut state1 = RtkState::new(time1, pos.clone(), 1.0);
-        state1.core_phi = Some(DMatrix::identity(crate::filter::CORE_STATE_SIZE, crate::filter::CORE_STATE_SIZE));
-        state1.full_p_predict = Some(DMatrix::identity(crate::filter::CORE_STATE_SIZE, crate::filter::CORE_STATE_SIZE) * 2.0);
+        // Use identity phi but with white-noise clock bias (φ[15,15]=0)
+        let mut phi = DMatrix::identity(crate::filter::CORE_STATE_SIZE, crate::filter::CORE_STATE_SIZE);
+        phi[(15, 15)] = 0.0;
+        state1.core_phi = Some(phi);
+        // Match p_pred variances to state0 covariance (scaled by 2x for position)
+        let mut p_pred = DMatrix::identity(crate::filter::CORE_STATE_SIZE, crate::filter::CORE_STATE_SIZE) * 2.0;
+        p_pred[(15, 15)] = crate::filter::PREDICTED_CLOCK_VARIANCE;
+        p_pred[(16, 16)] = crate::filter::PREDICTED_ISB_VARIANCE;
+        p_pred[(17, 17)] = crate::filter::PREDICTED_ISB_VARIANCE;
+        p_pred[(18, 18)] = crate::filter::PREDICTED_ISB_VARIANCE;
+        p_pred[(19, 19)] = 2000.0;
+        p_pred[(20, 20)] = 2.0;
+        state1.full_p_predict = Some(p_pred);
         state1.full_x_predict = Some(DVector::zeros(crate::filter::CORE_STATE_SIZE));
         (state0, state1)
     }
@@ -1577,5 +1588,580 @@ mod tests {
             "Clock drift (19) must NOT be frozen");
         assert!(!FROZEN_BACKWARD_INDICES.contains(&20),
             "ZWD (20) must NOT be frozen");
+    }
+
+    // -----------------------------------------------------------------------
+    // Edge-case coverage: extract_submatrix / extract_subvector
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_extract_submatrix_empty_rows() {
+        let mat = DMatrix::from_row_slice(3, 3, &[
+            1.0, 2.0, 3.0,
+            4.0, 5.0, 6.0,
+            7.0, 8.0, 9.0,
+        ]);
+        let sub = extract_submatrix(&mat, &[], &[0, 1]);
+        assert_eq!(sub.nrows(), 0);
+        assert_eq!(sub.ncols(), 2);
+    }
+
+    #[test]
+    fn test_extract_submatrix_empty_cols() {
+        let mat = DMatrix::from_row_slice(3, 3, &[
+            1.0, 2.0, 3.0,
+            4.0, 5.0, 6.0,
+            7.0, 8.0, 9.0,
+        ]);
+        let sub = extract_submatrix(&mat, &[0, 1], &[]);
+        assert_eq!(sub.nrows(), 2);
+        assert_eq!(sub.ncols(), 0);
+    }
+
+    #[test]
+    fn test_extract_submatrix_single_element() {
+        let mat = DMatrix::from_row_slice(3, 3, &[
+            1.0, 2.0, 3.0,
+            4.0, 5.0, 6.0,
+            7.0, 8.0, 9.0,
+        ]);
+        let sub = extract_submatrix(&mat, &[2], &[1]);
+        assert_eq!(sub.nrows(), 1);
+        assert_eq!(sub.ncols(), 1);
+        assert_eq!(sub[(0, 0)], 8.0);
+    }
+
+    #[test]
+    fn test_extract_submatrix_empty_both() {
+        let mat = DMatrix::zeros(3, 3);
+        let sub = extract_submatrix(&mat, &[], &[]);
+        assert_eq!(sub.nrows(), 0);
+        assert_eq!(sub.ncols(), 0);
+    }
+
+    #[test]
+    fn test_extract_subvector_empty() {
+        let vec = DVector::from_vec(vec![10.0, 20.0, 30.0]);
+        let sub = extract_subvector(&vec, &[]);
+        assert_eq!(sub.len(), 0);
+    }
+
+    // -----------------------------------------------------------------------
+    // build_phi_submatrix: core_size = 15 (clock/ISB present but below freeze threshold)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_build_phi_submatrix_core_size_15() {
+        // core_size = 15 means no freeze logic applied (FROZEN_BACKWARD_INDICES
+        // check is gated on core_size > 15). Clock/ISB states would not exist.
+        let core_size = 15;
+        let len = 15;
+        let mut phi = DMatrix::identity(core_size, core_size);
+        for i in 0..core_size {
+            phi[(i, i)] = 0.8;
+        }
+        let sub = build_phi_submatrix(&phi, core_size, len);
+        // All diagonal preserved — no freeze applied
+        for i in 0..core_size {
+            assert_eq!(sub[(i, i)], 0.8, "phi[{}] should be 0.8", i);
+        }
+    }
+
+    #[test]
+    fn test_build_phi_submatrix_with_ambiguities_no_freeze() {
+        // core_size < 15, with ambiguity states — ensures ambiguity identity
+        // works without hitting the freeze gate at core_size > 15.
+        let core_size = 6;
+        let len = 8; // 2 ambiguity states
+        let phi = DMatrix::identity(core_size, core_size);
+        let sub = build_phi_submatrix(&phi, core_size, len);
+        assert_eq!(sub.nrows(), len);
+        assert_eq!(sub.ncols(), len);
+        // Core diagonal preserved
+        assert_eq!(sub[(0, 0)], 1.0);
+        // Ambiguity diagonal = 1.0
+        assert_eq!(sub[(6, 6)], 1.0);
+        assert_eq!(sub[(7, 7)], 1.0);
+    }
+
+    #[test]
+    fn test_build_phi_submatrix_off_diagonal_preserved() {
+        // Verify that off-diagonal elements in phi are preserved through
+        // the submatrix construction (no spurious zeroing for non-frozen indices)
+        let core_size = crate::filter::CORE_STATE_SIZE; // 21
+        let mut phi = DMatrix::zeros(core_size, core_size);
+        // Set a drift coupling: clock drift → clock bias
+        phi[(15, 19)] = 1.0; // dt coupling
+        phi[(0, 1)] = 0.5; // position correlation
+        let sub = build_phi_submatrix(&phi, core_size, core_size);
+        assert_eq!(sub[(15, 19)], 1.0, "drift-to-bias coupling preserved");
+        assert_eq!(sub[(0, 1)], 0.5, "position cross-term preserved");
+        // Frozen indices on rows/cols are zeroed
+        assert_eq!(sub[(16, 19)], 0.0, "ISB GLO × drift frozen");
+        assert_eq!(sub[(19, 16)], 0.0, "drift × ISB GLO frozen");
+    }
+
+    // -----------------------------------------------------------------------
+    // invert_p_pred: boundary conditions
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_invert_p_pred_at_min_active_threshold() {
+        // State variance exactly at MIN_ACTIVE_STATE_VARIANCE boundary.
+        // The filter uses `>` comparison, so equal is INACTIVE (excluded).
+        let mut p_pred = DMatrix::zeros(2, 2);
+        p_pred[(0, 0)] = 2.0;
+        p_pred[(1, 1)] = MIN_ACTIVE_STATE_VARIANCE; // 1e-12, exactly on boundary
+        let inv = invert_p_pred(&p_pred, 2).unwrap();
+        assert_eq!(inv.nrows(), 2);
+        // Element at boundary should be excluded (0 in inverse)
+        assert_eq!(inv[(1, 1)], 0.0, "boundary element excluded from inversion");
+        assert!((inv[(0, 0)] - 0.5).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_invert_p_pred_slightly_above_threshold() {
+        // State variance slightly above MIN_ACTIVE_STATE_VARIANCE — should be active
+        let mut p_pred = DMatrix::zeros(2, 2);
+        p_pred[(0, 0)] = 2.0;
+        p_pred[(1, 1)] = MIN_ACTIVE_STATE_VARIANCE * 2.0; // 2e-12, above boundary
+        let inv = invert_p_pred(&p_pred, 2).unwrap();
+        assert_eq!(inv.nrows(), 2);
+        assert!((inv[(0, 0)] - 0.5).abs() < 1e-10);
+        assert!(inv[(1, 1)] > 0.0, "slightly-above-threshold element should be active");
+    }
+
+    // -----------------------------------------------------------------------
+    // smooth_epoch: predicted_attitude = None path
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_smooth_epoch_no_predicted_attitude() {
+        // When state_k1.predicted_attitude is None, the attitude correction
+        // path (lines 176-184) is not executed. delta_x[6..9] comes from
+        // build_x_vector (which sets them to 0 for the smoothed state).
+        let (mut state0, mut state1) = make_smoothable_state_pair();
+        // Explicitly set predicted_attitude to None
+        state1.predicted_attitude = None;
+
+        let phi_k = state1.core_phi.as_ref().unwrap().clone();
+        let p_pred_k1 = state1.full_p_predict.as_ref().unwrap().clone();
+        let x_pred_k1 = state1.full_x_predict.as_ref().unwrap().clone();
+
+        let result = smooth_epoch(&mut state0, &state1, &phi_k, &p_pred_k1, &x_pred_k1, 0);
+        assert!(result.is_ok(), "smooth_epoch with no predicted attitude: {:?}", result.err());
+        // Position should still be smoothed
+        assert!(state0.position.vector.x > 99.0, "position smoothed");
+    }
+
+    // -----------------------------------------------------------------------
+    // run_combined_ppk: all three predicts missing on same epoch
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_run_combined_ppk_all_predicts_missing() {
+        let mut engine = crate::engine::ProcessingEngine::new(crate::engine::EngineConfig::default());
+        let time0 = GpsTime::new(2000, 0.0);
+        let time1 = GpsTime::new(2000, 1.0);
+        let pos = Coordinate::new(Vector3::new(100.0, 200.0, 300.0), Datum::WGS84, Frame::ECEF, time0);
+
+        let state0 = RtkState::new(time0, pos, 1.0);
+        // state1 has ALL predicts as None — loop continues at line 44-55
+        let state1 = RtkState::new(time1, pos, 1.0);
+        engine.state_history.push(state0);
+        engine.state_history.push(state1);
+        let result = run_combined_ppk(&mut engine);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().len(), 2);
+    }
+
+    #[test]
+    fn test_run_combined_ppk_missing_phi_only() {
+        // core_phi missing, full_p_predict and full_x_predict present
+        let mut engine = crate::engine::ProcessingEngine::new(crate::engine::EngineConfig::default());
+        let time0 = GpsTime::new(2000, 0.0);
+        let time1 = GpsTime::new(2000, 1.0);
+        let pos = Coordinate::new(Vector3::new(100.0, 200.0, 300.0), Datum::WGS84, Frame::ECEF, time0);
+
+        let state0 = RtkState::new(time0, pos, 1.0);
+        let mut state1 = RtkState::new(time1, pos, 1.0);
+        // full_p_predict and full_x_predict present but core_phi missing
+        state1.full_p_predict = Some(DMatrix::identity(crate::filter::CORE_STATE_SIZE, crate::filter::CORE_STATE_SIZE));
+        state1.full_x_predict = Some(DVector::zeros(crate::filter::CORE_STATE_SIZE));
+        engine.state_history.push(state0);
+        engine.state_history.push(state1);
+        let result = run_combined_ppk(&mut engine);
+        assert!(result.is_ok());
+    }
+
+    // -----------------------------------------------------------------------
+    // validate_smoother_state: NaN and Inf paths
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_validate_smoother_state_nan_variance() {
+        let cov = DMatrix::from_element(21, 21, f64::NAN);
+        let p_pred = DMatrix::identity(21, 21);
+        let result = validate_smoother_state(&cov, &p_pred, 21);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_smoother_state_inf_variance() {
+        let cov = DMatrix::from_element(21, 21, f64::INFINITY);
+        let p_pred = DMatrix::identity(21, 21);
+        let result = validate_smoother_state(&cov, &p_pred, 21);
+        assert!(result.is_err());
+    }
+
+    // -----------------------------------------------------------------------
+    // build_x_vector: core_size = 6 path (no IMU, no clock/ISB)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_build_x_vector_core_size_6_nonempty_ambiguities() {
+        // When core_size = 6 and ambiguities are present, only position,
+        // velocity, and ambiguities are set. IMU/clock/ISB are skipped.
+        let time = GpsTime::new(2000, 0.0);
+        let pos = Coordinate::new(Vector3::new(1.0, 2.0, 3.0), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 1.0);
+        state.velocity = Vector3::new(4.0, 5.0, 6.0);
+        let sat = SatelliteId { constellation: Constellation::Gps, prn: 1 };
+        state.add_ambiguity(sat, 1, 123.45, 1.0);
+
+        let core_size = 6;
+        let matched = vec![crate::filter::CORE_STATE_SIZE]; // index of ambiguity in full state
+        // smooth_len = 6 + 1
+        let x = build_x_vector(&state, core_size, core_size + 1, &matched);
+        assert_eq!(x.len(), 7);
+        assert_eq!(x[0], 1.0);
+        assert_eq!(x[3], 4.0);
+        // ambiguity mapping: matches k index CORE_STATE_SIZE (21), placed at position core_size+0 = 6
+        assert_eq!(x[6], 123.45);
+    }
+
+    // -----------------------------------------------------------------------
+    // build_x_vector: core_size = 15 (clock/ISB present, no IMU)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_build_x_vector_core_size_15() {
+        let time = GpsTime::new(2000, 0.0);
+        let pos = Coordinate::new(Vector3::new(1.0, 2.0, 3.0), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 1.0);
+        state.velocity = Vector3::new(4.0, 5.0, 6.0);
+        state.rcv_clk_bias = 12345.0;
+        state.isb_glo = 10.0;
+        state.isb_gal = 20.0;
+        state.isb_bds = 30.0;
+        state.rcv_clk_drift = 1.5;
+        state.zwd = 0.25;
+
+        let core_size = 15;
+        let x = build_x_vector(&state, core_size, core_size, &[]);
+        assert_eq!(x.len(), 15);
+        // Position (0-2)
+        assert_eq!(x[0], 1.0);
+        assert_eq!(x[2], 3.0);
+        // Velocity (3-5)
+        assert_eq!(x[3], 4.0);
+        assert_eq!(x[5], 6.0);
+        // IMU states 6-14 are NOT set (core_size=15 skips accel/gyro bias at lines 316-318)
+        // Clock/ISB states 15-18 don't exist at core_size=15 (the if at line 320 checks > 15)
+        assert_eq!(x[6], 0.0); // no attitude
+        assert_eq!(x[9], 0.0); // no accel bias
+        assert_eq!(x[12], 0.0); // no gyro bias
+    }
+
+    // -----------------------------------------------------------------------
+    // update_smoothed_state: core_size = 6 (no IMU, no clock/ISB)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_update_smoothed_state_core_size_6() {
+        let time = GpsTime::new(2000, 0.0);
+        let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 1.0);
+        let core_size = 6;
+        let smooth_len = core_size;
+        let mut x_k_n = DVector::zeros(smooth_len);
+        x_k_n[0] = 10.0;
+        x_k_n[1] = 20.0;
+        x_k_n[2] = 30.0;
+        x_k_n[3] = 1.0;
+        x_k_n[4] = 2.0;
+        x_k_n[5] = 3.0;
+        let p_k_n = DMatrix::identity(smooth_len, smooth_len);
+        let idx_k: Vec<usize> = (0..core_size).collect();
+
+        update_smoothed_state(&mut state, &x_k_n, &p_k_n, core_size, smooth_len, &[], &idx_k);
+        assert_eq!(state.position.vector.x, 10.0);
+        assert_eq!(state.velocity.x, 1.0);
+        // IMU/clock/ISB should be unchanged (core_size=6 skips those branches)
+    }
+
+    // -----------------------------------------------------------------------
+    // smooth_epoch: non-finite p_pred_k1 (the second non-finite check at line 157)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_smooth_epoch_non_finite_p_pred() {
+        let (mut state0, state1) = make_smoothable_state_pair();
+        let phi_k = state1.core_phi.as_ref().unwrap().clone();
+        let x_pred_k1 = state1.full_x_predict.as_ref().unwrap().clone();
+
+        // p_pred with Inf -> caught by the p_pred_k1_sub non-finite check
+        let inf_pred = DMatrix::from_element(
+            crate::filter::CORE_STATE_SIZE, crate::filter::CORE_STATE_SIZE, f64::INFINITY);
+        let result = smooth_epoch(&mut state0, &state1, &phi_k, &inf_pred, &x_pred_k1, 0);
+        assert!(result.is_err());
+    }
+
+    // -----------------------------------------------------------------------
+    // Integration: three-epoch chain with reset in the middle
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_run_combined_ppk_three_epoch_reset_mid() {
+        let mut engine = crate::engine::ProcessingEngine::new(crate::engine::EngineConfig::default());
+        let time0 = GpsTime::new(2000, 0.0);
+        let time1 = GpsTime::new(2000, 1.0);
+        let time2 = GpsTime::new(2000, 2.0);
+        let pos = Coordinate::new(Vector3::new(100.0, 200.0, 300.0), Datum::WGS84, Frame::ECEF, time0);
+
+        let mut state0 = RtkState::new(time0, pos, 1.0);
+        state0.core_phi = Some(DMatrix::identity(crate::filter::CORE_STATE_SIZE, crate::filter::CORE_STATE_SIZE));
+        state0.full_p_predict = Some(DMatrix::identity(crate::filter::CORE_STATE_SIZE, crate::filter::CORE_STATE_SIZE));
+        state0.full_x_predict = Some(DVector::zeros(crate::filter::CORE_STATE_SIZE));
+
+        let mut state1 = RtkState::new(time1, pos, 1.0);
+        state1.core_phi = Some(DMatrix::identity(crate::filter::CORE_STATE_SIZE, crate::filter::CORE_STATE_SIZE));
+        state1.full_p_predict = Some(DMatrix::identity(crate::filter::CORE_STATE_SIZE, crate::filter::CORE_STATE_SIZE));
+        state1.full_x_predict = Some(DVector::zeros(crate::filter::CORE_STATE_SIZE));
+        state1.is_reset = true; // reset in middle — chain breaks
+
+        let mut state2 = RtkState::new(time2, pos, 1.0);
+        state2.core_phi = Some(DMatrix::identity(crate::filter::CORE_STATE_SIZE, crate::filter::CORE_STATE_SIZE));
+        state2.full_p_predict = Some(DMatrix::identity(crate::filter::CORE_STATE_SIZE, crate::filter::CORE_STATE_SIZE));
+        state2.full_x_predict = Some(DVector::zeros(crate::filter::CORE_STATE_SIZE));
+
+        engine.state_history.push(state0);
+        engine.state_history.push(state1);
+        engine.state_history.push(state2);
+        let result = run_combined_ppk(&mut engine);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().len(), 3);
+    }
+
+    // -----------------------------------------------------------------------
+    // A1-A4 pre-condition tests for validate_smoother_state
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_validate_smoother_state_empty_covariance() {
+        // A1: zero-size covariance
+        let cov = DMatrix::<f64>::zeros(0, 0);
+        let p_pred = DMatrix::<f64>::zeros(0, 0);
+        let result = validate_smoother_state(&cov, &p_pred, 0);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_smoother_state_frozen_index_out_of_bounds() {
+        // A4: frozen indices exceed state dimension
+        let cov = DMatrix::identity(16, 16);
+        let p_pred = DMatrix::identity(16, 16);
+        // core_size > 15 but covariance only 16 wide -> index 17,18 are OOB
+        let result = validate_smoother_state(&cov, &p_pred, 16);
+        assert!(result.is_err());
+    }
+
+    // -----------------------------------------------------------------------
+    // smooth_epoch: asymmetric covariance gets symmetrized
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_smooth_epoch_asymmetric_covariance_symmetrized() {
+        let (mut state0, state1) = make_smoothable_state_pair();
+        let phi_k = state1.core_phi.as_ref().unwrap().clone();
+        let p_pred_k1 = state1.full_p_predict.as_ref().unwrap().clone();
+        let x_pred_k1 = state1.full_x_predict.as_ref().unwrap().clone();
+
+        let result = smooth_epoch(&mut state0, &state1, &phi_k, &p_pred_k1, &x_pred_k1, 0);
+        assert!(result.is_ok(), "smooth_epoch: {:?}", result.err());
+
+        // Verify the smoothed covariance is symmetric — the RTS update
+        // explicitly enforces symmetry via 0.5*(P + P^T) at line 212.
+        let tol = 1e-12;
+        for i in 0..state0.covariance.nrows() {
+            for j in 0..state0.covariance.ncols() {
+                assert!(
+                    (state0.covariance[(i, j)] - state0.covariance[(j, i)]).abs() < tol,
+                    "Covariance not symmetric at ({},{}): {} vs {}",
+                    i, j, state0.covariance[(i, j)], state0.covariance[(j, i)]
+                );
+            }
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // smooth_epoch: p_k huge variance rejected (check at line 160-163)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_smooth_epoch_p_k_huge_variance_rejected() {
+        let (mut state0, state1) = make_smoothable_state_pair();
+        let phi_k = state1.core_phi.as_ref().unwrap().clone();
+        let p_pred_k1 = state1.full_p_predict.as_ref().unwrap().clone();
+        let x_pred_k1 = state1.full_x_predict.as_ref().unwrap().clone();
+
+        // Set state0 covariance > MAX_STATE_VARIANCE
+        state0.covariance[(2, 2)] = MAX_STATE_VARIANCE * 2.0;
+
+        let result = smooth_epoch(&mut state0, &state1, &phi_k, &p_pred_k1, &x_pred_k1, 0);
+        assert!(result.is_err(), "huge P_k should be rejected");
+    }
+
+    // -----------------------------------------------------------------------
+    // update_smoothed_state: core_size = 15 (has clock states but no IMU)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_update_smoothed_state_core_size_15() {
+        let time = GpsTime::new(2000, 0.0);
+        let pos = Coordinate::new(Vector3::new(10.0, 20.0, 30.0), Datum::WGS84, Frame::ECEF, time);
+        let mut state = RtkState::new(time, pos, 1.0);
+        state.velocity = Vector3::new(4.0, 5.0, 6.0);
+        state.rcv_clk_bias = 100.0;
+        state.zwd = 0.1;
+
+        let core_size = 15;
+        let smooth_len = core_size;
+        let mut x_k_n = DVector::zeros(smooth_len);
+        x_k_n[0] = 15.0; x_k_n[1] = 25.0; x_k_n[2] = 35.0;
+        x_k_n[3] = 5.0; x_k_n[4] = 6.0; x_k_n[5] = 7.0;
+        let p_k_n = DMatrix::identity(smooth_len, smooth_len);
+        let idx_k: Vec<usize> = (0..core_size).collect();
+
+        let original_clk = state.rcv_clk_bias;
+        let original_zwd = state.zwd;
+
+        update_smoothed_state(&mut state, &x_k_n, &p_k_n, core_size, smooth_len, &[], &idx_k);
+
+        assert_eq!(state.position.vector.x, 15.0);
+        assert_eq!(state.velocity.x, 5.0);
+        // core_size=15 skips the >15 clock/ISB branch
+        assert_eq!(state.rcv_clk_bias, original_clk, "clock not updated at core_size=15");
+        assert_eq!(state.zwd, original_zwd, "zwd not updated at core_size=15");
+    }
+
+    // -----------------------------------------------------------------------
+    // run_combined_ppk: three-epoch happy path
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_run_combined_ppk_three_epoch_happy_path() {
+        let mut engine = crate::engine::ProcessingEngine::new(crate::engine::EngineConfig::default());
+        let pos = Coordinate::new(
+            Vector3::new(100.0, 200.0, 300.0),
+            Datum::WGS84, Frame::ECEF,
+            GpsTime::new(2000, 0.0),
+        );
+        for i in 0..3 {
+            let mut state = RtkState::new(
+                GpsTime::new(2000, i as f64), pos, 100.0,
+            );
+            state.velocity = Vector3::new(1.0, 2.0, 3.0);
+            state.core_phi = Some(DMatrix::identity(
+                crate::filter::CORE_STATE_SIZE, crate::filter::CORE_STATE_SIZE));
+            state.full_p_predict = Some(DMatrix::identity(
+                crate::filter::CORE_STATE_SIZE, crate::filter::CORE_STATE_SIZE) * 200.0);
+            state.full_x_predict = Some(DVector::zeros(crate::filter::CORE_STATE_SIZE));
+            engine.state_history.push(state);
+        }
+
+        let result = run_combined_ppk(&mut engine);
+        assert!(result.is_ok(), "three-epoch: {:?}", result.err());
+        assert_eq!(result.unwrap().len(), 3);
+    }
+
+    // -----------------------------------------------------------------------
+    // build_phi_submatrix: ambiguity region does NOT copy phi values
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_build_phi_submatrix_ambiguities_no_overflow() {
+        let core_size = crate::filter::CORE_STATE_SIZE;
+        let len = core_size + 2;
+        let mut phi = DMatrix::zeros(len, len);
+        for i in 0..len {
+            phi[(i, i)] = 0.5;
+        }
+        phi[(core_size, core_size + 1)] = 0.99;
+
+        let sub = build_phi_submatrix(&phi, core_size, len);
+        assert_eq!(sub[(core_size, core_size)], 1.0, "ambiguity diagonal = 1");
+        assert_eq!(sub[(core_size + 1, core_size + 1)], 1.0);
+        assert_eq!(sub[(core_size, core_size + 1)], 0.0, "no cross-coupling");
+    }
+
+    // -----------------------------------------------------------------------
+    // invert_p_pred: all frozen via indices, no active elements
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_invert_p_pred_all_frozen_indices() {
+        let len = 19;
+        let mut p_pred = DMatrix::zeros(len, len);
+        // Only ISB states (16-18) have variance, but they're frozen
+        p_pred[(16, 16)] = 10.0;
+        p_pred[(17, 17)] = 10.0;
+        p_pred[(18, 18)] = 10.0;
+        let result = invert_p_pred(&p_pred, len);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "no active elements");
+    }
+
+    // -----------------------------------------------------------------------
+    // smooth_epoch: smoothed covariance divergence guard
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_smooth_epoch_covariance_divergence_guard() {
+        let (mut state0, mut state1) = make_smoothable_state_pair();
+        let phi_k = state1.core_phi.as_ref().unwrap().clone();
+        let x_pred_k1 = state1.full_x_predict.as_ref().unwrap().clone();
+        let p_pred_k1 = DMatrix::identity(
+            crate::filter::CORE_STATE_SIZE, crate::filter::CORE_STATE_SIZE);
+
+        // Huge element in state1 covariance -> p_k1_n has huge value
+        state1.covariance[(0, 0)] = MAX_STATE_VARIANCE * 2.0;
+
+        let result = smooth_epoch(&mut state0, &state1, &phi_k, &p_pred_k1, &x_pred_k1, 0);
+        assert!(result.is_err(), "covariance divergence caught");
+    }
+
+    // -----------------------------------------------------------------------
+    // smooth_epoch: non-positive p_pred_inv check via frozen-only state
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_smooth_epoch_invert_no_active_elements() {
+        let (mut state0, state1) = make_smoothable_state_pair();
+        let phi_k = state1.core_phi.as_ref().unwrap().clone();
+        let x_pred_k1 = state1.full_x_predict.as_ref().unwrap().clone();
+
+        // Make all non-frozen diagonal elements of p_pred zero
+        // so invert_p_pred returns "no active elements".
+        let n = crate::filter::CORE_STATE_SIZE; // 21
+        let mut p_pred = DMatrix::zeros(n, n);
+        // Keep frozen indices (16, 17, 18) non-zero but they're excluded from
+        // the active set. All other diagonals are 0 < MIN_ACTIVE_STATE_VARIANCE.
+        p_pred[(16, 16)] = 10.0;
+        p_pred[(17, 17)] = 10.0;
+        p_pred[(18, 18)] = 10.0;
+
+        let result = smooth_epoch(&mut state0, &state1, &phi_k, &p_pred, &x_pred_k1, 0);
+        assert!(result.is_err(), "no active elements -> invert -> error");
     }
 }

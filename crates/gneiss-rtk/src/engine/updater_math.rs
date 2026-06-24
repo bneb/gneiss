@@ -804,3 +804,161 @@ mod missed_mutant_tests {
         assert!((thresh2 - super::CP_PRE_FIT_CHI2_THRESHOLD / 25.0).abs() > 1e-2);
     }
 }
+
+#[cfg(test)]
+mod tight_weights_tests {
+    use super::*;
+    use crate::engine::config::EkfTuningConfig;
+    use gneiss_core::sat::{Constellation, SatelliteId};
+
+    /// Exercises the TightCoupling weights path in evaluate_post_fit_outliers
+    /// where apply_cauchy is called for non-outlier measurements.
+    #[test]
+    fn test_evaluate_post_fit_outliers_tight_weights_applied() {
+        let mut tuning = EkfTuningConfig::default();
+        tuning.pr_abs_thresh = 100.0;
+        tuning.phase_outlier_ratio_thresh = 5.0;
+
+        // Single measurement with moderate post-fit residual.
+        // meas_type = 0 (PR). abs_thresh = 100.0, ratio_thresh = 5.0 * 5.0 = 25.0 (tight).
+        let v = DVector::from_vec(vec![30.0]); // v/|s| = 30 < 100: not abs, 30 < 25*|s|... wait, hard_reject_ratio for tight = 5.0*5.0=25.0
+        //   ratio = 30/sqrt(1) = 30. 30 > 5.0*5.0=25.0 -> IS a ratio outlier -> worst_idx = Some(0)
+
+        // Need v small enough to NOT be ratio outlier, but large enough to test math
+        let v2 = DVector::from_vec(vec![10.0]); // ratio = 10 < 25 -> not ratio outlier
+        let s = DMatrix::from_diagonal(&DVector::from_vec(vec![1.0]));
+        let current_z = DVector::from_vec(vec![10.0]);
+        let current_valid = vec![0];
+        let sat = SatelliteId { constellation: Constellation::Gps, prn: 1 };
+        let meas_types = [(sat, 0)];
+
+        let (idx, val, weights) = evaluate_post_fit_outliers::<TightCoupling>(
+            &v2, &s, &current_z, &current_valid, Some(&meas_types), 1.0, &tuning,
+        );
+        // Should NOT be an outlier -> None
+        assert_eq!(idx, None, "should not be an outlier");
+        assert!((val - 0.0).abs() < 1e-9, "max ratio should be 0");
+        // TightCoupling should apply cauchy weighting
+        assert!(weights[0] > 0.0, "weight should be positive: {}", weights[0]);
+        // Cauchy weight should be less than 1.0 for a non-zero residual
+        assert!(weights[0] <= 1.0, "cauchy weight <= 1: {}", weights[0]);
+    }
+
+    /// Test TightCoupling hard_reject_ratio for meas_type = 1 (carrier phase)
+    #[test]
+    fn test_evaluate_post_fit_outliers_tight_cp_hard_reject() {
+        let mut tuning = EkfTuningConfig::default();
+        tuning.phase_outlier_ratio_thresh = 2.0;
+
+        // meas_type = 1 (CP), TightCoupling => hard_reject_ratio = 2.0 * 3.0 = 6.0
+        let v = DVector::from_vec(vec![50.0]); // ratio = 50/1 = 50 > 6.0 -> outlier
+        let s = DMatrix::from_diagonal(&DVector::from_vec(vec![1.0]));
+        let current_z = DVector::from_vec(vec![50.0]);
+        let current_valid = vec![0];
+        let sat = SatelliteId { constellation: Constellation::Gps, prn: 1 };
+        let meas_types = [(sat, 1)];
+
+        let (idx, val, _) = evaluate_post_fit_outliers::<TightCoupling>(
+            &v, &s, &current_z, &current_valid, Some(&meas_types), 1.0, &tuning,
+        );
+        assert_eq!(idx, Some(0));
+        assert!((val - 50.0).abs() < 1e-9);
+    }
+
+    /// Test TightCoupling hard_reject_ratio for meas_type = 3 (Doppler)
+    #[test]
+    fn test_evaluate_post_fit_outliers_tight_doppler_hard_reject() {
+        let mut tuning = EkfTuningConfig::default();
+        tuning.phase_outlier_ratio_thresh = 2.0;
+        tuning.doppler_outlier_ratio_mult = 3.0;
+
+        // meas_type = 3 (Doppler), TightCoupling => hard_reject_ratio = 2.0 * 3.0 * 3.0 = 18.0
+        let v = DVector::from_vec(vec![100.0]); // ratio = 100/1 = 100 > 18.0 -> outlier
+        let s = DMatrix::from_diagonal(&DVector::from_vec(vec![1.0]));
+        let current_z = DVector::from_vec(vec![100.0]);
+        let current_valid = vec![0];
+        let sat = SatelliteId { constellation: Constellation::Gps, prn: 1 };
+        let meas_types = [(sat, 3)];
+
+        let (idx, val, _) = evaluate_post_fit_outliers::<TightCoupling>(
+            &v, &s, &current_z, &current_valid, Some(&meas_types), 1.0, &tuning,
+        );
+        assert_eq!(idx, Some(0));
+        assert!((val - 100.0).abs() < 1e-9);
+    }
+
+    /// Test TightCoupling default meas_type hard_reject_ratio
+    #[test]
+    fn test_evaluate_post_fit_outliers_tight_default_hard_reject() {
+        let mut tuning = EkfTuningConfig::default();
+        tuning.phase_outlier_ratio_thresh = 2.0;
+
+        // meas_type = 99 (unknown/other), TightCoupling => hard_reject_ratio = 2.0 * 5.0 = 10.0
+        let v = DVector::from_vec(vec![20.0]); // ratio = 20/1 = 20 > 10.0 -> outlier
+        let s = DMatrix::from_diagonal(&DVector::from_vec(vec![1.0]));
+        let current_z = DVector::from_vec(vec![20.0]);
+        let current_valid = vec![0];
+        let sat = SatelliteId { constellation: Constellation::Gps, prn: 1 };
+        let meas_types = [(sat, 99)];
+
+        let (idx, val, _) = evaluate_post_fit_outliers::<TightCoupling>(
+            &v, &s, &current_z, &current_valid, Some(&meas_types), 1.0, &tuning,
+        );
+        assert_eq!(idx, Some(0));
+        assert!((val - 20.0).abs() < 1e-9);
+    }
+
+    /// Test that compute_scalar_thresholds fallback path (`_ => 40.0`) is exercised
+    #[test]
+    fn test_compute_scalar_thresholds_unknown_fallback() {
+        let tuning = EkfTuningConfig::default();
+        let (thresh, abs_thresh) = compute_scalar_thresholds::<LooseCoupling>(99, 15.0, &tuning);
+        assert_eq!(thresh, 15.0);
+        assert_eq!(abs_thresh, 40.0);
+    }
+
+    /// Test TightCoupling's effective_abs_thresh for non-CP meas_types
+    #[test]
+    fn test_evaluate_post_fit_outliers_effective_threshold_scaling() {
+        let mut tuning = EkfTuningConfig::default();
+        tuning.pr_abs_thresh = 50.0;
+
+        // meas_type = 0 (PR). For non-CP, effective_abs_thresh = max(50.0, sqrt(s_ii) * 3.0)
+        // s_ii = 1.0, so effective = max(50.0, 3.0) = 50.0
+        // TightCoupling: is_abs_outlier = v > (50.0 * 5.0) = 250.0 AND meas_type != 3
+        let v = DVector::from_vec(vec![200.0]); // 200 < 250 -> NOT abs outlier
+        let s = DMatrix::from_diagonal(&DVector::from_vec(vec![1.0]));
+        let current_z = DVector::from_vec(vec![200.0]);
+        let current_valid = vec![0];
+        let sat = SatelliteId { constellation: Constellation::Gps, prn: 1 };
+        let meas_types = [(sat, 0)];
+
+        let (idx, _, _) = evaluate_post_fit_outliers::<TightCoupling>(
+            &v, &s, &current_z, &current_valid, Some(&meas_types), 1.0, &tuning,
+        );
+        // 200/sqrt(1) = 200. hard_reject_ratio = 2.0 * 5.0 = 10.0. 200 > 10.0 -> outlier
+        assert_eq!(idx, Some(0));
+    }
+
+    /// Test LooseCoupling effective_abs_thresh (no * 5.0 factor)
+    #[test]
+    fn test_evaluate_post_fit_outliers_loose_effective_threshold() {
+        let mut tuning = EkfTuningConfig::default();
+        tuning.pr_abs_thresh = 100.0;
+
+        // meas_type = 0, LooseCoupling => effective_abs_thresh = max(100.0, sqrt(s_ii)*3.0)
+        // v = 150. 150 > 100 -> abs outlier, but meas_type != 3
+        // LooseCoupling: is_abs_outlier = v > effective_abs_thresh && meas_type != 3
+        let v = DVector::from_vec(vec![150.0]); // 150 > 100 -> abs outlier
+        let s = DMatrix::from_diagonal(&DVector::from_vec(vec![1.0]));
+        let current_z = DVector::from_vec(vec![150.0]);
+        let current_valid = vec![0];
+        let sat = SatelliteId { constellation: Constellation::Gps, prn: 1 };
+        let meas_types = [(sat, 0)];
+
+        let (idx, _, _) = evaluate_post_fit_outliers::<LooseCoupling>(
+            &v, &s, &current_z, &current_valid, Some(&meas_types), 1.0, &tuning,
+        );
+        assert_eq!(idx, Some(0));
+    }
+}

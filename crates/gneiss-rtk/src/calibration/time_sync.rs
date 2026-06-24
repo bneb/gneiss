@@ -151,4 +151,52 @@ mod tests {
         let result = cross_correlate_time_offset(&gnss_time, &gnss_vel, &imu_time, &imu_vel);
         assert_eq!(result, 0.0);
     }
+
+    #[test]
+    fn test_cross_correlate_time_offset_gnss_after_imu_epochs() {
+        // GNSS epoch after all IMU epochs: binary search returns Err(last)
+        // idx >= imu_time.len() -> idx < imu_time.len() fails -> count stays 0
+        let gnss_time = vec![100.0, 101.0];
+        let gnss_vel = vec![Vector3::new(1.0, 0.0, 0.0); 2];
+        let imu_time = vec![0.0, 1.0, 2.0];
+        let imu_vel = vec![Vector3::new(1.0, 0.0, 0.0); 3];
+
+        let result = cross_correlate_time_offset(&gnss_time, &gnss_vel, &imu_time, &imu_vel);
+        assert_eq!(result, 0.0);
+    }
+
+    #[test]
+    fn test_cross_correlate_time_offset_negative_tau_finds_correlation() {
+        // Sweep covers tau in [-0.5, +0.5]. With negative tau, GNSS time is shifted
+        // earlier — this tests the negative tau branch.
+        let mut gnss_time = Vec::new();
+        let mut gnss_vel = Vec::new();
+        let mut imu_time = Vec::new();
+        let mut imu_vel = Vec::new();
+
+        let freq = 0.3;
+        for i in 0..200 {
+            let t = i as f64 * 0.01;
+            imu_time.push(t);
+            let v = (t * core::f64::consts::TAU * freq).cos();
+            imu_vel.push(Vector3::new(v, 0.0, 0.0));
+        }
+
+        // GNSS at 5 Hz with zero time offset
+        for i in 0..40 {
+            let t = i as f64 * 0.2;
+            gnss_time.push(t);
+            let v = (t * core::f64::consts::TAU * freq).cos();
+            gnss_vel.push(Vector3::new(v, 0.0, 0.0));
+        }
+
+        // With zero offset, best_tau should be close to 0
+        let result = cross_correlate_time_offset(&gnss_time, &gnss_vel, &imu_time, &imu_vel);
+        // Allow 3 ms tolerance (search step is 1 ms)
+        assert!(
+            result.abs() < 0.03,
+            "expected ~0 offset, got {}",
+            result
+        );
+    }
 }

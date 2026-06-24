@@ -893,6 +893,69 @@ mod tests {
         assert!(factor.is_cauchy_rejectable());
     }
 
+    #[test]
+    fn test_carrier_phase_jacobian_with_zwd() {
+        // CarrierPhaseFactor jacobian with index_zwd set should have 0.0 at the ZWD index
+        let factor = CarrierPhaseFactor {
+            sat_pos: Vector3::new(2.0, 3.0, 6.0),
+            measured_cp: 7.0,
+            variance: 0.01,
+            sat_clock_bias: 0.0,
+            tropo_dry_delay: 0.0,
+            map_wet: 0.0,
+            wavelength: 0.19,
+            index_x: 0,
+            index_y: 1,
+            index_z: 2,
+            index_dt: 3,
+            index_zwd: Some(4),
+            index_amb: 5,
+            robust_threshold: 3.0,
+        };
+        let state = DVector::from_vec(vec![0.0, 0.0, 0.0, 0.0, 0.5, 1.0]);
+        let jac = factor.jacobian(&state);
+        // ZWD jacobian should be 0.0 (disabled in carrier phase)
+        assert!(
+            (jac[(0, 4)]).abs() < 1e-15,
+            "ZWD jacobian should be 0.0, got {}",
+            jac[(0, 4)]
+        );
+        // Ambiguity jacobian should still be -wavelength
+        assert!(
+            (jac[(0, 5)] - (-0.19)).abs() < 1e-15,
+            "Ambiguity jacobian should be -wavelength = -0.19, got {}",
+            jac[(0, 5)]
+        );
+    }
+
+    #[test]
+    fn test_carrier_phase_jacobian_numerical_with_zwd() {
+        // Full numerical jacobian check for CarrierPhaseFactor with ZWD enabled
+        let factor = CarrierPhaseFactor {
+            sat_pos: Vector3::new(2.0, 3.0, 6.0),
+            measured_cp: 7.0,
+            variance: 0.01,
+            sat_clock_bias: 0.5,
+            tropo_dry_delay: 0.3,
+            map_wet: 0.0,
+            wavelength: 0.19,
+            index_x: 0,
+            index_y: 1,
+            index_z: 2,
+            index_dt: 3,
+            index_zwd: Some(4),
+            index_amb: 5,
+            robust_threshold: 3.0,
+        };
+        let state = DVector::from_vec(vec![1.0, 2.0, 3.0, 0.1, 0.05, 2.0]);
+        let anal_jac = factor.jacobian(&state);
+        let num_jac = numerical_jacobian(&factor, &state);
+        assert!(
+            (anal_jac - num_jac).norm() < 2e-3,
+            "CarrierPhaseFactor jacobian with ZWD diverges from numerical"
+        );
+    }
+
     // ==================== ErrorStatePseudorangeFactor extended tests ====================
 
     #[test]
@@ -1895,6 +1958,370 @@ mod tests {
         };
         assert_eq!(factor.robust_threshold(), Some(3.0));
         assert!(factor.is_cauchy_rejectable());
+    }
+
+    // ==================== Additional PseudorangeFactor coverage ====================
+
+    #[test]
+    fn test_pseudorange_residual_with_zwd_some() {
+        // Cover the Some(index) branch of index_zwd in residual()
+        let factor = PseudorangeFactor {
+            sat_pos: Vector3::new(2.0, 3.0, 6.0),
+            measured_pr: 7.0,
+            variance: 2.5,
+            sat_clock_bias: 0.0,
+            tropo_dry_delay: 0.0,
+            map_wet: 0.0,
+            index_x: 0,
+            index_y: 1,
+            index_z: 2,
+            index_dt: 3,
+            index_zwd: Some(4),
+            robust_threshold: 3.0,
+        };
+        let state = DVector::from_vec(vec![0.0, 0.0, 0.0, 0.0, 99.0]);
+        let res = factor.residual(&state);
+        // zwd is read but ignored in residual, so residual should be 0
+        assert!(
+            res[0].abs() < 1e-10,
+            "Pseudorange residual with ZWD Some should be 0, got {}",
+            res[0]
+        );
+    }
+
+    // ==================== Additional CarrierPhaseFactor coverage ====================
+
+    #[test]
+    fn test_carrier_phase_jacobian_dist_near_zero() {
+        // Cover dist < 1e-6: entire if-block in jacobian skipped, all entries 0
+        let factor = CarrierPhaseFactor {
+            sat_pos: Vector3::new(0.0, 0.0, 1e-7),
+            measured_cp: 0.0,
+            variance: 0.01,
+            sat_clock_bias: 0.0,
+            tropo_dry_delay: 0.0,
+            map_wet: 0.0,
+            wavelength: 0.19,
+            index_x: 0,
+            index_y: 1,
+            index_z: 2,
+            index_dt: 3,
+            index_zwd: None,
+            index_amb: 4,
+            robust_threshold: 3.0,
+        };
+        let state = DVector::from_vec(vec![0.0, 0.0, 0.0, 0.0, 1.0]);
+        let jac = factor.jacobian(&state);
+        for i in 0..5 {
+            assert_eq!(
+                jac[(0, i)], 0.0,
+                "CarrierPhase jacobian[0,{}] should be 0 when dist near 0",
+                i
+            );
+        }
+    }
+
+    #[test]
+    fn test_carrier_phase_residual_with_zwd_some() {
+        // Cover the Some(index) branch of index_zwd in CP residual
+        let factor = CarrierPhaseFactor {
+            sat_pos: Vector3::new(2.0, 3.0, 6.0),
+            measured_cp: 7.0,
+            variance: 0.01,
+            sat_clock_bias: 0.0,
+            tropo_dry_delay: 0.0,
+            map_wet: 0.0,
+            wavelength: 0.19,
+            index_x: 0,
+            index_y: 1,
+            index_z: 2,
+            index_dt: 3,
+            index_zwd: Some(4),
+            index_amb: 5,
+            robust_threshold: 3.0,
+        };
+        let state = DVector::from_vec(vec![0.0, 0.0, 0.0, 0.0, 42.0, 0.0]);
+        let res = factor.residual(&state);
+        // zwd is read but ignored, amb=0, dt=0, dist=7, expected=7, residual=0
+        assert!(
+            res[0].abs() < 1e-10,
+            "CarrierPhase residual with ZWD Some should be 0, got {}",
+            res[0]
+        );
+    }
+
+    // ==================== Additional ErrorStatePseudorangeFactor coverage ====================
+
+    #[test]
+    fn test_error_state_pseudorange_residual_gps_clock_offset() {
+        // Test GPS clock delta: dt = nominal_dt + delta[index_dt] (no ISB for GPS)
+        let factor = ErrorStatePseudorangeFactor {
+            robust_threshold: 3.0,
+            sat_pos: Vector3::new(2.0, 3.0, 6.0),
+            measured_pr: 7.5,
+            variance: 1.0,
+            sat_clock_bias: 0.0,
+            tropo_dry_delay: 0.0,
+            map_wet: 0.0,
+            nominal_rx: 0.0,
+            nominal_ry: 0.0,
+            nominal_rz: 0.0,
+            nominal_dt: 0.1,
+            nominal_dt_gal: 0.0,
+            nominal_dt_bds: 0.0,
+            nominal_dt_glo: 0.0,
+            nominal_zwd: 0.0,
+            index_x: 0,
+            index_y: 1,
+            index_z: 2,
+            index_dt: 3,
+            index_zwd: None,
+            index_dt_gal: None,
+            index_dt_bds: None,
+            index_dt_glo: None,
+            sat_id: gneiss_core::sat::SatelliteId {
+                constellation: gneiss_core::sat::Constellation::Gps,
+                prn: 1,
+            },
+        };
+        // delta[3] = 0.4, so dt = 0.1 + 0.4 = 0.5
+        // dist = 7.0, expected = 7.0 + 0.5 = 7.5, residual = 7.5 - 7.5 = 0
+        let delta = DVector::from_vec(vec![0.0, 0.0, 0.0, 0.4]);
+        let res = factor.residual(&delta);
+        assert!(
+            res[0].abs() < 1e-10,
+            "GPS clock offset residual should be 0, got {}",
+            res[0]
+        );
+    }
+
+    #[test]
+    fn test_error_state_pseudorange_jacobian_dist_near_zero() {
+        // Cover dist < 1e-6: entire if-block in jacobian skipped
+        let factor = ErrorStatePseudorangeFactor {
+            robust_threshold: 3.0,
+            sat_pos: Vector3::new(0.0, 0.0, 1e-7),
+            measured_pr: 0.0,
+            variance: 1.0,
+            sat_clock_bias: 0.0,
+            tropo_dry_delay: 0.0,
+            map_wet: 0.0,
+            nominal_rx: 0.0,
+            nominal_ry: 0.0,
+            nominal_rz: 0.0,
+            nominal_dt: 0.0,
+            nominal_dt_gal: 0.0,
+            nominal_dt_bds: 0.0,
+            nominal_dt_glo: 0.0,
+            nominal_zwd: 0.0,
+            index_x: 0,
+            index_y: 1,
+            index_z: 2,
+            index_dt: 3,
+            index_zwd: None,
+            index_dt_gal: None,
+            index_dt_bds: None,
+            index_dt_glo: None,
+            sat_id: gneiss_core::sat::SatelliteId {
+                constellation: gneiss_core::sat::Constellation::Gps,
+                prn: 1,
+            },
+        };
+        let delta = DVector::from_vec(vec![0.0, 0.0, 0.0, 0.0]);
+        let jac = factor.jacobian(&delta);
+        for i in 0..4 {
+            assert_eq!(
+                jac[(0, i)], 0.0,
+                "ErrorState PR jacobian[0,{}] should be 0 when dist near 0",
+                i
+            );
+        }
+    }
+
+    #[test]
+    fn test_error_state_pseudorange_jacobian_dist_near_zero_with_zwd() {
+        // dist < 1e-6 with index_zwd set: entire if-block skipped
+        let factor = ErrorStatePseudorangeFactor {
+            robust_threshold: 3.0,
+            sat_pos: Vector3::new(0.0, 0.0, 1e-7),
+            measured_pr: 0.0,
+            variance: 1.0,
+            sat_clock_bias: 0.0,
+            tropo_dry_delay: 0.0,
+            map_wet: 2.5,
+            nominal_rx: 0.0,
+            nominal_ry: 0.0,
+            nominal_rz: 0.0,
+            nominal_dt: 0.0,
+            nominal_dt_gal: 0.0,
+            nominal_dt_bds: 0.0,
+            nominal_dt_glo: 0.0,
+            nominal_zwd: 0.1,
+            index_x: 0,
+            index_y: 1,
+            index_z: 2,
+            index_dt: 3,
+            index_zwd: Some(4),
+            index_dt_gal: None,
+            index_dt_bds: None,
+            index_dt_glo: None,
+            sat_id: gneiss_core::sat::SatelliteId {
+                constellation: gneiss_core::sat::Constellation::Gps,
+                prn: 1,
+            },
+        };
+        let delta = DVector::from_vec(vec![0.0, 0.0, 0.0, 0.0, 0.0]);
+        let jac = factor.jacobian(&delta);
+        for i in 0..5 {
+            assert_eq!(
+                jac[(0, i)], 0.0,
+                "ErrorState PR jacobian[0,{}] should be 0 when dist near 0 with ZWD",
+                i
+            );
+        }
+    }
+
+    // ==================== Additional ErrorStateCarrierPhaseFactor coverage ====================
+
+    #[test]
+    fn test_error_state_carrier_phase_jacobian_dist_near_zero() {
+        // Cover dist < 1e-6: entire if-block in CP jacobian skipped
+        let factor = ErrorStateCarrierPhaseFactor {
+            robust_threshold: 3.0,
+            sat_pos: Vector3::new(0.0, 0.0, 1e-7),
+            measured_cp: 0.0,
+            variance: 0.01,
+            sat_clock_bias: 0.0,
+            tropo_dry_delay: 0.0,
+            map_wet: 0.0,
+            wavelength: 0.19,
+            nominal_rx: 0.0,
+            nominal_ry: 0.0,
+            nominal_rz: 0.0,
+            nominal_dt: 0.0,
+            nominal_dt_gal: 0.0,
+            nominal_dt_bds: 0.0,
+            nominal_dt_glo: 0.0,
+            nominal_zwd: 0.0,
+            nominal_amb: 0.0,
+            index_x: 0,
+            index_y: 1,
+            index_z: 2,
+            index_dt: 3,
+            index_zwd: None,
+            index_dt_gal: None,
+            index_dt_bds: None,
+            index_dt_glo: None,
+            index_amb: 4,
+            sat_id: gneiss_core::sat::SatelliteId {
+                constellation: gneiss_core::sat::Constellation::Gps,
+                prn: 1,
+            },
+        };
+        let delta = DVector::from_vec(vec![0.0, 0.0, 0.0, 0.0, 0.0]);
+        let jac = factor.jacobian(&delta);
+        for i in 0..5 {
+            assert_eq!(
+                jac[(0, i)], 0.0,
+                "ErrorState CP jacobian[0,{}] should be 0 when dist near 0",
+                i
+            );
+        }
+    }
+
+    #[test]
+    fn test_error_state_carrier_phase_jacobian_glonass_clock() {
+        // Test Glonass clock ISB jacobian entry for ErrorStateCarrierPhaseFactor
+        let factor = ErrorStateCarrierPhaseFactor {
+            robust_threshold: 3.0,
+            sat_pos: Vector3::new(20000000.0, 10000000.0, 5000000.0),
+            measured_cp: 120000000.0,
+            variance: 1.0,
+            sat_clock_bias: 0.0001,
+            tropo_dry_delay: 2.3,
+            map_wet: 3.1,
+            wavelength: 0.19,
+            nominal_rx: 1000.0,
+            nominal_ry: 2000.0,
+            nominal_rz: 3000.0,
+            nominal_dt: 0.0002,
+            nominal_dt_gal: 0.0,
+            nominal_dt_bds: 0.0,
+            nominal_dt_glo: 0.0,
+            nominal_zwd: 0.1,
+            nominal_amb: 50.0,
+            index_x: 0,
+            index_y: 1,
+            index_z: 2,
+            index_dt: 3,
+            index_zwd: Some(5),
+            index_dt_gal: None,
+            index_dt_bds: None,
+            index_dt_glo: Some(4),
+            index_amb: 6,
+            sat_id: gneiss_core::sat::SatelliteId {
+                constellation: gneiss_core::sat::Constellation::Glonass,
+                prn: 5,
+            },
+        };
+        let state = DVector::from_vec(vec![5.0, -3.0, 2.0, 0.1, 0.01, 0.05, -2.0]);
+        let anal_jac = factor.jacobian(&state);
+        let num_jac = numerical_jacobian(&factor, &state);
+        assert!(
+            (anal_jac[(0, 4)] - (-1.0)).abs() < 1e-10,
+            "Glonass clock jacobian should be -1.0, got {}",
+            anal_jac[(0, 4)]
+        );
+        assert!(
+            (anal_jac - num_jac).norm() < 2e-3,
+            "CP jacobian with Glonass clock diverges from numerical"
+        );
+    }
+
+    #[test]
+    fn test_error_state_carrier_phase_jacobian_dist_near_zero_with_zwd() {
+        // dist < 1e-6 with index_zwd and index_amb set: entire if-block skipped
+        let factor = ErrorStateCarrierPhaseFactor {
+            robust_threshold: 3.0,
+            sat_pos: Vector3::new(0.0, 0.0, 1e-7),
+            measured_cp: 0.0,
+            variance: 0.01,
+            sat_clock_bias: 0.0,
+            tropo_dry_delay: 0.0,
+            map_wet: 2.5,
+            wavelength: 0.19,
+            nominal_rx: 0.0,
+            nominal_ry: 0.0,
+            nominal_rz: 0.0,
+            nominal_dt: 0.0,
+            nominal_dt_gal: 0.0,
+            nominal_dt_bds: 0.0,
+            nominal_dt_glo: 0.0,
+            nominal_zwd: 0.1,
+            nominal_amb: 1.0,
+            index_x: 0,
+            index_y: 1,
+            index_z: 2,
+            index_dt: 3,
+            index_zwd: Some(4),
+            index_dt_gal: None,
+            index_dt_bds: None,
+            index_dt_glo: None,
+            index_amb: 5,
+            sat_id: gneiss_core::sat::SatelliteId {
+                constellation: gneiss_core::sat::Constellation::Gps,
+                prn: 1,
+            },
+        };
+        let delta = DVector::from_vec(vec![0.0, 0.0, 0.0, 0.0, 0.0, 0.0]);
+        let jac = factor.jacobian(&delta);
+        for i in 0..6 {
+            assert_eq!(
+                jac[(0, i)], 0.0,
+                "ErrorState CP jacobian[0,{}] should be 0 when dist near 0 with ZWD",
+                i
+            );
+        }
     }
 }
 

@@ -376,4 +376,65 @@ mod tests {
         let expected = angles.to_rotation() * v;
         assert!((rotated - expected).norm() < 1e-10);
     }
+
+    #[test]
+    fn test_gravity_alignment_zero_rotation() {
+        // Sensor perfectly aligned with vehicle frame — gravity reads [0, 0, -g]
+        let measurements = vec![ImuMeasurement {
+            time_tag: 0,
+            accel: Vector3::new(0.0, 0.0, -9.81),
+            gyro: Vector3::zeros(),
+            temperature: Some(25.0),
+        }; 10];
+        let (roll, pitch) = estimate_gravity_alignment(&measurements).unwrap();
+        assert!((roll - 0.0).abs() < 1e-10, "zero roll for perfect alignment");
+        assert!((pitch - 0.0).abs() < 1e-10, "zero pitch for perfect alignment");
+    }
+
+    #[test]
+    fn test_gravity_alignment_all_positive_accel() {
+        // All positive accelerations — edge case for atan2
+        let measurements = vec![ImuMeasurement {
+            time_tag: 0,
+            accel: Vector3::new(1.0, 2.0, 3.0),
+            gyro: Vector3::zeros(),
+            temperature: Some(25.0),
+        }; 5];
+        let (roll, pitch) = estimate_gravity_alignment(&measurements).unwrap();
+        let expected_pitch = f64::atan2(1.0, f64::sqrt(4.0 + 9.0));
+        let expected_roll = f64::atan2(-2.0, -3.0);
+        assert!((pitch - expected_pitch).abs() < 1e-10);
+        assert!((roll - expected_roll).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_heading_alignment_single_gnss_epoch_insufficient() {
+        // Fewer than 10 GNSS velocities -> error
+        let imu_meas = vec![ImuMeasurement {
+            time_tag: 0,
+            accel: Vector3::new(1.0, 0.0, 0.0),
+            gyro: Vector3::zeros(),
+            temperature: None,
+        }; 100];
+        let gnss_vels = vec![(0.0, Vector3::new(10.0, 0.0, 0.0))]; // only 1
+        let result = estimate_heading_alignment(&imu_meas, &gnss_vels, 0.0, 0.0);
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err(),
+            "Insufficient dynamic data for heading alignment"
+        );
+    }
+
+    #[test]
+    fn test_heading_alignment_fewer_than_100_imu_insufficient() {
+        let gnss_vels = vec![(0.0, Vector3::new(10.0, 0.0, 0.0)); 11];
+        let imu_meas = vec![ImuMeasurement {
+            time_tag: 0,
+            accel: Vector3::new(1.0, 0.0, 0.0),
+            gyro: Vector3::zeros(),
+            temperature: None,
+        }; 99]; // fewer than 100
+        let result = estimate_heading_alignment(&imu_meas, &gnss_vels, 0.0, 0.0);
+        assert!(result.is_err());
+    }
 }

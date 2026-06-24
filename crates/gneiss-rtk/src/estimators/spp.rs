@@ -1771,4 +1771,449 @@ mod tests {
         // Verify the test uses the same constant as production code
         assert_eq!(MIN_EARTH_RADIUS_M, 6_000_000.0);
     }
+
+    #[test]
+    fn test_compute_seed_position_direct() {
+        use gneiss_core::sat::{Constellation, SatelliteId};
+        use gneiss_core::time::GpsTime;
+        let t = GpsTime::new(2000, 100000.0);
+        let ms: Vec<SppMeasurement> = (0..3).map(|i| SppMeasurement {
+            constellation: Constellation::Gps,
+            raw_pr: 20000000.0 + i as f64 * 1000000.0,
+            snr: 45.0, doppler: 0.0, time: t,
+            eph: Ephemeris::Gps(gneiss_core::ephemeris::GpsEphemeris {
+                sat: SatelliteId { constellation: Constellation::Gps, prn: i + 1 },
+                toe: t, toc: t, af0: 0.0, af1: 0.0, af2: 0.0,
+                crs: 0.0, crc: 0.0, cuc: 0.0, cus: 0.0,
+                cic: 0.0, cis: 0.0, m0: 0.0, e: 0.01, sqrt_a: 5153.6,
+                delta_n: 0.0, omega0: 0.0, omega_dot: 0.0,
+                i0: 0.95, idot: 0.0, omega: 0.0, tgd: 0.0, iode: 1, iodc: 1,
+            }),
+            is_iono_free: false, freq_band: 1,
+        }).collect();
+        let (sx, sy, sz) = compute_seed_position(&ms);
+        assert!(!sx.is_nan());
+        assert!(!sy.is_nan());
+        assert!(!sz.is_nan());
+    }
+
+    #[test]
+    fn test_compute_seed_clocks_multi_constellation() {
+        use gneiss_core::sat::{Constellation, SatelliteId};
+        use gneiss_core::time::GpsTime;
+        let t = GpsTime::new(2000, 100000.0);
+        let eph_base = || -> Ephemeris {
+            Ephemeris::Gps(gneiss_core::ephemeris::GpsEphemeris {
+                sat: SatelliteId { constellation: Constellation::Gps, prn: 1 },
+                toe: t, toc: t, af0: 0.0, af1: 0.0, af2: 0.0,
+                crs: 0.0, crc: 0.0, cuc: 0.0, cus: 0.0,
+                cic: 0.0, cis: 0.0, m0: 0.0, e: 0.01, sqrt_a: 5153.6,
+                delta_n: 0.0, omega0: 0.0, omega_dot: 0.0,
+                i0: 0.95, idot: 0.0, omega: 0.0, tgd: 0.0, iode: 1, iodc: 1,
+            })
+        };
+        let ms = vec![
+            SppMeasurement { constellation: Constellation::Gps, raw_pr: 20000000.0, snr: 45.0, doppler: 0.0, time: t, eph: eph_base(), is_iono_free: false, freq_band: 1 },
+            SppMeasurement { constellation: Constellation::Galileo, raw_pr: 21000000.0, snr: 42.0, doppler: 0.0, time: t, eph: eph_base(), is_iono_free: false, freq_band: 1 },
+            SppMeasurement { constellation: Constellation::Beidou, raw_pr: 20500000.0, snr: 40.0, doppler: 0.0, time: t, eph: eph_base(), is_iono_free: false, freq_band: 1 },
+            SppMeasurement { constellation: Constellation::Glonass, raw_pr: 19500000.0, snr: 38.0, doppler: 0.0, time: t, eph: eph_base(), is_iono_free: false, freq_band: 1 },
+        ];
+        let (cdt_gps, cdt_gal, cdt_bds, cdt_glo) = compute_seed_clocks(&ms, 6378137.0, 0.0, 0.0);
+        // All clock biases should be non-zero and finite
+        assert!(cdt_gps.is_finite() && cdt_gps != 0.0);
+        assert!(cdt_gal.is_finite() && cdt_gal != 0.0);
+        assert!(cdt_bds.is_finite() && cdt_bds != 0.0);
+        assert!(cdt_glo.is_finite() && cdt_glo != 0.0);
+    }
+
+    #[test]
+    fn test_seed_initial_state_without_previous() {
+        use gneiss_core::sat::{Constellation, SatelliteId};
+        use gneiss_core::time::GpsTime;
+        let t = GpsTime::new(2000, 100000.0);
+        let eph = Ephemeris::Gps(gneiss_core::ephemeris::GpsEphemeris {
+            sat: SatelliteId { constellation: Constellation::Gps, prn: 1 },
+            toe: t, toc: t, af0: 0.0, af1: 0.0, af2: 0.0,
+            crs: 0.0, crc: 0.0, cuc: 0.0, cus: 0.0,
+            cic: 0.0, cis: 0.0, m0: 0.0, e: 0.01, sqrt_a: 5153.6,
+            delta_n: 0.0, omega0: 0.0, omega_dot: 0.0,
+            i0: 0.95, idot: 0.0, omega: 0.0, tgd: 0.0, iode: 1, iodc: 1,
+        });
+        let ms = vec![SppMeasurement {
+            constellation: Constellation::Gps, raw_pr: 20000000.0,
+            snr: 45.0, doppler: 0.0, time: t, eph, is_iono_free: false, freq_band: 1,
+        }];
+        // No previous state: should use compute_seed_position
+        let state = seed_initial_state(&ms, None);
+        assert!(state.position.vector.norm() > 0.0);
+    }
+
+    #[test]
+    fn test_filter_raim_outliers_runs_without_panic() {
+        use gneiss_core::sat::{Constellation, SatelliteId};
+        use gneiss_core::time::GpsTime;
+        let t = GpsTime::new(2000, 100000.0);
+        let eph = Ephemeris::Gps(gneiss_core::ephemeris::GpsEphemeris {
+            sat: SatelliteId { constellation: Constellation::Gps, prn: 1 },
+            toe: t, toc: t, af0: 0.0, af1: 0.0, af2: 0.0,
+            crs: 0.0, crc: 0.0, cuc: 0.0, cus: 0.0,
+            cic: 0.0, cis: 0.0, m0: 0.0, e: 0.01, sqrt_a: 5153.6,
+            delta_n: 0.0, omega0: 0.0, omega_dot: 0.0,
+            i0: 0.95, idot: 0.0, omega: 0.0, tgd: 0.0, iode: 1, iodc: 1,
+        });
+        let ms: Vec<SppMeasurement> = (0..4).map(|i| SppMeasurement {
+            constellation: Constellation::Gps,
+            raw_pr: 20000000.0 + i as f64 * 1000000.0,
+            snr: 45.0, doppler: 0.0, time: t,
+            eph: eph.clone(),
+            is_iono_free: false, freq_band: 1,
+        }).collect();
+        let state = SppState::new(
+            Coordinate::new(
+                Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0),
+                Datum::WGS84, Frame::ECEF, t,
+            ),
+            0.0, 0.0, 0.0, 0.0,
+        );
+        let config = SppConfig {
+            enable_sagnac: false, enable_tropo: false, enable_iono: false,
+            elevation_mask_rad: -core::f64::consts::PI,
+            raim_outlier_m: 1000000.0, // Very permissive - keep everything
+            ..Default::default()
+        };
+        let filtered = filter_raim_outliers(&state, &ms, None, &config);
+        // With permissive threshold, all measurements should be kept
+        assert_eq!(filtered.len(), 4, "All measurements should pass with permissive threshold");
+    }
+
+    #[test]
+    fn test_apply_raim_with_outlier_removal() {
+        use gneiss_core::sat::{Constellation, SatelliteId};
+        use gneiss_core::time::GpsTime;
+        let t = GpsTime::new(2000, 100000.0);
+        let eph = Ephemeris::Gps(gneiss_core::ephemeris::GpsEphemeris {
+            sat: SatelliteId { constellation: Constellation::Gps, prn: 1 },
+            toe: t, toc: t, af0: 0.0, af1: 0.0, af2: 0.0,
+            crs: 0.0, crc: 0.0, cuc: 0.0, cus: 0.0,
+            cic: 0.0, cis: 0.0, m0: 0.0, e: 0.01, sqrt_a: 5153.6,
+            delta_n: 0.0, omega0: 0.0, omega_dot: 0.0,
+            i0: 0.95, idot: 0.0, omega: 0.0, tgd: 0.0, iode: 1, iodc: 1,
+        });
+        let ms: Vec<SppMeasurement> = (0..6).map(|i| SppMeasurement {
+            constellation: Constellation::Gps,
+            raw_pr: 20000000.0 + if i == 5 { 500000.0 } else { 0.0 } + i as f64 * 100.0,
+            snr: 45.0, doppler: 0.0, time: t,
+            eph: eph.clone(),
+            is_iono_free: false, freq_band: 1,
+        }).collect();
+        let seed = SppState::new(
+            Coordinate::new(
+                Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0),
+                Datum::WGS84, Frame::ECEF, t,
+            ), 0.0, 0.0, 0.0, 0.0,
+        );
+        let config = SppConfig {
+            enable_sagnac: false, enable_tropo: false, enable_iono: false,
+            elevation_mask_rad: -core::f64::consts::PI,
+            max_iterations: 2,
+            ..Default::default()
+        };
+        let result = apply_raim(seed.clone(), seed, &ms, None, &config);
+        // With outlier present, RAIM should attempt re-solve.
+        // Even if it fails (max_iterations=2 might not converge), it returns an error or the original state
+        // depending on path.
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_find_clock_cols_no_gps() {
+        use gneiss_core::sat::{Constellation, SatelliteId};
+        use gneiss_core::time::GpsTime;
+        let t = GpsTime::new(2000, 100000.0);
+        let eph_base = || -> Ephemeris {
+            Ephemeris::Gps(gneiss_core::ephemeris::GpsEphemeris {
+                sat: SatelliteId { constellation: Constellation::Gps, prn: 1 },
+                toe: t, toc: t, af0: 0.0, af1: 0.0, af2: 0.0,
+                crs: 0.0, crc: 0.0, cuc: 0.0, cus: 0.0,
+                cic: 0.0, cis: 0.0, m0: 0.0, e: 0.01, sqrt_a: 5153.6,
+                delta_n: 0.0, omega0: 0.0, omega_dot: 0.0,
+                i0: 0.95, idot: 0.0, omega: 0.0, tgd: 0.0, iode: 1, iodc: 1,
+            })
+        };
+        // Only Galileo and GLONASS — no GPS
+        let ms = vec![
+            SppMeasurement { constellation: Constellation::Galileo, raw_pr: 20000000.0, snr: 45.0, doppler: 0.0, time: t, eph: eph_base(), is_iono_free: false, freq_band: 1 },
+            SppMeasurement { constellation: Constellation::Glonass, raw_pr: 21000000.0, snr: 42.0, doppler: 0.0, time: t, eph: eph_base(), is_iono_free: false, freq_band: 1 },
+        ];
+        let (cols, clk) = find_clock_cols(&ms);
+        // Without GPS/QZSS: 3 base + 1 (GAL) + 1 (GLO) = 5 columns
+        assert_eq!(cols, 5);
+        assert!(clk.0.is_none());
+        assert!(clk.1.is_some());
+        assert!(clk.2.is_none());
+        assert!(clk.3.is_some());
+    }
+
+    #[test]
+    fn test_compute_atmospheric_delays_with_klobuchar() {
+        let rec_ecef = Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0);
+        let rec_llh = ecef_to_llh(rec_ecef);
+        let iono = gneiss_core::atmosphere::KlobucharParams::default();
+        let config = SppConfig {
+            enable_tropo: true,
+            enable_iono: true,
+            ..Default::default()
+        };
+        let (tropo, iono_delay) = compute_atmospheric_delays(
+            rec_ecef, rec_llh, 0.5, 0.3, GpsTime::new(2000, 50000.0), Some(&iono), &config,
+        );
+        assert!(tropo > 0.0, "Tropospheric delay should be positive");
+        assert!(iono_delay != 0.0, "Ionospheric delay should be non-zero");
+    }
+
+    #[test]
+    fn test_compute_atmospheric_delays_below_min_elevation() {
+        let rec_ecef = Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0);
+        let rec_llh = ecef_to_llh(rec_ecef);
+        let config = SppConfig {
+            enable_tropo: true,
+            enable_iono: false,
+            ..Default::default()
+        };
+        // el = 0.01 rad, which is below MIN_ATMOSPHERE_ELEVATION_RAD (0.087 rad)
+        let (tropo, iono) = compute_atmospheric_delays(
+            rec_ecef, rec_llh, 0.5, 0.01, GpsTime::new(2000, 50000.0), None, &config,
+        );
+        // The function uses safe_el = max(el, MIN_ATMOSPHERE_ELEVATION_RAD)
+        // So it should still produce a non-zero tropo
+        assert!(tropo > 0.0, "Tropospheric delay should be positive even at low elevation");
+        assert_eq!(iono, 0.0);
+    }
+
+    #[test]
+    fn test_build_design_matrix_multi_constellation_clock_columns() {
+        use gneiss_core::sat::{Constellation, SatelliteId};
+        use gneiss_core::time::GpsTime;
+        let t = GpsTime::new(2000, 100000.0);
+        let eph = Ephemeris::Gps(gneiss_core::ephemeris::GpsEphemeris {
+            sat: SatelliteId { constellation: Constellation::Gps, prn: 1 },
+            toe: t, toc: t, af0: 0.0, af1: 0.0, af2: 0.0,
+            crs: 0.0, crc: 0.0, cuc: 0.0, cus: 0.0,
+            cic: 0.0, cis: 0.0, m0: 0.0, e: 0.01, sqrt_a: 5153.6,
+            delta_n: 0.0, omega0: 0.0, omega_dot: 0.0,
+            i0: 0.95, idot: 0.0, omega: 0.0, tgd: 0.0, iode: 1, iodc: 1,
+        });
+        // 4 GPS + 1 Galileo + 1 GLONASS
+        let mut ms = Vec::new();
+        for i in 0..4 {
+            ms.push(SppMeasurement {
+                constellation: Constellation::Gps,
+                raw_pr: 20000000.0 + i as f64 * 1000000.0,
+                snr: 45.0, doppler: 0.0, time: t,
+                eph: eph.clone(),
+                is_iono_free: false, freq_band: 1,
+            });
+        }
+        ms.push(SppMeasurement {
+            constellation: Constellation::Galileo,
+            raw_pr: 21000000.0, snr: 42.0, doppler: 0.0, time: t,
+            eph: eph.clone(),
+            is_iono_free: false, freq_band: 1,
+        });
+        ms.push(SppMeasurement {
+            constellation: Constellation::Glonass,
+            raw_pr: 19500000.0, snr: 40.0, doppler: 0.0, time: t,
+            eph: eph.clone(),
+            is_iono_free: false, freq_band: 1,
+        });
+
+        let state = SppState::new(
+            Coordinate::new(
+                Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0),
+                Datum::WGS84, Frame::ECEF, t,
+            ), 0.0, 0.0, 0.0, 0.0,
+        );
+        let config = SppConfig {
+            enable_sagnac: false, enable_tropo: false, enable_iono: false,
+            elevation_mask_rad: -core::f64::consts::PI,
+            ..Default::default()
+        };
+        let result = build_design_matrix(&state, &ms, None, &config);
+        assert!(result.is_ok());
+        let (h, _w, _dz, cols, clocks) = result.unwrap();
+        // 4 GPS + 1 GAL + 1 GLO = 6 measurements. With GPS+GAL+GLO: 3+3=6 columns
+        assert_eq!(h.nrows(), 6);
+        assert_eq!(h.ncols(), 6);
+        // Check that the clock columns are set
+        assert!(clocks.0.is_some()); // GPS
+        assert!(clocks.1.is_some()); // GAL
+        assert!(clocks.3.is_some()); // GLO
+    }
+
+    #[test]
+    fn test_build_design_matrix_sagnac_enabled() {
+        use gneiss_core::sat::{Constellation, SatelliteId};
+        use gneiss_core::time::GpsTime;
+        let t = GpsTime::new(2000, 100000.0);
+        let eph = Ephemeris::Gps(gneiss_core::ephemeris::GpsEphemeris {
+            sat: SatelliteId { constellation: Constellation::Gps, prn: 1 },
+            toe: t, toc: t, af0: 0.0, af1: 0.0, af2: 0.0,
+            crs: 0.0, crc: 0.0, cuc: 0.0, cus: 0.0,
+            cic: 0.0, cis: 0.0, m0: 0.0, e: 0.01, sqrt_a: 5153.6,
+            delta_n: 0.0, omega0: 0.0, omega_dot: 0.0,
+            i0: 0.95, idot: 0.0, omega: 0.0, tgd: 0.0, iode: 1, iodc: 1,
+        });
+        let ms: Vec<SppMeasurement> = (0..4).map(|i| SppMeasurement {
+            constellation: Constellation::Gps,
+            raw_pr: 20000000.0 + i as f64 * 1000000.0,
+            snr: 45.0, doppler: 0.0, time: t,
+            eph: eph.clone(),
+            is_iono_free: false, freq_band: 1,
+        }).collect();
+        let state = SppState::new(
+            Coordinate::new(
+                Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0),
+                Datum::WGS84, Frame::ECEF, t,
+            ), 0.0, 0.0, 0.0, 0.0,
+        );
+        let config = SppConfig {
+            enable_sagnac: true, // Sagnac enabled
+            enable_tropo: false, enable_iono: false,
+            elevation_mask_rad: -core::f64::consts::PI,
+            ..Default::default()
+        };
+        let result = build_design_matrix(&state, &ms, None, &config);
+        assert!(result.is_ok(), "Design matrix with sagnac should build successfully");
+    }
+
+    #[test]
+    fn test_build_single_measurement_beidou_path() {
+        use gneiss_core::obs::{EpochObs, ObsCode, ObsType, Observation, SatObs, SignalCode};
+        use gneiss_core::sat::{Constellation, SatelliteId};
+        use gneiss_core::time::GpsTime;
+        let t = GpsTime::new(2000, 100000.0);
+        let sat_bds = SatelliteId { constellation: Constellation::Beidou, prn: 3 };
+
+        // Beidou: p1 comes from get_observable(2)
+        let sat_obs = SatObs {
+            sat: sat_bds,
+            observations: vec![
+                Observation {
+                    code: ObsCode { obs_type: ObsType::Pseudorange, signal: SignalCode { freq_band: 2, attribute: 'I' } },
+                    value: 22000000.0, lock_time: None, lli: None,
+                },
+                Observation {
+                    code: ObsCode { obs_type: ObsType::Snr, signal: SignalCode { freq_band: 2, attribute: 'I' } },
+                    value: 40.0, lock_time: None, lli: None,
+                },
+            ],
+        };
+
+        let eph_bds = gneiss_core::ephemeris::BeidouEphemeris {
+            sat: sat_bds, toe: t, toc: t, af0: 0.0, af1: 0.0, af2: 0.0,
+            crs: 0.0, crc: 0.0, cuc: 0.0, cus: 0.0,
+            cic: 0.0, cis: 0.0, m0: 0.0, e: 0.01, sqrt_a: 5153.6,
+            delta_n: 0.0, omega0: 0.0, omega_dot: 0.0,
+            i0: 0.95, idot: 0.0, omega: 0.0, tgd1: 0.0, tgd2: 0.0, aode: 1, aodc: 1,
+        };
+
+        let epoch = EpochObs { time: t, satellites: vec![sat_obs] };
+        let ephs = vec![Ephemeris::Beidou(eph_bds)];
+
+        let ms = build_measurements(&epoch, &ephs, &SppConfig::default());
+        assert_eq!(ms.len(), 1, "Beidou measurement should be built");
+        assert_eq!(ms[0].constellation, Constellation::Beidou);
+        assert!(!ms[0].is_iono_free, "Beidou single-freq should not be iono-free");
+    }
+
+    #[test]
+    fn test_build_single_measurement_galileo_band5_path() {
+        use gneiss_core::obs::{EpochObs, ObsCode, ObsType, Observation, SatObs, SignalCode};
+        use gneiss_core::sat::{Constellation, SatelliteId};
+        use gneiss_core::time::GpsTime;
+        let t = GpsTime::new(2000, 100000.0);
+        let sat_gal = SatelliteId { constellation: Constellation::Galileo, prn: 2 };
+
+        // Galileo: p1 from band 1, p2 tries band 7 first, then band 5
+        let sat_obs = SatObs {
+            sat: sat_gal,
+            observations: vec![
+                Observation {
+                    code: ObsCode { obs_type: ObsType::Pseudorange, signal: SignalCode { freq_band: 1, attribute: 'C' } },
+                    value: 21000000.0, lock_time: None, lli: None,
+                },
+                Observation {
+                    code: ObsCode { obs_type: ObsType::Pseudorange, signal: SignalCode { freq_band: 5, attribute: 'Q' } },
+                    value: 22000000.0, lock_time: None, lli: None,
+                },
+                Observation {
+                    code: ObsCode { obs_type: ObsType::Snr, signal: SignalCode { freq_band: 1, attribute: 'C' } },
+                    value: 42.0, lock_time: None, lli: None,
+                },
+            ],
+        };
+
+        let eph_gal = gneiss_core::ephemeris::GalileoEphemeris {
+            sat: sat_gal, toe: t, toc: t, af0: 0.0, af1: 0.0, af2: 0.0,
+            crs: 0.0, crc: 0.0, cuc: 0.0, cus: 0.0,
+            cic: 0.0, cis: 0.0, m0: 0.0, e: 0.01, sqrt_a: 5153.6,
+            delta_n: 0.0, omega0: 0.0, omega_dot: 0.0,
+            i0: 0.95, idot: 0.0, omega: 0.0,
+            bgd_e1_e5a: 0.0, bgd_e1_e5b: 0.0, iod_nav: 1,
+        };
+
+        let epoch = EpochObs { time: t, satellites: vec![sat_obs] };
+        let ephs = vec![Ephemeris::Galileo(eph_gal)];
+
+        let ms = build_measurements(&epoch, &ephs, &SppConfig::default());
+        assert_eq!(ms.len(), 1, "Galileo measurement should be built");
+        assert_eq!(ms[0].constellation, Constellation::Galileo);
+        assert!(ms[0].is_iono_free, "Galileo dual-freq should be iono-free");
+        assert_eq!(ms[0].freq_band, 5, "Galileo band 5 should be used");
+    }
+
+    #[test]
+    fn test_build_single_measurement_beidou_band6_path() {
+        use gneiss_core::obs::{EpochObs, ObsCode, ObsType, Observation, SatObs, SignalCode};
+        use gneiss_core::sat::{Constellation, SatelliteId};
+        use gneiss_core::time::GpsTime;
+        let t = GpsTime::new(2000, 100000.0);
+        let sat_bds = SatelliteId { constellation: Constellation::Beidou, prn: 3 };
+
+        // Beidou: p1 from band 2, p2 tries band 7 first, then band 6
+        let sat_obs = SatObs {
+            sat: sat_bds,
+            observations: vec![
+                Observation {
+                    code: ObsCode { obs_type: ObsType::Pseudorange, signal: SignalCode { freq_band: 2, attribute: 'I' } },
+                    value: 22000000.0, lock_time: None, lli: None,
+                },
+                Observation {
+                    code: ObsCode { obs_type: ObsType::Pseudorange, signal: SignalCode { freq_band: 6, attribute: 'X' } },
+                    value: 23000000.0, lock_time: None, lli: None,
+                },
+                Observation {
+                    code: ObsCode { obs_type: ObsType::Snr, signal: SignalCode { freq_band: 2, attribute: 'I' } },
+                    value: 40.0, lock_time: None, lli: None,
+                },
+            ],
+        };
+
+        let eph_bds = gneiss_core::ephemeris::BeidouEphemeris {
+            sat: sat_bds, toe: t, toc: t, af0: 0.0, af1: 0.0, af2: 0.0,
+            crs: 0.0, crc: 0.0, cuc: 0.0, cus: 0.0,
+            cic: 0.0, cis: 0.0, m0: 0.0, e: 0.01, sqrt_a: 5153.6,
+            delta_n: 0.0, omega0: 0.0, omega_dot: 0.0,
+            i0: 0.95, idot: 0.0, omega: 0.0, tgd1: 0.0, tgd2: 0.0, aode: 1, aodc: 1,
+        };
+
+        let epoch = EpochObs { time: t, satellites: vec![sat_obs] };
+        let ephs = vec![Ephemeris::Beidou(eph_bds)];
+
+        let ms = build_measurements(&epoch, &ephs, &SppConfig::default());
+        assert_eq!(ms.len(), 1, "Beidou measurement should be built");
+        assert_eq!(ms[0].constellation, Constellation::Beidou);
+        assert!(ms[0].is_iono_free, "Beidou dual-freq should be iono-free");
+        assert_eq!(ms[0].freq_band, 6, "Beidou band 6 should be used");
+    }
 }
