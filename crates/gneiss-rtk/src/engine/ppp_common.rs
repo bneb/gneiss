@@ -11,22 +11,12 @@ pub(crate) fn snr_scale(snr: i32) -> f64 {
 }
 
 pub(crate) fn invert_matrix(mat: &DMatrix<f64>) -> Option<DMatrix<f64>> {
-    // If NaN detected, sanitize the matrix: replace NaN diagonals with a
-    // large value (10,000 m² variance) and NaN off-diagonals with zero.
-    // This prevents a single NaN from cascading into a full state reset
-    // (StateDisappeared) which causes 30m position jumps in the output.
     if mat.iter().any(|x| x.is_nan()) {
-        let mut sanitized = mat.clone();
-        for i in 0..sanitized.nrows() {
-            for j in 0..sanitized.ncols() {
-                if sanitized[(i, j)].is_nan() {
-                    sanitized[(i, j)] = if i == j { 10000.0 } else { 0.0 };
-                }
-            }
-        }
-        tracing::warn!("NaN detected in covariance matrix — sanitized {} entries",
-            mat.iter().filter(|x| x.is_nan()).count());
-        return Some(invert_matrix_robust(&sanitized));
+        tracing::warn!(
+            "NaN detected in {}×{} covariance matrix",
+            mat.nrows(), mat.ncols()
+        );
+        return None;
     }
     Some(invert_matrix_robust(mat))
 }
