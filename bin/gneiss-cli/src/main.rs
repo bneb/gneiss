@@ -427,6 +427,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         'R' => enabled.push(gneiss_core::sat::Constellation::Glonass),
                         'E' => enabled.push(gneiss_core::sat::Constellation::Galileo),
                         'C' => enabled.push(gneiss_core::sat::Constellation::Beidou),
+                        'J' => enabled.push(gneiss_core::sat::Constellation::Qzss),
                         _ => {}
                     }
                 }
@@ -478,6 +479,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     _ => return Err("Invalid dynamics model specified".into()),
                 };
             }
+
+            // Default to GPS+Galileo+QZSS for PPP when no --systems flag
+            if engine_config.enabled_constellations.is_none() && engine_config.mode.is_ppp() {
+                engine_config.enabled_constellations = Some(vec![
+                    gneiss_core::sat::Constellation::Gps,
+                    gneiss_core::sat::Constellation::Galileo,
+                    gneiss_core::sat::Constellation::Qzss,
+                ]);
+            }
+
             if let Some(lr) = lambda_ratio {
                 engine_config.lambda_min_ratio = lr;
             }
