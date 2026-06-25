@@ -778,7 +778,7 @@ impl PppInsIteratedEkf {
             .max(state.covariance[(1, 1)])
             .max(state.covariance[(2, 2)]);
         let pos_std = pos_var.sqrt();
-        let pr_threshold = (100.0_f64).max(5.0 * pos_std).min(500.0);
+        let pr_threshold = (100.0_f64).max(3.0 * pos_std).min(200.0);
         if res_pr.abs() > pr_threshold {
             return false;
         }

@@ -1330,7 +1330,7 @@ mod mutant_killer_tests {
         // Verify the adaptive PR rejection threshold:
         //   threshold = max(100, 5*pos_std), capped at 500
         // Small covariance (sigma=1m) → threshold=100m
-        // Large covariance (sigma=300m) → threshold=500m (capped)
+        // Large covariance (sigma=300m) → threshold=200m (capped)
         // Medium covariance (sigma=30m) → threshold=150m
         let fg = PppIteratedEkf::default();
         let sat_id = SatelliteId { constellation: Constellation::Gps, prn: 1 };
@@ -1379,14 +1379,14 @@ mod mutant_killer_tests {
             assert!(result, "80m residual with sigma=1m should be accepted (threshold=100m)");
         }
 
-        // Case 3: Large variance (sigma=300m) → threshold=500m (capped)
-        // PR residual = 400m < 500m → accepted
+        // Case 3: Large variance (sigma=300m) → threshold=200m (capped)
+        // PR residual = 150m < 200m → accepted
         {
             let mut state = dummy_rtk_state();
             for i in 0..3 { state.covariance[(i, i)] = 90000.0; }
             let mut meas = Vec::new();
             let sat = ProcessedSat {
-                sat_obs: &obs, dt_sat_m: 0.0, p1: 400.0, p2: None,
+                sat_obs: &obs, dt_sat_m: 0.0, p1: 150.0, p2: None,
                 cp1: None, cp2: None, is_iono_free: true,
                 osb_p1: 0.0, osb_p2: 0.0, osb_cp1: 0.0, osb_cp2: 0.0,
                 los: Vector3::zeros(), dist: 0.0, el: std::f64::consts::PI / 2.0,
@@ -1397,7 +1397,27 @@ mod mutant_killer_tests {
                 rcv_pos_ecef: Vector3::zeros(), pcv_correction: 0.0,
             };
             let result = fg.push_sat_meas(&mut meas, &state, &sat, &x_i, 0, &los, 0.0, 0.0, 0.0);
-            assert!(result, "400m residual with sigma=300m should be accepted (threshold=500m)");
+            assert!(result, "150m residual with sigma=300m should be accepted (threshold=200m)");
+        }
+
+        // Case 4: PR residual = 250m > 200m cap → rejected even with huge variance
+        {
+            let mut state = dummy_rtk_state();
+            for i in 0..3 { state.covariance[(i, i)] = 90000.0; }
+            let mut meas = Vec::new();
+            let sat = ProcessedSat {
+                sat_obs: &obs, dt_sat_m: 0.0, p1: 250.0, p2: None,
+                cp1: None, cp2: None, is_iono_free: true,
+                osb_p1: 0.0, osb_p2: 0.0, osb_cp1: 0.0, osb_cp2: 0.0,
+                los: Vector3::zeros(), dist: 0.0, el: std::f64::consts::PI / 2.0,
+                snr: 45.0, doppler: 0.0, lam1: 0.19, lam2: 0.24,
+                tropo_dry: 0.0, map_wet: 0.0, iono_delay: 0.0,
+                f1: 1.0, f2: 1.0, sat_pos_rot: Vector3::zeros(),
+                sat_vel: Vector3::zeros(), sat_clock_drift: 0.0,
+                rcv_pos_ecef: Vector3::zeros(), pcv_correction: 0.0,
+            };
+            let result = fg.push_sat_meas(&mut meas, &state, &sat, &x_i, 0, &los, 0.0, 0.0, 0.0);
+            assert!(!result, "250m residual should be rejected (cap=200m)");
         }
     }
 
