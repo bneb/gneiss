@@ -3,11 +3,19 @@ use crate::engine::processed_sat::ProcessedSat;
 use crate::filter::{RtkState, CORE_STATE_SIZE};
 use nalgebra::{DMatrix, DVector, Vector3};
 
+// Type aliases for AR candidate tuples used throughout this module.
+// (sat_id, n1_idx, n2_idx, el_rad, lam1, lam2)
+type ArCandidate = (gneiss_core::sat::SatelliteId, usize, usize, f64, f64, f64);
+// WL result: (state_vector, covariance, kept_indices)
+type WlResult = (DVector<f64>, DMatrix<f64>, Vec<usize>);
+// NL result: (state_vector, covariance)
+type NlResult = (DVector<f64>, DMatrix<f64>);
+
 #[cfg(test)]
 #[derive(Clone)]
 pub struct ArMock {
-    pub wl_result: Option<Result<(DVector<f64>, DMatrix<f64>, Vec<usize>), &'static str>>,
-    pub nl_result: Option<Result<(DVector<f64>, DMatrix<f64>), &'static str>>,
+    pub wl_result: Option<Result<WlResult, &'static str>>,
+    pub nl_result: Option<Result<NlResult, &'static str>>,
     pub nl_calls: usize,
 }
 
@@ -24,7 +32,7 @@ impl PppIteratedEkf {
         state: &RtkState,
         p_current: &DMatrix<f64>,
         x_current: &DVector<f64>,
-        group_cands: &[(gneiss_core::sat::SatelliteId, usize, usize, f64, f64, f64)],
+        group_cands: &[ArCandidate],
         constellation: gneiss_core::sat::Constellation,
     ) -> Option<(DVector<f64>, DMatrix<f64>, usize)> {
         if group_cands.len() < 2 {
@@ -92,7 +100,7 @@ impl PppIteratedEkf {
         state: &RtkState,
         p_current: &DMatrix<f64>,
         x_current: &DVector<f64>,
-        cands: &[(gneiss_core::sat::SatelliteId, usize, usize, f64, f64, f64)],
+        cands: &[ArCandidate],
     ) -> Option<(DVector<f64>, DMatrix<f64>, usize)> {
         tracing::info!("PPP-AR: per-constellation failed, trying inter-constellation fallback");
         let subset = self.build_ar_subset(cands);
@@ -162,7 +170,7 @@ impl PppIteratedEkf {
         // destroys the WL LAMBDA ratio (was 1.0-1.1 for mixed constellations).
         let mut const_groups: std::collections::HashMap<
             gneiss_core::sat::Constellation,
-            Vec<(gneiss_core::sat::SatelliteId, usize, usize, f64, f64, f64)>,
+            Vec<ArCandidate>,
         > = std::collections::HashMap::new();
         for cand in &cands {
             const_groups
@@ -230,7 +238,7 @@ impl PppIteratedEkf {
         &self,
         state: &RtkState,
         sats: &[ProcessedSat],
-    ) -> Vec<(gneiss_core::sat::SatelliteId, usize, usize, f64, f64, f64)> {
+    ) -> Vec<ArCandidate> {
         let mut cands = Vec::new();
         for sat in sats.iter().filter(|s| {
             !s.is_iono_free
@@ -249,10 +257,10 @@ impl PppIteratedEkf {
 
     pub(super) fn build_ar_subset(
         &self,
-        cands: &[(gneiss_core::sat::SatelliteId, usize, usize, f64, f64, f64)],
+        cands: &[ArCandidate],
     ) -> Vec<(
-        (gneiss_core::sat::SatelliteId, usize, usize, f64, f64, f64),
-        (gneiss_core::sat::SatelliteId, usize, usize, f64, f64, f64),
+        ArCandidate,
+        ArCandidate,
     )> {
         // Inter-constellation: single highest-elevation GPS as universal reference.
         // Fall back to per-constellation if no GPS available.
@@ -295,11 +303,11 @@ impl PppIteratedEkf {
         state: &RtkState,
         p: &DMatrix<f64>,
         subset: &[(
-            (gneiss_core::sat::SatelliteId, usize, usize, f64, f64, f64),
-            (gneiss_core::sat::SatelliteId, usize, usize, f64, f64, f64),
+            ArCandidate,
+            ArCandidate,
         )],
         x: &DVector<f64>,
-    ) -> Result<(DVector<f64>, DMatrix<f64>, Vec<usize>), &'static str> {
+    ) -> Result<WlResult, &'static str> {
         #[cfg(test)]
         {
             let mut lock = AR_MOCK.lock().unwrap();
@@ -433,13 +441,13 @@ impl PppIteratedEkf {
         &self,
         _state: &RtkState,
         subset: &[(
-            (gneiss_core::sat::SatelliteId, usize, usize, f64, f64, f64),
-            (gneiss_core::sat::SatelliteId, usize, usize, f64, f64, f64),
+            ArCandidate,
+            ArCandidate,
         )],
         keep_indices: &[usize],
         x_wl: &DVector<f64>,
         p_wl: &DMatrix<f64>,
-    ) -> Result<(DVector<f64>, DMatrix<f64>), &'static str> {
+    ) -> Result<NlResult, &'static str> {
         #[cfg(test)]
         {
             let mut lock = AR_MOCK.lock().unwrap();
