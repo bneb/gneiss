@@ -41,12 +41,12 @@ carrier-phase constraints across epochs, breaking the single-epoch SPP ceiling.
 | Adaptive PR rejection threshold | No more filter death spiral | ✅ Done |
 | SPP prior loosening [9,100] m² | Don't lock to poor SPP seed | ✅ Done |
 | Coasting recovery via cold restart | Recover instead of permanent divergence | ✅ Done |
-| Clippy cleanup | 83 → 0 | 🔄 68 remaining |
+| Clippy cleanup | 83 → ≤30 non-unwrap | ✅ 49 (42 unwrap backlog, 7 other) |
 | Test coverage | 89.2% → 95% | 🔄 89.26% |
 | Mutation testing | 42% → 0 survivors | ❌ Tool issues |
 | Urban benchmark (Odaiba) | Establish baseline | ✅ 26m median |
 | IGS multi-station sweep | 7/7 stations converging | ✅ 6/7 (NKLG partial) |
-| Cargo aliases (coverage, lint, check) | Tooling in place | ✅ Done |
+| Cargo aliases (coverage, lint, audit) | Tooling in place | ✅ Done |
 
 **Exit criteria:** All tests pass, clippy ≤ 30 (unwrap backlog ok), coverage ≥ 90%.
 
