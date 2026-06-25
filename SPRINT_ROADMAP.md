@@ -14,6 +14,7 @@
 | PPP float (IGS) | 1.2m Hz / 7.5m Up | — | 🟡 Float only |
 | **PPP AR (IGS)** | **0.84m Hz / 2.2m Up** | — | **🟢 Competitive** |
 | PPP (urban) | not yet benchmarked | 2.0–4.0m | ⏳ Unknown |
+| **PPP AR (3 IGS stations)** | **0.73–1.94m Hz / 2.2–9.2m Up** | — | **🟢 Working on 3/7** |
 
 ### What Changed This Session
 
@@ -137,15 +138,15 @@ The original Phase A (2-epoch sliding window) was deprioritized after discoverin
 
 | Station | File | Epochs | Systems | Status |
 |---------|------|--------|---------|--------|
-| ALIC | `alic3350.19o` | 2,880 | GPS+GLO | ✅ AR working |
-| CEDU | `cedu3350.19o` | 2,880 | GPS | ⏳ Not tested |
-| HOB2 | `hob23350.19o` | 2,880 | GPS | ⏳ Not tested |
-| NKLG | `nklg3350.19o` | 2,880 | Multi | ⏳ Not tested |
-| PARK | `park3350.19o` | 2,880 | GPS | ⏳ Not tested |
-| PERT | `pert3350.19o` | 2,880 | GPS | ⏳ Not tested |
-| YARR | `yarr3350.19o` | 2,880 | GPS | ⏳ Not tested |
-| WTZR | `wtzr3350.19o` | 2,880 | GPS+GLO+GAL | ❌ Diverges |
-| SUTH | `suth3350.19o` | 2,880 | GPS+GLO | ⚠️ Few DF sats |
+| ALIC | `alic3350.19o` | 2,880 | GPS+GLO | ✅ AR working, 0.84m Hz50 |
+| CEDU | `cedu3350.19o` | 2,880 | GPS | ✅ AR working, 0.73m Hz50 |
+| YARR | `yarr3350.19o` | 2,880 | GPS | ✅ AR working, 1.94m Hz50 |
+| HOB2 | `hob23350.19o` | 2,880 | GPS | 🟡 AR fixes 3×, 3.99m |
+| SUTH | `suth3350.19o` | 2,880 | GPS+GLO | 🟡 AR 66% fix, 0.79m |
+| NKLG | `nklg3350.19o` | 2,880 | Multi | ❌ Diverges (0% AR fix) |
+| PARK | `park3350.19o` | 2,880 | GPS | ❌ Diverges (55m drift) |
+| PERT | `pert3350.19o` | 2,880 | GPS | ❌ Diverges (167m drift) |
+| WTZR | `wtzr3350.19o` | 2,880 | GPS+GLO+GAL | ❌ Not yet tested |
 
 **Products for day 335, 2019:**
 SP3 `cod20820.sp3`, CLK `gfz20820.clk`, NAV `brdc3350.19n`, ANTEX `igs14.atx`, IONEX `codg3350.19i`
