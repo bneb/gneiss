@@ -74,7 +74,7 @@ Enabling Galileo/QZSS doubles visible satellites in urban canyons.
 
 | Task | Target |
 |:-----|:-------|
-| Enable Galileo for PPP | `--systems GE` working |
+| Enable Galileo for PPP | `--systems GE` working | ✅ GPS+Galileo: 26.0→17.2m median, 3.6x fewer outliers |
 | Test NKLG with GPS+Galileo | Investigate 1600 coasting events |
 | ISB estimation validation | Galileo/GLO/BDS ISBs converge |
 | Multi-constellation urban benchmark | Odaiba GPS+QZSS, Shinjuku GPS+QZSS |
