@@ -81,7 +81,22 @@ impl crate::engine::ppp_iekf::PppIteratedEkf {
         };
 
         let res_pr = sat.p1 - expected_pr;
-        if res_pr.abs() > 100.0 {
+        // Adaptive rejection threshold: during convergence (position std > 20m),
+        // allow residuals up to 500m. When converged (std < 2m), tighten to 100m.
+        // Formula: threshold = max(100, 5 * position_std), capped at 500m.
+        // This prevents the filter death spiral where early SPP position errors
+        // (common at equatorial stations) cause all measurements to be rejected,
+        // leading to permanent coasting and divergence.
+        let pos_var = state.covariance[(0, 0)]
+            .max(state.covariance[(1, 1)])
+            .max(state.covariance[(2, 2)]);
+        let pos_std = pos_var.sqrt();
+        let pr_threshold = (100.0_f64).max(5.0 * pos_std).min(500.0);
+        if res_pr.abs() > pr_threshold {
+            tracing::debug!(
+                "PR rejected: sat={}, res_pr={:.1}m, threshold={:.1}m, pos_std={:.1}m",
+                sat.sat_obs.sat, res_pr, pr_threshold, pos_std
+            );
             return false;
         }
 

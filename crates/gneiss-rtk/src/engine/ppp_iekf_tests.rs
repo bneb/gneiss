@@ -1326,6 +1326,82 @@ mod mutant_killer_tests {
     }
 
     #[test]
+    fn test_push_sat_meas_adaptive_threshold() {
+        // Verify the adaptive PR rejection threshold:
+        //   threshold = max(100, 5*pos_std), capped at 500
+        // Small covariance (sigma=1m) → threshold=100m
+        // Large covariance (sigma=300m) → threshold=500m (capped)
+        // Medium covariance (sigma=30m) → threshold=150m
+        let fg = PppIteratedEkf::default();
+        let sat_id = SatelliteId { constellation: Constellation::Gps, prn: 1 };
+        let obs = SatObs { sat: sat_id, observations: vec![] };
+        let x_i = DVector::zeros(CORE_STATE_SIZE);
+        let los = Vector3::new(0.0, 0.0, 1.0);
+
+        // Case 1: Small variance (sigma=1m) → threshold=100m
+        // PR residual = 120m > 100m → rejected
+        {
+            let mut state = dummy_rtk_state();
+            for i in 0..3 { state.covariance[(i, i)] = 1.0; }
+            let mut meas = Vec::new();
+            let sat = ProcessedSat {
+                sat_obs: &obs, dt_sat_m: 0.0, p1: 120.0, p2: None,
+                cp1: None, cp2: None, is_iono_free: true,
+                osb_p1: 0.0, osb_p2: 0.0, osb_cp1: 0.0, osb_cp2: 0.0,
+                los: Vector3::zeros(), dist: 0.0, el: std::f64::consts::PI / 2.0,
+                snr: 45.0, doppler: 0.0, lam1: 0.19, lam2: 0.24,
+                tropo_dry: 0.0, map_wet: 0.0, iono_delay: 0.0,
+                f1: 1.0, f2: 1.0, sat_pos_rot: Vector3::zeros(),
+                sat_vel: Vector3::zeros(), sat_clock_drift: 0.0,
+                rcv_pos_ecef: Vector3::zeros(), pcv_correction: 0.0,
+            };
+            let result = fg.push_sat_meas(&mut meas, &state, &sat, &x_i, 0, &los, 0.0, 0.0, 0.0);
+            assert!(!result, "120m residual with sigma=1m should be rejected (threshold=100m)");
+        }
+
+        // Case 2: PR residual = 80m < 100m → accepted even with small variance
+        {
+            let mut state = dummy_rtk_state();
+            for i in 0..3 { state.covariance[(i, i)] = 1.0; }
+            let mut meas = Vec::new();
+            let sat = ProcessedSat {
+                sat_obs: &obs, dt_sat_m: 0.0, p1: 80.0, p2: None,
+                cp1: None, cp2: None, is_iono_free: true,
+                osb_p1: 0.0, osb_p2: 0.0, osb_cp1: 0.0, osb_cp2: 0.0,
+                los: Vector3::zeros(), dist: 0.0, el: std::f64::consts::PI / 2.0,
+                snr: 45.0, doppler: 0.0, lam1: 0.19, lam2: 0.24,
+                tropo_dry: 0.0, map_wet: 0.0, iono_delay: 0.0,
+                f1: 1.0, f2: 1.0, sat_pos_rot: Vector3::zeros(),
+                sat_vel: Vector3::zeros(), sat_clock_drift: 0.0,
+                rcv_pos_ecef: Vector3::zeros(), pcv_correction: 0.0,
+            };
+            let result = fg.push_sat_meas(&mut meas, &state, &sat, &x_i, 0, &los, 0.0, 0.0, 0.0);
+            assert!(result, "80m residual with sigma=1m should be accepted (threshold=100m)");
+        }
+
+        // Case 3: Large variance (sigma=300m) → threshold=500m (capped)
+        // PR residual = 400m < 500m → accepted
+        {
+            let mut state = dummy_rtk_state();
+            for i in 0..3 { state.covariance[(i, i)] = 90000.0; }
+            let mut meas = Vec::new();
+            let sat = ProcessedSat {
+                sat_obs: &obs, dt_sat_m: 0.0, p1: 400.0, p2: None,
+                cp1: None, cp2: None, is_iono_free: true,
+                osb_p1: 0.0, osb_p2: 0.0, osb_cp1: 0.0, osb_cp2: 0.0,
+                los: Vector3::zeros(), dist: 0.0, el: std::f64::consts::PI / 2.0,
+                snr: 45.0, doppler: 0.0, lam1: 0.19, lam2: 0.24,
+                tropo_dry: 0.0, map_wet: 0.0, iono_delay: 0.0,
+                f1: 1.0, f2: 1.0, sat_pos_rot: Vector3::zeros(),
+                sat_vel: Vector3::zeros(), sat_clock_drift: 0.0,
+                rcv_pos_ecef: Vector3::zeros(), pcv_correction: 0.0,
+            };
+            let result = fg.push_sat_meas(&mut meas, &state, &sat, &x_i, 0, &los, 0.0, 0.0, 0.0);
+            assert!(result, "400m residual with sigma=300m should be accepted (threshold=500m)");
+        }
+    }
+
+    #[test]
     fn test_resolve_uduc_indices_with_all_indices() {
         let mut state = dummy_rtk_state();
         let sat_id = SatelliteId { constellation: Constellation::Gps, prn: 1 };

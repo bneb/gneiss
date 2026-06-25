@@ -23,8 +23,8 @@ const GM_EARTH: f64 = 3.986004415E14;
 ///   - Frequency-dependent diurnal band corrections using Earth's resonance kernel.
 ///   - Removal of permanent deformation (zero-frequency term) to produce tide-free
 ///     coordinates compatible with ITRF.
-/// This introduces ≤1–2 cm systematic error in height and horizontal components
-/// that is currently absorbed by the troposphere zenith wet delay state.
+///     This introduces ≤1–2 cm systematic error in height and horizontal components
+///     that is currently absorbed by the troposphere zenith wet delay state.
 ///
 /// Reference: IERS Conventions 2010, Section 7.1.1, Tables 7.3a/7.3b.
 pub fn solid_earth_tides_ecef(t: GpsTime, pos_ecef: Vector3<f64>) -> Vector3<f64> {

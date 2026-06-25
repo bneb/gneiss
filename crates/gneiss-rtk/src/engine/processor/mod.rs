@@ -325,12 +325,17 @@ impl ProcessingEngine {
                     if self.consecutive_rejections > MAX_COAST {
                         tracing::warn!(
                             "Insufficient satellites for {} consecutive epochs — \
-                             decoupling position covariance to accept new anchor",
+                             decoupling and triggering SPP cold restart",
                             self.consecutive_rejections
                         );
                         if let Some(ref mut state) = self.current_state {
                             state.decouple_position();
                             state.decouple_clock();
+                            // Reset epoch_count so next process_ppp treats this
+                            // as a cold start (hard SPP reset), recovering from
+                            // filter divergence caused by persistent measurement
+                            // rejection (e.g. equatorial stations with poor SPP).
+                            state.epoch_count = 0;
                         }
                         self.consecutive_rejections = 0;
                     } else {
@@ -1216,6 +1221,66 @@ mod tests {
             .collect();
 
         let rover = EpochObs { time, satellites: sats };
+        let err = engine.process_epoch(&rover, None).unwrap_err();
+        assert!(matches!(err, EngineError::InitialSppFailed));
+    }
+
+    #[test]
+    fn test_gnn_raim_initialization() {
+        let mut config = EngineConfig::default();
+        config.enable_gnn_raim = true;
+        // Should not panic — GNN model creation can fail silently (returns None via .ok())
+        let engine = ProcessingEngine::new(config);
+        let _ = engine.gnn_raim;
+    }
+
+    #[test]
+    fn test_process_epoch_ppp_iekf_dispatch() {
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        engine.config.mode = EngineMode::PppIekf;
+        let time = GpsTime::new(0, 0.0);
+        let rover = EpochObs { time, satellites: vec![] };
+        let err = engine.process_epoch(&rover, None).unwrap_err();
+        // PppIekf dispatches to process_ppp which fails with InitialSppFailed
+        assert!(matches!(err, EngineError::InitialSppFailed));
+    }
+
+    #[test]
+    fn test_process_epoch_ppp_multi_epoch_dispatch() {
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        engine.config.mode = EngineMode::PppMultiEpoch;
+        let time = GpsTime::new(0, 0.0);
+        let rover = EpochObs { time, satellites: vec![] };
+        let err = engine.process_epoch(&rover, None).unwrap_err();
+        assert!(matches!(err, EngineError::InitialSppFailed));
+    }
+
+    #[test]
+    fn test_process_epoch_ppp_ins_iekf_dispatch() {
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        engine.config.mode = EngineMode::PppInsIekf;
+        let time = GpsTime::new(0, 0.0);
+        let rover = EpochObs { time, satellites: vec![] };
+        let err = engine.process_epoch(&rover, None).unwrap_err();
+        assert!(matches!(err, EngineError::InitialSppFailed));
+    }
+
+    #[test]
+    fn test_process_epoch_sppins_loosely_coupled_dispatch() {
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        engine.config.mode = EngineMode::SppInsLooselyCoupled;
+        let time = GpsTime::new(0, 0.0);
+        let rover = EpochObs { time, satellites: vec![] };
+        let err = engine.process_epoch(&rover, None).unwrap_err();
+        assert!(matches!(err, EngineError::InitialSppFailed));
+    }
+
+    #[test]
+    fn test_process_epoch_rtkins_loosely_coupled_dispatch() {
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        engine.config.mode = EngineMode::RtkInsLooselyCoupled;
+        let time = GpsTime::new(0, 0.0);
+        let rover = EpochObs { time, satellites: vec![] };
         let err = engine.process_epoch(&rover, None).unwrap_err();
         assert!(matches!(err, EngineError::InitialSppFailed));
     }

@@ -44,15 +44,25 @@ pub fn process_ppp<'a>(
         if is_cold_start {
             state.position = spp.position;
             state.rcv_clk_bias = spp.cdt;
+            // Do NOT reset position covariance here. The initial predict_state
+            // call spans a huge dt (GPS epoch 0 → rover time), inflating the
+            // position variance to the clamp ceiling. This large variance is
+            // beneficial: it tells the IEKF to trust measurements over the
+            // position prior, allowing convergence from a potentially poor SPP
+            // seed. The covariance shrinks naturally as measurements are
+            // assimilated over subsequent epochs.
         } else {
-            // Prior variance clamped to [1, 25] m².  1.0 floor prevents
-            // the prior from dominating carrier-phase after convergence;
-            // 25.0 cap limits SPP systematic errors from corrupting the
-            // filter when it's uncertain.
+            // Prior variance clamped to [9, 100] m².
+            // 9 m² floor (σ=3m): prevents the prior from dominating
+            // carrier-phase after rapid convergence, which would lock
+            // the filter to a potentially wrong SPP seed (critical at
+            // equatorial stations where SPP can be off by 30-70m).
+            // 100 m² cap (σ=10m): prevents SPP outliers from
+            // destabilising the filter during early convergence.
             let pos_cov = state.covariance[(0, 0)]
                 .min(state.covariance[(1, 1)])
                 .min(state.covariance[(2, 2)]);
-            let prior_var = pos_cov.min(25.0).max(1.0);
+            let prior_var = pos_cov.min(100.0).max(9.0);
             position_prior = Some((spp.position.vector, prior_var));
         }
     }

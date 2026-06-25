@@ -186,10 +186,16 @@ impl RtkState {
 
     /// Decouples the position states (indices 0..3) from the rest of the EKF state
     /// by zeroing out the corresponding cross-covariance rows and columns.
+    /// Inflates position variance to reflect uncertainty after coasting — this
+    /// widens the adaptive PR rejection threshold so measurements can be
+    /// reacquired after a divergence episode.
     /// This is mathematically required when teleporting the position state.
     pub fn decouple_position(&mut self) {
         let cols = self.covariance.ncols();
         for i in 0..3 {
+            if self.covariance[(i, i)] < 900.0 {
+                self.covariance[(i, i)] = 900.0;
+            }
             for j in 3..cols {
                 self.covariance[(i, j)] = 0.0;
                 self.covariance[(j, i)] = 0.0;
@@ -916,10 +922,13 @@ mod tests {
                 assert_eq!(state.covariance[(j, i)], 0.0);
             }
         }
-        // Ensure other elements are untouched
+        // Position variance inflated to >= 900, cross-terms untouched
         for i in 0..3 {
+            assert!(state.covariance[(i, i)] >= 900.0);
             for j in 0..3 {
-                assert_eq!(state.covariance[(i, j)], 1.0);
+                if i != j {
+                    assert_eq!(state.covariance[(i, j)], 1.0);
+                }
             }
         }
         for i in 3..cols {
