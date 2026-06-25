@@ -1,3 +1,4 @@
+use crate::engine::types::IonosphereModel;
 use crate::engine::{EngineConfig, EngineError, EngineMode};
 use crate::filter::RtkState;
 use gneiss_core::coords::Coordinate;
@@ -281,6 +282,17 @@ impl ProcessingEngine {
 
         let filtered_base_storage = base_obs.map(|b| filter_obs(b, self.config.min_snr_dbhz));
         let filtered_base = filtered_base_storage.as_ref();
+
+        // Auto-select IONEX when grid data is loaded: it provides 1-5 cm
+        // accuracy vs 1-3 m for Klobuchar.  The Ionex branch in
+        // process_single_sat already falls back to Klobuchar when no grid
+        // data is present, so this is always safe to enable.
+        if self.ionex_grid.is_some() && self.config.iono_model == IonosphereModel::Klobuchar {
+            self.config.iono_model = IonosphereModel::Ionex;
+            if let Some(ref mut solver) = self.ppp_factor_opt {
+                solver.iono_model = IonosphereModel::Ionex;
+            }
+        }
 
         // --- dispatch ---
         let err = match self.config.mode {
