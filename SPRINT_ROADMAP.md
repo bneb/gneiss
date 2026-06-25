@@ -1,167 +1,223 @@
-# Sprint Roadmap — Industry-Leading PPP Accuracy
+# Gneiss Sprint Roadmap — 2026-06-25
 
-**Updated: 2026-06-24**  
-**Status: Two critical bugs fixed. CP now works. AR achieves 0.84m Hz / 2.2m Up. File refactoring 25% done.**
+## Ultimate Goal
 
----
+**Beat RTKLIB in PPP mode across all environments** — open-sky, urban canyon, and
+suburban — matching or exceeding Leica/Novatel commercial accuracy while
+remaining a fully open-source Rust codebase.
 
-## Current Competitive Position
+## Competitive Position (Current)
 
 | Mode | Gneiss | RTKLIB | Status |
-|------|--------|--------|--------|
-| SPP (urban) | 1.8–2.1m | 2.8m | ✅ We win |
-| RTK (urban) | 1.3–1.5m | 2.2–2.9m | ✅ We win |
-| PPP float (IGS) | 1.2m Hz / 7.5m Up | — | 🟡 Float only |
-| **PPP AR (IGS)** | **0.84m Hz / 2.2m Up** | — | **🟢 Competitive** |
-| PPP (urban) | not yet benchmarked | 2.0–4.0m | ⏳ Unknown |
-| **PPP AR (3 IGS stations)** | **0.73–1.94m Hz / 2.2–9.2m Up** | — | **🟢 Working on 3/7** |
+|:-----|:-------|:-------|:-------|
+| SPP (urban) | 1.3–2.1m | 2.1–5.5m | ✅ **Winning** |
+| RTK (urban) | 0.69–1.55m | 0.67–2.2m | ✅ **Competitive** |
+| PPP (open-sky, AR, precise) | 0.73–0.84m | — | ✅ **Strong** |
+| PPP (urban, IEKF fwd) | 5.0–5.3m | 2.0–3.97m | ❌ **Losing by 1.3–3.0m** |
+| PPP (urban, IEKF smooth) | 5.2–16.7m | 2.0–3.97m | ❌ **Smoother degrades** |
 
-### What Changed This Session
-
-Two critical bugs were root-caused and fixed:
-
-1. **CP silently dropped (since inception).** `push_cp_measurement()` called `find_ambiguity_index()` (band-0 only), but `update_phase_ambiguities()` created UDUC bands 1/2/3 whenever raw L1/L2 existed. The lookup returned `None`, the `if-let` guard silently skipped, and **the IEKF was pseudorange-only**. Fix: check `is_iono_free` first, create band-0 before UDUC band intercept.
-
-2. **NaN in covariance (cycle slip inflation).** Bug 25 inflates position/velocity covariance ×4 per slip. After many slips, values approach f64 overflow. `Phi*P*Phi^T + Q` produces NaN entries (~90 per event, 11 events per 2880-epoch run). Each caused a `StateDisappeared` error → 30m position jump. Fix: pre-clamp covariance at ±1e10 before the predict step.
+**Gap to close:** 1.3–3.0m in urban PPP, plus smoother fix.
 
 ---
 
-## Accuracy Progression (ALIC, GPS-only PPP, 2880 epochs)
+## The Architecture Problem
 
-| Stage | Hz 50% | Hz RMS | Up RMS | 3D RMS | Errors | Converge |
-|-------|--------|--------|--------|--------|--------|----------|
-| PR-only (bug) | 1.61m | 1.83m | 5.36m | 5.66m | 43 | 1.03 ✗ |
-| + CP fix | 1.45m | 1.60m | 5.17m | 5.41m | 7 | 0.86 |
-| + NaN fix + pre-clamp | 1.22m | 2.48m | 7.46m | 7.86m | 0 | 0.84 |
-| **+ AR enabled** | **0.84m** | **1.54m** | **2.18m** | **2.67m** | **0** | **0.28** |
+The single-epoch IEKF re-anchors position to SPP each epoch. This creates a
+~5m accuracy floor because SPP quality is the limiting factor. The SPP anchor
+cannot be removed (divergence confirmed in POST_MORTEM hypothesis #8).
 
-AR converged scatter: East σ=1.09m (50%=0.49m), North σ=1.09m (50%=0.45m), Up σ=2.18m (50%=1.26m).
+**Solution:** Multi-epoch sliding-window factor graph that accumulates
+carrier-phase constraints across epochs, breaking the single-epoch SPP ceiling.
 
 ---
 
-## Phase 1: Productionize AR (ACTIVE)
+## Sprint 1 — Foundation Hardening (95% DONE) 🔄
 
-### 1.1 — AR Stability & Robustness
-**File:** `crates/gneiss-rtk/src/engine/ppp_ar.rs`
+**Goal:** Production-grade code quality. No regressions. Clean baseline.
 
-AR has been tested on one station (ALIC). Need multi-station validation.
+| Task | Target | Status |
+|:-----|:-------|:-------|
+| Fix PARK/PERT/HOB2 divergence | 0 coasting events | ✅ Done |
+| Adaptive PR rejection threshold | No more filter death spiral | ✅ Done |
+| SPP prior loosening [9,100] m² | Don't lock to poor SPP seed | ✅ Done |
+| Coasting recovery via cold restart | Recover instead of permanent divergence | ✅ Done |
+| Clippy cleanup | 83 → 0 | 🔄 68 remaining |
+| Test coverage | 89.2% → 95% | 🔄 89.26% |
+| Mutation testing | 42% → 0 survivors | ❌ Tool issues |
+| Urban benchmark (Odaiba) | Establish baseline | ✅ 26m median |
+| IGS multi-station sweep | 7/7 stations converging | ✅ 6/7 (NKLG partial) |
+| Cargo aliases (coverage, lint, check) | Tooling in place | ✅ Done |
 
-- [ ] Run AR on all 7 IGS stations (ALIC, CEDU, HOB2, NKLG, PARK, PERT, YARR)
-- [ ] Fix WTZR divergence (3,940km — likely antenna or P2/C2 mapping)
-- [ ] Add AR fix-count and ratio monitoring in CLI output
-- [ ] **Gate:** AR fixes on ≥5 stations with Hz50 < 1.0m
-
-### 1.2 — IONEX + AR
-**Files:** `crates/gneiss-core/src/atmosphere.rs`, `crates/gneiss-parsers/src/ionex.rs`
-
-IONEX provides 5cm iono prior (vs 3m Klobuchar) in UDUC mode. With AR forcing UDUC, IONEX becomes directly applicable.
-
-- [ ] Benchmark IONEX + AR on ALIC (compare vs Klobuchar + AR)
-- [ ] Fix IONEX interpolation performance (cache temporal window, pre-compute IPP)
-- [ ] **Gate:** IONEX + AR Hz50 < 0.8m
-
-### 1.3 — Multi-GNSS AR
-- [ ] Test GPS+GLONASS AR (ALIC has 2 GLONASS sats)
-- [ ] Test GPS+Galileo AR if data available
-- [ ] **Gate:** Multi-GNSS AR Hz50 < 0.6m
+**Exit criteria:** All tests pass, clippy ≤ 30 (unwrap backlog ok), coverage ≥ 90%.
 
 ---
 
-## Phase 2: Code Quality Standards (CLAUDE.md compliance)
+## Sprint 2 — Urban PPP Accuracy (NEXT)
 
-Current state vs targets:
+**Goal:** Close the PPP gap vs RTKLIB from 5m → 2m in urban canyons.
 
-| Standard | Current | Target | Gap |
-|----------|---------|--------|-----|
-| Compiler warnings | 0 | 0 | ✅ |
-| Test failures | 0 | 0 | ✅ |
-| Clippy warnings | 182 | 0 | 🔴 |
-| Line coverage | 89.8% | >95% | 🟡 |
-| Mutation survivors | ? | 0 | ⚪ |
-| File size (ppp_iekf.rs) | 3,264 | <500 | 🔴 |
-| File size (ppp.rs) | 2,931 | <500 | 🔴 |
+### 2a. Smoother Fix
 
-### 2.1 — File Size Reduction (IN PROGRESS)
+The backward smoother degrades accuracy (5.0m → 16.7m in Shinjuku).
+Root cause likely in covariance propagation or state ordering mismatch between
+forward filter and backward pass.
 
-ppp_iekf.rs: 4353 → 3264 (-25%), ppp.rs: 3460 → 2931 (-15%)
-Extracted: ppp_measurements.rs (580), ppp_ar.rs (535), ppp_antenna.rs (553)
+| Task | Target |
+|:-----|:-------|
+| Debug smoother horizontal degradation | Smoothed ≤ forward |
+| Unit tests for smoother RTS math | 100% coverage on smoother core |
+| Verify smoother on IGS stations | Smoothed ≤ forward on all 7 |
 
-- [ ] Move tests from ppp_iekf.rs to ppp_iekf_tests.rs (~1500 lines)
-- [ ] Move tests from ppp.rs to ppp_tests.rs (~1200 lines)
-- [ ] Extract ppp_spp_anchor.rs from ppp.rs (SPP prior logic, ~200 lines)
-- [ ] **Gate:** All files <500 LOC except test files
+### 2b. Multi-Constellation PPP
 
-### 2.2 — Clippy Cleanup
-- [ ] Fix 182 clippy warnings (mostly `unwrap_used`, `too_many_arguments`)
-- [ ] Add `#![deny(clippy::all)]` to lib.rs
-- [ ] **Gate:** 0 clippy warnings
+Enabling Galileo/QZSS doubles visible satellites in urban canyons.
 
-### 2.3 — Coverage
-- [ ] Write ~30 targeted tests for uncovered branches (identified by workflow)
-- [ ] Focus on ppp_iekf.rs (252 uncovered) and ppp.rs (193 uncovered)
-- [ ] **Gate:** >95% line coverage
+| Task | Target |
+|:-----|:-------|
+| Enable Galileo for PPP | `--systems GE` working |
+| Test NKLG with GPS+Galileo | Investigate 1600 coasting events |
+| ISB estimation validation | Galileo/GLO/BDS ISBs converge |
+| Multi-constellation urban benchmark | Odaiba GPS+QZSS, Shinjuku GPS+QZSS |
 
-### 2.4 — Mutation Testing
-- [ ] Run `cargo mutants` on high-coverage modules
-- [ ] Kill all survivors or document equivalent mutants
-- [ ] **Gate:** 0 mutation survivors
+### 2c. Ionosphere Model Upgrade
 
----
+Klobuchar is ±2-5m at mid-latitudes, worse at equator. IONEX/GIM provides
+±0.1-0.5m — a 10x improvement that directly reduces PPP convergence time.
 
-## Phase 3: Urban Benchmark
+| Task | Target |
+|:-----|:-------|
+| Validate IONEX interpolation | No NaN at grid boundaries |
+| IONEX benchmark vs Klobuchar | IGS station comparison |
+| Default to IONEX when available | Auto-select mode |
 
-### 3.1 — Odaiba F9P Dataset
-- [ ] Run SPP baseline on Odaiba (compare against 5.3m baseline)
-- [ ] Run PPP float on Odaiba
-- [ ] Run PPP AR on Odaiba
-- [ ] **Gate:** PPP AR Hz50 < 2.0m on Odaiba (ties RTKLIB)
+### 2d. NKLG Root Cause
 
-### 3.2 — Competitive Matrix
-- [ ] Run all modes across all working stations
-- [ ] Compare vs RTKLIB where ground truth available
-- [ ] Publish accuracy matrix
+NKLG (Gabon, equatorial) has 6-38km PR residuals at epoch 3+. Not fixed by
+GPS+Galileo. Likely SP3/CLK data gap or equatorial ionosphere issue.
+
+| Task | Target |
+|:-----|:-------|
+| Check SP3/CLK satellite coverage at NKLG | Identify missing PRNs |
+| Compare broadcast vs precise orbits for NKLG | Quantify orbit/clock gaps |
+| Test with IONEX instead of Klobuchar | Equatorial iono may be the cause |
+
+**Exit criteria:** Urban PPP median < 3m (Odaiba/Shinjuku), smoother fixed,
+multi-constellation working, NKLG root-caused.
 
 ---
 
-## Deferred: Multi-Epoch Factor Graph
+## Sprint 3 — Multi-Epoch Factor Graph (ARCHITECTURE)
 
-The original Phase A (2-epoch sliding window) was deprioritized after discovering:
-1. The CP bug meant all prior testing was on PR-only — the "5m architectural floor" was actually a software bug
-2. AR provides larger accuracy gains (71% vertical improvement) with less complexity
-3. The full-state factor graph requires shared ambiguities to function, which is a significant refactor
+**Goal:** Break the single-epoch SPP ceiling. Target urban PPP < 2m.
 
-**Revisit when:** AR is productionized and the accuracy limit of single-epoch AR is understood.
+This is the original SPRINT_PLAN.md vision — a sliding-window factor graph
+that jointly optimizes position, clock, tropo, and ambiguities across N epochs.
+The existing factor graph infrastructure (1,172 lines) already supports
+GNSS and IMU factors with LM optimization and Schur complement marginalization.
+
+### Phase 1: 2-Epoch Joint Optimization
+
+| Task | Target |
+|:-----|:-------|
+| Build `PppTwoEpochOptimizer` | 2-epoch joint state estimation |
+| Dynamics constraint between epochs | x_k ≈ Φ · x_{k-1} |
+| Reuse existing GNSS factor code | PR/CP/Doppler factors |
+| Benchmark vs single-epoch IEKF | Odaiba < 4.5m (from 5.3m) |
+
+### Phase 2: N-Epoch Sliding Window
+
+| Task | Target |
+|:-----|:-------|
+| Window management (VecDeque, 5-10 epochs) | Stable N-epoch optimization |
+| Schur complement marginalization | O(N·M³) computational cost |
+| Benchmark vs 2-epoch | Odaiba < 4.0m |
+
+### Phase 3: Shared Ambiguities Across Window
+
+| Task | Target |
+|:-----|:-------|
+| One ambiguity per sat per freq for entire window | CP constrains ALL epochs |
+| Cycle slip handling in window | Detect and reset individual amb |
+| Benchmark vs Phase 2 | Odaiba < 3.5m |
+
+**Exit criteria:** Urban PPP < 3.5m, tied or beating RTKLIB (2.0–4.0m).
+
+**Kill switch:** If Phase 1 doesn't improve Odaiba by ≥ 0.3m, abort Sprint 3.
+The factor graph path is a dead end and we accept the 5m ceiling for
+broadcast-ephemeris PPP.
 
 ---
 
-## Dataset Inventory
+## Sprint 4 — INS Integration
 
-| Station | File | Epochs | Systems | Status |
-|---------|------|--------|---------|--------|
-| ALIC | `alic3350.19o` | 2,880 | GPS+GLO | ✅ AR working, 0.84m Hz50 |
-| CEDU | `cedu3350.19o` | 2,880 | GPS | ✅ AR working, 0.73m Hz50 |
-| YARR | `yarr3350.19o` | 2,880 | GPS | ✅ AR working, 1.94m Hz50 |
-| HOB2 | `hob23350.19o` | 2,880 | GPS | 🟡 AR fixes 3×, 3.99m |
-| SUTH | `suth3350.19o` | 2,880 | GPS+GLO | 🟡 AR 66% fix, 0.79m |
-| NKLG | `nklg3350.19o` | 2,880 | Multi | ❌ Diverges (0% AR fix) |
-| PARK | `park3350.19o` | 2,880 | GPS | ❌ Diverges (55m drift) |
-| PERT | `pert3350.19o` | 2,880 | GPS | ❌ Diverges (167m drift) |
-| WTZR | `wtzr3350.19o` | 2,880 | GPS+GLO+GAL | ❌ Not yet tested |
+**Goal:** Dead reckoning through urban canyons. Survive 10–30s GNSS outages.
 
-**Products for day 335, 2019:**
-SP3 `cod20820.sp3`, CLK `gfz20820.clk`, NAV `brdc3350.19n`, ANTEX `igs14.atx`, IONEX `codg3350.19i`
+| Task | Target |
+|:-----|:-------|
+| Fix tight-coupling Mahalanobis rejections | INS doesn't free-integrate in multipath |
+| IMU preintegration validation | Unit tests for preintegration covariance |
+| Urban outage simulation | < 5m drift after 10s outage |
+| Benchmark full INS-PPP against RTKLIB | Shinjuku + Odaiba 18-grid |
 
 ---
 
-## Known Bugs (All Fixed)
+## Sprint 5 — Production Polish
 
-| Bug | Root Cause | Fix | Session |
-|-----|-----------|-----|---------|
-| IEKF was PR-only | `find_ambiguity_index` band-0 mismatch | Check `is_iono_free` first | 2026-06-24 |
-| NaN in covariance | Cycle slip inflation → overflow | Pre-clamp at ±1e10 | 2026-06-24 |
-| `auto_detect_dynamics` | Never implemented, defaulted to Automotive | Default to Static | 2026-06-24 |
-| AR WL covariance | From EKF state P (277k cyc²) | Build Q_WL from MW statistics | Prior session |
-| AR too early | Unconverged MW at epoch 12 | MW threshold 10→50 | Prior session |
-| AR re-fixing | Fix every epoch after success | Add `is_fixed && !has_new_sats` | Prior session |
-| ANTEX O(n) lookup | Linear scan per satellite | HashMap indexing | Prior session |
-| SP3 clock fallback | Missing clock → satellite dropped | Fall back to broadcast clock | Prior session |
+**Goal:** Codebase meets all CLAUDE.md standards. Ship-quality.
+
+| Standard | Current | Target |
+|:---------|:--------|:-------|
+| File size | 37 files > 500 LOC | 0 files > 500 LOC |
+| Function size | 13 functions > 32 LOC | 0 functions > 32 LOC |
+| Nesting depth | Up to 9 levels | All < 3 levels |
+| Test coverage | 89.26% lines | > 95% lines |
+| Mutation testing | 42% survival | 0 survivors |
+| Compiler warnings | 68 | 0 |
+
+---
+
+## Benchmark Matrix
+
+All sprints must not regress this matrix. Fresh runs required at each sprint exit.
+
+| Dataset | Receiver | SPP | RTK | PPP Fwd | PPP Smooth | PPP+INS |
+|:--------|:---------|:----|:----|:--------|:-----------|:--------|
+| IGS ALIC | LEICA GR25 | — | — | 0.84m ✅ | TBD | — |
+| IGS CEDU | TRIMBLE | — | — | 0.73m ✅ | TBD | — |
+| IGS YARR | — | — | — | 1.94m ✅ | TBD | — |
+| IGS HOB2 | — | — | — | 0 coast ✅ | TBD | — |
+| IGS PARK | TRIMBLE NETR9 | — | — | 0 coast ✅ | TBD | — |
+| IGS PERT | TRIMBLE NETR9 | — | — | 0 coast ✅ | TBD | — |
+| IGS NKLG | SEPT POLARX5 | — | — | 1600 coast 🟡 | TBD | — |
+| Odaiba | u-blox F9P | 2.1m ✅ | 0.69m ✅ | **5.3m** ❌ | 5.2m ❌ | 7.3m |
+| Shinjuku | u-blox F9P | 1.8m ✅ | 1.55m ✅ | **5.0m** ❌ | **16.7m** ❌ | 14.3m |
+| GSDC | Pixel 4 | 2.0m ✅ | 8.4m ❌ | 108m ❌ | 108m ❌ | 108m |
+
+**Critical rows:** Odaiba PPP and Shinjuku PPP — must close the 1.3–3.0m gap vs RTKLIB.
+
+---
+
+## Risk Register
+
+| Risk | Prob | Impact | Mitigation |
+|:-----|:-----|:-------|:-----------|
+| Factor graph doesn't improve accuracy | 30% | High | Kill switch after Phase 1 |
+| Smoother bug is in core math | 25% | Medium | Isolate with unit tests |
+| NKLG is unfixable (bad data) | 20% | Low | Accept 6/7 stations |
+| Multi-constellation introduces ISB bugs | 35% | Medium | Test each constellation alone |
+| Phone PPP never converges (Pixel 4) | 40% | Low | Accept SPP/RTK only for phones |
+| Mutation testing tool incompatible | 30% | Low | Manual review or cargo-mutants fix |
+
+---
+
+## Timeline (Aggressive)
+
+| Sprint | Focus | Est. Duration |
+|:-------|:------|:--------------|
+| Sprint 1 | Foundation hardening | 95% done |
+| Sprint 2 | Urban PPP accuracy | 1–2 weeks |
+| Sprint 3 | Multi-epoch factor graph | 2–3 weeks |
+| Sprint 4 | INS integration | 1–2 weeks |
+| Sprint 5 | Production polish | 1–2 weeks |
+
+**Total:** ~8–10 weeks to production-grade PPP engine beating RTKLIB.
