@@ -458,6 +458,7 @@ impl PppInsIteratedEkf {
         Ok((x_wl + dx_nl, p_fixed))
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn compute_iteration_dx(
         &self,
         state: &RtkState,
@@ -526,6 +527,7 @@ impl PppInsIteratedEkf {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn compute_final_covariance(
         &self,
         state: &RtkState,
@@ -743,6 +745,7 @@ impl PppInsIteratedEkf {
         meas
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn push_sat_meas(
         &self,
         meas: &mut Vec<FgMeasurement>,

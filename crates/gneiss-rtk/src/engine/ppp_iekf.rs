@@ -165,6 +165,7 @@ impl PppIteratedEkf {
         None
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn compute_iteration_dx(
         &self,
         state: &RtkState,

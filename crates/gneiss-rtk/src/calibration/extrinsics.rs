@@ -135,6 +135,7 @@ where
 
 /// Optimizes the 6-DOF extrinsics (lever arm X, Y, Z and mounting angles Roll, Pitch, Yaw)
 /// using the Nelder-Mead method to minimize the provided evaluation function.
+#[allow(clippy::needless_range_loop)]
 pub fn calibrate_extrinsics_6dof<F>(
     base_config: &crate::engine::EngineConfig,
     mut evaluate_fn: F,

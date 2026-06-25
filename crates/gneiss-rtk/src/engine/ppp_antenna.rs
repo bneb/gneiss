@@ -439,6 +439,7 @@ pub(crate) fn compute_sat_state(
     Some((t_tx, dt_s, sat_pos, sat_vel))
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn compute_pcv(
     engine: &ProcessingEngine,
     sat_obs: &gneiss_core::obs::SatObs,

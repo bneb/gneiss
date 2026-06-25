@@ -1,6 +1,7 @@
 use crate::engine::measurement::types::{SingleUpdate, UpdateGeometry, VarianceWeights, DdCarrierPhaseParams};
 use crate::engine::measurement::DdMeasurementContext;
 
+#[allow(clippy::too_many_arguments)]
 fn compute_carrier_phase_update(
     cp: [f64; 4],
     f: [f64; 2],

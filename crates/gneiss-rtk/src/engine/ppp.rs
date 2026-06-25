@@ -62,7 +62,7 @@ pub fn process_ppp<'a>(
             let pos_cov = state.covariance[(0, 0)]
                 .min(state.covariance[(1, 1)])
                 .min(state.covariance[(2, 2)]);
-            let prior_var = pos_cov.min(100.0).max(9.0);
+            let prior_var = pos_cov.clamp(9.0, 100.0);
             position_prior = Some((spp.position.vector, prior_var));
         }
     }

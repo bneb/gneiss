@@ -66,12 +66,12 @@ fn parse_yds(s: &str) -> Option<GpsTime> {
 
     let mut d = doy;
     let mut m = 0;
-    for i in 0..12 {
-        if d <= days_in_month[i] {
+    for (i, &dim) in days_in_month.iter().enumerate() {
+        if d <= dim {
             m = i as i32 + 1;
             break;
         }
-        d -= days_in_month[i];
+        d -= dim;
     }
 
     if m == 0 {
