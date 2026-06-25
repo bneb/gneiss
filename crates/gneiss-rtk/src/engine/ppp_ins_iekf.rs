@@ -839,6 +839,7 @@ impl PppInsIteratedEkf {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn push_pr_measurement(
         &self,
         meas: &mut Vec<FgMeasurement>,
@@ -891,6 +892,7 @@ impl PppInsIteratedEkf {
         });
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn push_doppler_measurement(
         &self,
         meas: &mut Vec<FgMeasurement>,
@@ -922,6 +924,7 @@ impl PppInsIteratedEkf {
         });
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn push_cp_measurement(
         &self,
         meas: &mut Vec<FgMeasurement>,
@@ -989,6 +992,7 @@ impl PppInsIteratedEkf {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn push_uduc_pr_measurements(
         &self,
         meas: &mut Vec<FgMeasurement>,
