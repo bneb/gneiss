@@ -527,6 +527,7 @@ fn find_clock_cols(measurements: &[SppMeasurement]) -> (usize, ClockCols) {
     (cols, ClockCols(gps_col, gal_col, bds_col, glo_col))
 }
 
+#[allow(clippy::type_complexity)]
 fn build_design_matrix(
     state: &SppState,
     measurements: &[SppMeasurement],

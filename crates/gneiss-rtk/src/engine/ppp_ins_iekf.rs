@@ -321,6 +321,7 @@ impl PppInsIteratedEkf {
         cands
     }
 
+    #[allow(clippy::type_complexity)]
     fn build_ar_subset(
         &self,
         cands: &[(gneiss_core::sat::SatelliteId, usize, usize, f64, f64, f64)],
@@ -354,6 +355,7 @@ impl PppInsIteratedEkf {
         subset
     }
 
+    #[allow(clippy::type_complexity)]
     fn resolve_widelane_ar(
         &self,
         state: &RtkState,
@@ -410,6 +412,7 @@ impl PppInsIteratedEkf {
         ))
     }
 
+    #[allow(clippy::type_complexity)]
     fn resolve_narrowlane_ar(
         &self,
         state: &RtkState,

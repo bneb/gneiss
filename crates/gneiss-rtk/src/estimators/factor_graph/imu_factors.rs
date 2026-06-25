@@ -130,6 +130,7 @@ impl ImuPreintegrationFactor {
 }
 
 impl ImuPreintegrationFactor {
+    #[allow(clippy::type_complexity)]
     fn extract_all_states(
         &self,
         state: &DVector<f64>,

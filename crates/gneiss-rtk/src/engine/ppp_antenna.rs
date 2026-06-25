@@ -282,6 +282,7 @@ pub(crate) fn process_single_sat<'a>(
     })
 }
 
+#[allow(clippy::type_complexity)]
 pub(crate) fn get_obs_and_corrections(
     engine: &ProcessingEngine,
     sat_obs: &gneiss_core::obs::SatObs,

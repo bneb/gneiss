@@ -16,6 +16,7 @@ struct Cli {
 }
 
 #[derive(Subcommand, Debug)]
+#[allow(clippy::large_enum_variant)]
 enum Commands {
     /// Run the engine in real-time using a serial port and NTRIP caster
     Live {

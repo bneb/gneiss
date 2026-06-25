@@ -6,5 +6,5 @@ coverage = "tarpaulin --out Html --output-dir target/tarpaulin --engine llvm"
 mutants = "mutants --workspace"
 lint = "clippy --workspace --all-targets -- -D warnings -D clippy::all -W clippy::pedantic"
 check-all = "test --workspace && clippy --workspace --all-targets"
-check = "test --workspace && clippy --workspace --all-targets -- -D warnings -D clippy::all -W clippy::pedantic && tarpaulin --out Html --output-dir target/tarpaulin --engine llvm && mutants --workspace"
+audit = "test --workspace && clippy --workspace --all-targets -- -D warnings -D clippy::all -W clippy::pedantic && tarpaulin --out Html --output-dir target/tarpaulin --engine llvm && mutants --workspace"
 

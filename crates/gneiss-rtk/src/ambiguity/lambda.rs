@@ -64,6 +64,7 @@ fn resolve_lambda_inner(
     })
 }
 
+#[allow(clippy::type_complexity)]
 fn run_lambda_search(
     n: usize,
     dec: &DecorrelateResult,
