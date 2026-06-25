@@ -286,7 +286,7 @@ impl ProcessingEngine {
         self.predict_state(dt);
         self.update_state_time(rover_obs.time)?;
 
-        let state = self.current_state.as_mut().unwrap();
+        let state = self.current_state.as_mut().expect("current_state is Some after ok_or early return");
         Self::check_covariance_divergence(
             state,
             spp_pos,
@@ -303,7 +303,7 @@ impl ProcessingEngine {
 
         self.apply_observations(&rover_smoothed, base_obs, spp_pos, spp_state_ref)?;
 
-        let state = self.current_state.as_mut().unwrap();
+        let state = self.current_state.as_mut().expect("current_state is Some after apply_observations");
         Self::apply_nhc_updates(&self.config, &self.imu_history, state);
 
         self.attempt_kinematic_alignment();

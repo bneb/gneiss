@@ -37,7 +37,7 @@ impl PppIteratedEkf {
         let subset: Vec<_> = sorted
             .iter()
             .skip(1)
-            .map(|c| (c.clone(), ref_cand.clone()))
+            .map(|c| (*c, *ref_cand))
             .collect();
 
         if subset.is_empty() {
@@ -168,7 +168,7 @@ impl PppIteratedEkf {
             const_groups
                 .entry(cand.0.constellation)
                 .or_default()
-                .push(cand.clone());
+                .push(*cand);
         }
 
         let x = extract_state_vector(state);
@@ -261,11 +261,11 @@ impl PppIteratedEkf {
             .filter(|c| c.0.constellation == gneiss_core::sat::Constellation::Gps)
             .max_by(|a, b| a.3.partial_cmp(&b.3).unwrap_or(std::cmp::Ordering::Equal))
         {
-            let ref_cand = ref_cand.clone();
+            let ref_cand = *ref_cand;
             return cands
                 .iter()
                 .filter(|c| c.0 != ref_cand.0)
-                .map(|c| (c.clone(), ref_cand.clone()))
+                .map(|c| (*c, ref_cand))
                 .collect();
         }
         // Fallback: per-constellation
@@ -275,16 +275,16 @@ impl PppIteratedEkf {
             const_cands
                 .entry(cand.0.constellation)
                 .or_insert_with(Vec::new)
-                .push(cand.clone());
+                .push(*cand);
         }
         for (_, mut group) in const_cands {
             if group.len() < 2 {
                 continue;
             }
             group.sort_by(|a, b| b.3.partial_cmp(&a.3).unwrap_or(std::cmp::Ordering::Equal));
-            let ref_cand = group[0].clone();
+            let ref_cand = group[0];
             for cand in group.iter().skip(1) {
-                subset.push((cand.clone(), ref_cand.clone()));
+                subset.push((*cand, ref_cand));
             }
         }
         subset

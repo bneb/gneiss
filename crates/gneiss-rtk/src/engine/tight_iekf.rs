@@ -37,7 +37,7 @@ impl TightFactorGraph {
             return;
         }
 
-        let state = engine.current_state.as_mut().unwrap();
+        let state = engine.current_state.as_mut().expect("current_state is Some after None check");
         let _rcv_pos = Vector3::new(
             state.position.vector.x,
             state.position.vector.y,

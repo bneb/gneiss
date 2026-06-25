@@ -142,7 +142,7 @@ impl ProcessingEngine {
         if let Some(pos) = spp_pos {
             if matches!(self.config.mode, EngineMode::Spp) {
                 // Pure SPP is an epoch-by-epoch solution. Do not filter.
-                let state = self.current_state.as_mut().unwrap();
+                let state = self.current_state.as_mut().expect("current_state is Some after ok_or early return");
                 state.time = rover_obs.time;
                 state.position = pos;
                 state.position.epoch = rover_obs.time;
@@ -153,7 +153,7 @@ impl ProcessingEngine {
                 );
                 self.state_history.push(state.clone());
                 self.obs_history.push((rover_obs.clone(), None));
-                return Ok(self.current_state.as_ref().unwrap());
+                return Ok(self.current_state.as_ref().expect("current_state is Some at end of process_spp"));
             }
         } else {
             // SPP failed for this epoch.

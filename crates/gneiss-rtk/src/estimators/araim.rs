@@ -86,7 +86,7 @@ fn evaluate_single_subset(
     let dy = full.position.vector.y - subset.position.vector.y;
     let dz = full.position.vector.z - subset.position.vector.z;
 
-    let (dn, de, du) = ecef_to_enu_diff(full.position.clone(), dx, dy, dz);
+    let (dn, de, du) = ecef_to_enu_diff(full.position, dx, dy, dz);
     let d_horiz = (dn.powi(2) + de.powi(2)).sqrt();
     let d_vert = du.abs();
 
@@ -109,7 +109,7 @@ fn evaluate_single_subset(
 fn project_covariance_diff_to_ned(full: &RtkState, subset: &RtkState) -> (f64, f64) {
     let p_full = full.covariance.view((0, 0), (3, 3));
     let p_sub = subset.covariance.view((0, 0), (3, 3));
-    let dp = &p_sub - &p_full;
+    let dp = p_sub - p_full;
 
     let llh = ecef_to_llh(full.position.vector);
     let rot = ecef_to_ned_matrix(llh);

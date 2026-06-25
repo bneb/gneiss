@@ -173,6 +173,7 @@ pub fn detect_gf_slip(
 /// The MW combination removes geometry, ionosphere, troposphere, and clock,
 /// isolating widelane ambiguity. A jump indicates a cycle slip.
 /// Returns true if MW jumps by more than `threshold_cycles` cycles.
+#[allow(clippy::too_many_arguments)]
 pub fn detect_mw_slip(
     cp1: f64,
     lam1: f64,
@@ -196,6 +197,7 @@ pub fn detect_mw_slip(
 /// Combined cycle slip detection using LLI, lock-time, geometry-free, and MW.
 /// Returns (is_slip, new_lock_time).
 /// `gf_prev` and `mw_prev` are updated in-place with the current values if no slip.
+#[allow(clippy::too_many_arguments)]
 pub fn detect_slip_combined(
     sat_obs: &SatObs,
     prev_lock: u32,

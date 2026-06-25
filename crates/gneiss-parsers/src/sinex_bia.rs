@@ -243,11 +243,10 @@ impl SinexBias {
 
     pub fn get_exact_bias(&self, sat: SatelliteId, obs: ObsCode, t: GpsTime) -> Option<f64> {
         for rec in &self.records {
-            if rec.bias_type == BiasType::Osb && rec.sat == sat && rec.obs1 == obs {
-                if t >= rec.start_time && t <= rec.end_time {
+            if rec.bias_type == BiasType::Osb && rec.sat == sat && rec.obs1 == obs
+                && t >= rec.start_time && t <= rec.end_time {
                     return Some(rec.value);
                 }
-            }
         }
         None
     }

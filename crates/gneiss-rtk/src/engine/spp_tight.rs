@@ -64,13 +64,13 @@ pub fn process_spp_tightly_coupled<'a>(
     let rejected = update_ekf(engine, &z_vec, &h_mat, &r_mat, &meas_types);
     handle_rejection(engine, rover_obs, rejected)?;
     finalize_epoch(engine, rover_obs);
-    Ok(engine.current_state.as_ref().unwrap())
+    Ok(engine.current_state.as_ref().expect("current_state is Some after None check"))
 }
 
 fn predict_and_align_state(engine: &mut ProcessingEngine, rover_obs: &EpochObs) {
-    let dt = rover_obs.time.tow - engine.current_state.as_ref().unwrap().time.tow;
+    let dt = rover_obs.time.tow - engine.current_state.as_ref().expect("current_state is Some after None check").time.tow;
     engine.predict_state(dt);
-    let state = engine.current_state.as_mut().unwrap();
+    let state = engine.current_state.as_mut().expect("current_state is Some after None check");
     state.time = rover_obs.time;
     state.position.epoch = rover_obs.time;
 }
@@ -83,22 +83,24 @@ fn bootstrap_clock_bias(engine: &mut ProcessingEngine, rover_obs: &EpochObs) {
         &SppConfig::default(),
         None,
     ) {
-        let state = engine.current_state.as_mut().unwrap();
+        let state = engine.current_state.as_mut().expect("current_state is Some after None check in caller");
         state.rcv_clk_bias = spp_res.cdt;
         state.covariance[(15, 15)] = CLK_BIAS_VAR_RESET;
     }
 }
 
-fn get_apc_kinematics(
-    engine: &ProcessingEngine,
-) -> (
+type ApcKinematics = (
     Vector3<f64>,
     Vector3<f64>,
     nalgebra::Rotation3<f64>,
     Vector3<f64>,
     Vector3<f64>,
-) {
-    let state = engine.current_state.as_ref().unwrap();
+);
+
+fn get_apc_kinematics(
+    engine: &ProcessingEngine,
+) -> ApcKinematics {
+    let state = engine.current_state.as_ref().expect("current_state is Some after None check in caller");
     let r_b_e = state.attitude.to_rotation_matrix();
     let lever_arm = if state.ins_aligned {
         Vector3::from_column_slice(&engine.config.imu_to_antenna_lever_arm)
@@ -152,15 +154,17 @@ struct SatGeometry {
     sat_drift: f64,
 }
 
-fn build_ekf_matrices(
-    engine: &ProcessingEngine,
-    measurements: &[SppMeasurement],
-) -> (
+type EkfMatrices = (
     DVector<f64>,
     DMatrix<f64>,
     DMatrix<f64>,
     Vec<(gneiss_core::sat::SatelliteId, u8)>,
-) {
+);
+
+fn build_ekf_matrices(
+    engine: &ProcessingEngine,
+    measurements: &[SppMeasurement],
+) -> EkfMatrices {
     let (pos_apc, v_apc, r_b_e, lever_arm, omega_eb_b) = get_apc_kinematics(engine);
     let ctx = EkfContext {
         pos_apc,
@@ -169,9 +173,9 @@ fn build_ekf_matrices(
         lever_arm,
         omega_eb_b,
         rec_llh: ecef_to_llh(pos_apc),
-        state: engine.current_state.as_ref().unwrap(),
+        state: engine.current_state.as_ref().expect("current_state is Some after None check in caller"),
         engine,
-        n_cols: engine.current_state.as_ref().unwrap().covariance.ncols(),
+        n_cols: engine.current_state.as_ref().expect("current_state is Some after None check in caller").covariance.ncols(),
     };
 
     let num_dop = measurements.iter().filter(|m| m.doppler != 0.0).count();
@@ -359,7 +363,7 @@ fn update_ekf(
     r: &DMatrix<f64>,
     types: &[(gneiss_core::sat::SatelliteId, u8)],
 ) -> bool {
-    let state = engine.current_state.as_mut().unwrap();
+    let state = engine.current_state.as_mut().expect("current_state is Some after None check in caller");
     let res = crate::engine::updater::update::<crate::engine::updater_math::TightCoupling>(
         state,
         z,
@@ -381,7 +385,7 @@ fn handle_rejection(
     rover_obs: &EpochObs,
     rejected: bool,
 ) -> Result<(), EngineError> {
-    let state = engine.current_state.as_mut().unwrap();
+    let state = engine.current_state.as_mut().expect("current_state is Some after None check in caller");
     if rejected {
         state.consecutive_rejections += 1;
         if state.consecutive_rejections > MAX_CONSECUTIVE_REJECTIONS {
@@ -405,7 +409,7 @@ fn reset_state_from_spp(
         None,
     )
     .map_err(|_| EngineError::NoObservations)?;
-    let state = engine.current_state.as_mut().unwrap();
+    let state = engine.current_state.as_mut().expect("current_state is Some after None check in caller");
     state.position = spp_res.position;
     state.velocity = Vector3::zeros();
     state.rcv_clk_bias = spp_res.cdt;
@@ -428,7 +432,7 @@ fn reset_state_from_spp(
 
 fn finalize_epoch(engine: &mut ProcessingEngine, rover_obs: &EpochObs) {
     engine.attempt_kinematic_alignment();
-    let final_state = engine.current_state.as_ref().unwrap().clone();
+    let final_state = engine.current_state.as_ref().expect("current_state is Some after None check in caller").clone();
     engine.state_history.push(final_state);
     engine.obs_history.push((rover_obs.clone(), None));
 }

@@ -143,6 +143,7 @@ pub struct EkfUpdateResult {
     pub weights: DVector<f64>,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn compute_update_iteration<C: CouplingStrategy>(
     state_cov: &DMatrix<f64>,
     current_z: &DVector<f64>,
@@ -224,6 +225,7 @@ enum OutlierAction {
     BreakLoop,
 }
 
+#[allow(clippy::too_many_arguments)]
 fn check_outlier(
     current_valid: &mut Vec<usize>,
     current_z: &mut DVector<f64>,
@@ -287,6 +289,7 @@ fn update_measurement_variances(
     changed
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run_ekf_iterations<C: CouplingStrategy>(
     state: &RtkState,
     current_z: &mut DVector<f64>,

@@ -351,7 +351,7 @@ impl ProcessingEngine {
         if self.current_state.is_none() {
             return Err(EngineError::InsufficientSatellites);
         }
-        Ok(self.current_state.as_ref().unwrap())
+        Ok(self.current_state.as_ref().expect("current_state is Some after None check"))
     }
 }
 

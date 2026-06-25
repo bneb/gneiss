@@ -51,9 +51,9 @@ impl FromStr for ObsCode {
         }
 
         let mut chars = s.chars();
-        let obs_char = chars.next().unwrap();
-        let freq_char = chars.next().unwrap();
-        let attr_char = chars.next().unwrap();
+        let obs_char = chars.next().expect("s.len() == 3, so at least 3 chars");
+        let freq_char = chars.next().expect("s.len() == 3, so at least 3 chars");
+        let attr_char = chars.next().expect("s.len() == 3, so at least 3 chars");
 
         let obs_type = match obs_char {
             'C' => ObsType::Pseudorange,

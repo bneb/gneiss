@@ -30,9 +30,9 @@ impl ProcessingEngine {
             self.current_state = Some(ins_state);
         }
 
-        let dt = rover_obs.time.tow - self.current_state.as_ref().unwrap().time.tow;
+        let dt = rover_obs.time.tow - self.current_state.as_ref().expect("current_state is Some after seeding").time.tow;
         self.predict_state(dt);
-        let state = self.current_state.as_mut().unwrap();
+        let state = self.current_state.as_mut().expect("current_state is Some after seeding");
         state.time = rover_obs.time;
         state.position.epoch = rover_obs.time;
 
@@ -104,7 +104,7 @@ impl ProcessingEngine {
         self.obs_history
             .push((rover_obs.clone(), base_obs.cloned()));
 
-        Ok(self.current_state.as_ref().unwrap())
+        Ok(self.current_state.as_ref().expect("current_state is Some at end of process_rtk_loosely_coupled"))
     }
 
     pub fn process_spp_loosely_coupled(
@@ -123,19 +123,19 @@ impl ProcessingEngine {
         self.gnss_only_state = Some(gnss_res_cloned);
 
         if self.current_state.is_none() {
-            let state = self.gnss_only_state.as_ref().unwrap();
+            let state = self.gnss_only_state.as_ref().expect("gnss_only_state was set at line 123");
             let mut ins_state = RtkState::new(rover_obs.time, state.position, 0.1);
             ins_state.velocity = state.velocity;
             self.current_state = Some(ins_state);
         }
 
-        let dt = rover_obs.time.tow - self.current_state.as_ref().unwrap().time.tow;
+        let dt = rover_obs.time.tow - self.current_state.as_ref().expect("current_state is Some after seeding").time.tow;
         self.predict_state(dt);
-        let state = self.current_state.as_mut().unwrap();
+        let state = self.current_state.as_mut().expect("current_state is Some after seeding");
         state.time = rover_obs.time;
         state.position.epoch = rover_obs.time;
 
-        let gnss_state = self.gnss_only_state.as_ref().unwrap();
+        let gnss_state = self.gnss_only_state.as_ref().expect("gnss_only_state was set at line 123");
         let r_b_e = state.attitude.to_rotation_matrix();
         let omega_ie_e =
             nalgebra::Vector3::new(0.0, 0.0, gneiss_core::constants::EARTH_ROTATION_RATE_RAD_S);
@@ -200,7 +200,7 @@ impl ProcessingEngine {
         }
         self.state_history.push(state.clone());
         self.obs_history.push((rover_obs.clone(), None));
-        Ok(self.current_state.as_ref().unwrap())
+        Ok(self.current_state.as_ref().expect("current_state is Some at end of process_spp_loosely_coupled"))
     }
 
     pub fn predict_state(&mut self, dt: f64) {

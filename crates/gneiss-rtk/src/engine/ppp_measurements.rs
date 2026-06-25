@@ -56,6 +56,7 @@ impl crate::engine::ppp_iekf::PppIteratedEkf {
         meas
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn push_sat_meas(
         &self,
         meas: &mut Vec<FgMeasurement>,
@@ -137,6 +138,7 @@ impl crate::engine::ppp_iekf::PppIteratedEkf {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn push_pr_measurement(
         &self,
         meas: &mut Vec<FgMeasurement>,
@@ -174,7 +176,7 @@ impl crate::engine::ppp_iekf::PppIteratedEkf {
         meas.push(FgMeasurement {
             res: res_pr,
             h_row: build_h_row(
-                &los,
+                los,
                 sat.map_wet,
                 None,
                 x_i.len(),
@@ -207,7 +209,7 @@ impl crate::engine::ppp_iekf::PppIteratedEkf {
         let w_rr = apply_huber(res_rr, var_rr, 3.0);
         meas.push(FgMeasurement {
             res: res_rr,
-            h_row: build_h_row_doppler(&los, x_i.len()),
+            h_row: build_h_row_doppler(los, x_i.len()),
             weight: var_rr / w_rr,
             raw_var: var_rr,
             is_phase: false,
@@ -215,6 +217,7 @@ impl crate::engine::ppp_iekf::PppIteratedEkf {
         });
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn push_cp_measurement(
         &self,
         meas: &mut Vec<FgMeasurement>,
@@ -248,7 +251,7 @@ impl crate::engine::ppp_iekf::PppIteratedEkf {
             meas.push(FgMeasurement {
                 res: res_cp,
                 h_row: build_h_row(
-                    &los,
+                    los,
                     sat.map_wet,
                     Some(CORE_STATE_SIZE + amb_idx),
                     x_i.len(),
@@ -264,6 +267,7 @@ impl crate::engine::ppp_iekf::PppIteratedEkf {
 
     /// Push CP measurement only if sat.cp1 is Some and non-zero.
     /// Extracted as a helper to reduce nesting depth in push_sat_meas.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn try_push_cp_measurement(
         &self,
         meas: &mut Vec<FgMeasurement>,
@@ -312,6 +316,7 @@ impl crate::engine::ppp_iekf::PppIteratedEkf {
         )
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn push_uduc_pr_measurements(
         &self,
         meas: &mut Vec<FgMeasurement>,
@@ -363,6 +368,7 @@ impl crate::engine::ppp_iekf::PppIteratedEkf {
         });
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn push_uduc_cp_measurements(
         &self,
         meas: &mut Vec<FgMeasurement>,
@@ -425,6 +431,7 @@ impl crate::engine::ppp_iekf::PppIteratedEkf {
         });
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn push_uduc_measurements(
         &self,
         meas: &mut Vec<FgMeasurement>,

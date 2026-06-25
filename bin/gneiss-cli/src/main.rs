@@ -523,7 +523,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
 
             let mut engine = ProcessingEngine::new(engine_config.clone());
-            let parent_dir = std::path::Path::new(&rover).parent().unwrap();
+            let parent_dir = std::path::Path::new(&rover).parent().expect("rover path should have a parent directory");
 
             let mut time_offset = 0.098;
             let initial_truth: Option<(f64, gneiss_rtk::filter::RtkState)> = None;
@@ -563,9 +563,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
 
             let nav_file = nav.unwrap_or_else(|| {
-                let mut f = parent_dir.join("rover.nav").to_str().unwrap().to_string();
+                let mut f = parent_dir.join("rover.nav").to_str().expect("path is valid UTF-8").to_string();
                 if !std::path::Path::new(&f).exists() {
-                    f = parent_dir.join("base.nav").to_str().unwrap().to_string();
+                    f = parent_dir.join("base.nav").to_str().expect("path is valid UTF-8").to_string();
                 }
                 f
             });
@@ -670,7 +670,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             for dcb_file in dcb {
                 let filename = std::path::Path::new(&dcb_file)
                     .file_name()
-                    .unwrap()
+                    .expect("dcb_file path has a file name")
                     .to_string_lossy()
                     .to_string();
                 let dcb_type = if filename.starts_with("P1C1") {
@@ -739,7 +739,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             let parts: Vec<&str> =
                                                 line.split_whitespace().collect();
                                             if parts.len() >= 2 {
-                                                let sys = parts[0].chars().next().unwrap();
+                                                let sys = parts[0].chars().next().expect("parts[0] should have at least one char");
                                                 if let Ok(prn) = parts[0][1..].parse::<u8>() {
                                                     if let Ok(val) = parts[1].parse::<f64>() {
                                                         let constel = match sys {
@@ -796,7 +796,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     gy = ref_gyro[0].1.y;
                                     gz = ref_gyro[0].1.z;
                                 } else if idx >= ref_gyro.len() {
-                                    let last = ref_gyro.last().unwrap();
+                                    let last = ref_gyro.last().expect("ref_gyro is non-empty at this point");
                                     gx = last.1.x;
                                     gy = last.1.y;
                                     gz = last.1.z;
@@ -889,7 +889,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let eval_fn = |cfg: &EngineConfig| -> f64 {
                     let mut eval_engine = ProcessingEngine::new(cfg.clone());
                     eval_engine.ephemerides = engine.ephemerides.clone();
-                    eval_engine.klobuchar_params = engine.klobuchar_params.clone();
+                    eval_engine.klobuchar_params = engine.klobuchar_params;
                     let mut eval_imu_idx = 0;
 
                     for r in rover_slice {
@@ -899,7 +899,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 (a.time.tow - r.time.tow)
                                     .abs()
                                     .partial_cmp(&(b.time.tow - r.time.tow).abs())
-                                    .unwrap()
+                                    .expect("GPS time difference should not be NaN")
                             })
                         } else {
                             None
@@ -984,7 +984,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 (a.time.tow - r.time.tow)
                                     .abs()
                                     .partial_cmp(&(b.time.tow - r.time.tow).abs())
-                                    .unwrap()
+                                    .expect("GPS time difference should not be NaN")
                             })
                         } else {
                             None
@@ -1121,13 +1121,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             if source.to_lowercase() == "noaa" || source.to_lowercase() == "all" {
                 let noaa = NoaaCorsProvider;
-                noaa.fetch_base_obs(coord.clone(), time, out_path).await?;
+                noaa.fetch_base_obs(coord, time, out_path).await?;
             }
 
             if source.to_lowercase() == "bkg" || source.to_lowercase() == "all" {
                 use gneiss_fetch::sources::bkg::BkgProvider;
                 let bkg = BkgProvider;
-                bkg.fetch_base_obs(coord.clone(), time, out_path).await?;
+                bkg.fetch_base_obs(coord, time, out_path).await?;
                 bkg.fetch_ephemeris(time, out_path).await?;
                 bkg.fetch_precise_products(time, out_path).await?;
             }

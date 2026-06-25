@@ -335,7 +335,7 @@ impl PppInsIteratedEkf {
             const_cands
                 .entry(cand.0.constellation)
                 .or_insert_with(Vec::new)
-                .push(cand.clone());
+                .push(*cand);
         }
 
         for (_, mut group) in const_cands {
@@ -344,10 +344,10 @@ impl PppInsIteratedEkf {
             }
             // Find reference satellite (highest elevation)
             group.sort_by(|a, b| b.3.partial_cmp(&a.3).unwrap_or(std::cmp::Ordering::Equal));
-            let ref_cand = group[0].clone();
+            let ref_cand = group[0];
 
             for cand in group.iter().skip(1) {
-                subset.push((cand.clone(), ref_cand.clone()));
+                subset.push((*cand, ref_cand));
             }
         }
 
@@ -869,7 +869,7 @@ impl PppInsIteratedEkf {
         meas.push(FgMeasurement {
             res: res_pr,
             h_row: build_h_row(
-                &los,
+                los,
                 sat.map_wet,
                 None,
                 x_i.len(),
@@ -896,7 +896,7 @@ impl PppInsIteratedEkf {
         let rcv_vel = v_apc;
         let rcv_clk_drift = if x_i.len() > 19 { x_i[19] } else { 0.0 };
         let meas_rr = -sat.doppler * sat.lam1;
-        let expected_rr = los.dot(&sat.sat_vel) - los.dot(&rcv_vel) + rcv_clk_drift
+        let expected_rr = los.dot(&sat.sat_vel) - los.dot(rcv_vel) + rcv_clk_drift
             - sat.sat_clock_drift * SPEED_OF_LIGHT;
 
         let res_rr = meas_rr - expected_rr;
@@ -906,7 +906,7 @@ impl PppInsIteratedEkf {
         let w_rr = apply_huber(res_rr, var_rr, 10.0);
         meas.push(FgMeasurement {
             res: res_rr,
-            h_row: build_h_row_doppler(&los, x_i.len(), h_vel_att, h_vel_bg),
+            h_row: build_h_row_doppler(los, x_i.len(), h_vel_att, h_vel_bg),
             weight: var_rr / w_rr,
             raw_var: var_rr,
             is_phase: false,
@@ -947,7 +947,7 @@ impl PppInsIteratedEkf {
             meas.push(FgMeasurement {
                 res: res_cp,
                 h_row: build_h_row(
-                    &los,
+                    los,
                     sat.map_wet,
                     Some(CORE_STATE_SIZE + amb_idx),
                     x_i.len(),
@@ -1010,7 +1010,7 @@ impl PppInsIteratedEkf {
             is_phase: false,
             sat: Some(sat.sat_obs.sat),
         });
-        let res_p2 = sat.p2.unwrap() - (expected_base + idx.gamma * idx.i1);
+        let res_p2 = sat.p2.expect("dual-frequency measurement ensures p2 is Some") - (expected_base + idx.gamma * idx.i1);
         meas.push(FgMeasurement {
             res: res_p2,
             h_row: build_h_row_uduc(
@@ -1030,6 +1030,7 @@ impl PppInsIteratedEkf {
         });
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn push_uduc_cp_measurements(
         &self,
         meas: &mut Vec<FgMeasurement>,
@@ -1043,7 +1044,7 @@ impl PppInsIteratedEkf {
     ) {
         let windup = *state.windup.get(&sat.sat_obs.sat).unwrap_or(&0.0);
         let var_l1 = 0.0001 * snr_scale(sat.snr as i32) / libm::sin(sat.el);
-        let res_l1 = (sat.cp1.unwrap() - windup) * sat.lam1 - (expected_base - idx.i1 + idx.n1);
+        let res_l1 = (sat.cp1.expect("dual-frequency measurement ensures cp1 is Some") - windup) * sat.lam1 - (expected_base - idx.i1 + idx.n1);
         meas.push(FgMeasurement {
             res: res_l1,
             h_row: build_h_row_uduc(
@@ -1062,7 +1063,7 @@ impl PppInsIteratedEkf {
             sat: Some(sat.sat_obs.sat),
         });
         let res_l2 =
-            (sat.cp2.unwrap() - windup) * sat.lam2 - (expected_base - idx.gamma * idx.i1 + idx.n2);
+            (sat.cp2.expect("dual-frequency measurement ensures cp2 is Some") - windup) * sat.lam2 - (expected_base - idx.gamma * idx.i1 + idx.n2);
         meas.push(FgMeasurement {
             res: res_l2,
             h_row: build_h_row_uduc(
@@ -1082,6 +1083,7 @@ impl PppInsIteratedEkf {
         });
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn push_uduc_measurements(
         &self,
         meas: &mut Vec<FgMeasurement>,
@@ -1101,6 +1103,7 @@ impl PppInsIteratedEkf {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn log_ppp_convergence(
     state: &RtkState,
     sats: &[ProcessedSat],
@@ -1136,7 +1139,7 @@ fn log_ppp_convergence(
         x_i,
         solver.max_iterations - 1,
         lever_arm,
-        &omega_eb_b,
+        omega_eb_b,
     );
     let (mut sum_pr, mut count_pr, mut sum_rr, mut count_rr) = (0.0, 0, 0.0, 0);
     for m in &meas {
@@ -1163,6 +1166,7 @@ fn log_ppp_convergence(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_h_row_uduc(
     los: &Vector3<f64>,
     map_wet: f64,

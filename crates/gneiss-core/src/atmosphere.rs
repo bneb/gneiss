@@ -41,20 +41,17 @@ impl Default for TropoParams {
 
 /// Tropospheric mapping function selection.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum TropoMapping {
     /// Niell Mapping Function (1996) — fast, closed-form, ~3-5cm at 15°
     Nmf,
     /// Global Mapping Function (Böhm 2006) — closed-form, ~1-2cm at 15°
+    #[default]
     Gmf,
     /// Vienna Mapping Function 1/3 — grid-file based, ~0.5-1cm at 15°
     Vmf1,
 }
 
-impl Default for TropoMapping {
-    fn default() -> Self {
-        Self::Gmf
-    }
-}
 
 /// Trait for tropospheric mapping functions.
 /// Returns (hydrostatic_mapping, wet_mapping) as dimensionless scale factors.

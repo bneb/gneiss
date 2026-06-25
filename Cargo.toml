@@ -24,7 +24,7 @@ missing_docs = "allow"
 
 [workspace.lints.clippy]
 unwrap_used = "warn"
-expect_used = "warn"
+expect_used = "allow"
 
 [profile.release]
 lto = "fat"

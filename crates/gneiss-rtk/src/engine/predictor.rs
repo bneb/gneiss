@@ -76,7 +76,7 @@ pub fn compute_transition_matrix(
         phi[(2, 5)] = dt;
     } else {
         let r_b_e = state.attitude.to_rotation_matrix();
-        let f_e = state.attitude * (imu_buffer.last().unwrap().accel - state.accel_bias);
+        let f_e = state.attitude * (imu_buffer.last().expect("imu_buffer is non-empty").accel - state.accel_bias);
         let f_e_skew = skew_symmetric(&f_e);
         let omega_ie_skew = skew_symmetric(&omega_ie);
 
@@ -257,7 +257,7 @@ pub fn predict(
                 crate::filter::CORE_STATE_SIZE,
             ),
         )
-        .copy_from(state.core_phi.as_ref().unwrap());
+        .copy_from(state.core_phi.as_ref().expect("core_phi should be initialized before use"));
 
     // Clamp extreme covariance values to prevent overflow in Phi*P*Phi^T.
     // Cycle slip inflation (×4 per slip) can push position variance toward

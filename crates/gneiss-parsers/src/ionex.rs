@@ -91,7 +91,7 @@ pub fn parse_ionex<R: BufRead>(reader: R) -> Result<IonexGrid, String> {
                     .split_whitespace()
                     .filter_map(|s| s.parse().ok())
                     .collect();
-                if parts.len() >= 1 {
+                if !parts.is_empty() {
                     grid.height_km = parts[0];
                 }
             }

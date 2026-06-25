@@ -19,9 +19,9 @@ impl DataSource for BkgProvider {
         out_dir: &Path,
     ) -> Result<PathBuf, FetchError> {
         let gps_epoch = chrono::NaiveDate::from_ymd_opt(1980, 1, 6)
-            .unwrap()
+            .expect("GPS epoch 1980-01-06 is valid")
             .and_hms_opt(0, 0, 0)
-            .unwrap();
+            .expect("GPS epoch 00:00:00 is valid");
         let seconds = (time.week as i64 * 604800) + time.tow as i64;
         let utc_time = gps_epoch + chrono::Duration::seconds(seconds);
 
@@ -42,7 +42,7 @@ impl DataSource for BkgProvider {
         let client = reqwest::Client::builder()
             .user_agent("Gneiss-Navigation-Engine/0.1.0")
             .build()
-            .unwrap();
+            .expect("reqwest Client::builder().build() should succeed with default settings");
         let response = client.get(&url).send().await?;
 
         if !response.status().is_success() {
@@ -79,9 +79,9 @@ impl DataSource for BkgProvider {
 
     async fn fetch_ephemeris(&self, time: GpsTime, out_dir: &Path) -> Result<PathBuf, FetchError> {
         let gps_epoch = chrono::NaiveDate::from_ymd_opt(1980, 1, 6)
-            .unwrap()
+            .expect("GPS epoch 1980-01-06 is valid")
             .and_hms_opt(0, 0, 0)
-            .unwrap();
+            .expect("GPS epoch 00:00:00 is valid");
         let seconds = (time.week as i64 * 604800) + time.tow as i64;
         let utc_time = gps_epoch + chrono::Duration::seconds(seconds);
 
@@ -101,7 +101,7 @@ impl DataSource for BkgProvider {
         let client = reqwest::Client::builder()
             .user_agent("Gneiss-Navigation-Engine/0.1.0")
             .build()
-            .unwrap();
+            .expect("reqwest Client::builder().build() should succeed with default settings");
         let response = client.get(&url).send().await?;
 
         if !response.status().is_success() {
@@ -151,7 +151,7 @@ impl BkgProvider {
         let client = reqwest::Client::builder()
             .user_agent("Gneiss-Navigation-Engine/0.1.0")
             .build()
-            .unwrap();
+            .expect("reqwest Client::builder().build() should succeed with default settings");
 
         for f in &files {
             let url = format!("{}{}", base_url, f);

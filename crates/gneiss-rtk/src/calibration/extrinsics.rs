@@ -274,11 +274,9 @@ where
                 evals[6] = (contracted, contracted_score);
                 continue;
             }
-        } else {
-            if contracted_score < worst_score {
-                evals[6] = (contracted, contracted_score);
-                continue;
-            }
+        } else if contracted_score < worst_score {
+            evals[6] = (contracted, contracted_score);
+            continue;
         }
 
         let best = evals[0].0;
