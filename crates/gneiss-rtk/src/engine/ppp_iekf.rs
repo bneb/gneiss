@@ -35,6 +35,9 @@ pub struct PppIteratedEkf {
     /// Ionosphere model — controls iono prior variance in UDUC measurements.
     /// Klobuchar: 9.0 m² (3m std). IONEX: 0.0025 m² (0.05m std).
     pub iono_model: IonosphereModel,
+    /// LAMBDA AR minimum ratio threshold (default 3.0 for safety).
+    /// Hardcoded 1.1 allowed wrong fixes on 3 of 7 IGS stations.
+    pub lambda_min_ratio: f64,
 }
 
 impl Default for PppIteratedEkf {
@@ -44,6 +47,7 @@ impl Default for PppIteratedEkf {
             convergence_threshold: 1e-3,
             huber_k: 3.0,
             iono_model: IonosphereModel::Klobuchar,
+            lambda_min_ratio: 2.0,
         }
     }
 }
@@ -55,6 +59,11 @@ impl PppIteratedEkf {
 
     pub fn with_iono_model(mut self, model: IonosphereModel) -> Self {
         self.iono_model = model;
+        self
+    }
+
+    pub fn with_lambda_min_ratio(mut self, ratio: f64) -> Self {
+        self.lambda_min_ratio = ratio;
         self
     }
 

@@ -364,18 +364,14 @@ impl PppIteratedEkf {
             }
         }
         let q_wl_ekf = &d_wl * p * d_wl.transpose();
-        // When all kept pairs have sufficient MW samples, use MW-based
-        // covariance instead of the EKF state covariance.  The MW EMA
-        // converges at ~0.42/sqrt(N) cycles whereas the EKF ambiguity
-        // states start at 10_000 m² (≈277_000 cycles² on WL).  Using the
-        // EKF covariance makes LAMBDA think every integer set is equally
-        // likely, yielding ratio ≈ 1.0.
         let all_mw_confident = keep_indices.iter().all(|&idx| {
             let (c, ref_sat) = &subset[idx];
             state.mw_sd_counts.get(&c.0).copied().unwrap_or(0) > 50
                 && state.mw_sd_counts.get(&ref_sat.0).copied().unwrap_or(0) > 50
         });
         let q_wl = if all_mw_confident {
+            // MW-based Q: tight (~0.18/N cycles²)
+            let mw_var_per_sample: f64 = 0.18;
             // MW per-sample DD variance: each single-epoch MW measurement has
             // ~0.42 cycle std on GPS L1/L2, so 0.18 cycles² per sample.
             // Reference satellite noise is shared across all DD pairs.
@@ -411,9 +407,11 @@ impl PppIteratedEkf {
             res_wl.ratio,
             res_wl.success_rate
         );
-        // NL fixes are all sub-cycle when WL passes — lower threshold to
-        // recover more epochs. Bootstrapping success_rate provides secondary gating.
-        let wl_ok = res_wl.ratio >= 1.1 && res_wl.success_rate >= 0.05;
+        // Use the configurable AR ratio threshold (default 1.5, recommend 3.0
+        // for stations with weak geometry).  Bootstrapping success_rate
+        // provides secondary gating.  Hardcoded 1.1 was too lenient and
+        // allowed wrong integer fixes on 3 of 7 IGS stations.
+        let wl_ok = res_wl.ratio >= self.lambda_min_ratio && res_wl.success_rate >= 0.05;
         if !wl_ok {
             return Err("WL ratio test failed");
         }

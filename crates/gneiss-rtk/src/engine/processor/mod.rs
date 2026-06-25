@@ -53,6 +53,7 @@ impl ProcessingEngine {
 
         let tropo_mapping = config.tropo_mapping;
         let iono_model = config.iono_model;
+        let lambda_min_ratio = config.lambda_min_ratio;
 
         Self {
             config,
@@ -68,7 +69,8 @@ impl ProcessingEngine {
             tropo_mapper: gneiss_core::atmosphere::create_tropo_mapper(tropo_mapping, None),
             ppp_factor_opt: Some(
                 crate::engine::ppp_iekf::PppIteratedEkf::new()
-                    .with_iono_model(iono_model),
+                    .with_iono_model(iono_model)
+                    .with_lambda_min_ratio(lambda_min_ratio),
             ),
             ppp_multi_epoch_opt: None,
             hatch_filter: crate::hatch::HatchFilter::default(),

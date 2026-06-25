@@ -83,6 +83,7 @@ pub fn process_ppp<'a>(
         } else {
             PppIteratedEkf::new()
                 .with_iono_model(engine.config.iono_model)
+                .with_lambda_min_ratio(engine.config.lambda_min_ratio)
                 .solve(state, &sats, position_prior)
         };
         engine.ppp_factor_opt = opt;
