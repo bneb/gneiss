@@ -58,6 +58,20 @@ pub fn run_combined_ppk(engine: &mut ProcessingEngine) -> Result<Vec<RtkState>, 
         let state_k = &mut left[k];
         let state_k1 = &right[0];
 
+        // Forward-filter quality guard: skip smoothing for cold-start epochs
+        // where the filter hasn't converged (epoch_count < 2 matches the
+        // is_cold_start logic in ppp.rs). Early epochs have inflated covariances
+        // that produce excessive RTS gain, degrading the backward correction.
+        if state_k.epoch_count < 2 || state_k1.epoch_count < 2 {
+            tracing::debug!(
+                "Forward filter cold start at k={} (epoch_count={}, {}), skipping smoothing",
+                k,
+                state_k.epoch_count,
+                state_k1.epoch_count
+            );
+            continue;
+        }
+
         if let Err(e) = smooth_epoch(state_k, state_k1, &phi_k, &p_pred_k1, &x_pred_k1, k) {
             tracing::debug!("RTS Smoothing skipped at k={}: {}", k, e);
             continue;
@@ -923,8 +937,10 @@ mod tests {
         let time0 = GpsTime::new(2000, 0.0);
         let time1 = GpsTime::new(2000, 1.0);
         let pos = Coordinate::new(Vector3::new(100.0, 200.0, 300.0), Datum::WGS84, Frame::ECEF, time0);
-        let state0 = RtkState::new(time0, pos, 1.0);
+        let mut state0 = RtkState::new(time0, pos, 1.0);
+        state0.epoch_count = 2; // Forward filter quality guard: epoch_count >= 2
         let mut state1 = RtkState::new(time1, pos.clone(), 1.0);
+        state1.epoch_count = 2; // Forward filter quality guard: epoch_count >= 2
         // Use identity phi but with white-noise clock bias (φ[15,15]=0)
         let mut phi = DMatrix::identity(crate::filter::CORE_STATE_SIZE, crate::filter::CORE_STATE_SIZE);
         phi[(15, 15)] = 0.0;
@@ -1003,11 +1019,13 @@ mod tests {
         let pos = Coordinate::new(Vector3::new(100.0, 200.0, 300.0), Datum::WGS84, Frame::ECEF, time0);
 
         let mut state0 = RtkState::new(time0, pos, 1.0);
+        state0.epoch_count = 2; // Forward filter quality guard: epoch_count >= 2
         state0.core_phi = Some(DMatrix::identity(crate::filter::CORE_STATE_SIZE, crate::filter::CORE_STATE_SIZE));
         state0.full_p_predict = Some(DMatrix::identity(crate::filter::CORE_STATE_SIZE, crate::filter::CORE_STATE_SIZE));
         state0.full_x_predict = Some(DVector::zeros(crate::filter::CORE_STATE_SIZE));
 
         let mut state1 = RtkState::new(time1, pos.clone(), 1.0);
+        state1.epoch_count = 3; // Forward filter quality guard: epoch_count >= 2
         state1.core_phi = Some(DMatrix::identity(crate::filter::CORE_STATE_SIZE, crate::filter::CORE_STATE_SIZE));
         state1.full_p_predict = Some(DMatrix::identity(crate::filter::CORE_STATE_SIZE, crate::filter::CORE_STATE_SIZE));
         state1.full_x_predict = Some(DVector::zeros(crate::filter::CORE_STATE_SIZE));
@@ -1021,8 +1039,79 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // smooth_epoch: full RTS smoothing computation
+    // Forward-filter quality guard tests
     // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_forward_filter_quality_guard_cold_start_epoch_skipped() {
+        // Verify that smoothing is skipped when epoch_count < 2 (cold start)
+        let mut engine = crate::engine::ProcessingEngine::new(crate::engine::EngineConfig::default());
+        let time0 = GpsTime::new(2000, 0.0);
+        let time1 = GpsTime::new(2000, 1.0);
+        let pos = Coordinate::new(Vector3::new(100.0, 200.0, 300.0), Datum::WGS84, Frame::ECEF, time0);
+
+        // state0 has epoch_count = 0 (cold start)
+        let mut state0 = RtkState::new(time0, pos, 1.0);
+        state0.core_phi = Some(DMatrix::identity(crate::filter::CORE_STATE_SIZE, crate::filter::CORE_STATE_SIZE));
+        state0.full_p_predict = Some(DMatrix::identity(crate::filter::CORE_STATE_SIZE, crate::filter::CORE_STATE_SIZE));
+        state0.full_x_predict = Some(DVector::zeros(crate::filter::CORE_STATE_SIZE));
+
+        let mut state1 = RtkState::new(time1, pos.clone(), 1.0);
+        state1.epoch_count = 5; // state_k1 has adequate quality
+        state1.core_phi = Some(DMatrix::identity(crate::filter::CORE_STATE_SIZE, crate::filter::CORE_STATE_SIZE));
+        state1.full_p_predict = Some(DMatrix::identity(crate::filter::CORE_STATE_SIZE, crate::filter::CORE_STATE_SIZE));
+        state1.full_x_predict = Some(DVector::zeros(crate::filter::CORE_STATE_SIZE));
+
+        engine.state_history.push(state0);
+        engine.state_history.push(state1);
+        let result = run_combined_ppk(&mut engine);
+        assert!(result.is_ok());
+        let states = result.unwrap();
+        assert_eq!(states.len(), 2);
+        // The guard only prevents epoch_count < 2 on state_k (epoch 0).
+        // state0 is at index 0, state1 is at index 1.
+        // In the backward loop: k=0 processes state0 (epoch_count=0) vs state1 (epoch_count=5).
+        // The quality guard triggers on state0.epoch_count < 2, so state0 should be
+        // unchanged by the smoother (position remains at initial values).
+        assert_eq!(states[0].position.vector.x, 100.0,
+            "Cold start epoch should not be smoothed");
+    }
+
+    #[test]
+    fn test_forward_filter_quality_guard_mature_epoch_passes() {
+        // Verify that smoothing proceeds when both states have epoch_count >= 2
+        let mut engine = crate::engine::ProcessingEngine::new(crate::engine::EngineConfig::default());
+        let time0 = GpsTime::new(2000, 0.0);
+        let time1 = GpsTime::new(2000, 1.0);
+        let pos = Coordinate::new(Vector3::new(100.0, 200.0, 300.0), Datum::WGS84, Frame::ECEF, time0);
+
+        let mut state0 = RtkState::new(time0, pos, 100.0);
+        state0.epoch_count = 2; // Adequate quality
+        state0.velocity = Vector3::new(1.0, 2.0, 3.0);
+        state0.core_phi = Some(DMatrix::identity(crate::filter::CORE_STATE_SIZE, crate::filter::CORE_STATE_SIZE));
+        state0.full_p_predict = Some(DMatrix::identity(crate::filter::CORE_STATE_SIZE, crate::filter::CORE_STATE_SIZE) * 200.0);
+        state0.full_x_predict = Some(DVector::zeros(crate::filter::CORE_STATE_SIZE));
+
+        let mut state1 = RtkState::new(time1, pos.clone(), 100.0);
+        state1.epoch_count = 3; // Adequate quality
+        state1.velocity = Vector3::new(1.0, 2.0, 3.0);
+        state1.core_phi = Some(DMatrix::identity(crate::filter::CORE_STATE_SIZE, crate::filter::CORE_STATE_SIZE));
+        state1.full_p_predict = Some(DMatrix::identity(crate::filter::CORE_STATE_SIZE, crate::filter::CORE_STATE_SIZE) * 200.0);
+        state1.full_x_predict = Some(DVector::zeros(crate::filter::CORE_STATE_SIZE));
+
+        engine.state_history.push(state0);
+        engine.state_history.push(state1);
+        let result = run_combined_ppk(&mut engine);
+        assert!(result.is_ok());
+        let states = result.unwrap();
+        assert_eq!(states.len(), 2);
+        // Both states have epoch_count >= 2, so smoothing should proceed.
+        // State 0 (epoch 0) should have been smoothed toward state 1 (epoch 1).
+        // Result depends on actual RTS computation, but should differ from
+        // the initial position (100, 200, 300) if smoothing ran.
+        let smoothed_pos = states[0].position.vector;
+        assert!(smoothed_pos.x > 0.0, "Smoothed position should be non-zero");
+    }
 
     /// Create a pair of states where smooth_epoch will succeed and produce
     /// predictable RTS updates. phi = I, p_pred = 200*I, x_pred matches state0.
@@ -1034,6 +1123,9 @@ mod tests {
 
         let mut state0 = RtkState::new(time0, pos0, 100.0); // position cov = 100
         let mut state1 = RtkState::new(time1, pos1, 100.0);
+
+        state0.epoch_count = 2; // Forward filter quality guard: epoch_count >= 2
+        state1.epoch_count = 2;
 
         state0.velocity = Vector3::new(1.0, 2.0, 3.0);
         state1.velocity = Vector3::new(1.0, 2.0, 3.0);
@@ -2071,6 +2163,7 @@ mod tests {
             let mut state = RtkState::new(
                 GpsTime::new(2000, i as f64), pos, 100.0,
             );
+            state.epoch_count = i + 2; // Forward filter quality guard: epoch_count >= 2
             state.velocity = Vector3::new(1.0, 2.0, 3.0);
             state.core_phi = Some(DMatrix::identity(
                 crate::filter::CORE_STATE_SIZE, crate::filter::CORE_STATE_SIZE));

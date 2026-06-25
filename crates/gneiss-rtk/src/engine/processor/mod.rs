@@ -417,7 +417,8 @@ mod tests {
             Frame::ECEF,
             time0,
         );
-        let state0 = RtkState::new(time0, pos0, 1.0);
+        let mut state0 = RtkState::new(time0, pos0, 1.0);
+        state0.epoch_count = 2; // Forward filter quality guard: epoch_count >= 2
 
         let pos1 = Coordinate::new(
             Vector3::new(12.0, 0.0, 0.0),
@@ -426,6 +427,7 @@ mod tests {
             time1,
         );
         let mut state1 = RtkState::new(time1, pos1, 0.5);
+        state1.epoch_count = 3; // Forward filter quality guard: epoch_count >= 2
         state1.is_fixed = true;
 
         // Mock prediction with realistic p_pred for ISB/clock states.
