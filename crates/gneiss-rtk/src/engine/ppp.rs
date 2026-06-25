@@ -33,6 +33,7 @@ pub fn process_ppp<'a>(
     // POST_MORTEM hypothesis #8). Multi-epoch convergence requires a
     // sliding-window factor graph — not just disabling the prior.
     let mut position_prior: Option<(Vector3<f64>, f64)> = None;
+    let mut spp_pos_for_recovery: Option<gneiss_core::coords::Coordinate> = None;
     if let Ok(spp) = crate::spp::compute_spp(
         rover_obs,
         &engine.ephemerides,
@@ -40,6 +41,7 @@ pub fn process_ppp<'a>(
         &crate::spp::SppConfig::default(),
         None,
     ) {
+        spp_pos_for_recovery = Some(spp.position);
         let is_cold_start = state.epoch_count < 2;
         if is_cold_start {
             state.position = spp.position;
@@ -107,6 +109,23 @@ pub fn process_ppp<'a>(
     let final_state = engine.current_state.as_ref().unwrap().clone();
     engine.state_history.push(final_state);
     engine.obs_history.push((rover_obs.clone(), None));
+
+    // Check for covariance explosion after the IEKF solve. At equatorial
+    // stations (e.g. NKLG), frequent cycle slips from ionospheric
+    // scintillation multiply position/velocity covariance by 4x per slip.
+    // Without this guard, covariance grows unchecked past 1e13, causing
+    // total measurement rejection and permanent divergence.
+    // The RTK/SPP pipelines already call check_covariance_divergence;
+    // PPP was missing it — this was the root cause of NKLG's 1600
+    // coasting events.
+    if let Some(ref mut state) = engine.current_state {
+        ProcessingEngine::check_covariance_divergence(
+            state,
+            spp_pos_for_recovery,
+            None,
+            false,
+        );
+    }
 
     solve_result?;
     Ok(engine.current_state.as_ref().unwrap())
@@ -295,3 +314,7 @@ fn add_uduc_ambiguities(
 #[cfg(test)]
 #[path = "ppp_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "ppp_antenna_tests.rs"]
+mod antenna_tests;

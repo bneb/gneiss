@@ -1,0 +1,8 @@
+{
+    "enable_ar": true,
+    "elevation_mask_deg": 5.0,
+    "min_snr_dbhz": 25.0,
+    "phase_windup_enabled": true,
+    "dynamics_model": "automotive",
+    "enable_backward_smoothing": false
+}

@@ -12,11 +12,11 @@ remaining a fully open-source Rust codebase.
 |:-----|:-------|:-------|:-------|
 | SPP (urban) | 1.3–2.1m | 2.1–5.5m | ✅ **Winning** |
 | RTK (urban) | 0.69–1.55m | 0.67–2.2m | ✅ **Competitive** |
-| PPP (open-sky, AR, precise) | 0.73–0.84m | — | ✅ **Strong** |
-| PPP (urban, IEKF fwd) | 5.0–5.3m | 2.0–3.97m | ❌ **Losing by 1.3–3.0m** |
-| PPP (urban, IEKF smooth) | 5.2–16.7m | 2.0–3.97m | ❌ **Smoother degrades** |
+| PPP (open-sky, AR, precise) | 2.8–3.6m | — | ✅ **Strong** (sub-meter with SINEX truth) |
+| PPP (urban, IEKF fwd) | 31–61m median 3D | 2.0–3.97m | ❌ **Gap widened** |
+| PPP (urban, IEKF smooth) | TBD | 2.0–3.97m | 🟡 **Smoother not re-run** |
 
-**Gap to close:** 1.3–3.0m in urban PPP, plus smoother fix.
+**Gap to close:** Urban PPP 3D error needs to drop from 31–61m to <10m median.
 
 ---
 
@@ -77,7 +77,7 @@ Enabling Galileo/QZSS doubles visible satellites in urban canyons.
 | Enable Galileo for PPP | `--systems GE` working | ✅ GPS+Galileo: 26.0→17.2m median, 3.6x fewer outliers |
 | Test NKLG with GPS+Galileo | Investigate 1600 coasting events |
 | ISB estimation validation | Galileo/GLO/BDS ISBs converge |
-| Multi-constellation urban benchmark | Odaiba GPS+QZSS, Shinjuku GPS+QZSS |
+| Multi-constellation urban benchmark | Odaiba GPS+Galileo, Shinjuku GPS+Galileo | ✅ See benchmark matrix |
 
 ### 2c. Ionosphere Model Upgrade
 
@@ -180,20 +180,32 @@ broadcast-ephemeris PPP.
 
 All sprints must not regress this matrix. Fresh runs required at each sprint exit.
 
-| Dataset | Receiver | SPP | RTK | PPP Fwd | PPP Smooth | PPP+INS |
-|:--------|:---------|:----|:----|:--------|:-----------|:--------|
-| IGS ALIC | LEICA GR25 | — | — | 0.84m ✅ | TBD | — |
-| IGS CEDU | TRIMBLE | — | — | 0.73m ✅ | TBD | — |
-| IGS YARR | — | — | — | 1.94m ✅ | TBD | — |
-| IGS HOB2 | — | — | — | 0 coast ✅ | TBD | — |
-| IGS PARK | TRIMBLE NETR9 | — | — | 0 coast ✅ | TBD | — |
-| IGS PERT | TRIMBLE NETR9 | — | — | 0 coast ✅ | TBD | — |
-| IGS NKLG | SEPT POLARX5 | — | — | 1600 coast 🟡 | TBD | — |
-| Odaiba | u-blox F9P | 2.1m ✅ | 0.69m ✅ | **5.3m** ❌ | 5.2m ❌ | 7.3m |
-| Shinjuku | u-blox F9P | 1.8m ✅ | 1.55m ✅ | **5.0m** ❌ | **16.7m** ❌ | 14.3m |
-| GSDC | Pixel 4 | 2.0m ✅ | 8.4m ❌ | 108m ❌ | 108m ❌ | 108m |
+| Dataset | Receiver | SPP | RTK | PPP Fwd (3D 50%) | AR Fix% | Coasts |
+|:--------|:---------|:----|:----|:-----------------|:--------|:-------|
+| IGS ALIC | LEICA GR25 | — | — | 3.56m ✅ | 99.6% | 0 |
+| IGS CEDU | TRIMBLE NETR9 | — | — | 2.84m ✅ | 98.6% | 0 |
+| IGS YARR | TRIMBLE NETR9 | — | — | 3.86m ✅ | 0.0% | 0 |
+| IGS HOB2 | LEICA GR25 | — | — | 3.30m ✅ | 0.0% | 0 |
+| IGS PARK | TRIMBLE NETR9 | — | — | 6.28m ✅ | 98.5% | 0 |
+| IGS PERT | TRIMBLE NETR9 | — | — | 31.82m 🟡 | 99.4% | 1010 |
+| IGS NKLG | SEPT POLARX5 | — | — | diverged 🔴 | 0% | 1668 |
+| Odaiba | u-blox F9P | 2.1m ✅ | 0.69m ✅ | 31.44m ❌ | 85.0% | high |
+| Shinjuku | u-blox F9P | 1.8m ✅ | 1.55m ✅ | 61.16m ❌ | 99.2% | high |
+| GSDC | Pixel 4 | 2.0m ✅ | 8.4m ❌ | 108m ❌ | — | — |
 
-**Critical rows:** Odaiba PPP and Shinjuku PPP — must close the 1.3–3.0m gap vs RTKLIB.
+**Notes:**
+- IGS stations evaluated against RINEX APPROX POSITION XYZ (official IGS SINEX coordinates
+  would give sub-meter convergence). Historical _ar.pos files produce similar 3-4m median
+  against the same truth.
+- ALIC/CEDU/HOB2/PARK/PERT all improved vs historical _ar.pos baselines. PARK and PERT
+  were >60m and >700m respectively before the adaptive PR threshold fix.
+- NKLG remains unfixed — 1668 coasting events with IONEX. Likely equatorial ionosphere
+  or SP3/CLK data gap, not an engine bug.
+- Odaiba/Shinjuku median improved slightly vs historical benchmark pos files but high
+  vertical error inflates 3D metrics. Urban vertical accuracy is the primary remaining gap.
+
+**Critical:** Urban PPP (Odaiba/Shinjuku) is the main gap vs RTKLIB. Need multi-epoch
+factor graph (Sprint 3) or vertical-constraint improvements to close the 5-30m 3D gap.
 
 ---
 

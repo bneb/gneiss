@@ -13,6 +13,7 @@ pub(crate) mod ppp_antenna;
 pub mod ppp_common;
 pub mod ppp_iekf;
 pub mod ppp_ins_iekf;
+pub(crate) mod ppp_ins_measurements;
 pub mod ppp_math;
 pub(crate) mod ppp_measurements;
 pub mod ppp_multi_epoch;

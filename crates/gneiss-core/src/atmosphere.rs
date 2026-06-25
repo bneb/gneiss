@@ -568,6 +568,7 @@ impl AtmosphereModel {
     /// `az`: satellite azimuth in radians.
     /// `el`: satellite elevation in radians.
     /// `time`: GPS time of observation.
+    #[allow(clippy::too_many_arguments)]
     pub fn iono_ionex(
         tec_maps: &[(GpsTime, &Vec<Vec<f64>>)],
         grid_lat1: f64,

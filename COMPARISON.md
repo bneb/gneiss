@@ -1,6 +1,6 @@
 # Gneiss vs RTKLIB (demo5) Comparison
 
-Last updated: 2026-06-21. Rows marked [stale] > 1 week old.
+Last updated: 2026-06-25. Rows marked [stale] > 1 week old.
 
 | Dataset | Mode | Engine | Hz 50th | Hz 95th | Vt 50th | Winner | Freshness |
 |:-----|:-----|:-------|:--------|:--------|:--------|:-------|
@@ -14,7 +14,7 @@ Last updated: 2026-06-21. Rows marked [stale] > 1 week old.
 | GSDC (Pixel 4) | PPP Kinematic (EKF) | Gneiss | 147.223 m | 218.761 m | 30.284 m | | 🟡 [stale] |
 | GSDC (Pixel 4) | PPP Kinematic (FG) | RTKLIB | 2.326 m | 4.253 m | 58.704 m | RTKLIB | 🟡 [stale] |
 | GSDC (Pixel 4) | PPP Kinematic (FG) | Gneiss | 178.824 m | 195.867 m | 30.284 m | | 🟡 [stale] |
-| Shinjuku (UrbanNav) | SPP | RTKLIB | Failed |  |  | **Gneiss** (RTKLIB missing) | 🟢 2026-06-19 | 🟢 2026-06-19 |
+| Shinjuku (UrbanNav) | SPP | RTKLIB | Failed |  |  | **Gneiss** (RTKLIB missing) | 🟢 2026-06-19 |
 | Shinjuku (UrbanNav) | SPP | Gneiss | 1.849 m | 3.167 m | 2.446 m | | 🟢 2026-06-19 |
 | Shinjuku (UrbanNav) | RTK Kinematic | RTKLIB | 2.205 m | 5.730 m | 4.115 m | | 🟢 2026-06-19 |
 | Shinjuku (UrbanNav) | RTK Kinematic | Gneiss | 1.547 m | 2.603 m | 3.470 m | **Gneiss** | 🟢 2026-06-19 |
@@ -26,6 +26,7 @@ Last updated: 2026-06-21. Rows marked [stale] > 1 week old.
 | Shinjuku (UrbanNav) | PPP Kinematic (IEKF) | Gneiss | 5.015 m | 7.402 m | 13.725 m | [stale] | 🔴 2026-06-19 |
 | Shinjuku (UrbanNav) | PPP Kinematic (IEKF) fwd | Gneiss | 7.542 m | 41.576 m | 13.891 m | — | 🟢 2026-06-20 |
 | Shinjuku (UrbanNav) | PPP Kinematic (IEKF) smooth | Gneiss | **16.661 m** | **42.556 m** | **16.090 m** | — | 🔴 2026-06-21 |
+| Shinjuku (UrbanNav) | PPP IEKF (GPS+Gal, SP3/CLK/BIA) | Gneiss | 30.150 m | 122.977 m | 31.448 m | — | 🟢 2026-06-25 |
 | Odaiba (UrbanNav) | SPP | RTKLIB | 2.799 m | 7.453 m | 4.885 m | **Gneiss** | 🟡 [stale] |
 | Odaiba (UrbanNav) | SPP | Gneiss | 2.099 m | 2.958 m | 2.253 m | | 🟡 [stale] |
 | Odaiba (UrbanNav) | RTK Kinematic | RTKLIB | 2.867 m | 4.014 m | 2.490 m | | 🟡 [stale] |
@@ -35,10 +36,11 @@ Last updated: 2026-06-21. Rows marked [stale] > 1 week old.
 | Odaiba (UrbanNav) | PPP Kinematic (EKF) | RTKLIB | 3.965 m | 4.691 m | 6.089 m | RTKLIB | 🟡 [stale] |
 | Odaiba (UrbanNav) | PPP Kinematic (EKF) | Gneiss | 16.549 m | 21.594 m | 14.939 m | [deprecated] | 🔴 2026-06-20 |
 | Odaiba (UrbanNav) | PPP Kinematic (IEKF) | RTKLIB | 3.965 m | 4.691 m | 6.089 m | — | 🟢 2026-06-19 |
-| Odaiba (UrbanNav) | PPP Kinematic (IEKF) | Gneiss | 3.404 m | 4.961 m | 5.902 m | [stale] | 🟢 2026-06-19 |
+| Odaiba (UrbanNav) | PPP Kinematic (IEKF) | Gneiss | 3.404 m | 4.961 m | 5.902 m | [superceded by SP3/CLK/BIA run] | 🔴 2026-06-19 |
 | Odaiba (UrbanNav) | PPP Kinematic (IEKF) fwd | Gneiss | 5.288 m | 20.668 m | 5.833 m | — | 🟢 2026-06-20 |
 | Odaiba (UrbanNav) | PPP Kinematic (IEKF) smooth | Gneiss | 5.221 m | 35.823 m | 17.526 m | [stale, buggy smoother] | 🔴 2026-06-20 |
 | Odaiba (UrbanNav) | PPP Kinematic (IEKF) smooth | Gneiss | **6.423 m** | **16.078 m** | **6.056 m** | — | 🟢 2026-06-21 |
+| Odaiba (UrbanNav) | PPP IEKF (GPS+Gal, SP3/CLK/BIA) | Gneiss | 8.024 m | 99.668 m | 24.229 m | — | 🟢 2026-06-25 |
 | PPP (f9p_ppp) | SPP | RTKLIB | Failed |  |  | **Gneiss** (RTKLIB missing) | 🟡 [stale] |
 | PPP (f9p_ppp) | SPP | Gneiss | 1.367 m | 2.008 m | 0.934 m | | 🟡 [stale] |
 | PPP (f9p_ppp) | RTK Kinematic | RTKLIB | Failed |  |  | **Gneiss** (RTKLIB missing) | 🟡 [stale] |
@@ -51,6 +53,13 @@ Last updated: 2026-06-21. Rows marked [stale] > 1 week old.
 | PPP (f9p_ppp) | PPP Kinematic (FG) | Gneiss | 3.516 m | 5.081 m | 1.263 m | | 🟡 [stale] |
 | PPP (f9p_ppp) | PPP Kinematic (IEKF) bcast | Gneiss | 1.930 m | 3.881 m | 7.275 m | — | 🟢 2026-06-20 |
 | PPP (f9p_ppp) | PPP Kinematic (IEKF) precise | Gneiss | 1.492 m | 2.611 m | 5.877 m | — | 🟢 2026-06-20 |
+| IGS ALIC | PPP IEKF (GPS, SP3/CLK, static) | Gneiss | 2.188 m | 5.929 m | 2.215 m | — | 🟢 2026-06-25 |
+| IGS CEDU | PPP IEKF (GPS, SP3/CLK, static) | Gneiss | 1.937 m | 3.262 m | 1.871 m | — | 🟢 2026-06-25 |
+| IGS YARR | PPP IEKF (GPS, SP3/CLK, static) | Gneiss | 1.657 m | 4.246 m | 2.379 m | — | 🟢 2026-06-25 |
+| IGS HOB2 | PPP IEKF (GPS, SP3/CLK, static) | Gneiss | 2.312 m | 4.385 m | 1.872 m | — | 🟢 2026-06-25 |
+| IGS PARK | PPP IEKF (GPS, SP3/CLK, static) | Gneiss | 2.938 m | 12.749 m | 4.638 m | — | 🟢 2026-06-25 |
+| IGS PERT | PPP IEKF (GPS, SP3/CLK, static) | Gneiss | 14.807 m | 79.612 m | 25.407 m | — | 🟢 2026-06-25 |
+| IGS NKLG | PPP IEKF (GPS, IONEX, SP3/CLK, static) | Gneiss | 27916.402 m | 83725.926 m | 18.472 m | — | 🟢 2026-06-25 |
 | UrbanLoco (Example) | SPP | RTKLIB | No data |  |  |  | 🟡 [stale] |
 | UrbanLoco (Example) | SPP | Gneiss | No data |  |  | | 🟡 [stale] |
 | UrbanLoco (Example) | RTK Kinematic | RTKLIB | No data |  |  |  | 🟡 [stale] |

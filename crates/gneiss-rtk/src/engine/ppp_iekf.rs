@@ -242,3 +242,7 @@ impl PppIteratedEkf {
 #[cfg(test)]
 #[path = "ppp_iekf_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "ppp_ar_tests.rs"]
+mod adversarial_tests;
