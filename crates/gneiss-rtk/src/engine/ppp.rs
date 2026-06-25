@@ -186,12 +186,16 @@ pub(crate) fn update_phase_ambiguities(
             for i in 0..4 {
                 state.remove_ambiguity(sat.sat_obs.sat, i);
             }
-            // Bug 25 fix: inflate position and velocity covariance after losing
-            // phase constraints.  Over-confidence in the current coordinate
-            // estimate prevents re-convergence on new phase observations.
-            // Multiply position (0..3) and velocity (3..6) diagonal elements by 4.
+            // Inflate position and velocity covariance after losing phase
+            // constraints.  Over-confidence in the current coordinate estimate
+            // prevents re-convergence on new phase observations.
+            // Multiply position (0..3) and velocity (3..6) diagonal elements
+            // by 4, but clamp at 1e4 m² (σ=100m) to prevent exponential growth
+            // from frequent ionospheric scintillation at equatorial stations.
+            // Without the cap, N slips produce 4^N growth (e.g., 10 slips
+            // = 4^10 = 1,048,576×), causing total measurement rejection.
             for i in 0..6 {
-                state.covariance[(i, i)] *= 4.0;
+                state.covariance[(i, i)] = (state.covariance[(i, i)] * 4.0).min(5e4);
             }
         }
         let isb = match sat.sat_obs.sat.constellation {
