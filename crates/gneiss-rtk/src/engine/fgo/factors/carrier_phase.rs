@@ -34,10 +34,6 @@ mod tests {
     use super::*;
     use nalgebra::{Matrix3, Vector3};
 
-    fn skew_symmetric(v: &Vector3<f64>) -> Matrix3<f64> {
-        Matrix3::new(0.0, -v.z, v.y, v.z, 0.0, -v.x, -v.y, v.x, 0.0)
-    }
-
     #[test]
     fn test_carrier_phase_jacobian() {
         let u = Vector3::new(0.6, 0.8, 0.0);
@@ -61,7 +57,7 @@ mod tests {
         }
 
         // check theta
-        let expected_theta = -u.transpose() * r_b_e * skew_symmetric(&l_b);
+        let expected_theta = -u.transpose() * r_b_e * super::super::skew_symmetric(&l_b);
         assert_eq!(h[(0, 6)], expected_theta[0]);
         assert_eq!(h[(0, 7)], expected_theta[1]);
         assert_eq!(h[(0, 8)], expected_theta[2]);

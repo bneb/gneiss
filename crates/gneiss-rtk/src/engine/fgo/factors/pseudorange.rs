@@ -26,17 +26,13 @@ mod tests {
     use super::*;
     use nalgebra::{DMatrix, Matrix3, Vector3};
 
-    fn skew_symmetric(v: &Vector3<f64>) -> Matrix3<f64> {
-        Matrix3::new(0.0, -v.z, v.y, v.z, 0.0, -v.x, -v.y, v.x, 0.0)
-    }
-
     fn compute_expected_h(
         u: &Vector3<f64>,
         r_b_e: &Matrix3<f64>,
         l_b: &Vector3<f64>,
     ) -> DMatrix<f64> {
         let mut h = DMatrix::zeros(1, 17);
-        let skew_l = skew_symmetric(l_b);
+        let skew_l = super::super::skew_symmetric(l_b);
         let theta_term = -u.transpose() * r_b_e * skew_l;
 
         // p^e
