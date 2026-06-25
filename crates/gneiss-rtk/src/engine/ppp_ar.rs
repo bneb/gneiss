@@ -371,7 +371,6 @@ impl PppIteratedEkf {
         });
         let q_wl = if all_mw_confident {
             // MW-based Q: tight (~0.18/N cycles²)
-            let mw_var_per_sample: f64 = 0.18;
             // MW per-sample DD variance: each single-epoch MW measurement has
             // ~0.42 cycle std on GPS L1/L2, so 0.18 cycles² per sample.
             // Reference satellite noise is shared across all DD pairs.
