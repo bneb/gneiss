@@ -210,6 +210,7 @@ impl PppRtklib {
         ppp: &PppState,
         obs: &[(SatelliteId, f64, f64, f64, f64, f64)], // (sat, L1, L2, P1, P2, el)
         lc_if_vals: &[f64],                               // IF carrier phase in meters
+        range_offsets: &[f64],                            // PCV+PCO+tide correction (m)
         sat_pos: &[Vector3<f64>],                       // ECEF satellite positions
         sat_clk: &[f64],                                 // satellite clock corrections (m)
         sat_var: &[f64],                                 // satellite position variance
@@ -231,8 +232,8 @@ impl PppRtklib {
             let rs = sat_pos[i];
             let dts = sat_clk[i];
 
-            // Geometric range (simplified — full version would compute from sat pos)
-            let dist = (rs - Vector3::new(x[0], x[1], x[2])).norm();
+            // Geometric range with PCV/PCO/tide corrections from ProcessedSat
+            let dist = (rs - Vector3::new(x[0], x[1], x[2])).norm() + range_offsets[i];
             if dist <= 0.0 { skipped_dist += 1;
                 continue;
             }
@@ -342,6 +343,7 @@ impl PppRtklib {
     pub fn solve_with_sats(&mut self, state: &mut RtkState, sats: &[crate::engine::processed_sat::ProcessedSat]) -> Result<(), EngineError> {
         let mut obs_data: Vec<(SatelliteId, f64, f64, f64, f64, f64)> = Vec::new();
         let mut lc_if_vals: Vec<f64> = Vec::new();
+        let mut range_offsets: Vec<f64> = Vec::new(); // ProcessedSat.dist - our_dist
         let mut sat_pos: Vec<Vector3<f64>> = Vec::new();
         let mut sat_clk: Vec<f64> = Vec::new();
         let mut sat_var: Vec<f64> = Vec::new();
@@ -356,6 +358,8 @@ impl PppRtklib {
             } else {
                 0.0
             };
+            let our_dist = (sat.sat_pos_rot - rcv).norm();
+            range_offsets.push(sat.dist - our_dist); // PCV + PCO + tide corrections
             obs_data.push((sat.sat_obs.sat, sat.cp1.unwrap_or(0.0), sat.cp2.unwrap_or(0.0), sat.p1, sat.p2.unwrap_or(sat.p1), el * R2D));
             lc_if_vals.push(lc_if);
             sat_pos.push(sat.sat_pos_rot);
@@ -425,7 +429,7 @@ impl PppRtklib {
             vec![0.0f64; lc_if_vals.len()]
         };
         for _iter in 0..self.max_iter {
-            let nv = self.residuals(&ppp, &obs_data, &lc_for_filter, &sat_pos, &sat_clk, &sat_var, &xp, &mut v, &mut h_mat, &mut r_mat);
+            let nv = self.residuals(&ppp, &obs_data, &lc_for_filter, &range_offsets, &sat_pos, &sat_clk, &sat_var, &xp, &mut v, &mut h_mat, &mut r_mat);
             if nv < 4 { break; }
             let h_s = h_mat.view((0, 0), (nx, nv)).clone_owned();
             let vs = v.rows(0, nv).clone_owned();
@@ -589,10 +593,12 @@ impl PppRtklib {
 
         for _iter in 0..self.max_iter {
             let empty_lc: Vec<f64> = vec![0.0; obs_data.len()];
+            let empty_off: Vec<f64> = vec![0.0; obs_data.len()];
             let nv = self.residuals(
                 &ppp,
                 &obs_data,
                 &empty_lc,
+                &empty_off,
                 &sat_pos,
                 &sat_clk,
                 &sat_var,
