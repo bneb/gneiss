@@ -114,6 +114,7 @@ pub struct PppRtklib {
     pub x: DVector<f64>,
     pub p: DMatrix<f64>,
     pub epoch: u32,
+    last_nsat: usize,
 }
 
 impl Default for PppRtklib {
@@ -127,6 +128,7 @@ impl Default for PppRtklib {
             x: DVector::zeros(0),
             p: DMatrix::zeros(0, 0),
             epoch: 0,
+            last_nsat: 0,
         }
     }
 }
@@ -350,13 +352,13 @@ impl PppRtklib {
         let mut ppp = PppState::new(has_glo, self.dynamics);
         ppp.nsat = obs_data.len();
         let nx = ppp.nx();
-        if self.epoch == 0 {
+        if self.epoch == 0 || self.last_nsat != obs_data.len() {
             let mut x0 = DVector::zeros(nx);
             x0[0] = state.position.vector.x; x0[1] = state.position.vector.y; x0[2] = state.position.vector.z;
             self.x = x0;
             self.p = self.init_covariance(&ppp, nx);
         }
-        self.epoch += 1;
+        self.last_nsat = obs_data.len(); self.epoch += 1;
         let mut xp = self.x.clone();
         let mut pp = self.p.clone();
         self.predict(&ppp, &mut xp, &mut pp);
