@@ -29,6 +29,7 @@ pub struct ProcessingEngine {
     pub tropo_mapper: Box<dyn gneiss_core::atmosphere::TropoMapper>,
     pub ppp_factor_opt: Option<crate::engine::ppp_iekf::PppIteratedEkf>,
     pub ppp_multi_epoch_opt: Option<crate::engine::ppp_multi_epoch::MultiEpochOptimizer>,
+    pub ppp_rtklib_solver: Option<crate::engine::ppp_rtklib::PppRtklib>,
     pub sp3_epochs: Vec<gneiss_parsers::sp3::Sp3Epoch>,
     pub clk_data: Option<gneiss_parsers::rinex_clk::RinexClock>,
     pub ionex_grid: Option<gneiss_parsers::ionex::IonexGrid>,
@@ -77,6 +78,7 @@ impl ProcessingEngine {
                     .with_lambda_min_ratio(lambda_min_ratio),
             ),
             ppp_multi_epoch_opt: None,
+            ppp_rtklib_solver: None,
             hatch_filter: crate::hatch::HatchFilter::default(),
             innovation_tracker: crate::engine::adaptive::InnovationTracker::default(),
             consecutive_rejections: 0,
@@ -332,6 +334,7 @@ impl ProcessingEngine {
             | EngineMode::PppInsLooselyCoupled
             | EngineMode::PppIekf
             | EngineMode::PppRtklib => {
+                // Seed state from SPP (required by build_sats)
                 if self.current_state.is_none() {
                     if let Ok(spp) = crate::spp::compute_spp(
                         &filtered_rover, &self.ephemerides,
@@ -343,11 +346,18 @@ impl ProcessingEngine {
                         self.current_state = Some(s);
                     }
                 }
-                let mut ppp = crate::engine::ppp_rtklib::PppRtklib::default();
-                let result = if let Some(ref mut state) = self.current_state {
+                // Build satellite data (needs current_state to exist)
+                let sats = crate::engine::ppp_antenna::build_sats(self, &filtered_rover);
+                let result = if sats.is_empty() {
+                    Some(EngineError::InsufficientSatellites)
+                } else if let Some(ref mut state) = self.current_state {
                     state.time = filtered_rover.time;
                     state.position.epoch = filtered_rover.time;
-                    ppp.solve(state, &filtered_rover, &self.ephemerides).err()
+                    let mut solver = self.ppp_rtklib_solver.take()
+                        .unwrap_or_else(crate::engine::ppp_rtklib::PppRtklib::default);
+                    let r = solver.solve_with_sats(state, &sats).err();
+                    self.ppp_rtklib_solver = Some(solver);
+                    r
                 } else {
                     Some(EngineError::StateDisappeared)
                 };
