@@ -187,18 +187,19 @@ fn smooth_epoch(
     let mut delta_x = &x_k1_n - &x_pred_k1_sub;
 
     // Innovation gating: compute normalized innovation squared (NIS).
-    // If the forward-filter innovation is statistically inconsistent with
-    // the predicted covariance, the forward filter likely diverged at this
-    // epoch. Log a warning but continue — the existing covariance guards
-    // (non-finite check, MAX_STATE_VARIANCE) catch catastrophic cases.
-    // The NIS check provides diagnostic visibility without breaking the
-    // backward pass for borderline epochs.
+    // When NIS exceeds the threshold, the forward filter has almost
+    // certainly diverged at this epoch. Skip the RTS correction and
+    // keep the forward-filter state — applying a correction based on
+    // a corrupted innovation would poison the entire backward pass.
+    // Threshold: 100 × DOF (generous — chi-square 99.99% for 30 DOF
+    // is ~60, so 100×DOF is a very conservative gate).
     let nis = (&delta_x.transpose() * &p_pred_inv * &delta_x)[(0, 0)];
     if nis > smooth_len as f64 * 100.0 {
         tracing::warn!(
-            "Smoother NIS={:.1} exceeds threshold={:.0} ({} DOF) — forward filter may have diverged",
+            "Smoother NIS={:.1} exceeds threshold={:.0} ({} DOF) — keeping forward-filter state",
             nis, smooth_len as f64 * 100.0, smooth_len
         );
+        return Err("NIS gate rejected");
     }
 
     if core_size > 6 {
@@ -960,8 +961,11 @@ mod tests {
         let mut phi = DMatrix::identity(crate::filter::CORE_STATE_SIZE, crate::filter::CORE_STATE_SIZE);
         phi[(15, 15)] = 0.0;
         state1.core_phi = Some(phi);
-        // Match p_pred variances to state0 covariance (scaled by 2x for position)
-        let mut p_pred = DMatrix::identity(crate::filter::CORE_STATE_SIZE, crate::filter::CORE_STATE_SIZE) * 2.0;
+        // Use large predicted covariance so NIS gate passes.
+        // NIS threshold = smooth_len * 100 ≈ 2000. With |innov| ≈ 374 m
+        // (position difference from prediction), we need P_pred >> 374²/2000 ≈ 70.
+        // Using 200 m² per axis gives plenty of margin.
+        let mut p_pred = DMatrix::identity(crate::filter::CORE_STATE_SIZE, crate::filter::CORE_STATE_SIZE) * 200.0;
         p_pred[(15, 15)] = crate::filter::PREDICTED_CLOCK_VARIANCE;
         p_pred[(16, 16)] = crate::filter::PREDICTED_ISB_VARIANCE;
         p_pred[(17, 17)] = crate::filter::PREDICTED_ISB_VARIANCE;
@@ -969,7 +973,13 @@ mod tests {
         p_pred[(19, 19)] = 2000.0;
         p_pred[(20, 20)] = 2.0;
         state1.full_p_predict = Some(p_pred);
-        state1.full_x_predict = Some(DVector::zeros(crate::filter::CORE_STATE_SIZE));
+        // Predicted state at the same position as actual (consistent with
+        // the large covariance — the prediction is uncertain but unbiased).
+        let mut x_pred = DVector::zeros(crate::filter::CORE_STATE_SIZE);
+        x_pred[0] = 100.0;
+        x_pred[1] = 200.0;
+        x_pred[2] = 300.0;
+        state1.full_x_predict = Some(x_pred);
         (state0, state1)
     }
 

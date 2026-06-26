@@ -42,6 +42,7 @@ pub fn process_ppp<'a>(
         None,
     ) {
         spp_pos_for_recovery = Some(spp.position);
+        engine.last_spp_position = Some(spp.position);
         let is_cold_start = state.epoch_count < 2;
         if is_cold_start {
             state.position = spp.position;
@@ -103,6 +104,46 @@ pub fn process_ppp<'a>(
     };
     state.epoch_count = state.epoch_count.saturating_add(1);
 
+    // Innovation gate: if the IEKF solution has diverged catastrophically
+    // from the predicted state, reject it and keep the prediction. Uses a
+    // high threshold (500 m or 50× sqrt(trace_P), whichever is larger) to
+    // catch true divergence without rejecting legitimate position updates
+    // from satellite geometry changes.
+    if let Some(ref pred_pos) = state.predicted_position {
+        let innov = state.position.vector - pred_pos.vector;
+        let p00 = state.covariance[(0, 0)];
+        let p11 = state.covariance[(1, 1)];
+        let p22 = state.covariance[(2, 2)];
+        let trace_p = p00 + p11 + p22;
+        if trace_p > 0.0 {
+            let threshold = (50.0_f64 * trace_p.sqrt()).max(500.0);
+            if innov.norm() > threshold {
+                tracing::warn!(
+                    "IEKF position divergence: |innov|={:.0} m > threshold={:.0} m -- keeping predicted state",
+                    innov.norm(),
+                    threshold
+                );
+                state.position = *pred_pos;
+                if let Some(pred_vel) = state.predicted_velocity {
+                    state.velocity = pred_vel;
+                } else {
+                    // Velocity estimate is likely corrupted — zero it
+                    // and force re-estimation from measurements.
+                    state.velocity = nalgebra::Vector3::zeros();
+                }
+                // Inflate position AND velocity covariance to force
+                // the next IEKF solve to re-estimate both from
+                // measurements rather than trusting the prediction.
+                for i in 0..3 {
+                    state.covariance[(i, i)] = state.covariance[(i, i)].max(100.0);
+                }
+                for i in 3..6 {
+                    state.covariance[(i, i)] = state.covariance[(i, i)].max(100.0);
+                }
+            }
+        }
+    }
+
     // Always push to history — predict_state() was already called at the
     // top of process_ppp, so the propagated state is valid even when solve
     // returns InsufficientSatellites.  The smoother bridges the gap.
@@ -125,6 +166,13 @@ pub fn process_ppp<'a>(
             None,
             false,
         );
+    }
+
+    // Attempt INS alignment for tightly-coupled PPP-INS modes.
+    // This must run after the IEKF solve so the state velocity is
+    // available for kinematic or static alignment.
+    if engine.config.mode == EngineMode::PppIns {
+        engine.attempt_kinematic_alignment();
     }
 
     solve_result?;

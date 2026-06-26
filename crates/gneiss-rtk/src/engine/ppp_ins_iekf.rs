@@ -3,6 +3,7 @@ use crate::engine::ppp_common::{
     invert_matrix, FgMeasurement,
 };
 use crate::engine::processed_sat::ProcessedSat;
+use crate::engine::ProcessingEngine;
 use crate::engine::EngineError;
 use crate::filter::{RtkState, CORE_STATE_SIZE};
 use crate::math::inversion::solve_cholesky_svd;
@@ -30,11 +31,48 @@ pub fn process_ppp_ins_fg<'a>(
     crate::engine::ppp::update_phase_ambiguities(state, &sats, rover_obs.time);
     state.prune_stale_ambiguities(state.epoch_count as u32, 10);
 
+    // SPP position prior — anchors the IEKF during early convergence,
+    // same as process_ppp. Without this anchor, the IEKF can diverge
+    // catastrophically on a single bad epoch when IMU factors are not
+    // yet active (pre-alignment).
+    let mut position_prior: Option<(Vector3<f64>, f64)> = None;
+    let mut spp_pos_for_recovery: Option<gneiss_core::coords::Coordinate> = None;
+    if let Ok(spp) = crate::spp::compute_spp(
+        rover_obs,
+        &engine.ephemerides,
+        engine.klobuchar_params.as_ref(),
+        &crate::spp::SppConfig::default(),
+        None,
+    ) {
+        spp_pos_for_recovery = Some(spp.position);
+        let is_cold_start = state.epoch_count < 2;
+        if is_cold_start {
+            state.position = spp.position;
+            state.rcv_clk_bias = spp.cdt;
+        } else {
+            let pos_cov = state.covariance[(0, 0)]
+                .min(state.covariance[(1, 1)])
+                .min(state.covariance[(2, 2)]);
+            let prior_var = pos_cov.clamp(9.0, 100.0);
+            position_prior = Some((spp.position.vector, prior_var));
+        }
+    }
+
     let last_state = engine.state_history.last();
     let imu_history = &engine.imu_history;
 
     let lever_arm = nalgebra::Vector3::from_column_slice(&engine.config.imu_to_antenna_lever_arm);
-    PppInsIteratedEkf::new().solve(state, &sats, imu_history, last_state, &lever_arm)?;
+    PppInsIteratedEkf::new().solve(state, &sats, imu_history, last_state, &lever_arm, position_prior)?;
+
+    // Check for covariance explosion (same guard as process_ppp)
+    if let Some(ref mut s) = engine.current_state {
+        ProcessingEngine::check_covariance_divergence(
+            s,
+            spp_pos_for_recovery,
+            None,
+            false,
+        );
+    }
 
     crate::engine::processor::ProcessingEngine::attempt_kinematic_alignment(engine);
     let state = engine.current_state.as_mut().unwrap();
@@ -89,9 +127,10 @@ impl PppInsIteratedEkf {
         imu_history: &[Vec<gneiss_core::imu::ImuMeasurement>],
         last_state: Option<&RtkState>,
         lever_arm: &nalgebra::Vector3<f64>,
+        position_prior: Option<(Vector3<f64>, f64)>,
     ) -> Result<(), EngineError> {
         for outer_iter in 0..4 {
-            let done = self.solve_inner(state, sats, imu_history, last_state, lever_arm)?;
+            let done = self.solve_inner(state, sats, imu_history, last_state, lever_arm, position_prior)?;
             if done || outer_iter == 3 {
                 if !done {
                     tracing::warn!("Max outlier rejection iterations reached.");
@@ -114,6 +153,7 @@ impl PppInsIteratedEkf {
         imu_history: &[Vec<gneiss_core::imu::ImuMeasurement>],
         last_state: Option<&RtkState>,
         lever_arm: &nalgebra::Vector3<f64>,
+        position_prior: Option<(Vector3<f64>, f64)>,
     ) -> Result<bool, EngineError> {
         let x_pred = extract_state_vector(state);
         let p_pred = state.covariance.clone();
@@ -133,6 +173,7 @@ impl PppInsIteratedEkf {
                 imu_history,
                 last_state,
                 lever_arm,
+                position_prior,
             )? {
                 let mut x_next = &x_i + &dx;
                 if x_next.len() > 8 {
@@ -157,7 +198,7 @@ impl PppInsIteratedEkf {
             }
         }
 
-        if let Some(sat) = self.find_worst_outlier(state, sats, &x_i, imu_history, lever_arm) {
+        if let Some(sat) = self.find_worst_outlier(state, sats, &x_i, imu_history, lever_arm, position_prior) {
             tracing::warn!(
                 "PPP FG Outlier Detected for {:?}. Removing ambiguity and retrying.",
                 sat
@@ -177,6 +218,7 @@ impl PppInsIteratedEkf {
             imu_history,
             last_state,
             lever_arm,
+            position_prior,
         );
         apply_state_vector(state, &x_i, final_p);
         let omega_eb_b = imu_history
@@ -217,6 +259,7 @@ impl PppInsIteratedEkf {
         x_i: &DVector<f64>,
         imu_history: &[Vec<gneiss_core::imu::ImuMeasurement>],
         lever_arm: &nalgebra::Vector3<f64>,
+        _position_prior: Option<(Vector3<f64>, f64)>,
     ) -> Option<gneiss_core::sat::SatelliteId> {
         let omega_eb_b = imu_history
             .last()
@@ -460,6 +503,7 @@ impl PppInsIteratedEkf {
         imu_history: &[Vec<gneiss_core::imu::ImuMeasurement>],
         last_state: Option<&RtkState>,
         lever_arm: &nalgebra::Vector3<f64>,
+        position_prior: Option<(Vector3<f64>, f64)>,
     ) -> Result<Option<DVector<f64>>, EngineError> {
         let omega_eb_b = imu_history
             .last()
@@ -491,6 +535,16 @@ impl PppInsIteratedEkf {
         let mut htwr = h_mat.transpose() * &w_mat * &res_vec;
 
         self.accumulate_imu_factors(x_i, imu_history, last_state, &mut htwh, Some(&mut htwr));
+
+        // SPP position prior — soft anchor to prevent divergence during
+        // early convergence, matching process_ppp behaviour.
+        if let Some((spp_pos, var)) = position_prior {
+            let w = 1.0 / var;
+            for i in 0..3 {
+                htwh[(i, i)] += w;
+                htwr[i] += w * (spp_pos[i] - x_i[i]);
+            }
+        }
 
         let htwh_damped = &htwh + p_inv;
         let mut diff = x_pred - x_i;
@@ -528,6 +582,7 @@ impl PppInsIteratedEkf {
         imu_history: &[Vec<gneiss_core::imu::ImuMeasurement>],
         last_state: Option<&RtkState>,
         lever_arm: &nalgebra::Vector3<f64>,
+        position_prior: Option<(Vector3<f64>, f64)>,
     ) -> DMatrix<f64> {
         let omega_eb_b = imu_history
             .last()
@@ -564,6 +619,13 @@ impl PppInsIteratedEkf {
         let mut htwh = h_mat.transpose() * &w_mat * h_mat;
 
         self.accumulate_imu_factors(x_i, imu_history, last_state, &mut htwh, None);
+
+        if let Some((_spp_pos, var)) = position_prior {
+            let w = 1.0 / var;
+            for i in 0..3 {
+                htwh[(i, i)] += w;
+            }
+        }
 
         let htwh_damped = htwh + p_inv;
 
@@ -760,7 +822,7 @@ mod tests {
         state.covariance = DMatrix::identity(CORE_STATE_SIZE, CORE_STATE_SIZE);
         let sats = vec![];
         let lever_arm = nalgebra::Vector3::zeros();
-        let res = fg.solve(&mut state, &sats, &[], None, &lever_arm);
+        let res = fg.solve(&mut state, &sats, &[], None, &lever_arm, None);
         assert!(matches!(res, Err(EngineError::InsufficientSatellites)));
     }
 
@@ -989,7 +1051,7 @@ mod nan_tests {
         state.covariance = DMatrix::from_element(CORE_STATE_SIZE, CORE_STATE_SIZE, f64::NAN);
         let sats = vec![];
         let lever_arm = nalgebra::Vector3::zeros();
-        let res = fg.solve(&mut state, &sats, &[], None, &lever_arm);
+        let res = fg.solve(&mut state, &sats, &[], None, &lever_arm, None);
         assert!(matches!(res, Err(EngineError::StateDisappeared)));
     }
 }

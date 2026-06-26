@@ -38,6 +38,9 @@ pub struct ProcessingEngine {
     pub dcbs: std::collections::HashMap<(gneiss_core::sat::SatelliteId, String), f64>,
     pub gnn_raim: Option<crate::engine::ml::gnn_raim::GnnRaimModel>,
     pub sinex_bias: Option<gneiss_parsers::sinex_bia::SinexBias>,
+    /// Last known-good SPP position, used as recovery anchor when the
+    /// current epoch's SPP compute fails and PPP covariance has diverged.
+    pub last_spp_position: Option<gneiss_core::coords::Coordinate>,
 }
 
 impl ProcessingEngine {
@@ -85,6 +88,7 @@ impl ProcessingEngine {
             dcbs: std::collections::HashMap::new(),
             gnn_raim,
             sinex_bias: None,
+            last_spp_position: None,
         }
     }
 
@@ -118,6 +122,17 @@ impl ProcessingEngine {
                     pos_var_max
                 );
                 state.reset_to_spp(pos, spp_state_ref, init_isbs);
+            } else {
+                // No SPP available this epoch — decouple position/clock
+                // from the corrupted state to prevent contamination of
+                // subsequent epochs. The state will coast on prediction
+                // until the next successful SPP recovery.
+                tracing::error!(
+                    "Position variance {:.0} m² exceeds limit and no SPP recovery available. Decoupling.",
+                    pos_var_max
+                );
+                state.decouple_position();
+                state.decouple_clock();
             }
         }
     }
@@ -1298,6 +1313,137 @@ mod tests {
         let err = engine.process_epoch(&rover, None).unwrap_err();
         assert!(matches!(err, EngineError::InitialSppFailed));
     }
+
+    #[test]
+    fn test_attempt_static_alignment_success() {
+        let mut config = EngineConfig::default();
+        config.mode = EngineMode::RtkIns;
+        config.imu_to_antenna_lever_arm = [0.5, 0.0, 1.0];
+
+        let mut engine = ProcessingEngine::new(config);
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(
+            Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+        let mut state = RtkState::new(time, pos, 1.0);
+        state.velocity = Vector3::new(0.1, 0.0, 0.0); // Nearly stationary
+        engine.current_state = Some(state);
+
+        // Add state history (needed for yaw fallback)
+        for _ in 0..3 {
+            engine.state_history.push(RtkState::new(time, pos, 1.0));
+        }
+
+        // 5+ IMU samples with consistent gravity, low variance
+        let imu_samples: Vec<_> = (0..6)
+            .map(|_| gneiss_core::imu::ImuMeasurement {
+                accel: Vector3::new(0.0, 0.0, 9.8),
+                gyro: Vector3::new(0.0, 0.0, 0.0),
+                time_tag: 0,
+                temperature: None,
+            })
+            .collect();
+        engine.imu_history.push(imu_samples);
+
+        engine.attempt_kinematic_alignment();
+
+        let aligned_state = engine.current_state.as_ref().unwrap();
+        assert!(aligned_state.ins_aligned, "Static alignment should succeed");
+
+        // Attitude covariance should be set to (20°)² for static alignment
+        let att_var = (20.0f64.to_radians()).powi(2);
+        for i in 6..9 {
+            assert!(
+                (aligned_state.covariance[(i, i)] - att_var).abs() < 1e-10,
+                "Covariance[{}] = {}, expected {}",
+                i,
+                aligned_state.covariance[(i, i)],
+                att_var
+            );
+        }
+        assert!(engine.imu_buffer.is_empty());
+    }
+
+    #[test]
+    fn test_attempt_static_alignment_rejects_high_variance() {
+        // IMU-based detection: high accelerometer variance → not stationary
+        let mut config = EngineConfig::default();
+        config.mode = EngineMode::RtkIns;
+        let mut engine = ProcessingEngine::new(config);
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(
+            Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+        let mut state = RtkState::new(time, pos, 1.0);
+        state.velocity = Vector3::new(0.1, 0.0, 0.0);
+        engine.current_state = Some(state);
+
+        for _ in 0..3 {
+            engine.state_history.push(RtkState::new(time, pos, 1.0));
+        }
+
+        // IMU samples with gravity-like mean but HIGH variance (vehicle moving)
+        // ±4.0 m/s² on X/Y with Z=9.8 gives magnitude swings of ~1 m/s²,
+        // well above the 0.5 variance threshold.
+        let imu_samples: Vec<_> = (0..6)
+            .map(|i| {
+                let offset = if i % 2 == 0 { 4.0 } else { -4.0 };
+                gneiss_core::imu::ImuMeasurement {
+                    accel: Vector3::new(offset, offset, 9.8),
+                    gyro: Vector3::new(0.0, 0.0, 0.0),
+                    time_tag: 0,
+                    temperature: None,
+                }
+            })
+            .collect();
+        engine.imu_history.push(imu_samples);
+
+        engine.attempt_kinematic_alignment();
+        assert!(!engine.current_state.as_ref().unwrap().ins_aligned,
+            "Static alignment should NOT trigger when accel variance is high");
+    }
+
+    #[test]
+    fn test_attempt_static_alignment_rejects_bad_gravity() {
+        let mut config = EngineConfig::default();
+        config.mode = EngineMode::RtkIns;
+        let mut engine = ProcessingEngine::new(config);
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(
+            Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+        let mut state = RtkState::new(time, pos, 1.0);
+        state.velocity = Vector3::new(0.0, 0.0, 0.0);
+        engine.current_state = Some(state);
+
+        for _ in 0..3 {
+            engine.state_history.push(RtkState::new(time, pos, 1.0));
+        }
+
+        // IMU shows acceleration far from gravity (e.g., sensor error)
+        let imu_samples: Vec<_> = (0..6)
+            .map(|_| gneiss_core::imu::ImuMeasurement {
+                accel: Vector3::new(50.0, 50.0, 50.0), // ~86 m/s² — not gravity
+                gyro: Vector3::new(0.0, 0.0, 0.0),
+                time_tag: 0,
+                temperature: None,
+            })
+            .collect();
+        engine.imu_history.push(imu_samples);
+
+        engine.attempt_kinematic_alignment();
+        assert!(!engine.current_state.as_ref().unwrap().ins_aligned,
+            "Static alignment should NOT trigger when accel magnitude is wrong");
+    }
 }
 
 impl ProcessingEngine {
@@ -1322,7 +1468,12 @@ impl ProcessingEngine {
         }
 
         let speed = state.velocity.norm();
+        // Sanity check: reject speeds above 100 m/s (360 km/h) — these
+        // indicate a GPS glitch, not real vehicle motion. Realistic
+        // ground-vehicle speeds top out around 50 m/s.
+        let speed_sane = speed < 100.0;
         if speed > 3.0
+            && speed_sane
             && self.state_history.len() >= 5
             && self
                 .state_history
@@ -1362,6 +1513,129 @@ impl ProcessingEngine {
                 state.covariance[(i, i)] = (15.0f64.to_radians()).powi(2);
             }
             self.imu_buffer.clear();
-        }
+        } else {
+            // Static alignment: detect stationary using raw IMU data rather
+            // than GNSS velocity, which can be noisy (especially in PPP mode
+            // where the IEKF velocity estimate never drops below 0.5 m/s even
+            // when the vehicle is truly stationary).
+            //
+            // A stationary IMU has: acceleration ≈ gravity (±25%), low
+            // accelerometer variance (< 0.5 m²/s⁴), and low gyro rates.
+            // IMU batches are per-epoch (typically 1-3 samples at 5 Hz PPP),
+            // so we accumulate across the last several epochs for a robust
+            // stationary check.
+            let recent_imu: Vec<&gneiss_core::imu::ImuMeasurement> = self
+                .imu_history
+                .iter()
+                .rev()
+                .take(4) // 4 epochs × ~2 samples = ~8 samples
+                .flatten()
+                .collect();
+            if recent_imu.len() >= 5 {
+                let n = recent_imu.len() as f64;
+                let mean_accel: nalgebra::Vector3<f64> = recent_imu
+                    .iter()
+                    .map(|m| m.accel)
+                    .fold(nalgebra::Vector3::zeros(), |a, b| a + b)
+                    / n;
+                let mean_mag = mean_accel.norm();
+                let var_accel: f64 = recent_imu
+                    .iter()
+                    .map(|m| {
+                        let d = m.accel.norm() - mean_mag;
+                        d * d
+                    })
+                    .sum::<f64>()
+                    / n;
+                let mean_gyro_mag: f64 = recent_imu
+                    .iter()
+                    .map(|m| m.gyro.norm())
+                    .sum::<f64>()
+                    / n;
+
+                let is_stationary = mean_mag > 7.0
+                    && mean_mag < 12.0
+                    && var_accel < 0.5
+                    && mean_gyro_mag < 0.15;
+
+                    if is_stationary {
+                        // Handle IMU sign convention: the engine expects
+                        // specific force in a Z-up body frame ([0,0,+g] at
+                        // rest). If the sensor uses the opposite convention
+                        // (az < 0 at rest), flip all components.
+                        let sign = if mean_accel.z < 0.0 { -1.0 } else { 1.0 };
+                        let ax = sign * mean_accel.x;
+                        let ay = sign * mean_accel.y;
+                        let az = sign * mean_accel.z;
+                        let roll = f64::atan2(ay, az);
+                        let pitch =
+                            f64::atan2(-ax, (ay * ay + az * az).sqrt());
+
+                        let llh = gneiss_core::coords::ecef_to_llh(
+                            state.position.vector,
+                        );
+                        let ecef_to_ned =
+                            gneiss_core::coords::ecef_to_ned_matrix(llh);
+                        let v_ned = ecef_to_ned * state.velocity;
+                        // Use GNSS velocity for yaw if the vehicle is moving;
+                        // otherwise fall back to the most recent history state
+                        // with meaningful velocity.
+                        let yaw = if v_ned.norm() > 1.0 {
+                            f64::atan2(v_ned[1], v_ned[0])
+                        } else {
+                            self.state_history
+                                .iter()
+                                .rev()
+                                .filter_map(|s| {
+                                    let v = ecef_to_ned * s.velocity;
+                                    if v.norm() > 1.0 {
+                                        Some(f64::atan2(v[1], v[0]))
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .next()
+                                .unwrap_or(0.0)
+                        };
+
+                        let rot_veh_to_ned =
+                            nalgebra::Rotation3::from_euler_angles(
+                                roll, pitch, yaw,
+                            );
+                        let ned_to_ecef = ecef_to_ned.transpose();
+                        let rot_mat =
+                            nalgebra::Rotation3::from_matrix_unchecked(
+                                ned_to_ecef * rot_veh_to_ned.matrix(),
+                            );
+                        state.attitude =
+                            nalgebra::UnitQuaternion::from_rotation_matrix(
+                                &rot_mat,
+                            );
+
+                        // Shift state position from antenna phase center
+                        // to IMU center
+                        let r_e_v = state.attitude.to_rotation_matrix();
+                        let lever_arm =
+                            nalgebra::Vector3::from_column_slice(
+                                &self.config.imu_to_antenna_lever_arm,
+                            );
+                        state.position.vector -= r_e_v * lever_arm;
+
+                        state.ins_aligned = true;
+                        tracing::info!(
+                            "Static alignment: roll={:.1} pitch={:.1} yaw={:.1} deg (accel var={:.3})",
+                            roll.to_degrees(),
+                            pitch.to_degrees(),
+                            yaw.to_degrees(),
+                            var_accel
+                        );
+                        for i in 6..9 {
+                            state.covariance[(i, i)] =
+                                (20.0f64.to_radians()).powi(2);
+                        }
+                        self.imu_buffer.clear();
+                    }
+                }
+            }
     }
 }

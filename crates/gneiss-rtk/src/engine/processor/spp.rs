@@ -16,12 +16,35 @@ impl ProcessingEngine {
             let z_vec = nalgebra::DVector::from_column_slice(z_diff.as_slice());
 
             let mut rejected = false;
-            if config.mode.is_tightly_coupled()
-                && state.ins_aligned
-                && z_diff.norm() > config.spp_consistency_threshold_m
-            {
-                rejected = true;
-            } else {
+            if config.mode.is_tightly_coupled() && state.ins_aligned {
+                // Use Mahalanobis distance with state covariance for robust
+                // rejection — avoids rejecting valid SPP updates in urban canyons
+                // where multipath errors regularly exceed the Euclidean threshold.
+                let p00 = state.covariance[(0, 0)];
+                let p01 = state.covariance[(0, 1)];
+                let p02 = state.covariance[(0, 2)];
+                let p10 = state.covariance[(1, 0)];
+                let p11 = state.covariance[(1, 1)];
+                let p12 = state.covariance[(1, 2)];
+                let p20 = state.covariance[(2, 0)];
+                let p21 = state.covariance[(2, 1)];
+                let p22 = state.covariance[(2, 2)];
+                let s_mat = nalgebra::Matrix3::new(
+                    p00 + 9.0, p01, p02,
+                    p10, p11 + 9.0, p12,
+                    p20, p21, p22 + 9.0,
+                );
+                if let Some(s_inv) = s_mat.try_inverse() {
+                    let d2 = (z_diff.transpose() * s_inv * z_diff)[(0, 0)];
+                    // chi-square 99% for 3 DOF = 11.345
+                    if d2 > 11.345 {
+                        rejected = true;
+                    }
+                } else {
+                    rejected = true;
+                }
+            }
+            if !rejected {
                 let mut h_mat = nalgebra::DMatrix::zeros(3, state.covariance.ncols());
                 h_mat.view_mut((0, 0), (3, 3)).fill_diagonal(1.0);
 
@@ -537,5 +560,77 @@ mod tests {
             }
             Err(e) => panic!("Unexpected error: {:?}", e),
         }
+    }
+
+    #[test]
+    fn test_perform_spp_ekf_update_mahalanobis_accepts_large_diff_with_high_uncertainty() {
+        // When INS position covariance is large (uncertain state), a moderately
+        // large SPP difference should be accepted by the Mahalanobis check.
+        // This is the key urban-canyon scenario: SPP errors exceed the old 15m
+        // Euclidean threshold, but the INS is also uncertain so the update is valid.
+        let mut config = EngineConfig::default();
+        config.mode = EngineMode::RtkIns;
+        config.spp_consistency_threshold_m = 15.0;
+
+        let time = GpsTime::new(0, 0.0);
+        let state_pos = Coordinate::new(
+            Vector3::new(1.0, 2.0, 3.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+        let mut state = RtkState::new(time, state_pos, 1.0);
+        state.ins_aligned = true;
+        // Inflate position covariance to simulate urban canyon uncertainty
+        // (100 m² variance → 10 m std per axis)
+        for i in 0..3 {
+            state.covariance[(i, i)] = 100.0;
+        }
+
+        // SPP position 30m away — would be rejected by old 15m Euclidean check
+        let spp_pos = Coordinate::new(
+            Vector3::new(1.0, 2.0, 33.0), // 30m away in Z
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+
+        ProcessingEngine::perform_spp_ekf_update(&config, &mut state, Some(spp_pos), 0.0);
+        // Should NOT be rejected: Mahalanobis distance accounts for large covariance
+        assert_eq!(state.consecutive_rejections, 0,
+            "Update should be accepted when INS covariance is large");
+    }
+
+    #[test]
+    fn test_perform_spp_ekf_update_mahalanobis_still_rejects_with_low_uncertainty() {
+        // When INS position covariance is small (confident state), a large
+        // SPP difference should still be rejected by the Mahalanobis check.
+        let mut config = EngineConfig::default();
+        config.mode = EngineMode::RtkIns;
+        config.spp_consistency_threshold_m = 15.0;
+
+        let time = GpsTime::new(0, 0.0);
+        let state_pos = Coordinate::new(
+            Vector3::new(1.0, 2.0, 3.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+        let mut state = RtkState::new(time, state_pos, 1.0);
+        state.ins_aligned = true;
+        // Default covariance is 1.0 m² (tight INS)
+
+        // SPP position ~100m away — well beyond what covariance allows
+        let spp_pos = Coordinate::new(
+            Vector3::new(101.0, 202.0, 303.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+
+        ProcessingEngine::perform_spp_ekf_update(&config, &mut state, Some(spp_pos), 0.0);
+        // Should STILL be rejected — Mahalanobis distance is large with tight covariance
+        assert_eq!(state.consecutive_rejections, 1,
+            "Update should be rejected when INS is confident and SPP is far away");
     }
 }
