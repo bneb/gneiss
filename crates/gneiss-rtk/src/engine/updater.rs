@@ -1184,8 +1184,6 @@ mod private_tests {
     // -----------------------------------------------------------------------
 
     #[test]
-    #[test]
-    #[ignore] // TODO: hangs due to NaN in covariance propagating through matrix ops
     fn test_update_loosely_coupled_nan_dx() {
         let time = GpsTime::new(2000, 0.0);
         let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);

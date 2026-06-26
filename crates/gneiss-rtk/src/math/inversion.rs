@@ -4,6 +4,11 @@ const DEFAULT_SVD_EPSILON: f64 = 1e-9;
 const DEFAULT_REGULARIZATION: f64 = 1e-6;
 
 pub fn invert_matrix_robust(m: &CovMatrix) -> CovMatrix {
+    // Guard against NaN/Inf: nalgebra's Cholesky and SVD decompositions
+    // can loop indefinitely on matrices containing NaN or infinity.
+    if m.iter().any(|x| x.is_nan() || x.is_infinite()) {
+        return CovMatrix::identity(m.nrows(), m.ncols()) * DEFAULT_REGULARIZATION;
+    }
     if let Some(chol) = m.clone().cholesky() {
         chol.inverse()
     } else if let Ok(inv) = m

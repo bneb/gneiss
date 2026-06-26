@@ -115,6 +115,7 @@ pub struct PppRtklib {
     pub p: DMatrix<f64>,
     pub epoch: u32,
     last_nsat: usize,
+    biases_seeded: bool,
 }
 
 impl Default for PppRtklib {
@@ -129,6 +130,7 @@ impl Default for PppRtklib {
             p: DMatrix::zeros(0, 0),
             epoch: 0,
             last_nsat: 0,
+            biases_seeded: false,
         }
     }
 }
@@ -165,20 +167,19 @@ impl PppRtklib {
     }
 
     /// Forward-predict the state (RTKLIB udstate_ppp).
-    /// In static PPP with white-noise clock, this is a no-op for position
-    /// and adds process noise to clock/tropo/biases.
-    fn predict(&self, ppp: &PppState, x: &mut DVector<f64>, p_mat: &mut DMatrix<f64>) {
+    /// In static PPP, position is constant. Clock is white noise — add
+    /// process noise to clock variance but DON'T reset the value to zero.
+    /// Resetting forces re-estimation of the full receiver clock offset
+    /// (~1.4M m = 5ms for F9P), which leaks into position through the
+    /// Kalman gain and causes ~300m/epoch drift.
+    fn predict(&self, ppp: &PppState, _x: &mut DVector<f64>, p_mat: &mut DMatrix<f64>) {
         let nx = ppp.nx();
-        let nr = ppp.nr();
 
-        // Position: static (no prediction change)
-        // Clock: white noise — reset to zero with large variance
+        // Position: static (no prediction change, no process noise)
+        // Clock: white noise — keep current value, reset variance to large
         for i in 0..ppp.nc() {
             let ci = ppp.ic(i);
-            x[ci] = 0.0;
-        }
-        for i in 0..ppp.nc() {
-            let ci = ppp.ic(i);
+            // Clear cross-correlations within ±30 indices
             for j in 0..nx {
                 if i32::abs(ci as i32 - j as i32) > 30 {
                     continue;
@@ -187,6 +188,11 @@ impl PppRtklib {
                 p_mat[(j, ci)] = 0.0;
             }
             p_mat[(ci, ci)] = VAR_CLK;
+        }
+        // Tropo: random walk — add small process noise
+        for i in 0..ppp.nt() {
+            let ti = ppp.it() + i;
+            p_mat[(ti, ti)] += 1e-6; // 1 mm²/s process noise
         }
     }
 
@@ -197,6 +203,7 @@ impl PppRtklib {
         &self,
         ppp: &PppState,
         obs: &[(SatelliteId, f64, f64, f64, f64, f64)], // (sat, L1, L2, P1, P2, el)
+        lc_if_vals: &[f64],                               // IF carrier phase in meters
         sat_pos: &[Vector3<f64>],                       // ECEF satellite positions
         sat_clk: &[f64],                                 // satellite clock corrections (m)
         sat_var: &[f64],                                 // satellite position variance
@@ -207,7 +214,7 @@ impl PppRtklib {
     ) -> usize {
         let nx = ppp.nx();
         let nr = ppp.nr();
-        let mut nv = 0; let mut skipped_el = 0; let mut skipped_dist = 0; let mut skipped_cp = 0; let mut skipped_code = 0; let mut accepted = 0;
+        let mut nv = 0; let mut skipped_el = 0; let mut skipped_dist = 0; let mut skipped_cp = 0; let mut skipped_code = 0;
 
         for i in 0..obs.len() {
             let (sat, l1_cyc, l2_cyc, p1, p2, el_deg) = obs[i];
@@ -231,11 +238,11 @@ impl PppRtklib {
             let vart = ERR_SAAS * ERR_SAAS;
 
             // Gneiss IF mode: p1 is already IF-combined. Use directly.
-            let lc = 0.0; // CP disabled until ambiguity init
+            let lc = lc_if_vals[i];
             let pc = p1; // IF value from build_sats
 
             // Corrected range
-            let rng = dist - CLIGHT * dts + dtrp;
+            let rng = dist - dts + dtrp; // dts already in meters from ProcessedSat
 
             let sys: usize = if sat.constellation == Constellation::Glonass {
                 1
@@ -271,8 +278,8 @@ impl PppRtklib {
                 v[nv] -= x[ppp.ib(i)];
                 h[(ppp.ib(i), nv)] = 1.0;
 
-                // Measurement variance
-                let var_phase = 0.0001 / libm::sin(el).max(0.1) * 2.0 + sat_var[i] + vart;
+                // Measurement variance: σ ≈ 10cm at zenith, scaled by 1/sin(el)
+                let var_phase = 0.01 / libm::sin(el).max(0.1) + sat_var[i] + vart;
                 r[(nv, nv)] = var_phase;
 
                 // Innovation test
@@ -314,7 +321,6 @@ impl PppRtklib {
         }
         nv
     }
-
     fn elevation(rcv: &Vector3<f64>, sat: &Vector3<f64>) -> f64 {
         let llh = gneiss_core::coords::ecef_to_llh(*rcv);
         let ned_mat = gneiss_core::coords::ecef_to_ned_matrix(llh);
@@ -325,6 +331,7 @@ impl PppRtklib {
 
     pub fn solve_with_sats(&mut self, state: &mut RtkState, sats: &[crate::engine::processed_sat::ProcessedSat]) -> Result<(), EngineError> {
         let mut obs_data: Vec<(SatelliteId, f64, f64, f64, f64, f64)> = Vec::new();
+        let mut lc_if_vals: Vec<f64> = Vec::new();
         let mut sat_pos: Vec<Vector3<f64>> = Vec::new();
         let mut sat_clk: Vec<f64> = Vec::new();
         let mut sat_var: Vec<f64> = Vec::new();
@@ -333,21 +340,60 @@ impl PppRtklib {
             let el = Self::elevation(&rcv, &sat.sat_pos_rot);
             if el < self.elev_mask_deg * D2R { continue; }
             if sat.p1 == 0.0 { continue; }
+            // IF carrier phase in meters: cp1 is already IF-combined in L1 cycles
+            let lc_if = if sat.is_iono_free {
+                sat.cp1.unwrap_or(0.0) * sat.lam1
+            } else {
+                0.0
+            };
             obs_data.push((sat.sat_obs.sat, sat.cp1.unwrap_or(0.0), sat.cp2.unwrap_or(0.0), sat.p1, sat.p2.unwrap_or(sat.p1), el * R2D));
+            lc_if_vals.push(lc_if);
             sat_pos.push(sat.sat_pos_rot);
             sat_clk.push(sat.dt_sat_m);
             sat_var.push(0.0);
         }
-        tracing::warn!("solve_with_sats: {} sats -> {} obs_data entries", sats.len(), obs_data.len()); if obs_data.len() < 4 { return Err(EngineError::InsufficientSatellites); }
+        tracing::debug!("solve_with_sats: {} sats -> {} obs_data ({} with CP)", sats.len(), obs_data.len(), lc_if_vals.iter().filter(|v| **v != 0.0).count()); if obs_data.len() < 4 { return Err(EngineError::InsufficientSatellites); }
         let has_glo = obs_data.iter().any(|(s,_,_,_,_,_)| s.constellation == Constellation::Glonass);
         let mut ppp = PppState::new(has_glo, self.dynamics);
         ppp.nsat = obs_data.len();
         let nx = ppp.nx();
-        if self.epoch == 0 || self.last_nsat != obs_data.len() {
+        if self.epoch == 0 {
             let mut x0 = DVector::zeros(nx);
             x0[0] = state.position.vector.x; x0[1] = state.position.vector.y; x0[2] = state.position.vector.z;
             self.x = x0;
             self.p = self.init_covariance(&ppp, nx);
+            self.biases_seeded = false;
+        } else if self.last_nsat != obs_data.len() {
+            // nsat changed: resize state vector, preserve existing state values
+            let old_nr = ppp.nr();
+            let old_nx = self.x.len();
+            let mut x_new = DVector::zeros(nx);
+            let mut p_new = DMatrix::zeros(nx, nx);
+            // Copy existing position/clock/tropo states
+            let nr = ppp.nr();
+            for i in 0..old_nr.min(nr) {
+                x_new[i] = self.x[i];
+                for j in 0..old_nr.min(nr) {
+                    p_new[(i, j)] = self.p[(i, j)];
+                }
+            }
+            // Existing biases get their old values; new biases get VAR_BIAS
+            for i in 0..old_nx.saturating_sub(old_nr) {
+                let new_idx = nr + i;
+                if new_idx < nx {
+                    x_new[new_idx] = self.x[old_nr + i];
+                    p_new[(new_idx, new_idx)] = self.p[(old_nr + i, old_nr + i)];
+                }
+            }
+            for i in old_nx.saturating_sub(old_nr)..ppp.nsat {
+                let idx = nr + i;
+                if idx < nx {
+                    p_new[(idx, idx)] = VAR_BIAS;
+                }
+            }
+            self.x = x_new;
+            self.p = p_new;
+            self.biases_seeded = false;
         }
         self.last_nsat = obs_data.len(); self.epoch += 1;
         let mut xp = self.x.clone();
@@ -357,13 +403,41 @@ impl PppRtklib {
         let mut v = DVector::zeros(nv_max);
         let mut h_mat = DMatrix::zeros(nx, nv_max);
         let mut r_mat = DMatrix::zeros(nv_max, nv_max);
+        // Warmup epoch: PR-only, then seed biases from the converged state
+        let cp_enabled = self.biases_seeded;
+        let lc_for_filter: Vec<f64> = if cp_enabled {
+            lc_if_vals.clone()
+        } else {
+            vec![0.0f64; lc_if_vals.len()]
+        };
         for _iter in 0..self.max_iter {
-            let nv = self.residuals(&ppp, &obs_data, &sat_pos, &sat_clk, &sat_var, &xp, &mut v, &mut h_mat, &mut r_mat);
+            let nv = self.residuals(&ppp, &obs_data, &lc_for_filter, &sat_pos, &sat_clk, &sat_var, &xp, &mut v, &mut h_mat, &mut r_mat);
             if nv < 4 { break; }
             let h_s = h_mat.view((0, 0), (nx, nv)).clone_owned();
             let vs = v.rows(0, nv).clone_owned();
             let rs = r_mat.view((0, 0), (nv, nv)).clone_owned();
             if Self::measurement_update(&mut xp, &mut pp, &h_s, &vs, &rs, nx, nv).is_err() { break; }
+        }
+        // After warmup epoch: seed phase biases from the PR-converged state.
+        // Using the filtered position (not SPP) gives biases within ~3m,
+        // so CP residuals start small enough for σ=10cm measurements to pull.
+        if !self.biases_seeded {
+            let mut seeded = 0;
+            for i in 0..obs_data.len() {
+                if lc_if_vals[i] == 0.0 { continue; }
+                let rs = sat_pos[i];
+                let dts = sat_clk[i];
+                let (sat, _, _, _, _, el) = obs_data[i];
+                let sys: usize = if sat.constellation == Constellation::Glonass { 1 } else { 0 };
+                let dist = (rs - Vector3::new(xp[0], xp[1], xp[2])).norm();
+                let el_rad = el * D2R;
+                let dtrp = self.trop_saas(el_rad);
+                let rng = dist - dts + dtrp; // dts already in meters from ProcessedSat
+                xp[ppp.ib(i)] = lc_if_vals[i] - rng - xp[ppp.ic(sys)];
+                seeded += 1;
+            }
+            tracing::debug!("solve_with_sats: seeded {} phase biases after warmup epoch", seeded);
+            self.biases_seeded = true;
         }
         self.x = xp;
         self.p = pp;
@@ -500,9 +574,11 @@ impl PppRtklib {
         let mut pp = p_mat.clone();
 
         for _iter in 0..self.max_iter {
+            let empty_lc: Vec<f64> = vec![0.0; obs_data.len()];
             let nv = self.residuals(
                 &ppp,
                 &obs_data,
+                &empty_lc,
                 &sat_pos,
                 &sat_clk,
                 &sat_var,

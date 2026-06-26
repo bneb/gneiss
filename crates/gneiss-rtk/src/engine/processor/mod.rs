@@ -336,14 +336,17 @@ impl ProcessingEngine {
             | EngineMode::PppRtklib => {
                 // Seed state from SPP (required by build_sats)
                 if self.current_state.is_none() {
-                    if let Ok(spp) = crate::spp::compute_spp(
+                    match crate::spp::compute_spp(
                         &filtered_rover, &self.ephemerides,
                         self.klobuchar_params.as_ref(),
                         &crate::spp::SppConfig::default(), None,
                     ) {
-                        let mut s = RtkState::new(filtered_rover.time, spp.position, 100.0);
-                        s.rcv_clk_bias = spp.cdt;
-                        self.current_state = Some(s);
+                        Ok(spp) => {
+                            let mut s = RtkState::new(filtered_rover.time, spp.position, 100.0);
+                            s.rcv_clk_bias = spp.cdt;
+                            self.current_state = Some(s);
+                        }
+                        Err(_) => return Err(EngineError::InitialSppFailed),
                     }
                 }
                 // Build satellite data (needs current_state to exist)
