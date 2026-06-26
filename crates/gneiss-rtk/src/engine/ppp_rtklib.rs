@@ -230,18 +230,9 @@ impl PppRtklib {
             let dtrp = self.trop_saas(el);
             let vart = ERR_SAAS * ERR_SAAS;
 
-            // Ionosphere-free combination
-            let (f1, f2) = gneiss_core::signal::satellite_frequencies(sat, 0);
-            let gamma = SQR(f1) / SQR(f2);
-            let c1 = gamma / (gamma - 1.0);
-            let c2 = -1.0 / (gamma - 1.0);
-
-            // IF carrier phase (cycles → meters)
-            let lam1 = CLIGHT / f1;
-            let lam2 = CLIGHT / f2;
-            let lc = c1 * l1_cyc * lam1 + c2 * l2_cyc * lam2;
-            // IF pseudorange
-            let pc = c1 * p1 + c2 * p2;
+            // Gneiss IF mode: p1 is already IF-combined. Use directly.
+            let lc = 0.0; // CP disabled until ambiguity init
+            let pc = p1; // IF value from build_sats
 
             // Corrected range
             let rng = dist - CLIGHT * dts + dtrp;
@@ -416,10 +407,13 @@ impl PppRtklib {
         let k = &*p * h * &s_inv; // (nx × nx) × (nx × nv) × (nv × nv) = (nx × nv)
         // dx = K * v → (nx × 1)
         let dx = &k * v;
+        if dx.iter().any(|d| d.is_nan() || d.abs() > 1e8) { return Err(EngineError::StateDisappeared); }
         *x += &dx;
         // P = (I - K*H^T) * P → (nx × nx)
         let i_mat = DMatrix::identity(_nx, _nx);
-        *p = (&i_mat - &k * &h_t) * p.clone();
+        let ikh = &i_mat - &k * &h_t;
+        *p = &ikh * p.clone() * &ikh.transpose() + &k * r * &k.transpose();
+        if p.iter().any(|d| d.is_nan() || d.is_infinite()) { return Err(EngineError::StateDisappeared); }
         Ok(())
     }
 
