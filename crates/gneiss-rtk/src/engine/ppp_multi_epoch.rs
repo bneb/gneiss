@@ -243,8 +243,10 @@ impl Factor for PositionPriorFactor {
 pub type MultiEpochOptimizer = PppTwoEpochOptimizer;
 
 pub struct PppTwoEpochOptimizer {
-    /// Previous epoch data.
-    prev_data: Option<EpochSnapshot>,
+    /// Sliding window of past epoch snapshots (oldest first).
+    window: std::collections::VecDeque<EpochSnapshot>,
+    /// Maximum number of epochs in the sliding window (default 5).
+    window_size: usize,
     /// Process-noise configuration for the dynamics constraint.
     process_noise: ProcessNoiseConfig,
     /// Maximum LM iterations.
@@ -262,7 +264,8 @@ pub struct PppTwoEpochOptimizer {
 impl Default for PppTwoEpochOptimizer {
     fn default() -> Self {
         Self {
-            prev_data: None,
+            window: std::collections::VecDeque::new(),
+            window_size: 5,
             process_noise: ProcessNoiseConfig::default(),
             max_iterations: 15,
             convergence_tol: 1e-4,
@@ -316,37 +319,37 @@ impl PppTwoEpochOptimizer {
             .with_lambda_min_ratio(self.lambda_min_ratio);
         iekf.solve(state, sats, position_prior)?;
 
-        // --- Step 2: first epoch — just cache and return -------------------
+        // --- Step 2: push current snapshot into the sliding window ---------
         let curr_snapshot = self.snapshot(state, sats);
-        let prev_data = match self.prev_data.take() {
-            Some(prev) => prev,
-            None => {
-                self.prev_data = Some(curr_snapshot);
-                return Ok(());
-            }
-        };
+        self.window.push_back(curr_snapshot);
 
-        // --- Step 3: try 2-epoch joint optimisation -----------------------
-        let result = self.try_two_epoch_optimisation(
-            state, &prev_data, &curr_snapshot, sats, position_prior,
-        );
+        // --- Step 3: need at least 2 epochs for joint optimisation ---------
+        if self.window.len() < 2 {
+            return Ok(());
+        }
+
+        // --- Step 4: try N-epoch joint optimisation ------------------------
+        let n_epochs = self.window.len();
+        let result = self.try_n_epoch_optimisation(state, sats, position_prior);
 
         match result {
             Ok((final_state, final_cov)) => {
                 apply_core_state(state, &final_state, &final_cov);
-                self.prev_data = Some(curr_snapshot);
-                Ok(())
             }
-            Err(e) => {
-                // Keep the IEKF result already in `state`.
-                self.prev_data = Some(curr_snapshot);
+            Err(ref e) => {
                 tracing::warn!(
-                    "Two-epoch optimisation failed ({}), keeping IEKF result.",
-                    e
+                    "{}-epoch optimisation failed ({}), keeping IEKF result.",
+                    n_epochs, e
                 );
-                Ok(())
             }
         }
+
+        // --- Step 5: maintain window size ----------------------------------
+        while self.window.len() > self.window_size {
+            self.window.pop_front();
+        }
+
+        Ok(())
     }
 
     // ------------------------------------------------------------------
@@ -366,14 +369,18 @@ impl PppTwoEpochOptimizer {
     ///
     /// Returns `(final_core_state, final_covariance)` on success.
     #[allow(clippy::too_many_arguments)]
-    fn try_two_epoch_optimisation(
+    fn try_n_epoch_optimisation(
         &self,
         state: &RtkState,
-        prev: &EpochSnapshot,
-        curr: &EpochSnapshot,
         _sats: &[ProcessedSat],
         position_prior: Option<(Vector3<f64>, f64)>,
     ) -> Result<(DVector<f64>, DMatrix<f64>), EngineError> {
+        // Use the oldest and newest epochs in the window for 2-epoch joint
+        // optimisation. A wider baseline (N epochs apart) provides better
+        // geometry diversity than adjacent pairs when the window > 2.
+        // Full N-epoch joint optimisation (Phase 2 proper) is deferred.
+        let prev = self.window.front().expect("window has >= 2 entries");
+        let curr = self.window.back().expect("window has >= 2 entries");
         // --- Determine ambiguity layout -----------------------------------
         // Collect all ambiguity keys from the current state (which the IEKF
         // already updated).  Satellites visible in both epochs share the same
@@ -1160,8 +1167,8 @@ mod tests {
         assert!(result.is_ok(), "First epoch should succeed: {:?}", result);
         // State should be updated (IEKF ran)
         assert!(state.position.vector.norm() > 0.0);
-        // After first epoch, prev_data should be set
-        assert!(opt.prev_data.is_some());
+        // After first epoch, window should have 1 entry
+        assert_eq!(opt.window.len(), 1);
     }
 
     #[test]
