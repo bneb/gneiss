@@ -192,7 +192,7 @@ impl Default for EngineConfig {
             imu_to_nhc_lever_arm: [0.0; 3],
             enable_nhc: false,
             enable_backward_smoothing: false,
-            lambda_min_ratio: 1.5,
+            lambda_min_ratio: 3.0, // safe — matches IEKF default, prevents wrong WL fixes
             lambda_min_subset: 5,
             enabled_constellations: None,
             raim_pseudorange_outlier_m: 25.0,
