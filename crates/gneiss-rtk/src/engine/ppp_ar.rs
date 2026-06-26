@@ -332,7 +332,7 @@ impl PppIteratedEkf {
         // Accept satellites with converged covariance OR sufficient MW samples
         let keep_indices: Vec<usize> = (0..q_wl_full.nrows())
             .filter(|&i| {
-                let cov_ok = q_wl_full[(i, i)].sqrt() < 0.30;
+                let cov_ok = q_wl_full[(i, i)].sqrt() < 0.50; // was 0.30 — relaxed for urban
                 if cov_ok {
                     return true;
                 }

@@ -2106,7 +2106,7 @@ mod mutant_killer_tests {
         assert!(!iono.is_phase);
         // res = sat.iono_delay - x_i[i1_idx]; i1_idx=0, x_i[CORE_STATE_SIZE]=0 -> res=5.0
         assert!((iono.res - 5.0).abs() < 1e-6, "iono prior residual");
-        assert!((iono.raw_var - 9.0).abs() < 1e-6, "iono prior variance (3m std)");
+        assert!((iono.raw_var - 2.25).abs() < 1e-6, "iono prior variance (1.5m std)");
     }
 
     #[test]
