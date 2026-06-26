@@ -87,33 +87,100 @@ pub fn process_ppp<'a>(
     if sats.is_empty() {
         return Err(EngineError::InsufficientSatellites);
     }
-    let state = engine.current_state.as_mut().unwrap();
-    update_phase_ambiguities(state, &sats, rover_obs.time);
-    state.prune_stale_ambiguities(state.epoch_count as u32, 10);
-
-    // Dispatch to appropriate solver based on engine mode
-    let solve_result = if engine.config.mode == EngineMode::PppMultiEpoch {
-        let opt = engine.ppp_multi_epoch_opt.take();
-        let mut solver = opt.unwrap_or_else(|| {
-            crate::engine::ppp_multi_epoch::MultiEpochOptimizer::new(2)
-        });
-        let result = solver.solve(state, &sats, position_prior);
-        engine.ppp_multi_epoch_opt = Some(solver);
-        result
-    } else {
-        let mut opt = engine.ppp_factor_opt.take();
-        let result = if let Some(ref mut solver) = opt {
-            solver.solve(state, &sats, position_prior)
+    // --- IF IEKF solve (in block to drop state borrow) ------------------
+    let (solve_result, if_epoch_count) = {
+        let state = engine.current_state.as_mut().unwrap();
+        update_phase_ambiguities(state, &sats, rover_obs.time);
+        state.prune_stale_ambiguities(state.epoch_count as u32, 10);
+        let ec = state.epoch_count;
+        let result = if engine.config.mode == EngineMode::PppMultiEpoch {
+            let opt = engine.ppp_multi_epoch_opt.take();
+            let mut solver = opt.unwrap_or_else(|| {
+                crate::engine::ppp_multi_epoch::MultiEpochOptimizer::new(2)
+            });
+            let r = solver.solve(state, &sats, position_prior);
+            engine.ppp_multi_epoch_opt = Some(solver);
+            r
         } else {
-            PppIteratedEkf::new()
-                .with_iono_model(engine.config.iono_model)
-                .with_lambda_min_ratio(engine.config.lambda_min_ratio)
-                .solve(state, &sats, position_prior)
+            let mut opt = engine.ppp_factor_opt.take();
+            let r = if let Some(ref mut solver) = opt {
+                solver.solve(state, &sats, position_prior)
+            } else {
+                PppIteratedEkf::new()
+                    .with_iono_model(engine.config.iono_model)
+                    .with_lambda_min_ratio(engine.config.lambda_min_ratio)
+                    .solve(state, &sats, position_prior)
+            };
+            engine.ppp_factor_opt = opt;
+            r
         };
-        engine.ppp_factor_opt = opt;
-        result
-    };
-    state.epoch_count = state.epoch_count.saturating_add(1);
+        (result, ec)
+    }; // state borrow dropped
+
+    // --- Hybrid PPP-AR: parallel UDUC AR → N1/N2 → N_IF -----------------
+    if engine.config.enable_ar
+        && engine.config.iono_model == crate::engine::types::IonosphereModel::Ionex
+        && if_epoch_count > 10
+    {
+        engine.config.uduc_ar = true;
+        let uduc_sats = build_sats(engine, rover_obs);
+        engine.config.uduc_ar = false;
+        if !uduc_sats.is_empty() {
+            let if_state = engine.current_state.as_mut().unwrap();
+            let mut ar_state = if_state.clone();
+            // Initialize UDUC ambiguities (band 1=L1, 2=L2, 3=iono)
+            // from the UDUC satellites. Without this, the IEKF has no
+            // L1/L2 ambiguities to resolve.
+            update_phase_ambiguities(&mut ar_state, &uduc_sats, rover_obs.time);
+            let ar_iekf = PppIteratedEkf::new()
+                .with_iono_model(crate::engine::types::IonosphereModel::Ionex)
+                .with_lambda_min_ratio(engine.config.lambda_min_ratio);
+            if ar_iekf.solve(&mut ar_state, &uduc_sats, None).is_ok() && ar_state.is_fixed {
+                // Convert UDUC N1/N2 integers to IF ambiguity N_IF.
+                // Only apply when ≥3 satellites fix — fewer creates an
+                // inconsistent state where fixed and float ambiguities mix.
+                let if_amb_backup = if_state.ambiguities.clone();
+                let mut fixed = 0usize;
+                let mut n1_map: std::collections::HashMap<_, usize> = std::collections::HashMap::new();
+                let mut n2_map: std::collections::HashMap<_, usize> = std::collections::HashMap::new();
+                for (i, (sat, band)) in ar_state.ambiguity_keys.iter().enumerate() {
+                    if *band == 1 { n1_map.insert(*sat, i); }
+                    if *band == 2 { n2_map.insert(*sat, i); }
+                }
+                for (sat, n1_idx) in &n1_map {
+                    if let Some(n2_idx) = n2_map.get(sat) {
+                        // Ambiguities are stored in METERS. N_IF is the
+                        // iono-free combination: IF = (f1²·L1 − f2²·L2)/(f1²−f2²)
+                        let n1 = ar_state.ambiguities[*n1_idx]; // meters
+                        let n2 = ar_state.ambiguities[*n2_idx]; // meters
+                        let (f1, f2) = gneiss_core::signal::satellite_frequencies(*sat, 0);
+                        let f1s = f1 * f1; let f2s = f2 * f2;
+                        let n_if = (f1s * n1 - f2s * n2) / (f1s - f2s);
+                        if let Some(if_idx) = if_state.ambiguity_keys.iter()
+                            .position(|(s, b)| *s == *sat && *b == 0)
+                        {
+                            if_state.ambiguities[if_idx] = n_if;
+                            let ci = crate::filter::CORE_STATE_SIZE + if_idx;
+                            if ci < if_state.covariance.nrows() {
+                                if_state.covariance[(ci, ci)] = 1e-6;
+                            }
+                            fixed += 1;
+                        }
+                    }
+                }
+                if fixed >= 3 {
+                    if_state.is_fixed = true;
+                    tracing::info!("Hybrid AR: {} sats fixed", fixed);
+                } else {
+                    if_state.ambiguities = if_amb_backup;
+                }
+            }
+        }
+    }
+
+    // --- Post-solve: innovation gate, covariance check, etc. ------------
+    let state = engine.current_state.as_mut().unwrap();
+    state.epoch_count = if_epoch_count.saturating_add(1);
 
     // Innovation gate: if the IEKF solution has diverged catastrophically
     // from the predicted state, reject it and keep the prediction. Uses a
