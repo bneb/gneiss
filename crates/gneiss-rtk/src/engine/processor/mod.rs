@@ -331,6 +331,21 @@ impl ProcessingEngine {
             | EngineMode::PppIns
             | EngineMode::PppInsLooselyCoupled
             | EngineMode::PppIekf
+            | EngineMode::PppRtklib => {
+                let mut ppp = crate::engine::ppp_rtklib::PppRtklib::default();
+                let result = if let Some(ref mut state) = self.current_state {
+                    state.time = filtered_rover.time;
+                    state.position.epoch = filtered_rover.time;
+                    ppp.solve(state, &filtered_rover, &self.ephemerides).err()
+                } else {
+                    Some(EngineError::StateDisappeared)
+                };
+                if let Some(ref s) = self.current_state {
+                    self.state_history.push(s.clone());
+                    self.obs_history.push((filtered_rover.clone(), None));
+                }
+                result
+            }
             | EngineMode::PppMultiEpoch => crate::engine::ppp::process_ppp(self, &filtered_rover).err(),
             EngineMode::PppInsIekf => {
                 crate::engine::ppp_ins_iekf::process_ppp_ins_fg(self, &filtered_rover).err()

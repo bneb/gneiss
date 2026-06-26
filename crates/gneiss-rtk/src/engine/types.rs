@@ -15,6 +15,7 @@ pub enum EngineMode {
     PppInsLooselyCoupled,
     PppIekf,
     PppInsIekf,
+    PppRtklib,
     RtkInsIekf,
     /// Multi-epoch sliding-window factor graph PPP.
     /// Breaks the single-epoch IEKF accuracy floor (~5m) by jointly
@@ -27,7 +28,7 @@ impl EngineMode {
     pub fn is_tightly_coupled(&self) -> bool {
         matches!(
             self,
-            Self::SppIns | Self::RtkIns | Self::PppIns | Self::PppInsIekf | Self::RtkInsIekf
+            Self::SppIns | Self::RtkIns | Self::PppIns | Self::PppInsIekf | Self::RtkInsIekf | Self::PppRtklib
         )
     }
 
@@ -39,6 +40,7 @@ impl EngineMode {
                 | Self::PppInsLooselyCoupled
                 | Self::PppIekf
                 | Self::PppInsIekf
+                | Self::PppRtklib
                 | Self::PppMultiEpoch
         )
     }
