@@ -323,12 +323,17 @@ impl PppTwoEpochOptimizer {
         let curr_snapshot = self.snapshot(state, sats);
         self.window.push_back(curr_snapshot);
 
-        // --- Step 3: need at least 2 epochs for joint optimisation ---------
+        // --- Step 3: maintain window size (before early return) -------------
+        while self.window.len() > self.window_size {
+            self.window.pop_front();
+        }
+
+        // --- Step 4: need at least 2 epochs for joint optimisation ---------
         if self.window.len() < 2 {
             return Ok(());
         }
 
-        // --- Step 4: try N-epoch joint optimisation ------------------------
+        // --- Step 5: try N-epoch joint optimisation ------------------------
         let n_epochs = self.window.len();
         let result = self.try_n_epoch_optimisation(state, sats, position_prior);
 
@@ -342,11 +347,6 @@ impl PppTwoEpochOptimizer {
                     n_epochs, e
                 );
             }
-        }
-
-        // --- Step 5: maintain window size ----------------------------------
-        while self.window.len() > self.window_size {
-            self.window.pop_front();
         }
 
         Ok(())
@@ -1409,4 +1409,5 @@ mod tests {
         let result = opt.solve(&mut state, &sats2, prior);
         assert!(result.is_ok(), "With prior should succeed: {:?}", result);
     }
+
 }
