@@ -111,6 +111,9 @@ pub struct PppRtklib {
     pub max_inno_m: f64,
     pub dynamics: bool,
     pub tide_corr: bool,
+    pub x: DVector<f64>,
+    pub p: DMatrix<f64>,
+    pub epoch: u32,
 }
 
 impl Default for PppRtklib {
@@ -118,9 +121,12 @@ impl Default for PppRtklib {
         Self {
             max_iter: 2,
             elev_mask_deg: 15.0,
-            max_inno_m: 0.0, // 0 = disabled (RTKLIB default)
+            max_inno_m: 0.0,
             dynamics: false,
             tide_corr: true,
+            x: DVector::zeros(0),
+            p: DMatrix::zeros(0, 0),
+            epoch: 0,
         }
     }
 }
@@ -199,11 +205,11 @@ impl PppRtklib {
     ) -> usize {
         let nx = ppp.nx();
         let nr = ppp.nr();
-        let mut nv = 0;
+        let mut nv = 0; let mut skipped_el = 0; let mut skipped_dist = 0; let mut skipped_cp = 0; let mut skipped_code = 0; let mut accepted = 0;
 
         for i in 0..obs.len() {
             let (sat, l1_cyc, l2_cyc, p1, p2, el_deg) = obs[i];
-            if el_deg < self.elev_mask_deg {
+            if el_deg < self.elev_mask_deg { skipped_el += 1;
                 continue;
             }
 
@@ -212,7 +218,7 @@ impl PppRtklib {
 
             // Geometric range (simplified — full version would compute from sat pos)
             let dist = (rs - Vector3::new(x[0], x[1], x[2])).norm();
-            if dist <= 0.0 {
+            if dist <= 0.0 { skipped_dist += 1;
                 continue;
             }
 
@@ -314,6 +320,66 @@ impl PppRtklib {
             }
         }
         nv
+    }
+
+    fn elevation(rcv: &Vector3<f64>, sat: &Vector3<f64>) -> f64 {
+        let llh = gneiss_core::coords::ecef_to_llh(*rcv);
+        let ned_mat = gneiss_core::coords::ecef_to_ned_matrix(llh);
+        let delta = sat - rcv;
+        let ned = ned_mat * delta;
+        libm::atan2(-ned.z, (ned.x.powi(2) + ned.y.powi(2)).sqrt())
+    }
+
+    pub fn solve_with_sats(&mut self, state: &mut RtkState, sats: &[crate::engine::processed_sat::ProcessedSat]) -> Result<(), EngineError> {
+        let mut obs_data: Vec<(SatelliteId, f64, f64, f64, f64, f64)> = Vec::new();
+        let mut sat_pos: Vec<Vector3<f64>> = Vec::new();
+        let mut sat_clk: Vec<f64> = Vec::new();
+        let mut sat_var: Vec<f64> = Vec::new();
+        let rcv = Vector3::new(state.position.vector.x, state.position.vector.y, state.position.vector.z);
+        for sat in sats { tracing::debug!("RTKLIB sat p1={:.1} el={:.1}", sat.p1, Self::elevation(&rcv, &sat.sat_pos_rot)*R2D);
+            let el = Self::elevation(&rcv, &sat.sat_pos_rot);
+            if el < self.elev_mask_deg * D2R { continue; }
+            if sat.p1 == 0.0 { continue; }
+            obs_data.push((sat.sat_obs.sat, sat.cp1.unwrap_or(0.0), sat.cp2.unwrap_or(0.0), sat.p1, sat.p2.unwrap_or(sat.p1), el * R2D));
+            sat_pos.push(sat.sat_pos_rot);
+            sat_clk.push(sat.dt_sat_m);
+            sat_var.push(0.0);
+        }
+        tracing::warn!("solve_with_sats: {} sats -> {} obs_data entries", sats.len(), obs_data.len()); if obs_data.len() < 4 { return Err(EngineError::InsufficientSatellites); }
+        let has_glo = obs_data.iter().any(|(s,_,_,_,_,_)| s.constellation == Constellation::Glonass);
+        let mut ppp = PppState::new(has_glo, self.dynamics);
+        ppp.nsat = obs_data.len();
+        let nx = ppp.nx();
+        if self.epoch == 0 {
+            let mut x0 = DVector::zeros(nx);
+            x0[0] = state.position.vector.x; x0[1] = state.position.vector.y; x0[2] = state.position.vector.z;
+            self.x = x0;
+            self.p = self.init_covariance(&ppp, nx);
+        }
+        self.epoch += 1;
+        let mut xp = self.x.clone();
+        let mut pp = self.p.clone();
+        self.predict(&ppp, &mut xp, &mut pp);
+        let nv_max = obs_data.len() * 2;
+        let mut v = DVector::zeros(nv_max);
+        let mut h_mat = DMatrix::zeros(nx, nv_max);
+        let mut r_mat = DMatrix::zeros(nv_max, nv_max);
+        for _iter in 0..self.max_iter {
+            let nv = self.residuals(&ppp, &obs_data, &sat_pos, &sat_clk, &sat_var, &xp, &mut v, &mut h_mat, &mut r_mat);
+            if nv < 4 { break; }
+            let h_s = h_mat.view((0, 0), (nx, nv)).clone_owned();
+            let vs = v.rows(0, nv).clone_owned();
+            let rs = r_mat.view((0, 0), (nv, nv)).clone_owned();
+            if Self::measurement_update(&mut xp, &mut pp, &h_s, &vs, &rs, nx, nv).is_err() { break; }
+        }
+        self.x = xp;
+        self.p = pp;
+        state.position.vector.x = self.x[0];
+        state.position.vector.y = self.x[1];
+        state.position.vector.z = self.x[2];
+        state.rcv_clk_bias = self.x[ppp.ic(0)];
+        state.covariance = self.p.clone();
+        Ok(())
     }
 
     /// Simple Saastamoinen troposphere model
