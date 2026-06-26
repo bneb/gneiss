@@ -121,7 +121,7 @@ pub struct PppRtklib {
 impl Default for PppRtklib {
     fn default() -> Self {
         Self {
-            max_iter: 2,
+            max_iter: 5,
             elev_mask_deg: 15.0,
             max_inno_m: 0.0,
             dynamics: false,
