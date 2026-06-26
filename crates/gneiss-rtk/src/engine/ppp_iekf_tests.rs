@@ -2154,6 +2154,7 @@ mod mutant_killer_tests {
 
     #[test]
     fn test_resolve_narrowlane_ar_mock() {
+        let _ = crate::engine::ppp_ar::AR_MOCK.lock().map(|mut m| *m = None);
         // Use crate::engine::ppp_ar::AR_MOCK to verify NL resolution returns expected modified state
         let fg = PppIteratedEkf::default();
         let state = dummy_rtk_state();
@@ -2208,6 +2209,7 @@ mod mutant_killer_tests {
 
     #[test]
     fn test_process_constellation_group_empty_keep_indices() {
+        let _ = crate::engine::ppp_ar::AR_MOCK.lock().map(|mut m| *m = None);
         // WL returns empty keep_indices -> process_constellation_group returns None
         let fg = PppIteratedEkf::default();
         let state = dummy_rtk_state();
@@ -2239,6 +2241,7 @@ mod mutant_killer_tests {
 
     #[test]
     fn test_process_constellation_group_mock_success() {
+        let _ = crate::engine::ppp_ar::AR_MOCK.lock().map(|mut m| *m = None);
         // With mock WL+NL, group resolves successfully (jump 9.5 < 10 passes position check)
         let fg = PppIteratedEkf::default();
         let state = dummy_rtk_state();
@@ -2304,6 +2307,7 @@ mod mutant_killer_tests {
 
     #[test]
     fn test_try_inter_constellation_fallback_empty_keep_indices() {
+        let _ = crate::engine::ppp_ar::AR_MOCK.lock().map(|mut m| *m = None);
         // WL mock returns empty keep_indices -> returns None
         let fg = PppIteratedEkf::default();
         let state = dummy_rtk_state();
@@ -2329,6 +2333,7 @@ mod mutant_killer_tests {
 
     #[test]
     fn test_try_inter_constellation_fallback_success() {
+        let _ = crate::engine::ppp_ar::AR_MOCK.lock().map(|mut m| *m = None);
         // Full mock success path with valid WL keep_indices and NL resolution
         let fg = PppIteratedEkf::default();
         let state = dummy_rtk_state();

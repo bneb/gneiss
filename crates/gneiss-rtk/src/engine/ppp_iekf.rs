@@ -73,29 +73,86 @@ impl PppIteratedEkf {
         sats: &[ProcessedSat],
         position_prior: Option<(Vector3<f64>, f64)>, // (ecef_m, variance_m2)
     ) -> Result<(), EngineError> {
+        self.solve_with_fixed_amb(state, sats, position_prior, &[])
+    }
+
+    /// Solve with externally-fixed ambiguity constraints.
+    /// `fixed_amb` is a list of `(ambiguity_index, value_meters)` pairs.
+    /// Each is added as a pseudo-measurement with σ=1mm.
+    pub fn solve_with_fixed_amb(
+        &self,
+        state: &mut RtkState,
+        sats: &[ProcessedSat],
+        position_prior: Option<(Vector3<f64>, f64)>,
+        fixed_amb: &[(usize, f64)],
+    ) -> Result<(), EngineError> {
+        // Store target values for the pseudo-measurements.
+        // These are (ambiguity_index, target_meters).
+        let targets: Vec<(usize, f64)> = fixed_amb.to_vec();
+        let has_constraints = !targets.is_empty();
         for outer_iter in 0..4 {
-            let done = self.solve_inner(state, sats, position_prior)?;
-            if done || outer_iter == 3 {
-                if !done {
-                    tracing::warn!("Max outlier rejection iterations reached.");
-                }
-                break;
-            }
+            let done = if has_constraints {
+                self.solve_inner_fixed(state, sats, position_prior, &targets)?
+            } else {
+                self.solve_inner(state, sats, position_prior)?
+            };
+            if done || outer_iter == 3 { break; }
         }
-        // Skip AR if already fixed and no new satellites appeared.
-        // Re-fixing every epoch after a correct fix wastes compute and risks
-        // an incorrect subsequent fix corrupting a converged solution.
         let has_new_sats = sats.iter().any(|s| {
             let key = (s.sat_obs.sat, 0);
             state.last_observed.get(&key).copied().unwrap_or(0) == state.epoch_count as u32
         });
-        if (!state.is_fixed || has_new_sats)
-            && state.epoch_count > 10 {
-                if let Err(e) = self.resolve_cascade_ar(state, sats) {
-                    tracing::info!("Cascade AR did not fix: {:?}", e);
+        if (!state.is_fixed || has_new_sats) && state.epoch_count > 10 {
+            if let Err(e) = self.resolve_cascade_ar(state, sats) {
+                tracing::info!("Cascade AR did not fix: {:?}", e);
+            }
+        }
+        Ok(())
+    }
+
+    fn solve_inner_fixed(
+        &self,
+        state: &mut RtkState,
+        sats: &[ProcessedSat],
+        position_prior: Option<(Vector3<f64>, f64)>,
+        targets: &[(usize, f64)],
+    ) -> Result<bool, EngineError> {
+        let x_pred = extract_state_vector(state);
+        let p_pred = state.covariance.clone();
+        state.full_x_predict = Some(x_pred.clone());
+        state.full_p_predict = Some(p_pred.clone());
+        let mut x_i = x_pred.clone();
+        let p_inv = invert_matrix(&p_pred).ok_or(EngineError::StateDisappeared)?;
+        for _iter in 0..self.max_iterations {
+            let mut meas = self.build_measurements(state, sats, &x_i, _iter);
+            if meas.is_empty() { return Err(EngineError::InsufficientSatellites); }
+            // Add fixed ambiguity constraints: target = n_if, residual = n_if - x_i[idx]
+            for &(amb_idx, target) in targets {
+                let i = crate::filter::CORE_STATE_SIZE + amb_idx;
+                if i < x_i.len() {
+                    let mut h = DVector::zeros(x_i.len());
+                    h[i] = 1.0;
+                    meas.push(FgMeasurement { res: target - x_i[i], h_row: h, weight: 1e6, raw_var: 1e-6, is_phase: false, sat: None });
                 }
             }
-        Ok(())
+            let (h_mat, res_vec, r_mat) = assemble_matrices(&meas, x_i.len());
+            let w_mat = build_weight_matrix(&meas, &r_mat);
+            let mut htwh = h_mat.transpose() * &w_mat * &h_mat;
+            let mut htwr = h_mat.transpose() * &w_mat * &res_vec;
+            if let Some((spp_pos, var)) = position_prior {
+                let w = 1.0 / var;
+                for j in 0..3 { htwh[(j, j)] += w; htwr[j] += w * (spp_pos[j] - x_i[j]); }
+            }
+            let htwh_damped = &htwh + &p_inv;
+            let innov = &htwr + &p_inv * (&x_pred - &x_i);
+            match solve_cholesky_svd(&htwh_damped, &innov, 1e-9) {
+                Ok(sol) => { if sol.norm() < self.convergence_threshold { break; } x_i += sol; }
+                Err(_) => { tracing::warn!("Failed to solve normal equations in PPP FG!"); break; }
+            }
+        }
+        let final_p = self.compute_final_covariance(state, sats, &x_i, &p_pred, &p_inv);
+        apply_state_vector(state, &x_i, final_p);
+        Ok(true)
     }
 
     fn solve_inner(

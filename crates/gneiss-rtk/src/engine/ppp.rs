@@ -169,6 +169,12 @@ pub fn process_ppp<'a>(
                     }
                 }
                 if fixed >= 3 {
+                    // Apply fixed N_IF directly. Re-solving with pseudo-
+                    // measurements is architecturally correct but the
+                    // UDUC float position (18m) propagates through N_IF,
+                    // degrading IF accuracy (12.5m vs 8.7m baseline).
+                    // Post-hoc substitution preserves IF position quality.
+                    // Full fix requires IONEX-resolution UDUC float.
                     if_state.is_fixed = true;
                     tracing::info!("Hybrid AR: {} sats fixed", fixed);
                 } else {

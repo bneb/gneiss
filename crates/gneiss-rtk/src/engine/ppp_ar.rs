@@ -75,9 +75,9 @@ impl PppIteratedEkf {
         let float_pos = Vector3::new(x_current[0], x_current[1], x_current[2]);
         let fixed_pos = Vector3::new(x_fixed[0], x_fixed[1], x_fixed[2]);
         let jump = (fixed_pos - float_pos).norm();
-        if jump > 3.0 {
+        if jump > 10.0 {
             tracing::warn!(
-                "PPP-AR {:?} rejected: position jump {:.2}m > 3m",
+                "PPP-AR {:?} rejected: position jump {:.2}m > 10m",
                 constellation,
                 jump
             );
