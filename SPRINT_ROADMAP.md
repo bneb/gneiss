@@ -13,10 +13,11 @@ remaining a fully open-source Rust codebase.
 | SPP (urban) | 1.3–2.1m | 2.1–5.5m | ✅ **Winning** |
 | RTK (urban) | 0.69–1.55m | 0.67–2.2m | ✅ **Competitive** |
 | PPP (open-sky, AR, precise) | 2.8–3.6m | — | ✅ **Strong** (sub-meter with SINEX truth) |
-| PPP (urban, IEKF fwd) | 31–61m median 3D | 2.0–3.97m | ❌ **Gap widened** |
-| PPP (urban, IEKF smooth) | TBD | 2.0–3.97m | 🟡 **Smoother not re-run** |
+| PPP (urban, IEKF fwd) | 17.3m median 3D | 2.0–3.97m | ❌ **Losing** (gap narrowing) |
+| PPP (urban, FG 5-epoch) | **13.5m** median 3D | 2.0–3.97m | 🔄 **Improving** (factor graph path) |
+| PPP (urban, IEKF smooth) | Degrades 26→60m | 2.0–3.97m | 🟡 **Diagnosed** (NIS gating added) |
 
-**Gap to close:** Urban PPP 3D error needs to drop from 31–61m to <10m median.
+**Gap to close:** Factor graph at 13.5m, needs Sprint 3 Phase 3 + Sprint 4 INS to reach <5m.
 
 ---
 
