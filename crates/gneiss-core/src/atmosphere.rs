@@ -674,7 +674,7 @@ impl AtmosphereModel {
 
             // Latitude index (fractional)
             let lat_frac = (lat - grid_lat1) / grid_dlat;
-            let i0 = (lat_frac.floor() as isize).clamp(0, nlat as isize - 1) as usize;
+            let i0 = (libm::floor(lat_frac) as isize).clamp(0, nlat as isize - 1) as usize;
             let i1 = (i0 + 1).min(nlat - 1);
             let lat_w1 = lat_frac - i0 as f64;
             let lat_w0 = 1.0 - lat_w1;
@@ -685,7 +685,7 @@ impl AtmosphereModel {
                 lon_deg += 360.0;
             }
             let lon_frac = (lon_deg - grid_lon1) / grid_dlon;
-            let j0 = (lon_frac.floor() as isize).clamp(0, nlon as isize - 1) as usize;
+            let j0 = (libm::floor(lon_frac) as isize).clamp(0, nlon as isize - 1) as usize;
             let j1 = if j0 + 1 < nlon { j0 + 1 } else { 0 };
             let lon_w1 = lon_frac - j0 as f64;
             let lon_w0 = 1.0 - lon_w1;
@@ -852,6 +852,7 @@ impl AtmosphereModel {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::vec;
 
     #[test]
     fn test_tropo_delay() {
@@ -976,4 +977,107 @@ mod tests {
             "Klobuchar delay must be ≥ 0, got {delay_south}"
         );
     }
+
+    fn make_test_tec_grid() -> Vec<Vec<f64>> {
+        let mut grid = Vec::with_capacity(3);
+        for i in 0..3 {
+            let lat = 30.0 + (i as f64) * 5.0;
+            let mut row = Vec::with_capacity(4);
+            for j in 0..4 {
+                let lon = (j as f64 - 1.0) * 5.0;
+                row.push(lat + lon / 10.0);
+            }
+            grid.push(row);
+        }
+        grid
+    }
+
+    #[test]
+    fn test_ionex_bilinear_grid_center() {
+        let grid = make_test_tec_grid();
+        let tec_maps: Vec<(GpsTime, &Vec<Vec<f64>>)> = vec![(GpsTime::new(2000, 0.0), &grid)];
+        let delay = AtmosphereModel::iono_ionex(
+            &tec_maps, 30.0, 40.0, 5.0, -5.0, 10.0, 5.0, 350.0,
+            Vector3::new(35.0_f64.to_radians(), 7.5_f64.to_radians(), 100.0),
+            0.0, core::f64::consts::FRAC_PI_2,
+            GpsTime::new(2000, 0.0),
+        );
+        assert!((delay - 0.1624 * 35.75).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_ionex_elevation_mapping() {
+        let grid = make_test_tec_grid();
+        let tec_maps: Vec<(GpsTime, &Vec<Vec<f64>>)> = vec![(GpsTime::new(2000, 0.0), &grid)];
+        let d90 = AtmosphereModel::iono_ionex(
+            &tec_maps, 30.0, 40.0, 5.0, -5.0, 10.0, 5.0, 350.0,
+            Vector3::new(30.0_f64.to_radians(), 0.0_f64.to_radians(), 100.0),
+            0.0, core::f64::consts::FRAC_PI_2,
+            GpsTime::new(2000, 0.0),
+        );
+        let d45 = AtmosphereModel::iono_ionex(
+            &tec_maps, 30.0, 40.0, 5.0, -5.0, 10.0, 5.0, 350.0,
+            Vector3::new(30.0_f64.to_radians(), 0.0_f64.to_radians(), 100.0),
+            0.0, 45.0_f64.to_radians(),
+            GpsTime::new(2000, 0.0),
+        );
+        let ratio = d45 / d90.max(1e-9);
+        assert!(ratio > 1.3 && ratio < 1.5, "MF ratio should be ~1.4, got {:.3}", ratio);
+    }
+
+    #[test]
+    fn test_ionex_temporal_interpolation() {
+        let grid1 = make_test_tec_grid();
+        let mut grid2 = make_test_tec_grid();
+        for row in &mut grid2 { for v in row { *v += 10.0; } }
+        let tec_maps: Vec<(GpsTime, &Vec<Vec<f64>>)> = vec![
+            (GpsTime::new(2000, 0.0), &grid1),
+            (GpsTime::new(2000, 7200.0), &grid2),
+        ];
+        let d1 = AtmosphereModel::iono_ionex(
+            &tec_maps, 30.0, 40.0, 5.0, -5.0, 10.0, 5.0, 350.0,
+            Vector3::new(30.0_f64.to_radians(), 0.0_f64.to_radians(), 100.0),
+            0.0, core::f64::consts::FRAC_PI_2,
+            GpsTime::new(2000, 0.0),
+        );
+        let d2 = AtmosphereModel::iono_ionex(
+            &tec_maps, 30.0, 40.0, 5.0, -5.0, 10.0, 5.0, 350.0,
+            Vector3::new(30.0_f64.to_radians(), 0.0_f64.to_radians(), 100.0),
+            0.0, core::f64::consts::FRAC_PI_2,
+            GpsTime::new(2000, 7200.0),
+        );
+        let dmid = AtmosphereModel::iono_ionex(
+            &tec_maps, 30.0, 40.0, 5.0, -5.0, 10.0, 5.0, 350.0,
+            Vector3::new(30.0_f64.to_radians(), 0.0_f64.to_radians(), 100.0),
+            0.0, core::f64::consts::FRAC_PI_2,
+            GpsTime::new(2000, 3600.0),
+        );
+        assert!((dmid - (d1 + d2) / 2.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_ionex_zero_elevation_returns_zero() {
+        let grid = make_test_tec_grid();
+        let tec_maps = vec![(GpsTime::new(2000, 0.0), &grid)];
+        let delay = AtmosphereModel::iono_ionex(
+            &tec_maps, 30.0, 40.0, 5.0, -5.0, 10.0, 5.0, 350.0,
+            Vector3::new(35.0_f64.to_radians(), 0.0_f64.to_radians(), 100.0),
+            0.0, 0.0,
+            GpsTime::new(2000, 0.0),
+        );
+        assert_eq!(delay, 0.0);
+    }
+
+    #[test]
+    fn test_ionex_empty_maps_returns_zero() {
+        let tec_maps: Vec<(GpsTime, &Vec<Vec<f64>>)> = vec![];
+        let delay = AtmosphereModel::iono_ionex(
+            &tec_maps, 30.0, 40.0, 5.0, -5.0, 10.0, 5.0, 350.0,
+            Vector3::new(35.0_f64.to_radians(), 0.0_f64.to_radians(), 100.0),
+            0.0, core::f64::consts::FRAC_PI_2,
+            GpsTime::new(2000, 0.0),
+        );
+        assert_eq!(delay, 0.0);
+    }
+
 }
