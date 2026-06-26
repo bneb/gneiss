@@ -47,7 +47,7 @@ impl Default for PppIteratedEkf {
             convergence_threshold: 1e-3,
             huber_k: 3.0,
             iono_model: IonosphereModel::Klobuchar,
-            lambda_min_ratio: 1.5, // relaxed from 2.0 for urban — more fixes, monitor for wrong fixes
+            lambda_min_ratio: 3.0, // safe threshold — avoids wrong WL fixes
         }
     }
 }

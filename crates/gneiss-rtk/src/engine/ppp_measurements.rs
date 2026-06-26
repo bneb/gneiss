@@ -132,7 +132,7 @@ impl crate::engine::ppp_iekf::PppIteratedEkf {
                 let i1_est = x_i.get(CORE_STATE_SIZE + i1_idx).copied().unwrap_or(0.0);
                 let res_i1 = sat.iono_delay - i1_est;
                 let var_i1 = match self.iono_model {
-                    IonosphereModel::Klobuchar => 2.25,   // 1.5m std (tightened from 9.0 for UDUC AR)
+                    IonosphereModel::Klobuchar => 9.0,    // 3m std — safe prior, needs IONEX for tighter
                     IonosphereModel::Ionex => 0.0025,     // 0.05m std (5cm)
                 };
                 meas.push(FgMeasurement {

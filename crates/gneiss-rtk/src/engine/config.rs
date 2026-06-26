@@ -213,7 +213,7 @@ impl Default for EngineConfig {
             ar_ffrt_prob: 0.001,
             iono_model: IonosphereModel::default(),
             enable_tropo_gradients: false,
-            enable_ar: true, // Enable PPP-AR by default
+            enable_ar: true, // UDUC enabled; AR activates when WL converged
             process_noise_cb: 1.0,    // σ=1 m/s for TCXO random walk
             process_noise_cd: 10.0,   // σ=0.55 m/s per epoch (RALPH: was 1e4)
             process_noise_isb: 0.1,   // ~0.3 m/hr random walk

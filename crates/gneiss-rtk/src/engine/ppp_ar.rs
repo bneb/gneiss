@@ -75,9 +75,9 @@ impl PppIteratedEkf {
         let float_pos = Vector3::new(x_current[0], x_current[1], x_current[2]);
         let fixed_pos = Vector3::new(x_fixed[0], x_fixed[1], x_fixed[2]);
         let jump = (fixed_pos - float_pos).norm();
-        if jump > 10.0 {
+        if jump > 3.0 {
             tracing::warn!(
-                "PPP-AR {:?} rejected: position jump {:.2}m > 10m",
+                "PPP-AR {:?} rejected: position jump {:.2}m > 3m",
                 constellation,
                 jump
             );
@@ -332,7 +332,7 @@ impl PppIteratedEkf {
         // Accept satellites with converged covariance OR sufficient MW samples
         let keep_indices: Vec<usize> = (0..q_wl_full.nrows())
             .filter(|&i| {
-                let cov_ok = q_wl_full[(i, i)].sqrt() < 0.50; // was 0.30 — relaxed for urban
+                let cov_ok = q_wl_full[(i, i)].sqrt() < 0.30; // cycles — safe threshold
                 if cov_ok {
                     return true;
                 }
