@@ -314,7 +314,11 @@ impl PppRtklib {
                     h[(ppp.it(), nv)] = mw;
                 }
 
-                let var_code = 1.0 / libm::sin(el).max(0.1) * 2.0 + sat_var[i] + vart;
+                // PR variance: σ≈5m at zenith. Inflated from RTKLIB defaults
+                // because IF pseudorange has systematic biases (~10-15m) that
+                // would otherwise dominate the solution. CP (σ≈0.1m) pulls
+                // toward the true position once biases are initialized.
+                let var_code = 25.0 / libm::sin(el).max(0.1) + sat_var[i] + vart;
                 r[(nv, nv)] = var_code;
 
                 if self.max_inno_m > 0.0 && v[nv].abs() > self.max_inno_m && sys != 1 {
