@@ -11,6 +11,15 @@ pub(crate) const SPEED_OF_LIGHT: f64 = gneiss_core::constants::SPEED_OF_LIGHT_M_
 pub(crate) const PSEUDORANGE_VARIANCE_BASE: f64 = 1.0;
 
 impl crate::engine::ppp_iekf::PppIteratedEkf {
+    /// GLONASS per-satellite pseudorange IFB correction (meters).
+    fn glo_ifb_pr(sat: &ProcessedSat) -> f64 {
+        if sat.sat_obs.sat.constellation != gneiss_core::sat::Constellation::Glonass {
+            return 0.0;
+        }
+        let df_mhz = (sat.f1 - gneiss_core::signal::FREQ_GLO_L1_NOMINAL) / 1e6;
+        df_mhz * 0.15 // m/MHz
+    }
+
     pub(crate) fn build_measurements(
         &self,
         state: &RtkState,
@@ -34,7 +43,8 @@ impl crate::engine::ppp_iekf::PppIteratedEkf {
             let los = (sat.sat_pos_rot - rcv_pos) / geometric_dist;
             let isb = Self::extract_isb(x_i, sat.sat_obs.sat.constellation);
             let expected_base =
-                dist + x_i[15] + isb - sat.dt_sat_m + sat.tropo_dry + ztd * sat.map_wet;
+                dist + x_i[15] + isb - sat.dt_sat_m + sat.tropo_dry + ztd * sat.map_wet
+                - Self::glo_ifb_pr(sat);
 
             if !self.push_sat_meas(
                 &mut meas,
@@ -202,11 +212,13 @@ impl crate::engine::ppp_iekf::PppIteratedEkf {
         } else {
             var_pr += 9.0; // Single frequency has ~3m Klobuchar residual iono error (3^2 = 9)
         }
-        // GLONASS FDMA signals have unmodelled per-satellite IFB that adds
-        // additional uncertainty. Inflate variance by 2.25× (σ × 1.5) matching
-        // RTKLIB's EFACT_GLO = 1.5.
+        // GLONASS FDMA signals have unmodelled per-satellite IFB that the
+        // per-channel correction (glo_ifb_pr) partially addresses. Inflate
+        // variance to prevent residual errors from dominating the solution.
+        // RTKLIB uses EFACT_GLO=1.5; we use 10× (σ × 3.16) to be conservative
+        // until external calibration data is available.
         if sat.sat_obs.sat.constellation == gneiss_core::sat::Constellation::Glonass {
-            var_pr *= 2.25;
+            var_pr *= 10.0;
         }
         let w_pr = apply_huber(res_pr, var_pr, self.huber_k);
         meas.push(FgMeasurement {

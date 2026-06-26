@@ -42,6 +42,8 @@ struct OwnedSatData {
     el: f64,
     snr: f64,
     sat_id: gneiss_core::sat::SatelliteId,
+    /// GLONASS L1 frequency (Hz) for per-satellite IFB correction
+    f1: f64,
 }
 
 impl<'a> From<&ProcessedSat<'a>> for OwnedSatData {
@@ -59,8 +61,26 @@ impl<'a> From<&ProcessedSat<'a>> for OwnedSatData {
             el: s.el,
             snr: s.snr,
             sat_id: s.sat_obs.sat,
+            f1: s.f1,
         }
     }
+}
+
+/// GLONASS pseudorange IFB correction (meters).
+fn ppp_glo_ifb(sat: &OwnedSatData) -> f64 {
+    if sat.sat_id.constellation != gneiss_core::sat::Constellation::Glonass {
+        return 0.0;
+    }
+    let df_mhz = (sat.f1 - gneiss_core::signal::FREQ_GLO_L1_NOMINAL) / 1e6;
+    df_mhz * 0.15 // m/MHz → meters
+}
+/// GLONASS carrier-phase IFB correction (meters).
+fn ppp_cp_glo_ifb(sat: &OwnedSatData) -> f64 {
+    if sat.sat_id.constellation != gneiss_core::sat::Constellation::Glonass {
+        return 0.0;
+    }
+    let df_mhz = (sat.f1 - gneiss_core::signal::FREQ_GLO_L1_NOMINAL) / 1e6;
+    df_mhz * 0.015
 }
 
 /// Snapshot of a single epoch's state and measurement data.
@@ -542,7 +562,7 @@ fn add_epoch_factors(
     // --- Pseudorange factor -----------------------------------------------
     opt.add_factor(Box::new(ErrorStatePseudorangeFactor {
         sat_pos: sat.sat_pos,
-        measured_pr: sat.p1,
+        measured_pr: sat.p1 - ppp_glo_ifb(sat),
         variance: pseudorange_variance(sat),
         sat_clock_bias: sat.dt_sat_m,
         tropo_dry_delay: sat.tropo_dry,
@@ -578,7 +598,7 @@ fn add_epoch_factors(
             };
             opt.add_factor(Box::new(ErrorStateCarrierPhaseFactor {
                 sat_pos: sat.sat_pos,
-                measured_cp: cp1,
+                measured_cp: cp1 - ppp_cp_glo_ifb(sat),
                 variance: cp_variance(sat),
                 sat_clock_bias: sat.dt_sat_m,
                 tropo_dry_delay: sat.tropo_dry,
@@ -851,6 +871,7 @@ mod tests {
             dt_sat_m: 0.0, tropo_dry: 0.0, map_wet: 0.0,
             lam1: 0.19, el: core::f64::consts::FRAC_PI_2, snr: 45.0,
             sat_id: SatelliteId { constellation: Constellation::Gps, prn: 1 },
+            f1: 1575.42e6,
         };
         let var = pseudorange_variance(&sat);
         // snr_scale = 10^((45-45)/10) = 1.0
@@ -867,6 +888,7 @@ mod tests {
             dt_sat_m: 0.0, tropo_dry: 0.0, map_wet: 0.0,
             lam1: 0.19, el: core::f64::consts::FRAC_PI_2, snr: 45.0,
             sat_id: SatelliteId { constellation: Constellation::Gps, prn: 1 },
+            f1: 1575.42e6,
         };
         let var = cp_variance(&sat);
         // snr_scale = 1.0, var = 0.0001 * 1.0 / 1.0 = 0.0001
@@ -1343,6 +1365,7 @@ mod tests {
             el: core::f64::consts::FRAC_PI_2,
             snr: 45.0,
             sat_id: SatelliteId { constellation: Constellation::Gps, prn: 1 },
+            f1: 1575.42e6,
         };
 
         add_epoch_factors(
@@ -1373,6 +1396,7 @@ mod tests {
             el: core::f64::consts::FRAC_PI_2,
             snr: 45.0,
             sat_id: SatelliteId { constellation: Constellation::Gps, prn: 1 },
+            f1: 1575.42e6,
         };
 
         add_epoch_factors(

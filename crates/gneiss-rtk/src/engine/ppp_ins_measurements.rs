@@ -63,8 +63,13 @@ impl PppInsIteratedEkf {
             let dist = geometric_dist - sat.pcv_correction;
             let los = (sat.sat_pos_rot - rcv_pos) / geometric_dist;
             let isb = Self::extract_isb(x_i, sat.sat_obs.sat.constellation);
+            // GLONASS per-satellite IFB correction: the ISB absorbs the
+            // system-level offset but cannot model the per-channel FDMA
+            // variation. This correction removes the frequency-dependent
+            // component before computing residuals.
+            let glo_ifb = Self::glo_ifb_correction(sat);
             let expected_base =
-                dist + x_i[15] + isb - sat.dt_sat_m + sat.tropo_dry + ztd * sat.map_wet;
+                dist + x_i[15] + isb - sat.dt_sat_m + sat.tropo_dry + ztd * sat.map_wet - glo_ifb;
 
             if !self.push_sat_meas(
                 &mut meas,
@@ -100,6 +105,25 @@ impl PppInsIteratedEkf {
         } else {
             0.0
         }
+    }
+
+    /// Compute GLONASS per-satellite inter-frequency bias (IFB) correction.
+    /// GLONASS uses FDMA: each satellite has a different carrier frequency,
+    /// and the receiver hardware delay varies with frequency. The single
+    /// `isb_glo` state absorbs the common offset but cannot model the
+    /// per-channel variation. This function applies a linear correction
+    /// proportional to the frequency offset from the nominal GLONASS L1/L2.
+    ///
+    /// Coefficient: 0.15 m/MHz for pseudorange (σ ≈ 0.08 m/channel),
+    ///              0.015 m/MHz for carrier phase.
+    /// These are conservative defaults; receiver-specific calibration
+    /// values can be loaded from DCB files for improved accuracy.
+    pub(super) fn glo_ifb_correction(sat: &ProcessedSat) -> f64 {
+        if sat.sat_obs.sat.constellation != gneiss_core::sat::Constellation::Glonass {
+            return 0.0;
+        }
+        let df_mhz = (sat.f1 - gneiss_core::signal::FREQ_GLO_L1_NOMINAL) / 1e6;
+        df_mhz * 0.15 // m/MHz → meters
     }
 
     pub(super) fn push_sat_meas(
