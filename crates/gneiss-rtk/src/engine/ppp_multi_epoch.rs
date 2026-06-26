@@ -19,7 +19,7 @@ use crate::engine::EngineError;
 use crate::estimators::factor_graph::gnss_factors::{
     ErrorStateCarrierPhaseFactor, ErrorStateDopplerFactor, ErrorStatePseudorangeFactor,
 };
-use crate::estimators::factor_graph::{Factor, FactorGraphOptimizer};
+use crate::estimators::factor_graph::{Factor, FactorGraphOptimizer, PriorFactor};
 use crate::filter::{CORE_STATE_SIZE, RtkState};
 use crate::math::inversion::invert_matrix_robust;
 
@@ -66,6 +66,8 @@ impl<'a> From<&ProcessedSat<'a>> for OwnedSatData {
 /// Snapshot of a single epoch's state and measurement data.
 #[derive(Clone)]
 struct EpochSnapshot {
+    /// GPS time of week (seconds) for dt computation
+    time: f64,
     /// Full core state vector (CORE_STATE_SIZE elements)
     state: DVector<f64>,
     /// Covariance matrix (full rank, including ambiguities)
@@ -359,6 +361,7 @@ impl PppTwoEpochOptimizer {
     /// Snapshot the current state+measurements for the next epoch pair.
     fn snapshot(&self, state: &RtkState, sats: &[ProcessedSat]) -> EpochSnapshot {
         EpochSnapshot {
+            time: state.time.tow,
             state: extract_state_vector(state),
             cov: state.covariance.clone(),
             sats: sats.iter().map(OwnedSatData::from).collect(),
@@ -389,8 +392,11 @@ impl PppTwoEpochOptimizer {
         let amb_keys = &state.ambiguity_keys;
         let total_dim = 2 * CORE_STATE_SIZE + n_amb;
 
+        // --- Compute dt between oldest and newest epoch -------------------
+        let dt = (prev.time - curr.time).abs().max(0.1); // at least 0.1s
+
         // --- Build the Q^{-1} matrix for the dynamics constraint ----------
-        let q_inv = build_q_inverse(&self.process_noise);
+        let q_inv = build_q_inverse(&self.process_noise, dt);
 
         // --- Build the dynamics factor ------------------------------------
         // Phi is identity for static PPP.
@@ -461,6 +467,22 @@ impl PppTwoEpochOptimizer {
                 nominal_y: curr.state[1],
                 nominal_z: curr.state[2],
                 total_dim,
+            }));
+        }
+
+        // --- Add IEKF state prior on current epoch -------------------------
+        // This is the P_pred^{-1} term from the IEKF: it anchors the factor
+        // graph optimisation to the IEKF solution with the IEKF's estimated
+        // uncertainty. Without this, the optimisation can freely move the
+        // state to fit GNSS measurements without any regularisation.
+        let p_sub = curr.cov.view((0, 0), (CORE_STATE_SIZE, CORE_STATE_SIZE));
+        if let Some(p_inv_sub) = invert_submatrix(&p_sub) {
+            let mut full_info = DMatrix::zeros(total_dim, total_dim);
+            full_info
+                .view_mut((CORE_STATE_SIZE, CORE_STATE_SIZE), (CORE_STATE_SIZE, CORE_STATE_SIZE))
+                .copy_from(&p_inv_sub);
+            optimizer.add_factor(Box::new(PriorFactor {
+                information: full_info,
             }));
         }
 
@@ -588,8 +610,12 @@ fn add_epoch_factors(
 
     // --- Doppler factor (if non-zero) ------------------------------------
     if sat.doppler != 0.0 {
+        let rcv_pos = core_state.fixed_rows::<3>(0).clone_owned();
+        let los_vec = sat.sat_pos - rcv_pos;
+        let los_norm = los_vec.norm();
+        let los = if los_norm > 1.0 { los_vec / los_norm } else { los_vec };
         opt.add_factor(Box::new(ErrorStateDopplerFactor {
-            los: sat.sat_pos / sat.sat_pos.norm(),
+            los,
             sat_vel: sat.sat_vel,
             measured_doppler_hz: sat.doppler,
             variance: 0.01,
@@ -623,8 +649,10 @@ fn cp_variance(sat: &OwnedSatData) -> f64 {
 }
 
 /// Build the inverse process-noise covariance matrix Q⁻¹ from the config.
-fn build_q_inverse(config: &ProcessNoiseConfig) -> DMatrix<f64> {
-    let q_diag = vec![
+/// Q is scaled by dt: Q(dt) = Q_ref * dt, so Q⁻¹(dt) = Q⁻¹_ref / dt.
+fn build_q_inverse(config: &ProcessNoiseConfig, dt: f64) -> DMatrix<f64> {
+    let dt_inv = 1.0 / dt.max(0.01);
+    let q_inv_diag: Vec<f64> = vec![
         config.pos.powi(2),
         config.pos.powi(2),
         config.pos.powi(2),
@@ -646,9 +674,25 @@ fn build_q_inverse(config: &ProcessNoiseConfig) -> DMatrix<f64> {
         config.isb.powi(2),
         config.clock_drift.powi(2),
         config.zwd.powi(2),
-    ];
-    let q_inv_diag: Vec<f64> = q_diag.iter().map(|v| 1.0 / v.max(1e-18)).collect();
+    ]
+    .iter()
+    .map(|v| dt_inv / v.max(1e-18))
+    .collect();
     DMatrix::from_diagonal(&DVector::from_vec(q_inv_diag))
+}
+
+/// Invert a small submatrix for the IEKF prior. Uses Cholesky if the
+/// matrix is positive definite, falls back to pseudo-inverse otherwise.
+fn invert_submatrix(m: &nalgebra::DMatrixView<f64>) -> Option<DMatrix<f64>> {
+    let n = m.nrows();
+    // Try Cholesky decomposition (fast path for PSD matrices)
+    if let Some(chol) = m.clone_owned().cholesky() {
+        return Some(chol.inverse());
+    }
+    // Fallback: regularised inverse for near-singular matrices
+    let reg = nalgebra::DMatrix::identity(n, n) * 1e-6;
+    let m_reg = m.clone_owned() + reg;
+    m_reg.try_inverse()
 }
 
 /// Compute a sub-block of the posterior covariance from the factor graph.
@@ -789,7 +833,7 @@ mod tests {
 
     #[test]
     fn test_build_q_inverse_default() {
-        let q_inv = build_q_inverse(&ProcessNoiseConfig::default());
+        let q_inv = build_q_inverse(&ProcessNoiseConfig::default(), 1.0);
         assert_eq!(q_inv.nrows(), CORE_STATE_SIZE);
         assert_eq!(q_inv.ncols(), CORE_STATE_SIZE);
         // Position diagonal: 1 / 0.01 = 100
