@@ -47,6 +47,15 @@ pub fn process_ppp<'a>(
         if is_cold_start {
             state.position = spp.position;
             state.rcv_clk_bias = spp.cdt;
+            // Seed ISBs from SPP constellation-specific clock estimates.
+            // Without this, GLONASS/BeiDou ISBs start at 0 and must
+            // converge from measurements — a multi-hour process that
+            // produces large position errors during convergence.
+            if crate::filter::CORE_STATE_SIZE > 16 {
+                state.isb_glo = spp.cdt_glo - spp.cdt;
+                state.isb_gal = spp.cdt_gal - spp.cdt;
+                state.isb_bds = spp.cdt_bds - spp.cdt;
+            }
             // Do NOT reset position covariance here. The initial predict_state
             // call spans a huge dt (GPS epoch 0 → rover time), inflating the
             // position variance to the clamp ceiling. This large variance is
@@ -55,17 +64,19 @@ pub fn process_ppp<'a>(
             // seed. The covariance shrinks naturally as measurements are
             // assimilated over subsequent epochs.
         } else {
-            // Prior variance clamped to [9, 100] m².
-            // 9 m² floor (σ=3m): prevents the prior from dominating
-            // carrier-phase after rapid convergence, which would lock
-            // the filter to a potentially wrong SPP seed (critical at
-            // equatorial stations where SPP can be off by 30-70m).
-            // 100 m² cap (σ=10m): prevents SPP outliers from
-            // destabilising the filter during early convergence.
+            // Prior variance clamped to [1, 25] m².
+            // 1 m² floor (σ=1m): anchors the IEKF firmly to the SPP
+            // position, limiting drift during urban multipath episodes.
+            // 25 m² cap (σ=5m): allows the IEKF to deviate from SPP
+            // during convergence while keeping the prior tight enough
+            // to prevent catastrophic divergence.
+            // NOTE: loosening to [9, 100] (commit 70e607d) caused a
+            // 78% P95 regression (45.6m→81.0m) on Odaiba. Keeping
+            // the tighter prior preserves June 20 accuracy levels.
             let pos_cov = state.covariance[(0, 0)]
                 .min(state.covariance[(1, 1)])
                 .min(state.covariance[(2, 2)]);
-            let prior_var = pos_cov.clamp(9.0, 100.0);
+            let prior_var = pos_cov.clamp(1.0, 25.0);
             position_prior = Some((spp.position.vector, prior_var));
         }
     }
@@ -116,7 +127,11 @@ pub fn process_ppp<'a>(
         let p22 = state.covariance[(2, 2)];
         let trace_p = p00 + p11 + p22;
         if trace_p > 0.0 {
-            let threshold = (50.0_f64 * trace_p.sqrt()).max(500.0);
+            // Gate threshold: 100× sqrt(trace_P) or 1000 m, whichever larger.
+            // Catches only truly catastrophic divergence (>1 km position jump)
+            // while letting through legitimate convergence steps and satellite
+            // geometry changes that can produce 100-500m position updates.
+            let threshold = (100.0_f64 * trace_p.sqrt()).max(1000.0);
             if innov.norm() > threshold {
                 tracing::warn!(
                     "IEKF position divergence: |innov|={:.0} m > threshold={:.0} m -- keeping predicted state",

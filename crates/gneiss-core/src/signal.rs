@@ -5,6 +5,11 @@ pub const FREQ_GPS_L2: f64 = 1227.60e6;
 pub const FREQ_GPS_L5: f64 = 1176.45e6;
 pub const FREQ_GAL_E5B: f64 = 1207.140e6;
 pub const FREQ_BDS_B1I: f64 = 1561.098e6;
+/// BDS-2 B2I frequency (NOT the same as Galileo E5b).
+/// BDS-3 uses B2b at 1207.140 MHz (same as Galileo E5b) or B2a at 1176.45 MHz.
+/// Without PRN-to-generation mapping, we default to the BDS-2 frequency which
+/// covers the majority of satellites in pre-2020 datasets.
+pub const FREQ_BDS_B2I: f64 = 1207.52e6;
 pub const FREQ_GLO_L1_NOMINAL: f64 = 1602.0e6;
 pub const FREQ_GLO_L2_NOMINAL: f64 = 1246.0e6;
 pub const FREQ_GLO_L1_DELTA: f64 = 0.5625e6;
@@ -13,8 +18,8 @@ pub const FREQ_GLO_L2_DELTA: f64 = 0.4375e6;
 pub fn satellite_frequencies(sat: SatelliteId, freq_num: i8) -> (f64, f64) {
     match sat.constellation {
         Constellation::Gps | Constellation::Qzss => (FREQ_GPS_L1, FREQ_GPS_L2),
-        Constellation::Galileo => (FREQ_GPS_L1, FREQ_GAL_E5B), // E1 shares GPS L1 freq
-        Constellation::Beidou => (FREQ_BDS_B1I, FREQ_GAL_E5B), // B2I shares E5b freq
+        Constellation::Galileo => (FREQ_GPS_L1, FREQ_GAL_E5B), // E1 shares GPS L1
+        Constellation::Beidou => (FREQ_BDS_B1I, FREQ_BDS_B2I), // B1I + B2I (BDS-2)
         Constellation::Glonass => {
             let f1 = FREQ_GLO_L1_NOMINAL + (freq_num as f64) * FREQ_GLO_L1_DELTA;
             let f2 = FREQ_GLO_L2_NOMINAL + (freq_num as f64) * FREQ_GLO_L2_DELTA;
@@ -36,7 +41,7 @@ pub fn get_frequency(sat: SatelliteId, freq_band: u8, freq_num: i8) -> f64 {
             match sat.constellation {
                 Constellation::Gps | Constellation::Qzss => FREQ_GPS_L2,
                 Constellation::Galileo => FREQ_GAL_E5B,
-                Constellation::Beidou => FREQ_GAL_E5B, // B2I
+                Constellation::Beidou => FREQ_BDS_B2I, // BDS-2 B2I (1207.52 MHz)
                 Constellation::Glonass => {
                     FREQ_GLO_L2_NOMINAL + (freq_num as f64) * FREQ_GLO_L2_DELTA
                 }
@@ -45,11 +50,12 @@ pub fn get_frequency(sat: SatelliteId, freq_band: u8, freq_num: i8) -> f64 {
         }
         5 => match sat.constellation {
             Constellation::Gps | Constellation::Qzss | Constellation::Galileo => FREQ_GPS_L5,
-            Constellation::Beidou => FREQ_GPS_L5,
+            Constellation::Beidou => FREQ_GPS_L5, // BDS-3 B2a shares L5
             _ => FREQ_GPS_L5,
         },
         7 => match sat.constellation {
-            Constellation::Galileo | Constellation::Beidou => FREQ_GAL_E5B,
+            Constellation::Galileo => FREQ_GAL_E5B,
+            Constellation::Beidou => FREQ_GAL_E5B, // BDS-3 B2b shares E5b
             _ => FREQ_GPS_L2,
         },
         _ => FREQ_GPS_L1,
