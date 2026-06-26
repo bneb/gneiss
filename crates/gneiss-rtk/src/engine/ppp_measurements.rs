@@ -94,7 +94,20 @@ impl crate::engine::ppp_iekf::PppIteratedEkf {
             .max(state.covariance[(2, 2)]);
         let pos_std = pos_var.sqrt();
         let pr_threshold = (100.0_f64).max(3.0 * pos_std).min(200.0);
-        if res_pr.abs() > pr_threshold {
+        // GLONASS FDMA signals have per-satellite frequency-dependent biases
+        // that a single ISB state cannot fully absorb. The unmodelled IFB can
+        // produce pseudorange residuals exceeding the normal PR threshold,
+        // especially during convergence. We relax the threshold for GLONASS
+        // (like RTKLIB's approach of skipping outlier rejection for GLONASS
+        // entirely) and instead rely on the inflated measurement noise to
+        // downweight problematic measurements.
+        let glo_threshold = (300.0_f64).max(5.0 * pos_std).min(500.0);
+        let effective_threshold = if sat.sat_obs.sat.constellation == gneiss_core::sat::Constellation::Glonass {
+            glo_threshold
+        } else {
+            pr_threshold
+        };
+        if res_pr.abs() > effective_threshold {
             tracing::debug!(
                 "PR rejected: sat={}, res_pr={:.1}m, threshold={:.1}m, pos_std={:.1}m",
                 sat.sat_obs.sat, res_pr, pr_threshold, pos_std
@@ -189,6 +202,12 @@ impl crate::engine::ppp_iekf::PppIteratedEkf {
         } else {
             var_pr += 9.0; // Single frequency has ~3m Klobuchar residual iono error (3^2 = 9)
         }
+        // GLONASS FDMA signals have unmodelled per-satellite IFB that adds
+        // additional uncertainty. Inflate variance by 2.25× (σ × 1.5) matching
+        // RTKLIB's EFACT_GLO = 1.5.
+        if sat.sat_obs.sat.constellation == gneiss_core::sat::Constellation::Glonass {
+            var_pr *= 2.25;
+        }
         let w_pr = apply_huber(res_pr, var_pr, self.huber_k);
         meas.push(FgMeasurement {
             res: res_pr,
@@ -264,6 +283,10 @@ impl crate::engine::ppp_iekf::PppIteratedEkf {
             if sat.is_iono_free {
                 var_cp *= 9.0;
             } // Iono-free amplifies phase noise
+            // GLONASS FDMA: unmodelled per-satellite IFB inflates CP noise
+            if sat.sat_obs.sat.constellation == gneiss_core::sat::Constellation::Glonass {
+                var_cp *= 2.25;
+            }
             let w_cp = apply_huber(res_cp, var_cp, self.huber_k);
             meas.push(FgMeasurement {
                 res: res_cp,

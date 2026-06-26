@@ -102,11 +102,11 @@ impl Default for SppConfig {
             enable_sagnac: true,
             enable_tropo: true,
             enable_iono: true,
-            raim_outlier_m: 25.0,
+            raim_outlier_m: 50.0,         // was 25m — too tight for GLONASS IFB (1-7m)
             snr_a: 1.0,
             snr_b: 150.0,
             min_measurements_init: 3,
-            raim_mad_multiplier: 7.413,   // 1.4826 * 5.0 sigma
+            raim_mad_multiplier: 5.0,    // was 7.413 (5σ) — now ~3.4σ, more permissive for GLONASS
             elevation_mask_rad: 0.261799, // 15 degrees
         }
     }
