@@ -660,6 +660,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 .map(|m| (m.time, m.tec.clone()))
                                 .collect();
                             engine.ionex_grid = Some(grid);
+                            engine.config.iono_model = gneiss_rtk::engine::types::IonosphereModel::Ionex;
                         }
                         Err(e) => error!("Failed to parse IONEX file {}: {}", ionex_path, e),
                     }
