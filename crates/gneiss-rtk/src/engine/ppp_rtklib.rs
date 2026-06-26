@@ -167,19 +167,23 @@ impl PppRtklib {
     }
 
     /// Forward-predict the state (RTKLIB udstate_ppp).
-    /// In static PPP, position is constant. Clock is white noise — add
-    /// process noise to clock variance but DON'T reset the value to zero.
-    /// Resetting forces re-estimation of the full receiver clock offset
-    /// (~1.4M m = 5ms for F9P), which leaks into position through the
-    /// Kalman gain and causes ~300m/epoch drift.
+    /// In static PPP, position is constant. Clock is white noise — keep the
+    /// estimated value (don't reset to zero) but inflate variance to VAR_CLK
+    /// and clear cross-correlations. The large variance prevents position
+    /// errors from leaking into the clock estimate through the Kalman gain
+    /// (gain ≈ 8% for clock with VAR_CLK=10000 vs 68% with P_clk=0.35).
+    /// The correlation clearing prevents error feedback loops between epochs.
     fn predict(&self, ppp: &PppState, _x: &mut DVector<f64>, p_mat: &mut DMatrix<f64>) {
         let nx = ppp.nx();
 
-        // Position: static (no prediction change, no process noise)
-        // Clock: white noise — keep current value, reset variance to large
+        // Position: static — add minimal process noise (σ≈1mm/s)
+        // to prevent covariance collapse from Joseph form rounding
+        for i in 0..3 {
+            p_mat[(i, i)] += 1e-6;
+        }
+        // Clock: white noise — keep value, inflate variance, clear correlations
         for i in 0..ppp.nc() {
             let ci = ppp.ic(i);
-            // Clear cross-correlations within ±30 indices
             for j in 0..nx {
                 if i32::abs(ci as i32 - j as i32) > 30 {
                     continue;
@@ -360,6 +364,10 @@ impl PppRtklib {
         if self.epoch == 0 {
             let mut x0 = DVector::zeros(nx);
             x0[0] = state.position.vector.x; x0[1] = state.position.vector.y; x0[2] = state.position.vector.z;
+            // Seed clock from SPP estimate (typically ~5ms = 1.4M meters for F9P).
+            // Starting at 0 forces the first measurement update to absorb the full
+            // receiver clock offset, which leaks into position through the gain matrix.
+            x0[ppp.ic(0)] = state.rcv_clk_bias;
             self.x = x0;
             self.p = self.init_covariance(&ppp, nx);
             self.biases_seeded = false;
