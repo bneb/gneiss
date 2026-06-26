@@ -325,7 +325,8 @@ impl PppRtklib {
         0.002277 / libm::cos(z) * (p + (1255.0 / t + 0.05) * e)
     }
 
-    /// Kalman measurement update (RTKLIB filter())
+    /// Kalman measurement update — port of RTKLIB filter()
+    /// H is stored as (nx × nv) — rows = state dim, cols = measurement dim.
     fn measurement_update(
         x: &mut DVector<f64>,
         p: &mut DMatrix<f64>,
@@ -333,26 +334,24 @@ impl PppRtklib {
         v: &DVector<f64>,
         r: &DMatrix<f64>,
         _nx: usize,
-        _nv: usize,
+        nv: usize,
     ) -> Result<(), EngineError> {
-        if _nv == 0 {
+        if nv == 0 {
             return Ok(());
         }
-        // H P H^T + R
-        let h_t = h.transpose();
-        let hp = h * &*p;
-        let s = &hp * &h_t + r;
-        // Invert S (always succeeds with SVD pseudo-inverse)
+        let h_t = h.transpose(); // (nv × nx)
+        // S = H^T * P * H + R  → (nv × nv)
+        let hp = &h_t * &*p; // (nv × nx) × (nx × nx) = (nv × nx)
+        let s = &hp * h + r; // (nv × nx) × (nx × nv) + (nv × nv) = (nv × nv)
         let s_inv = crate::math::inversion::invert_matrix_robust(&s);
-        // K = P H^T S^{-1}
-        let k = &*p * &h_t * &s_inv;
-        // dx = K v
+        // K = P * H * S^{-1} → (nx × nv)
+        let k = &*p * h * &s_inv; // (nx × nx) × (nx × nv) × (nv × nv) = (nx × nv)
+        // dx = K * v → (nx × 1)
         let dx = &k * v;
-        // x = x + dx
         *x += &dx;
-        // P = (I - K H) P
+        // P = (I - K*H^T) * P → (nx × nx)
         let i_mat = DMatrix::identity(_nx, _nx);
-        *p = (&i_mat - &k * h) * p.clone();
+        *p = (&i_mat - &k * &h_t) * p.clone();
         Ok(())
     }
 

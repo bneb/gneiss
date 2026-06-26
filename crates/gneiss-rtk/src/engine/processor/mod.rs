@@ -332,6 +332,17 @@ impl ProcessingEngine {
             | EngineMode::PppInsLooselyCoupled
             | EngineMode::PppIekf
             | EngineMode::PppRtklib => {
+                if self.current_state.is_none() {
+                    if let Ok(spp) = crate::spp::compute_spp(
+                        &filtered_rover, &self.ephemerides,
+                        self.klobuchar_params.as_ref(),
+                        &crate::spp::SppConfig::default(), None,
+                    ) {
+                        let mut s = RtkState::new(filtered_rover.time, spp.position, 100.0);
+                        s.rcv_clk_bias = spp.cdt;
+                        self.current_state = Some(s);
+                    }
+                }
                 let mut ppp = crate::engine::ppp_rtklib::PppRtklib::default();
                 let result = if let Some(ref mut state) = self.current_state {
                     state.time = filtered_rover.time;
