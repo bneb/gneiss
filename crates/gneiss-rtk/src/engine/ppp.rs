@@ -1,5 +1,4 @@
 use crate::engine::ppp_iekf::PppIteratedEkf;
-use crate::engine::processed_sat::ProcessedSat;
 use crate::engine::{EngineError, EngineMode, ProcessingEngine};
 use crate::filter::RtkState;
 use gneiss_core::obs::EpochObs;
@@ -113,37 +112,6 @@ pub fn process_ppp<'a>(
         engine.ppp_factor_opt = opt;
         result
     };
-    // --- Hybrid PPP-AR: UDUC AR on IF solution ---------------------------
-    // IF mode gives robust position (multipath suppression via combination).
-    // UDUC mode enables WL/NL ambiguity resolution. Run both: IF for position,
-    // UDUC in parallel for AR only. When AR fixes, apply integer constraints
-    // and position correction to the IF state (guarded by 3m jump limit).
-    if engine.config.enable_ar
-        && engine.config.iono_model == crate::engine::types::IonosphereModel::Ionex
-        && state.epoch_count > 10
-    {
-        let saved = engine.config.uduc_ar;
-        engine.config.uduc_ar = true;
-        let uduc_sats = build_sats(engine, rover_obs);
-        if !uduc_sats.is_empty() {
-            let mut ar_state = state.clone();
-            let ar_iekf = PppIteratedEkf::new()
-                .with_iono_model(crate::engine::types::IonosphereModel::Ionex)
-                .with_lambda_min_ratio(engine.config.lambda_min_ratio);
-            if ar_iekf.solve(&mut ar_state, &uduc_sats, None).is_ok() && ar_state.is_fixed {
-                let corr = (ar_state.position.vector - state.position.vector).norm();
-                if corr < 3.0 {
-                    state.is_fixed = true;
-                    let n = state.ambiguities.len().min(ar_state.ambiguities.len());
-                    state.ambiguities[..n].copy_from_slice(&ar_state.ambiguities[..n]);
-                    // Keep IF position — UDUC position is less accurate (18m vs 8m).
-                    // Only the fixed integer ambiguities are transferred.
-                    tracing::info!("Hybrid AR: pos_correction={:.3}m, applying fixed ambiguities only", corr);
-                }
-            }
-        }
-        engine.config.uduc_ar = saved;
-    }
     state.epoch_count = state.epoch_count.saturating_add(1);
 
     // Innovation gate: if the IEKF solution has diverged catastrophically
