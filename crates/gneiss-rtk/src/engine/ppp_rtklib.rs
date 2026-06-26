@@ -108,7 +108,8 @@ impl PppState {
 pub struct PppRtklib {
     pub max_iter: usize,
     pub elev_mask_deg: f64,
-    pub max_inno_m: f64,
+    pub max_inno_m: f64,   // code innovation threshold (m)
+    pub max_inno_cp: f64,  // carrier phase innovation threshold (m)
     pub dynamics: bool,
     pub tide_corr: bool,
     pub x: DVector<f64>,
@@ -123,7 +124,8 @@ impl Default for PppRtklib {
         Self {
             max_iter: 5,
             elev_mask_deg: 15.0,
-            max_inno_m: 0.0,
+            max_inno_m: 200.0,     // code innovation threshold (m)
+            max_inno_cp: 100.0,     // phase innovation threshold: reject outliers >100m
             dynamics: false,
             tide_corr: true,
             x: DVector::zeros(0),
@@ -286,8 +288,8 @@ impl PppRtklib {
                 let var_phase = 0.01 / libm::sin(el).max(0.1) + sat_var[i] + vart;
                 r[(nv, nv)] = var_phase;
 
-                // Innovation test
-                if self.max_inno_m > 0.0 && v[nv].abs() > self.max_inno_m && sys != 1 {
+                // Innovation test — tighter threshold for carrier phase
+                if self.max_inno_cp > 0.0 && v[nv].abs() > self.max_inno_cp && sys != 1 {
                     continue;
                 }
                 nv += 1;
