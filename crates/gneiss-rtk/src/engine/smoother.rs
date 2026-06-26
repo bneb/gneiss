@@ -186,6 +186,21 @@ fn smooth_epoch(
     let x_k = build_x_vector(state_k, core_size, smooth_len, &matched_k_indices);
     let mut delta_x = &x_k1_n - &x_pred_k1_sub;
 
+    // Innovation gating: compute normalized innovation squared (NIS).
+    // If the forward-filter innovation is statistically inconsistent with
+    // the predicted covariance, the forward filter likely diverged at this
+    // epoch. Log a warning but continue — the existing covariance guards
+    // (non-finite check, MAX_STATE_VARIANCE) catch catastrophic cases.
+    // The NIS check provides diagnostic visibility without breaking the
+    // backward pass for borderline epochs.
+    let nis = (&delta_x.transpose() * &p_pred_inv * &delta_x)[(0, 0)];
+    if nis > smooth_len as f64 * 100.0 {
+        tracing::warn!(
+            "Smoother NIS={:.1} exceeds threshold={:.0} ({} DOF) — forward filter may have diverged",
+            nis, smooth_len as f64 * 100.0, smooth_len
+        );
+    }
+
     if core_size > 6 {
         if let Some(predicted_attitude) = state_k1.predicted_attitude {
             let predicted_attitude: nalgebra::UnitQuaternion<f64> = predicted_attitude;
