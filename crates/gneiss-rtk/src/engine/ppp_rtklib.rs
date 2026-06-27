@@ -402,9 +402,12 @@ impl PppRtklib {
                     if ppp.nt() >= 1 { h[(ppp.it(), nv)] = mw; }
                     v[nv] -= x[ppp.ib(i)];
                     h[(ppp.ib(i), nv)] = 1.0;
-                    let var_phase = 0.01 / libm::sin(el).max(0.1) + sat_var[i] + vart;
+                    let ar_fixed = !ppp.uduc && self.p[(ppp.ib(i), ppp.ib(i))] < 0.01;
+                    let cp_var = if ar_fixed { 0.0001 } else { 0.01 };
+                    let var_phase = cp_var / libm::sin(el).max(0.1) + sat_var[i] + vart;
                     r[(nv, nv)] = var_phase;
-                    if self.max_inno_cp > 0.0 && v[nv].abs() > self.max_inno_cp && sys != 1 { continue; }
+                    let cp_thresh = if ar_fixed { 2.0 } else { self.max_inno_cp };
+                    if cp_thresh > 0.0 && v[nv].abs() > cp_thresh && sys != 1 { continue; }
                     nv += 1;
                 }
                 // ---- Code measurement ----
