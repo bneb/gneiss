@@ -523,22 +523,30 @@ impl PppRtklib {
                 for j in 0..ppp.nr() { p_new[(i,j)] = self.p[(i,j)]; }
             }
             if use_uduc {
-                // IF→UDUC: initialize iono, N1, N2 from raw data
+                // IF→UDUC: initialize iono from known IF position (precise),
+                // N1/N2 from AR-fixed N_IF + MW WL.
+                let pos_if = Vector3::new(self.x[0], self.x[1], self.x[2]);
+                let clk_if = self.x[ppp.ic(0)];
                 for i in 0..obs_data.len() {
                     let (_, _, l2_cyc, p1, p2, _) = obs_data[i];
                     if p2 == 0.0 || l2_cyc == 0.0 { continue; }
                     let f1 = f1_vals[i]; let f2 = f2_vals[i];
-                    let gamma = (f1 * f1) / (f2 * f2);
-                    let mut i1_est = (p2 - p1) / (gamma - 1.0);
-                    if i1_est.is_nan() || i1_est.abs() > 500.0 { i1_est = 0.0; }
+                    let lam1 = lam1_vals[i]; let lam2 = lam2_vals[i];
+                    let f1s = f1*f1; let f2s = f2*f2;
+
+                    // Ionosphere from P1-P2 using known IF geometry
+                    let rs = sat_pos[i];
+                    let dist = (rs - pos_if).norm();
+                    let dtrp = proc_tropo_dry[i];
+                    let rng = dist - sat_clk[i] + dtrp;
+                    let mut i1_est = (p1 - (rng + clk_if)).max(-200.0).min(200.0);
+                    if i1_est.is_nan() { i1_est = 0.0; }
                     x_new[ppp.ni(i)] = i1_est;
-                    // Seed N1, N2 from existing IF bias if AR-fixed
+
+                    // N1, N2 from AR-fixed IF bias + MW WL
                     let old_bi = ppp.nr() + i;
                     let n_if = if old_bi < self.x.len() { self.x[old_bi] } else { 0.0 };
-                    let lam1 = lam1_vals[i]; let lam2 = lam2_vals[i];
                     let lam_nl = 299792458.0 / (f1 + f2);
-                    let f1s = f1*f1; let f2s = f2*f2;
-                    // Compute N1 from N_IF using approximate WL from MW EMA
                     let n_wl: f64 = self.mw_wl_ema.get(&obs_data[i].0)
                         .map(|(_, e)| e.round()).unwrap_or(0.0);
                     let n1_est = (n_if - n_wl * f2s / (f1s - f2s) * lam2) / lam_nl;
