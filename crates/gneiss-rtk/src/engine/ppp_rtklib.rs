@@ -140,6 +140,7 @@ pub struct PppRtklib {
     pub max_inno_cp: f64,  // carrier phase innovation threshold (m)
     pub dynamics: bool,
     pub tide_corr: bool,
+    pub enable_multi_epoch: bool, // feature flag
     pub x: DVector<f64>,
     pub p: DMatrix<f64>,
     pub epoch: u32,
@@ -169,6 +170,7 @@ impl Default for PppRtklib {
             last_has_glo: false,
             biases_seeded: false,
             was_uduc: false,
+            enable_multi_epoch: false,
             mw_wl_ema: HashMap::new(),
             epoch_combiner: MultiEpochCombiner::new(),
         }
@@ -665,8 +667,8 @@ impl PppRtklib {
         state.rcv_clk_bias = self.x[ppp.ic(0)];
         state.covariance = self.p.clone();
 
-        // Feed converged positions to multi-epoch combiner (skip warmup)
-        if self.biases_seeded && self.epoch > 2 {
+        // Feed converged positions to multi-epoch combiner (feature-flagged)
+        if self.enable_multi_epoch && self.biases_seeded && self.epoch > 2 {
             let cov_3x3 = nalgebra::Matrix3::new(
                 self.p[(0,0)], self.p[(0,1)], self.p[(0,2)],
                 self.p[(1,0)], self.p[(1,1)], self.p[(1,2)],
