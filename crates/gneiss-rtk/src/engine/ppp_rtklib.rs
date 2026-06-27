@@ -26,7 +26,7 @@ const D2R: f64 = core::f64::consts::PI / 180.0;
 const R2D: f64 = 180.0 / core::f64::consts::PI;
 
 // Initial variances (RTKLIB defaults)
-const VAR_POS: f64 = 10000.0; // 100^2 m^2
+const VAR_POS: f64 = 25.0; // 5^2 m^2 (SPP accuracy), was 10000 (100^2)
 const VAR_CLK: f64 = 10000.0; // 100^2 m^2
 const VAR_ZTD: f64 = 0.09; // 0.3^2 m^2
 const VAR_GRA: f64 = 1e-6; // 0.001^2 m^2
