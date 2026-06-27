@@ -684,6 +684,40 @@ impl PppRtklib {
             }
         }
 
+        // ---- Geometry-based fast AR (epoch 30+) ----
+        // Use the converged position to fix N1 directly from geometry,
+        // bypassing the 100-sample MW WL accumulation. This triggers AR
+        // at epoch ~40-60 instead of ~100, halving the pre-AR tail.
+        if !ppp.uduc && self.epoch > 30 {
+            let rcv_pos = Vector3::new(self.x[0], self.x[1], self.x[2]);
+            let clock = self.x[ppp.ic(0)];
+            for i in 0..obs_data.len() {
+                if lc_if_vals[i] == 0.0 { continue; }
+                let (sat, _, _, _, _, _) = obs_data[i];
+                let rs = sat_pos[i]; let dts = sat_clk[i];
+                let dist = (rs - rcv_pos).norm();
+                if dist <= 0.0 { continue; }
+                let dtrp = proc_tropo_dry[i];
+                let rng = dist - dts + dtrp;
+                let lam_nl = 299792458.0 / (f1_vals[i] + f2_vals[i]);
+                let n1_est = (lc_if_vals[i] - rng - clock) / lam_nl;
+                let n1_rounded = n1_est.round();
+                if (n1_est - n1_rounded).abs() > 0.15 { continue; }
+                // Compute fixed N_IF from integer N1
+                let f1s = f1_vals[i]*f1_vals[i]; let f2s = f2_vals[i]*f2_vals[i];
+                let n_if_fixed = (f1s * n1_rounded * lam1_vals[i] - f2s * n1_rounded * lam2_vals[i]) / (f1s - f2s);
+                let n_if_float = self.x[ppp.ib(i)];
+                if (n_if_float - n_if_fixed).abs() > 0.5 { continue; }
+                // Fix it
+                let bi = ppp.ib(i);
+                self.x[bi] = n_if_fixed;
+                self.p[(bi, bi)] = 1e-6;
+                for j in 0..ppp.nx() {
+                    if j != bi { self.p[(bi, j)] = 0.0; self.p[(j, bi)] = 0.0; }
+                }
+            }
+        }
+
         // ---- MW widelane tracking for integer AR ----
         // Compute Melbourne-Wübbena widelane for each satellite, maintain EMA.
         // When WL is precise enough, fix N_wl → compute N1 → fix N_IF.
