@@ -144,6 +144,7 @@ pub struct PppRtklib {
     last_nsat: usize,
     last_has_glo: bool,    // for semantic state resize on GLO change
     biases_seeded: bool,
+    was_uduc: bool,         // previous epoch's UDUC mode
     /// MW widelane EMA for AR: sat → (count, smoothed_WL_cycles)
     mw_wl_ema: HashMap<SatelliteId, (u32, f64)>,
 }
@@ -163,6 +164,7 @@ impl Default for PppRtklib {
             last_nsat: 0,
             last_has_glo: false,
             biases_seeded: false,
+            was_uduc: false,
             mw_wl_ema: HashMap::new(),
         }
     }
@@ -466,6 +468,9 @@ impl PppRtklib {
         let mut ppp = PppState::new(has_glo, self.dynamics, use_uduc);
         ppp.nsat = obs_data.len();
         let nx = ppp.nx();
+        // Detect mode change
+        let mode_changed = use_uduc != self.was_uduc && self.epoch > 0;
+
         if self.epoch == 0 {
             let mut x0 = DVector::zeros(nx);
             x0[0] = state.position.vector.x; x0[1] = state.position.vector.y; x0[2] = state.position.vector.z;
@@ -505,6 +510,65 @@ impl PppRtklib {
             self.x = x0;
             self.p = self.init_covariance(&ppp, nx);
             self.biases_seeded = ppp.uduc; // UDUC biases seeded at init, IF needs warmup
+        } else if mode_changed {
+            // IF↔UDUC mode change: convert state vector
+            tracing::info!("Mode change: {} -> {} at epoch {}",
+                if self.was_uduc { "UDUC" } else { "IF" },
+                if use_uduc { "UDUC" } else { "IF" }, self.epoch);
+            let mut x_new = DVector::zeros(nx);
+            let mut p_new = DMatrix::zeros(nx, nx);
+            // Copy position, clock, tropo (same layout for both modes)
+            for i in 0..ppp.nr() {
+                x_new[i] = self.x[i];
+                for j in 0..ppp.nr() { p_new[(i,j)] = self.p[(i,j)]; }
+            }
+            if use_uduc {
+                // IF→UDUC: initialize iono, N1, N2 from raw data
+                for i in 0..obs_data.len() {
+                    let (_, _, l2_cyc, p1, p2, _) = obs_data[i];
+                    if p2 == 0.0 || l2_cyc == 0.0 { continue; }
+                    let f1 = f1_vals[i]; let f2 = f2_vals[i];
+                    let gamma = (f1 * f1) / (f2 * f2);
+                    let mut i1_est = (p2 - p1) / (gamma - 1.0);
+                    if i1_est.is_nan() || i1_est.abs() > 500.0 { i1_est = 0.0; }
+                    x_new[ppp.ni(i)] = i1_est;
+                    // Seed N1, N2 from existing IF bias if AR-fixed
+                    let old_bi = ppp.nr() + i;
+                    let n_if = if old_bi < self.x.len() { self.x[old_bi] } else { 0.0 };
+                    let lam1 = lam1_vals[i]; let lam2 = lam2_vals[i];
+                    let lam_nl = 299792458.0 / (f1 + f2);
+                    let f1s = f1*f1; let f2s = f2*f2;
+                    // Compute N1 from N_IF using approximate WL from MW EMA
+                    let n_wl: f64 = self.mw_wl_ema.get(&obs_data[i].0)
+                        .map(|(_, e)| e.round()).unwrap_or(0.0);
+                    let n1_est = (n_if - n_wl * f2s / (f1s - f2s) * lam2) / lam_nl;
+                    x_new[ppp.ib(i)] = n1_est;
+                    x_new[ppp.ib2(i)] = n1_est - n_wl;
+                    p_new[(ppp.ni(i), ppp.ni(i))] = VAR_BIAS;
+                    p_new[(ppp.ib(i), ppp.ib(i))] = VAR_BIAS;
+                    p_new[(ppp.ib2(i), ppp.ib2(i))] = VAR_BIAS;
+                }
+            } else {
+                // UDUC→IF: convert N1,N2 back to N_IF
+                let old_nsat = self.last_nsat;
+                for i in 0..obs_data.len() {
+                    let f1 = f1_vals[i]; let f2 = f2_vals[i];
+                    let lam1 = lam1_vals[i]; let lam2 = lam2_vals[i];
+                    let f1s = f1*f1; let f2s = f2*f2;
+                    // Old UDUC layout: L1 at nr+old_nsat+i, L2 at nr+2*old_nsat+i
+                    let old_l1_idx = ppp.nr() + old_nsat + i;
+                    let old_l2_idx = ppp.nr() + 2 * old_nsat + i;
+                    let old_n1 = if old_l1_idx < self.x.len() { self.x[old_l1_idx] } else { 0.0 };
+                    let old_n2 = if old_l2_idx < self.x.len() { self.x[old_l2_idx] } else { 0.0 };
+                    let n_if = (f1s * old_n1 * lam1 - f2s * old_n2 * lam2) / (f1s - f2s);
+                    let bi = ppp.nr() + i;
+                    x_new[bi] = n_if;
+                    p_new[(bi, bi)] = VAR_BIAS;
+                }
+            }
+            self.x = x_new;
+            self.p = p_new;
+            self.biases_seeded = false; // warmup for new mode
         } else if self.last_nsat != obs_data.len() {
             // nsat changed: resize state vector with semantic index remapping.
             // Blind slice copy corrupts indices when GLONASS appears/disappears
@@ -553,6 +617,7 @@ impl PppRtklib {
         }
         self.last_nsat = obs_data.len();
         self.last_has_glo = has_glo;
+        self.was_uduc = use_uduc;
         self.epoch += 1;
         let mut xp = self.x.clone();
         let mut pp = self.p.clone();

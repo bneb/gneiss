@@ -30,6 +30,7 @@ pub struct ProcessingEngine {
     pub ppp_factor_opt: Option<crate::engine::ppp_iekf::PppIteratedEkf>,
     pub ppp_multi_epoch_opt: Option<crate::engine::ppp_multi_epoch::MultiEpochOptimizer>,
     pub ppp_rtklib_solver: Option<crate::engine::ppp_rtklib::PppRtklib>,
+    pub mode_manager: crate::engine::ppp_mode_switch::PppModeManager,
     pub sp3_epochs: Vec<gneiss_parsers::sp3::Sp3Epoch>,
     pub clk_data: Option<gneiss_parsers::rinex_clk::RinexClock>,
     pub ionex_grid: Option<gneiss_parsers::ionex::IonexGrid>,
@@ -79,6 +80,7 @@ impl ProcessingEngine {
             ),
             ppp_multi_epoch_opt: None,
             ppp_rtklib_solver: None,
+            mode_manager: crate::engine::ppp_mode_switch::PppModeManager::default(),
             hatch_filter: crate::hatch::HatchFilter::default(),
             innovation_tracker: crate::engine::adaptive::InnovationTracker::default(),
             consecutive_rejections: 0,
@@ -349,8 +351,13 @@ impl ProcessingEngine {
                         Err(_) => return Err(EngineError::InitialSppFailed),
                     }
                 }
-                // Build satellite data (needs current_state to exist)
+                // Mode-dependent UDUC toggle: when in Uduc mode, produce raw L1/L2
+                let prev_uduc = self.config.uduc_ar;
+                if self.mode_manager.mode == crate::engine::ppp_mode_switch::PppSolverMode::Uduc {
+                    self.config.uduc_ar = true;
+                }
                 let sats = crate::engine::ppp_antenna::build_sats(self, &filtered_rover);
+                self.config.uduc_ar = prev_uduc;
                 let result = if sats.is_empty() {
                     Some(EngineError::InsufficientSatellites)
                 } else if let Some(ref mut state) = self.current_state {
@@ -372,6 +379,27 @@ impl ProcessingEngine {
                 } else {
                     Some(EngineError::StateDisappeared)
                 };
+                // Advance mode state machine
+                self.mode_manager.if_epoch_count += 1;
+                // Check for IF→UDUC handoff: ≥6 AR-fixed biases + 50+ epochs
+                if self.mode_manager.mode == crate::engine::ppp_mode_switch::PppSolverMode::If
+                    && self.mode_manager.fallback_count < 3
+                    && self.mode_manager.if_epoch_count > 50
+                {
+                    if let Some(ref solver) = self.ppp_rtklib_solver {
+                        let nr = 5; // GPS-only IF layout: pos(3)+clk(1)+tropo(1)
+                        let nsat = solver.x.len().saturating_sub(nr);
+                        let fixed: usize = (0..nsat).filter(|&i| {
+                            solver.p.get((nr + i, nr + i)).copied().unwrap_or(1.0) < 0.01
+                        }).count();
+                        if fixed >= 6 {
+                            tracing::info!("IF→UDUC handoff: {} AR-fixed biases at epoch {}", fixed, solver.epoch);
+                            self.mode_manager.mode = crate::engine::ppp_mode_switch::PppSolverMode::Uduc;
+                            self.mode_manager.uduc_epoch_count = 0;
+                        }
+                    }
+                }
+
                 if let Some(ref s) = self.current_state {
                     self.state_history.push(s.clone());
                     self.obs_history.push((filtered_rover.clone(), None));

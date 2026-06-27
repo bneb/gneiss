@@ -16,6 +16,7 @@ pub mod ppp_iekf;
 pub mod ppp_ins_iekf;
 pub(crate) mod ppp_ins_measurements;
 pub mod ppp_math;
+pub mod ppp_mode_switch;
 pub(crate) mod ppp_measurements;
 pub mod ppp_multi_epoch;
 pub mod predictor;
