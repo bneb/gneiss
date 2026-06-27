@@ -49,16 +49,19 @@ struct PppState {
     nsat: usize,
     /// Satellite IDs for each ambiguity slot
     amb_sats: Vec<SatelliteId>,
+    /// UDUC mode: estimate ionosphere + L1/L2 ambiguities instead of IF biases
+    uduc: bool,
 }
 
 impl PppState {
-    fn new(has_glo: bool, dynamics: bool) -> Self {
+    fn new(has_glo: bool, dynamics: bool, uduc: bool) -> Self {
         Self {
             np: if dynamics { 9 } else { 3 },
             has_glo,
             trop_opt: 2, // EST (estimate ZTD)
             nsat: 0,
             amb_sats: Vec::new(),
+            uduc,
         }
     }
 
@@ -88,19 +91,39 @@ impl PppState {
         }
     }
 
-    /// Total number of resolved states (before biases)
+    /// Total number of resolved states (before biases/iono)
     fn nr(&self) -> usize {
         self.it() + self.nt()
     }
 
-    /// Index of the first phase bias state
-    fn ib(&self, sat_idx: usize) -> usize {
+    /// Index of first ionosphere state (UDUC only)
+    fn ni(&self, sat_idx: usize) -> usize {
+        debug_assert!(self.uduc);
         self.nr() + sat_idx
+    }
+
+    /// Index of first L1 ambiguity state (UDUC) or IF bias (IF mode)
+    fn ib(&self, sat_idx: usize) -> usize {
+        if self.uduc {
+            self.nr() + self.nsat + sat_idx
+        } else {
+            self.nr() + sat_idx
+        }
+    }
+
+    /// Index of L2 ambiguity state (UDUC only)
+    fn ib2(&self, sat_idx: usize) -> usize {
+        debug_assert!(self.uduc);
+        self.nr() + 2 * self.nsat + sat_idx
     }
 
     /// Total number of estimated states
     fn nx(&self) -> usize {
-        self.ib(self.nsat) // biases for all observed satellites
+        if self.uduc {
+            self.nr() + 3 * self.nsat // iono + L1 amb + L2 amb per sat
+        } else {
+            self.ib(self.nsat) // biases for all observed satellites
+        }
     }
 }
 
@@ -373,7 +396,9 @@ impl PppRtklib {
         }
         tracing::debug!("solve_with_sats: {} sats -> {} obs_data ({} with CP)", sats.len(), obs_data.len(), lc_if_vals.iter().filter(|v| **v != 0.0).count()); if obs_data.len() < 4 { return Err(EngineError::InsufficientSatellites); }
         let has_glo = obs_data.iter().any(|(s,_,_,_,_,_)| s.constellation == Constellation::Glonass);
-        let mut ppp = PppState::new(has_glo, self.dynamics);
+        // UDUC mode: use raw L1/L2 if not iono-free (ProcessedSat has raw obs)
+        let use_uduc = !sats.is_empty() && !sats[0].is_iono_free && sats[0].p2.is_some();
+        let mut ppp = PppState::new(has_glo, self.dynamics, use_uduc);
         ppp.nsat = obs_data.len();
         let nx = ppp.nx();
         if self.epoch == 0 {
@@ -537,7 +562,7 @@ impl PppRtklib {
             .satellites
             .iter()
             .any(|s| s.sat.constellation == Constellation::Glonass);
-        let mut ppp = PppState::new(has_glo, self.dynamics);
+        let mut ppp = PppState::new(has_glo, self.dynamics, false); // IF mode for old API
         ppp.nsat = n; // simplified
 
         let nx = ppp.nx();
@@ -657,7 +682,7 @@ mod tests {
 
     #[test]
     fn test_ppp_state_indices() {
-        let ppp = PppState::new(false, false);
+        let ppp = PppState::new(false, false, false);
         assert_eq!(ppp.np, 3);
         assert_eq!(ppp.nc(), 1);
         assert_eq!(ppp.ic(0), 3); // pos(3) + GPS clk
@@ -665,7 +690,7 @@ mod tests {
         assert_eq!(ppp.nt(), 1);
         assert_eq!(ppp.nr(), 5); // pos(3) + clk(1) + tropo(1)
 
-        let ppp2 = PppState::new(true, false); // with GLONASS
+        let ppp2 = PppState::new(true, false, false); // with GLONASS
         assert_eq!(ppp2.nc(), 2);
         assert_eq!(ppp2.ic(0), 3); // GPS clk at 3
         assert_eq!(ppp2.ic(1), 4); // GLO clk at 4

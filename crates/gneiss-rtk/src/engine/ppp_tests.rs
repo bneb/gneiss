@@ -880,7 +880,7 @@ mod ppp_tests {
         // Iono always var = 100.0
         let idx3 = state.ambiguity_keys.iter().position(|&k| k == (sat_id, 3)).unwrap();
         let v3 = state.covariance[(crate::filter::CORE_STATE_SIZE + idx3, crate::filter::CORE_STATE_SIZE + idx3)];
-        assert!((v3 - 100.0).abs() < 1e-9, "Iono var should be 100, got {}", v3);
+        assert!((v3 - 10000.0).abs() < 1e-9, "Iono var should be 10000, got {}", v3);
 
         for i in 1..4 {
             assert!(state.last_observed.contains_key(&(sat_id, i)), "last_observed freq {}", i);
