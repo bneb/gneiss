@@ -211,6 +211,8 @@ impl PppRtklib {
         obs: &[(SatelliteId, f64, f64, f64, f64, f64)], // (sat, L1, L2, P1, P2, el)
         lc_if_vals: &[f64],                               // IF carrier phase in meters
         range_offsets: &[f64],                            // PCV+PCO+tide correction (m)
+        proc_tropo_dry: &[f64],                           // pre-computed ZHD×GMF mh
+        proc_map_wet: &[f64],                             // pre-computed GMF wet mapping
         sat_pos: &[Vector3<f64>],                       // ECEF satellite positions
         sat_clk: &[f64],                                 // satellite clock corrections (m)
         sat_var: &[f64],                                 // satellite position variance
@@ -240,8 +242,9 @@ impl PppRtklib {
 
             let el = el_deg * D2R;
 
-            // Troposphere: simple Saastamoinen
-            let dtrp = self.trop_saas(el);
+            // Troposphere: pre-computed ZHD×GMF mh + GMF wet mapping from pipeline
+            let dtrp = proc_tropo_dry[i];
+            let mw = proc_map_wet[i];
             let vart = ERR_SAAS * ERR_SAAS;
 
             // Gneiss IF mode: p1 is already IF-combined. Use directly.
@@ -276,8 +279,7 @@ impl PppRtklib {
                     v[nv] -= x[ppp.ic(1)];
                     h[(ppp.ic(1), nv)] = 1.0;
                 }
-                // Troposphere mapping
-                let mw = 1.0 / libm::sin(el).max(0.1);
+                // Troposphere: GMF wet mapping (pre-computed)
                 if ppp.nt() >= 1 {
                     h[(ppp.it(), nv)] = mw;
                 }
@@ -312,7 +314,6 @@ impl PppRtklib {
                     v[nv] -= x[ppp.ic(1)];
                     h[(ppp.ic(1), nv)] = 1.0;
                 }
-                let mw = 1.0 / libm::sin(el).max(0.1);
                 if ppp.nt() >= 1 {
                     h[(ppp.it(), nv)] = mw;
                 }
@@ -344,6 +345,8 @@ impl PppRtklib {
         let mut obs_data: Vec<(SatelliteId, f64, f64, f64, f64, f64)> = Vec::new();
         let mut lc_if_vals: Vec<f64> = Vec::new();
         let mut range_offsets: Vec<f64> = Vec::new(); // ProcessedSat.dist - our_dist
+        let mut proc_tropo_dry: Vec<f64> = Vec::new(); // ProcessedSat.tropo_dry (ZHD×GMF mh)
+        let mut proc_map_wet: Vec<f64> = Vec::new();   // ProcessedSat.map_wet (GMF mw)
         let mut sat_pos: Vec<Vector3<f64>> = Vec::new();
         let mut sat_clk: Vec<f64> = Vec::new();
         let mut sat_var: Vec<f64> = Vec::new();
@@ -360,6 +363,8 @@ impl PppRtklib {
             };
             let our_dist = (sat.sat_pos_rot - rcv).norm();
             range_offsets.push(sat.dist - our_dist); // PCV + PCO + tide corrections
+            proc_tropo_dry.push(sat.tropo_dry);       // ZHD×GMF mh (pre-computed)
+            proc_map_wet.push(sat.map_wet);            // GMF wet mapping (pre-computed)
             obs_data.push((sat.sat_obs.sat, sat.cp1.unwrap_or(0.0), sat.cp2.unwrap_or(0.0), sat.p1, sat.p2.unwrap_or(sat.p1), el * R2D));
             lc_if_vals.push(lc_if);
             sat_pos.push(sat.sat_pos_rot);
@@ -378,6 +383,12 @@ impl PppRtklib {
             // Starting at 0 forces the first measurement update to absorb the full
             // receiver clock offset, which leaks into position through the gain matrix.
             x0[ppp.ic(0)] = state.rcv_clk_bias;
+            // Seed ZWD from a priori wet delay (~0.1-0.3m). Pre-computed
+            // tropo_dry only contains hydrostatic; ZWD state holds the wet part.
+            let rcv_llh = gneiss_core::coords::ecef_to_llh(Vector3::new(x0[0], x0[1], x0[2]));
+            if ppp.nt() >= 1 {
+                x0[ppp.it()] = self.trop_zwd(rcv_llh);
+            }
             self.x = x0;
             self.p = self.init_covariance(&ppp, nx);
             self.biases_seeded = false;
@@ -429,7 +440,7 @@ impl PppRtklib {
             vec![0.0f64; lc_if_vals.len()]
         };
         for _iter in 0..self.max_iter {
-            let nv = self.residuals(&ppp, &obs_data, &lc_for_filter, &range_offsets, &sat_pos, &sat_clk, &sat_var, &xp, &mut v, &mut h_mat, &mut r_mat);
+            let nv = self.residuals(&ppp, &obs_data, &lc_for_filter, &range_offsets, &proc_tropo_dry, &proc_map_wet, &sat_pos, &sat_clk, &sat_var, &xp, &mut v, &mut h_mat, &mut r_mat);
             if nv < 4 { break; }
             let h_s = h_mat.view((0, 0), (nx, nv)).clone_owned();
             let vs = v.rows(0, nv).clone_owned();
@@ -448,8 +459,7 @@ impl PppRtklib {
                 let (sat, _, _, _, _, el) = obs_data[i];
                 let sys: usize = if sat.constellation == Constellation::Glonass { 1 } else { 0 };
                 let dist = (rs - Vector3::new(xp[0], xp[1], xp[2])).norm();
-                let el_rad = el * D2R;
-                let dtrp = self.trop_saas(el_rad);
+                let dtrp = proc_tropo_dry[i]; // pre-computed ZHD×GMF mh
                 let rng = dist - dts + dtrp; // dts already in meters from ProcessedSat
                 xp[ppp.ib(i)] = lc_if_vals[i] - rng - xp[ppp.ic(sys)];
                 seeded += 1;
@@ -467,13 +477,14 @@ impl PppRtklib {
         Ok(())
     }
 
-    /// Simple Saastamoinen troposphere model
-    fn trop_saas(&self, el: f64) -> f64 {
-        let z = std::f64::consts::FRAC_PI_2 - el;
-        let p = 1013.25; // sea level pressure
-        let t = 288.15; // temperature
+    /// Saastamoinen zenith wet delay for ZWD state initialization.
+    fn trop_zwd(&self, rcv_llh: Vector3<f64>) -> f64 {
+        let alt_m = rcv_llh.z;
+        let lat_rad = rcv_llh.x;
+        let t = (288.15 - 0.0065 * alt_m).max(200.0);
         let e = 6.108 * libm::exp((17.15 * t - 4684.0) / (t - 38.45)) * REL_HUMI;
-        0.002277 / libm::cos(z) * (p + (1255.0 / t + 0.05) * e)
+        let scale = 1.0 - 0.00266 * libm::cos(2.0 * lat_rad) - 0.00028 * alt_m / 1000.0;
+        0.002277 * (1255.0 / t + 0.05) * e / scale
     }
 
     /// Kalman measurement update — port of RTKLIB filter()
@@ -594,11 +605,15 @@ impl PppRtklib {
         for _iter in 0..self.max_iter {
             let empty_lc: Vec<f64> = vec![0.0; obs_data.len()];
             let empty_off: Vec<f64> = vec![0.0; obs_data.len()];
+            let empty_tropo: Vec<f64> = vec![0.0; obs_data.len()];
+            let empty_mw: Vec<f64> = vec![1.0; obs_data.len()];
             let nv = self.residuals(
                 &ppp,
                 &obs_data,
                 &empty_lc,
                 &empty_off,
+                &empty_tropo,
+                &empty_mw,
                 &sat_pos,
                 &sat_clk,
                 &sat_var,
