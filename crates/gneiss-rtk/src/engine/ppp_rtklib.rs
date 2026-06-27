@@ -12,6 +12,7 @@
 
 use std::collections::HashMap;
 
+use crate::engine::ppp_multi_epoch_batch::MultiEpochCombiner;
 use crate::engine::EngineError;
 use crate::filter::RtkState;
 use crate::measurements::combinations;
@@ -148,6 +149,8 @@ pub struct PppRtklib {
     was_uduc: bool,         // previous epoch's UDUC mode
     /// MW widelane EMA for AR: sat → (count, smoothed_WL_cycles)
     mw_wl_ema: HashMap<SatelliteId, (u32, f64)>,
+    /// Multi-epoch position combiner for static PPP
+    pub epoch_combiner: MultiEpochCombiner,
 }
 
 impl Default for PppRtklib {
@@ -167,6 +170,7 @@ impl Default for PppRtklib {
             biases_seeded: false,
             was_uduc: false,
             mw_wl_ema: HashMap::new(),
+            epoch_combiner: MultiEpochCombiner::new(),
         }
     }
 }
@@ -660,6 +664,25 @@ impl PppRtklib {
         state.position.vector.z = self.x[2];
         state.rcv_clk_bias = self.x[ppp.ic(0)];
         state.covariance = self.p.clone();
+
+        // Feed converged positions to multi-epoch combiner (skip warmup)
+        if self.biases_seeded && self.epoch > 2 {
+            let cov_3x3 = nalgebra::Matrix3::new(
+                self.p[(0,0)], self.p[(0,1)], self.p[(0,2)],
+                self.p[(1,0)], self.p[(1,1)], self.p[(1,2)],
+                self.p[(2,0)], self.p[(2,1)], self.p[(2,2)],
+            );
+            self.epoch_combiner.add_epoch(
+                Vector3::new(self.x[0], self.x[1], self.x[2]),
+                cov_3x3,
+            );
+            // Replace output with multi-epoch weighted average
+            if let Some(avg) = self.epoch_combiner.weighted_average() {
+                state.position.vector.x = avg.x;
+                state.position.vector.y = avg.y;
+                state.position.vector.z = avg.z;
+            }
+        }
 
         // ---- MW widelane tracking for integer AR ----
         // Compute Melbourne-Wübbena widelane for each satellite, maintain EMA.

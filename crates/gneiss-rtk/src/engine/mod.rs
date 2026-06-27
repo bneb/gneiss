@@ -19,6 +19,7 @@ pub mod ppp_math;
 pub mod ppp_mode_switch;
 pub(crate) mod ppp_measurements;
 pub mod ppp_multi_epoch;
+pub mod ppp_multi_epoch_batch;
 pub mod predictor;
 pub mod processed_sat;
 pub mod processor;
