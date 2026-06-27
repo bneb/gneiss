@@ -521,9 +521,22 @@ impl PppRtklib {
                     x0[ppp.ib2(i)] = (l2_meas - (rng - i1_est * gamma + x0[ppp.ic(sys)])) / lam2_vals[i];
                 }
             }
+            // IF mode: seed biases from SPP position before moving x0 to self.x
+            if !ppp.uduc {
+                for i in 0..obs_data.len() {
+                    if lc_if_vals[i] == 0.0 { continue; }
+                    let rs = sat_pos[i]; let dts = sat_clk[i];
+                    let (sat, _, _, _, _, el) = obs_data[i];
+                    let sys: usize = if sat.constellation == Constellation::Glonass { 1 } else { 0 };
+                    let dist = (rs - Vector3::new(x0[0], x0[1], x0[2])).norm();
+                    let dtrp = proc_tropo_dry[i];
+                    let rng = dist - dts + dtrp;
+                    x0[ppp.ib(i)] = lc_if_vals[i] - rng - x0[ppp.ic(sys)];
+                }
+            }
             self.x = x0;
             self.p = self.init_covariance(&ppp, nx);
-            self.biases_seeded = ppp.uduc; // UDUC biases seeded at init, IF needs warmup
+            self.biases_seeded = true; // biases seeded for both modes
         } else if mode_changed {
             // IF↔UDUC mode change: convert state vector
             tracing::info!("Mode change: {} -> {} at epoch {}",
