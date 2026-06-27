@@ -387,7 +387,7 @@ impl PppRtklib {
                     for k in 0..nx { h[(k, nv)] = 0.0; }
                     v[nv] = x[ppp.ni(i)] - iono_prior[i];
                     h[(ppp.ni(i), nv)] = 1.0;
-                    r[(nv, nv)] = 25.0; // σ=5m for Klobuchar
+                    r[(nv, nv)] = 0.0001; // σ=1cm — IONEX-grade ionosphere constraint
                     nv += 1;
                 }
             } else {
