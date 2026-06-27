@@ -407,7 +407,7 @@ fn add_uduc_ambiguities(
     let p1 = sat.p1;
     let gamma = (sat.f1 * sat.f1) / (sat.f2 * sat.f2);
     let mut i1_est = (p2 - p1) / (gamma - 1.0);
-    if i1_est.is_nan() || i1_est.abs() > 100.0 {
+    if i1_est.is_nan() || i1_est.abs() > 500.0 {
         i1_est = 0.0;
     }
 
@@ -425,7 +425,9 @@ fn add_uduc_ambiguities(
         > 50;
     let init_var = if mw_confident { 0.04 } else { 10000.0 }; // 0.2 cycle or 100m std
     if !state.ambiguity_keys.contains(&(sat.sat_obs.sat, 3)) {
-        state.add_ambiguity(sat.sat_obs.sat, 3, i1_est, 100.0);
+        // Ionosphere: large initial variance (σ=100m) so measurements dominate.
+        // P1-P2 estimate is noisy (~15m); tight prior causes slow convergence.
+        state.add_ambiguity(sat.sat_obs.sat, 3, i1_est, 10000.0);
     }
     if !state.ambiguity_keys.contains(&(sat.sat_obs.sat, 1)) {
         state.add_ambiguity(
