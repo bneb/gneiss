@@ -10,8 +10,11 @@
 //! The goal is identical output to RTKLIB on the same input data.
 //! Once verified, we can incrementally improve.
 
+use std::collections::HashMap;
+
 use crate::engine::EngineError;
 use crate::filter::RtkState;
+use crate::measurements::combinations;
 use gneiss_core::coords::Coordinate;
 use gneiss_core::ephemeris::Ephemeris;
 use gneiss_core::obs::EpochObs;
@@ -140,6 +143,8 @@ pub struct PppRtklib {
     pub epoch: u32,
     last_nsat: usize,
     biases_seeded: bool,
+    /// MW widelane EMA for AR: sat → (count, smoothed_WL_cycles)
+    mw_wl_ema: HashMap<SatelliteId, (u32, f64)>,
 }
 
 impl Default for PppRtklib {
@@ -156,6 +161,7 @@ impl Default for PppRtklib {
             epoch: 0,
             last_nsat: 0,
             biases_seeded: false,
+            mw_wl_ema: HashMap::new(),
         }
     }
 }
@@ -579,6 +585,72 @@ impl PppRtklib {
         state.position.vector.z = self.x[2];
         state.rcv_clk_bias = self.x[ppp.ic(0)];
         state.covariance = self.p.clone();
+
+        // ---- MW widelane tracking for integer AR ----
+        // Compute Melbourne-Wübbena widelane for each satellite, maintain EMA.
+        // When WL is precise enough, fix N_wl → compute N1 → fix N_IF.
+        for i in 0..obs_data.len() {
+            let (sat, l1_cyc, l2_cyc, p1_raw, p2_raw, _el_deg) = obs_data[i];
+            if l1_cyc == 0.0 || l2_cyc == 0.0 || p1_raw == 0.0 || p2_raw == 0.0 { continue; }
+            let lam1 = lam1_vals.get(i).copied().unwrap_or(0.1903);
+            let lam2 = lam2_vals.get(i).copied().unwrap_or(0.2442);
+            let f1 = f1_vals.get(i).copied().unwrap_or(1575.42e6);
+            let f2 = f2_vals.get(i).copied().unwrap_or(1227.60e6);
+            if f1 == 0.0 || f2 == 0.0 { continue; }
+
+            // MW in cycles: (L1-L2) - narrow-lane PR / widelane wavelength
+            let l1_m = l1_cyc * lam1;
+            let l2_m = l2_cyc * lam2;
+            let mw_m = combinations::melbourne_wubbena(l1_m, l2_m, p1_raw, p2_raw, f1, f2);
+            let wl_lambda = combinations::lambda_wl(f1, f2);
+            if wl_lambda <= 0.0 { continue; }
+            let mw_cyc = mw_m / wl_lambda;
+
+            // EMA: 0.05 weight for new sample
+            let (count, ema) = self.mw_wl_ema.get(&sat)
+                .map(|(c, e)| (c + 1, e + 0.05 * (mw_cyc - e)))
+                .unwrap_or((1u32, mw_cyc));
+            self.mw_wl_ema.insert(sat, (count, ema));
+
+            // Fix WL when confident (50+ samples) — round to nearest integer
+            if count > 50 {
+                let n_wl = ema.round();
+                if (ema - n_wl).abs() > 0.25 { continue; } // not confident
+
+                // N_IF = (f1²*N1*λ1 - f2²*N2*λ2) / (f1²-f2²)
+                // N1 = N2 + N_wl, so N_IF = N1*λ1 + f2²/(f1²-f2²)*N_wl*λ2 - N1*(f1²*λ1-f2²*λ2)/(f1²-f2²)
+                // Simplified: N1_est = (N_IF - f2²/(f1²-f2²)*N_wl*λ2) / λ1
+                let g = (f1 * f1) / (f2 * f2);
+                let f1s = f1 * f1; let f2s = f2 * f2;
+
+                // Get float N_IF from our IF bias (averaged)
+                let n_if = self.x[ppp.ib(i)];
+
+                // N_IF = N1*λ_nl + N_wl*f2²*λ2/(f1²-f2²) where λ_nl = c/(f1+f2)
+                let lam_nl = 299792458.0 / (f1 + f2);
+                let n1_est = (n_if - n_wl * f2s / (f1s - f2s) * lam2) / lam_nl;
+                let n1_rounded = n1_est.round();
+                if (n1_est - n1_rounded).abs() > 0.3 { continue; }
+
+                let n2_rounded = n1_rounded - n_wl;
+                let n_if_fixed = (f1s * n1_rounded * lam1 - f2s * n2_rounded * lam2) / (f1s - f2s);
+                let residual = n_if - n_if_fixed;
+                if residual.abs() > 2.0 { continue; } // reject if residual too large
+
+                // Tighten IF bias state to the fixed value
+                let bi = ppp.ib(i);
+                self.x[bi] = n_if_fixed;
+                self.p[(bi, bi)] = 1e-6; // σ ≈ 1mm — effectively locked
+                // Clear cross-correlations for this bias
+                for j in 0..ppp.nx() {
+                    if j != bi {
+                        self.p[(bi, j)] = 0.0;
+                        self.p[(j, bi)] = 0.0;
+                    }
+                }
+            }
+        }
+
         Ok(())
     }
 
