@@ -521,22 +521,9 @@ impl PppRtklib {
                     x0[ppp.ib2(i)] = (l2_meas - (rng - i1_est * gamma + x0[ppp.ic(sys)])) / lam2_vals[i];
                 }
             }
-            // IF mode: seed biases from SPP position before moving x0 to self.x
-            if !ppp.uduc {
-                for i in 0..obs_data.len() {
-                    if lc_if_vals[i] == 0.0 { continue; }
-                    let rs = sat_pos[i]; let dts = sat_clk[i];
-                    let (sat, _, _, _, _, el) = obs_data[i];
-                    let sys: usize = if sat.constellation == Constellation::Glonass { 1 } else { 0 };
-                    let dist = (rs - Vector3::new(x0[0], x0[1], x0[2])).norm();
-                    let dtrp = proc_tropo_dry[i];
-                    let rng = dist - dts + dtrp;
-                    x0[ppp.ib(i)] = lc_if_vals[i] - rng - x0[ppp.ic(sys)];
-                }
-            }
             self.x = x0;
             self.p = self.init_covariance(&ppp, nx);
-            self.biases_seeded = true; // biases seeded for both modes
+            self.biases_seeded = ppp.uduc; // UDUC biases seeded at init, IF needs warmup
         } else if mode_changed {
             // IF↔UDUC mode change: convert state vector
             tracing::info!("Mode change: {} -> {} at epoch {}",
@@ -658,14 +645,14 @@ impl PppRtklib {
         let mut pp = self.p.clone();
         self.predict(&ppp, &mut xp, &mut pp);
         // Clock-only pre-update: after predict() resets clock variance,
-        // use PR measurements to estimate clock without touching position.
-        // This prevents the clock reset from leaking into position through
-        // the Kalman gain matrix, which causes per-epoch position drift.
+        // use PR and AR-fixed CP measurements to estimate clock without
+        // touching position.  CP from AR-fixed biases gives σ≈1cm range,
+        // dramatically improving clock accuracy when AR is active.
         if !ppp.uduc {
-            let n_pr = obs_data.len();
-            let mut h_clk = DMatrix::zeros(ppp.nx(), n_pr);
-            let mut v_clk = DVector::zeros(n_pr);
-            let mut r_clk = DMatrix::zeros(n_pr, n_pr);
+            let max_n = obs_data.len() * 2;
+            let mut h_clk = DMatrix::zeros(ppp.nx(), max_n);
+            let mut v_clk = DVector::zeros(max_n);
+            let mut r_clk = DMatrix::zeros(max_n, max_n);
             let mut n_clk = 0usize;
             let rcv_pos = Vector3::new(xp[0], xp[1], xp[2]);
             for i in 0..obs_data.len() {
@@ -677,10 +664,19 @@ impl PppRtklib {
                 let dtrp = proc_tropo_dry[i];
                 let rng = dist - dts + dtrp;
                 let sys: usize = if obs_data[i].0.constellation == Constellation::Glonass { 1 } else { 0 };
+                // PR measurement (σ≈5m at zenith)
                 h_clk[(ppp.ic(sys), n_clk)] = 1.0;
                 v_clk[n_clk] = p1 - rng - xp[ppp.ic(sys)];
                 r_clk[(n_clk, n_clk)] = 25.0 / libm::sin(el).max(0.1);
                 n_clk += 1;
+                // CP measurement for AR-fixed IF biases (σ≈1cm at zenith)
+                let lc = lc_if_vals[i];
+                if lc != 0.0 && pp[(ppp.ib(i), ppp.ib(i))] < 0.01 {
+                    h_clk[(ppp.ic(sys), n_clk)] = 1.0;
+                    v_clk[n_clk] = lc - rng - xp[ppp.ib(i)] - xp[ppp.ic(sys)];
+                    r_clk[(n_clk, n_clk)] = 0.0001 / libm::sin(el).max(0.1);
+                    n_clk += 1;
+                }
             }
             if n_clk >= 4 {
                 let h_s = h_clk.view((0, 0), (ppp.nx(), n_clk)).clone_owned();
