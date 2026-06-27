@@ -615,7 +615,7 @@ impl PppRtklib {
             // Fix WL when confident (50+ samples) — round to nearest integer
             if count > 50 {
                 let n_wl = ema.round();
-                if (ema - n_wl).abs() > 0.25 { continue; } // not confident
+                if (ema - n_wl).abs() > 0.25 { continue; }
 
                 // N_IF = (f1²*N1*λ1 - f2²*N2*λ2) / (f1²-f2²)
                 // N1 = N2 + N_wl, so N_IF = N1*λ1 + f2²/(f1²-f2²)*N_wl*λ2 - N1*(f1²*λ1-f2²*λ2)/(f1²-f2²)
@@ -659,9 +659,10 @@ impl PppRtklib {
             !ppp.uduc && self.p[(ppp.ib(i), ppp.ib(i))] < 0.01
         });
         if any_fixed {
-            // Inflate position variance temporarily for CP-only re-convergence
-            for k in 0..3 { self.p[(k, k)] = self.p[(k, k)].max(4.0); } // σ=2m
+            // Inflate position/clock/ZWD for CP-only re-convergence
+            for k in 0..3 { self.p[(k, k)] = self.p[(k, k)].max(100.0); } // σ=10m pos
             self.p[(ppp.ic(0), ppp.ic(0))] = self.p[(ppp.ic(0), ppp.ic(0))].max(10000.0);
+            if ppp.nt() >= 1 { self.p[(ppp.it(), ppp.it())] = self.p[(ppp.it(), ppp.it())].max(9.0); } // σ=3m ZWD
 
             // One CP-only measurement update pass
             let mut v_cp = DVector::zeros(obs_data.len());
