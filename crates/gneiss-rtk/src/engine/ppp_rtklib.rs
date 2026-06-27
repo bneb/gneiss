@@ -142,6 +142,7 @@ pub struct PppRtklib {
     pub p: DMatrix<f64>,
     pub epoch: u32,
     last_nsat: usize,
+    last_has_glo: bool,    // for semantic state resize on GLO change
     biases_seeded: bool,
     /// MW widelane EMA for AR: sat → (count, smoothed_WL_cycles)
     mw_wl_ema: HashMap<SatelliteId, (u32, f64)>,
@@ -160,6 +161,7 @@ impl Default for PppRtklib {
             p: DMatrix::zeros(0, 0),
             epoch: 0,
             last_nsat: 0,
+            last_has_glo: false,
             biases_seeded: false,
             mw_wl_ema: HashMap::new(),
         }
@@ -504,20 +506,35 @@ impl PppRtklib {
             self.p = self.init_covariance(&ppp, nx);
             self.biases_seeded = ppp.uduc; // UDUC biases seeded at init, IF needs warmup
         } else if self.last_nsat != obs_data.len() {
-            // nsat changed: resize state vector, preserve existing state values
-            let old_nr = ppp.nr();
+            // nsat changed: resize state vector with semantic index remapping.
+            // Blind slice copy corrupts indices when GLONASS appears/disappears
+            // (nc() changes → it() and nr() shift by 1).
+            // old_nr = old position/clk/tropo count (depends on old has_glo)
+            let _old_nc = if self.last_has_glo { 2 } else { 1 };
+            let old_nr = ppp.np + _old_nc + ppp.nt();
             let old_nx = self.x.len();
             let mut x_new = DVector::zeros(nx);
             let mut p_new = DMatrix::zeros(nx, nx);
-            // Copy existing position/clock/tropo states
-            let nr = ppp.nr();
-            for i in 0..old_nr.min(nr) {
+            // Copy position (indices 0..np, same for both layouts)
+            for i in 0..3 {
                 x_new[i] = self.x[i];
-                for j in 0..old_nr.min(nr) {
-                    p_new[(i, j)] = self.p[(i, j)];
-                }
+                for j in 0..3 { p_new[(i, j)] = self.p[(i, j)]; }
             }
-            // Existing biases get their old values; new biases get VAR_BIAS
+            // Copy GPS clock (always at np, same for both)
+            x_new[ppp.ic(0)] = self.x[ppp.ic(0)];
+            p_new[(ppp.ic(0), ppp.ic(0))] = self.p[(ppp.ic(0), ppp.ic(0))];
+            // Copy GLO clock if present in both old and new
+            if ppp.nc() >= 2 && old_nx > ppp.ic(1) {
+                x_new[ppp.ic(1)] = self.x[ppp.ic(1)];
+                p_new[(ppp.ic(1), ppp.ic(1))] = self.p[(ppp.ic(1), ppp.ic(1))];
+            }
+            // Copy tropo (indices it()..it()+nt(), same dimension)
+            for i in 0..ppp.nt().min(old_nx.saturating_sub(ppp.it())) {
+                x_new[ppp.it() + i] = self.x[ppp.it() + i];
+                p_new[(ppp.it()+i, ppp.it()+i)] = self.p[(ppp.it()+i, ppp.it()+i)];
+            }
+            // Copy existing biases to same relative positions
+            let nr = ppp.nr();
             for i in 0..old_nx.saturating_sub(old_nr) {
                 let new_idx = nr + i;
                 if new_idx < nx {
@@ -525,17 +542,18 @@ impl PppRtklib {
                     p_new[(new_idx, new_idx)] = self.p[(old_nr + i, old_nr + i)];
                 }
             }
+            // New biases get VAR_BIAS
             for i in old_nx.saturating_sub(old_nr)..ppp.nsat {
                 let idx = nr + i;
-                if idx < nx {
-                    p_new[(idx, idx)] = VAR_BIAS;
-                }
+                if idx < nx { p_new[(idx, idx)] = VAR_BIAS; }
             }
             self.x = x_new;
             self.p = p_new;
-            self.biases_seeded = false;
+            self.biases_seeded = false; // warmup needed for new satellite biases
         }
-        self.last_nsat = obs_data.len(); self.epoch += 1;
+        self.last_nsat = obs_data.len();
+        self.last_has_glo = has_glo;
+        self.epoch += 1;
         let mut xp = self.x.clone();
         let mut pp = self.p.clone();
         self.predict(&ppp, &mut xp, &mut pp);
@@ -562,6 +580,19 @@ impl PppRtklib {
         // Using the filtered position (not SPP) gives biases within ~3m,
         // so CP residuals start small enough for σ=10cm measurements to pull.
         if !self.biases_seeded && !ppp.uduc {
+            // Validate position: if filter diverged during warmup, skip seeding
+            let pos_jump = (Vector3::new(xp[0], xp[1], xp[2]) - Vector3::new(self.x[0], self.x[1], self.x[2])).norm();
+            if pos_jump > 500.0 {
+                tracing::warn!("Warmup position jump {}m > 500m — skipping bias seed", pos_jump);
+                self.x[0] = xp[0]; self.x[1] = xp[1]; self.x[2] = xp[2]; // keep position
+                self.p = pp.clone(); // keep covariance
+                state.position.vector.x = self.x[0];
+                state.position.vector.y = self.x[1];
+                state.position.vector.z = self.x[2];
+                state.rcv_clk_bias = self.x[ppp.ic(0)];
+                state.covariance = self.p.clone();
+                return Ok(()); // retry warmup next epoch
+            }
             let mut seeded = 0;
             for i in 0..obs_data.len() {
                 if lc_if_vals[i] == 0.0 { continue; }
@@ -612,18 +643,15 @@ impl PppRtklib {
                 .unwrap_or((1u32, mw_cyc));
             self.mw_wl_ema.insert(sat, (count, ema));
 
-            // Fix WL when confident (50+ samples) — round to nearest integer
-            if count > 50 {
+            // Fix WL when confident (50+ samples). IF mode only:
+            // UDUC AR is handled separately via WL constraint Kalman updates.
+            if !ppp.uduc && count > 50 {
                 let n_wl = ema.round();
                 if (ema - n_wl).abs() > 0.25 { continue; }
 
-                // N_IF = (f1²*N1*λ1 - f2²*N2*λ2) / (f1²-f2²)
-                // N1 = N2 + N_wl, so N_IF = N1*λ1 + f2²/(f1²-f2²)*N_wl*λ2 - N1*(f1²*λ1-f2²*λ2)/(f1²-f2²)
-                // Simplified: N1_est = (N_IF - f2²/(f1²-f2²)*N_wl*λ2) / λ1
-                let g = (f1 * f1) / (f2 * f2);
                 let f1s = f1 * f1; let f2s = f2 * f2;
 
-                // Get float N_IF from our IF bias (averaged)
+                // Get float N_IF from our IF bias
                 let n_if = self.x[ppp.ib(i)];
 
                 // N_IF = N1*λ_nl + N_wl*f2²*λ2/(f1²-f2²) where λ_nl = c/(f1+f2)

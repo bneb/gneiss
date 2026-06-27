@@ -358,9 +358,17 @@ impl ProcessingEngine {
                     state.position.epoch = filtered_rover.time;
                     let mut solver = self.ppp_rtklib_solver.take()
                         .unwrap_or_else(crate::engine::ppp_rtklib::PppRtklib::default);
-                    let r = solver.solve_with_sats(state, &sats).err();
-                    self.ppp_rtklib_solver = Some(solver);
-                    r
+                    let r = std::panic::catch_unwind(
+                        std::panic::AssertUnwindSafe(|| solver.solve_with_sats(state, &sats))
+                    );
+                    match r {
+                        Ok(result) => { self.ppp_rtklib_solver = Some(solver); result.err() }
+                        Err(_panic) => {
+                            tracing::error!("RTKLIB solver panicked — reinitializing");
+                            self.ppp_rtklib_solver = Some(crate::engine::ppp_rtklib::PppRtklib::default());
+                            Some(EngineError::StateDisappeared)
+                        }
+                    }
                 } else {
                     Some(EngineError::StateDisappeared)
                 };
