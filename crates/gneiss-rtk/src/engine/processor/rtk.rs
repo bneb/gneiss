@@ -423,9 +423,14 @@ fn handle_ekf_acceptance(
     state.consecutive_rejections = 0;
     if let Ok(res) = state.resolve_ambiguities(ephemerides, config) {
         let fixed_state = res.fixed_state;
-        tracing::debug!("Integer ambiguities resolved!");
+        tracing::debug!("Integer ambiguities resolved: {} sats", fixed_state.ambiguities.len());
+        // Enable tight ambiguity process noise for fixed ambiguities.
+        // Don't replace position/covariance — the AR position correction
+        // may not be more accurate than the float solution.
+        state.is_fixed = true;
         state.fixed_state = Some(Box::new(fixed_state));
     } else {
+        state.is_fixed = false;
         state.fixed_state = None;
     }
 }
