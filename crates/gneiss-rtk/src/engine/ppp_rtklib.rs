@@ -703,7 +703,6 @@ impl PppRtklib {
                 let n1_est = (lc_if_vals[i] - rng - clock) / lam_nl;
                 let n1_rounded = n1_est.round();
                 if (n1_est - n1_rounded).abs() > 0.15 { continue; }
-                // Compute fixed N_IF from integer N1
                 let f1s = f1_vals[i]*f1_vals[i]; let f2s = f2_vals[i]*f2_vals[i];
                 let n_if_fixed = (f1s * n1_rounded * lam1_vals[i] - f2s * n1_rounded * lam2_vals[i]) / (f1s - f2s);
                 let n_if_float = self.x[ppp.ib(i)];
