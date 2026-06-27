@@ -114,18 +114,19 @@ impl PppState {
         }
     }
 
-    /// Index of L2 ambiguity state (UDUC only)
-    fn ib2(&self, sat_idx: usize) -> usize {
-        debug_assert!(self.uduc);
-        self.nr() + 2 * self.nsat + sat_idx
+    /// Index of L2 ambiguity state (full UDUC — deprecated, use 2N hybrid)
+    fn ib2(&self, _sat_idx: usize) -> usize {
+        0 // not used in 2N hybrid mode
     }
 
-    /// Total number of estimated states
+    /// Total number of estimated states.
+    /// UDUC hybrid: [pos, clk, tropo, iono(N), bias(N)] = nr + 2*nsat (well-determined)
+    /// IF mode: [pos, clk, tropo, bias(N)] = nr + nsat
     fn nx(&self) -> usize {
         if self.uduc {
-            self.nr() + 3 * self.nsat // iono + L1 amb + L2 amb per sat
+            self.nr() + 2 * self.nsat // iono + IF biases per sat
         } else {
-            self.ib(self.nsat) // biases for all observed satellites
+            self.ib(self.nsat)
         }
     }
 }
@@ -198,8 +199,7 @@ impl PppRtklib {
         if ppp.uduc {
             for i in 0..ppp.nsat {
                 p[(ppp.ni(i), ppp.ni(i))] = VAR_BIAS;   // ionosphere
-                p[(ppp.ib(i), ppp.ib(i))] = VAR_BIAS;    // L1 ambiguity
-                p[(ppp.ib2(i), ppp.ib2(i))] = VAR_BIAS;  // L2 ambiguity
+                p[(ppp.ib(i), ppp.ib(i))] = VAR_BIAS;    // IF bias
             }
         } else {
             for i in 0..ppp.nsat {
@@ -309,91 +309,8 @@ impl PppRtklib {
             // Line of sight unit vector
             let e = (rs - Vector3::new(x[0], x[1], x[2])) / dist;
 
-            if ppp.uduc {
-                // ---- UDUC: 4 raw measurements per satellite ----
-                let l1 = l1_cyc; let l2 = l2_cyc;
-                let lam1 = lam1_vals[i]; let lam2 = lam2_vals[i];
-                let f1 = f1_vals[i]; let f2 = f2_vals[i];
-                let inv_f1_sq = 1.0 / (f1 * f1);
-                let inv_f2_sq = 1.0 / (f2 * f2);
-                if l2 == 0.0 { continue; } // need both frequencies
-
-                // ---- PR1 ----
-                if p1 != 0.0 {
-                    for k in 0..nx { h[(k, nv)] = 0.0; }
-                    v[nv] = p1 - rng;
-                    for k in 0..3 { h[(k, nv)] = -e[k]; }
-                    if sys != 1 { v[nv] -= x[ppp.ic(0)]; h[(ppp.ic(0), nv)] = 1.0; }
-                    else { v[nv] -= x[ppp.ic(1)]; h[(ppp.ic(1), nv)] = 1.0; }
-                    if ppp.nt() >= 1 { h[(ppp.it(), nv)] = mw; }
-                    v[nv] -= x[ppp.ni(i)] * inv_f1_sq;
-                    h[(ppp.ni(i), nv)] = inv_f1_sq;
-                    let var_pr = 25.0 / libm::sin(el).max(0.1) + sat_var[i] + vart;
-                    r[(nv, nv)] = var_pr;
-                    if self.max_inno_m > 0.0 && v[nv].abs() > self.max_inno_m && sys != 1 { continue; }
-                    nv += 1;
-                }
-                // ---- PR2 ----
-                if p2 != 0.0 {
-                    for k in 0..nx { h[(k, nv)] = 0.0; }
-                    v[nv] = p2 - rng;
-                    for k in 0..3 { h[(k, nv)] = -e[k]; }
-                    if sys != 1 { v[nv] -= x[ppp.ic(0)]; h[(ppp.ic(0), nv)] = 1.0; }
-                    else { v[nv] -= x[ppp.ic(1)]; h[(ppp.ic(1), nv)] = 1.0; }
-                    if ppp.nt() >= 1 { h[(ppp.it(), nv)] = mw; }
-                    v[nv] -= x[ppp.ni(i)] * inv_f2_sq;
-                    h[(ppp.ni(i), nv)] = inv_f2_sq;
-                    let var_pr = 25.0 / libm::sin(el).max(0.1) + sat_var[i] + vart;
-                    r[(nv, nv)] = var_pr;
-                    if self.max_inno_m > 0.0 && v[nv].abs() > self.max_inno_m && sys != 1 { continue; }
-                    nv += 1;
-                }
-                // ---- CP1 ----
-                if l1 != 0.0 {
-                    for k in 0..nx { h[(k, nv)] = 0.0; }
-                    v[nv] = l1 * lam1 - rng;
-                    for k in 0..3 { h[(k, nv)] = -e[k]; }
-                    if sys != 1 { v[nv] -= x[ppp.ic(0)]; h[(ppp.ic(0), nv)] = 1.0; }
-                    else { v[nv] -= x[ppp.ic(1)]; h[(ppp.ic(1), nv)] = 1.0; }
-                    if ppp.nt() >= 1 { h[(ppp.it(), nv)] = mw; }
-                    v[nv] += x[ppp.ni(i)] * inv_f1_sq; // CP iono sign opposite to PR
-                    h[(ppp.ni(i), nv)] = -inv_f1_sq;
-                    v[nv] -= x[ppp.ib(i)] * lam1;
-                    h[(ppp.ib(i), nv)] = lam1;
-                    let var_cp = 0.01 / libm::sin(el).max(0.1) + sat_var[i] + vart;
-                    r[(nv, nv)] = var_cp;
-                    if self.max_inno_cp > 0.0 && v[nv].abs() > self.max_inno_cp && sys != 1 { continue; }
-                    nv += 1;
-                }
-                // ---- CP2 ----
-                if l2 != 0.0 {
-                    for k in 0..nx { h[(k, nv)] = 0.0; }
-                    v[nv] = l2 * lam2 - rng;
-                    for k in 0..3 { h[(k, nv)] = -e[k]; }
-                    if sys != 1 { v[nv] -= x[ppp.ic(0)]; h[(ppp.ic(0), nv)] = 1.0; }
-                    else { v[nv] -= x[ppp.ic(1)]; h[(ppp.ic(1), nv)] = 1.0; }
-                    if ppp.nt() >= 1 { h[(ppp.it(), nv)] = mw; }
-                    v[nv] += x[ppp.ni(i)] * inv_f2_sq;
-                    h[(ppp.ni(i), nv)] = -inv_f2_sq;
-                    v[nv] -= x[ppp.ib2(i)] * lam2;
-                    h[(ppp.ib2(i), nv)] = lam2;
-                    let var_cp = 0.01 / libm::sin(el).max(0.1) + sat_var[i] + vart;
-                    r[(nv, nv)] = var_cp;
-                    if self.max_inno_cp > 0.0 && v[nv].abs() > self.max_inno_cp && sys != 1 { continue; }
-                    nv += 1;
-                }
-                // Ionosphere prior: constrain UDUC iono to Klobuchar/IONEX
-                if iono_prior[i] != 0.0 {
-                    for k in 0..nx { h[(k, nv)] = 0.0; }
-                    v[nv] = x[ppp.ni(i)] - iono_prior[i];
-                    h[(ppp.ni(i), nv)] = 1.0;
-                    r[(nv, nv)] = 0.0001; // σ=1cm — IONEX-grade ionosphere constraint
-                    nv += 1;
-                }
-            } else {
-                // ---- IF mode: 2 measurements per satellite ----
-                // ---- Phase measurement ----
-                if lc != 0.0 {
+            // ---- Phase measurement (IF, always) ----
+            if lc != 0.0 {
                     for k in 0..nx { h[(k, nv)] = 0.0; }
                     v[nv] = lc - rng;
                     for k in 0..3 { h[(k, nv)] = -e[k]; }
@@ -423,7 +340,43 @@ impl PppRtklib {
                     if self.max_inno_m > 0.0 && v[nv].abs() > self.max_inno_m && sys != 1 { continue; }
                     nv += 1;
                 }
-            }
+
+                // Ionosphere estimation (UDUC hybrid): raw PR1/PR2 + IONEX prior
+                if ppp.uduc && p2 != 0.0 && l2_cyc != 0.0 {
+                    let f1 = f1_vals[i]; let f2 = f2_vals[i];
+                    let inv_f1_sq = 1.0 / (f1 * f1);
+                    let inv_f2_sq = 1.0 / (f2 * f2);
+                    // PR1 with iono state
+                    for k in 0..nx { h[(k, nv)] = 0.0; }
+                    v[nv] = p1 - rng;
+                    for k in 0..3 { h[(k, nv)] = -e[k]; }
+                    if sys != 1 { v[nv] -= x[ppp.ic(0)]; h[(ppp.ic(0), nv)] = 1.0; }
+                    else { v[nv] -= x[ppp.ic(1)]; h[(ppp.ic(1), nv)] = 1.0; }
+                    if ppp.nt() >= 1 { h[(ppp.it(), nv)] = mw; }
+                    v[nv] -= x[ppp.ni(i)] * inv_f1_sq;
+                    h[(ppp.ni(i), nv)] = inv_f1_sq;
+                    r[(nv, nv)] = 25.0 / libm::sin(el).max(0.1);
+                    nv += 1;
+                    // PR2 with iono state
+                    for k in 0..nx { h[(k, nv)] = 0.0; }
+                    v[nv] = p2 - rng;
+                    for k in 0..3 { h[(k, nv)] = -e[k]; }
+                    if sys != 1 { v[nv] -= x[ppp.ic(0)]; h[(ppp.ic(0), nv)] = 1.0; }
+                    else { v[nv] -= x[ppp.ic(1)]; h[(ppp.ic(1), nv)] = 1.0; }
+                    if ppp.nt() >= 1 { h[(ppp.it(), nv)] = mw; }
+                    v[nv] -= x[ppp.ni(i)] * inv_f2_sq;
+                    h[(ppp.ni(i), nv)] = inv_f2_sq;
+                    r[(nv, nv)] = 25.0 / libm::sin(el).max(0.1);
+                    nv += 1;
+                    // IONEX iono prior
+                    if iono_prior[i] != 0.0 {
+                        for k in 0..nx { h[(k, nv)] = 0.0; }
+                        v[nv] = x[ppp.ni(i)] - iono_prior[i];
+                        h[(ppp.ni(i), nv)] = 1.0;
+                        r[(nv, nv)] = 0.0001; // σ=1cm IONEX
+                        nv += 1;
+                    }
+                }
         }
         nv
     }
@@ -498,27 +451,12 @@ impl PppRtklib {
             if ppp.nt() >= 1 {
                 x0[ppp.it()] = self.trop_zwd(rcv_llh);
             }
-            // UDUC: seed ionosphere and L1/L2 ambiguities from raw observables
+            // UDUC hybrid: seed ionosphere from IONEX/Klobuchar prior (iono_prior[i])
             if ppp.uduc {
                 for i in 0..obs_data.len() {
-                    let (_, _, l2_cyc, p1, p2, _) = obs_data[i];
-                    if p2 == 0.0 || l2_cyc == 0.0 { continue; }
-                    let f1 = f1_vals[i]; let f2 = f2_vals[i];
-                    let gamma = (f1 * f1) / (f2 * f2);
-                    let mut i1_est = (p2 - p1) / (gamma - 1.0);
-                    if i1_est.is_nan() || i1_est.abs() > 500.0 { i1_est = 0.0; }
-                    x0[ppp.ni(i)] = i1_est;
-                    // Seed L1/L2 ambiguities from carrier phase residuals
-                    let rs = sat_pos[i]; let dts = sat_clk[i];
-                    let dist = (rs - Vector3::new(x0[0], x0[1], x0[2])).norm();
-                    let el_rad = obs_data[i].5 * D2R;
-                    let dtrp = proc_tropo_dry[i];
-                    let rng = dist - dts + dtrp;
-                    let l1_meas = obs_data[i].1 * lam1_vals[i];
-                    let l2_meas = l2_cyc * lam2_vals[i];
-                    let sys: usize = if obs_data[i].0.constellation == Constellation::Glonass { 1 } else { 0 };
-                    x0[ppp.ib(i)] = (l1_meas - (rng - i1_est + x0[ppp.ic(sys)])) / lam1_vals[i];
-                    x0[ppp.ib2(i)] = (l2_meas - (rng - i1_est * gamma + x0[ppp.ic(sys)])) / lam2_vals[i];
+                    if iono_prior[i] != 0.0 {
+                        x0[ppp.ni(i)] = iono_prior[i];
+                    }
                 }
             }
             self.x = x0;
@@ -537,55 +475,33 @@ impl PppRtklib {
                 for j in 0..ppp.nr() { p_new[(i,j)] = self.p[(i,j)]; }
             }
             if use_uduc {
-                // IF→UDUC: initialize iono from known IF position (precise),
-                // N1/N2 from AR-fixed N_IF + MW WL.
-                let pos_if = Vector3::new(self.x[0], self.x[1], self.x[2]);
-                let clk_if = self.x[ppp.ic(0)];
+                // IF→UDUC hybrid: copy IF biases, seed ionosphere from IONEX
                 for i in 0..obs_data.len() {
-                    let (_, _, l2_cyc, p1, p2, _) = obs_data[i];
-                    if p2 == 0.0 || l2_cyc == 0.0 { continue; }
-                    let f1 = f1_vals[i]; let f2 = f2_vals[i];
-                    let lam1 = lam1_vals[i]; let lam2 = lam2_vals[i];
-                    let f1s = f1*f1; let f2s = f2*f2;
-
-                    // Ionosphere from P1-P2 using known IF geometry
-                    let rs = sat_pos[i];
-                    let dist = (rs - pos_if).norm();
-                    let dtrp = proc_tropo_dry[i];
-                    let rng = dist - sat_clk[i] + dtrp;
-                    let mut i1_est = (p1 - (rng + clk_if)).max(-200.0).min(200.0);
-                    if i1_est.is_nan() { i1_est = 0.0; }
-                    x_new[ppp.ni(i)] = i1_est;
-
-                    // N1, N2 from AR-fixed IF bias + MW WL
-                    let old_bi = ppp.nr() + i;
-                    let n_if = if old_bi < self.x.len() { self.x[old_bi] } else { 0.0 };
-                    let lam_nl = 299792458.0 / (f1 + f2);
-                    let n_wl: f64 = self.mw_wl_ema.get(&obs_data[i].0)
-                        .map(|(_, e)| e.round()).unwrap_or(0.0);
-                    let n1_est = (n_if - n_wl * f2s / (f1s - f2s) * lam2) / lam_nl;
-                    x_new[ppp.ib(i)] = n1_est;
-                    x_new[ppp.ib2(i)] = n1_est - n_wl;
+                    if iono_prior[i] != 0.0 {
+                        x_new[ppp.ni(i)] = iono_prior[i];
+                    }
                     p_new[(ppp.ni(i), ppp.ni(i))] = VAR_BIAS;
-                    p_new[(ppp.ib(i), ppp.ib(i))] = VAR_BIAS;
-                    p_new[(ppp.ib2(i), ppp.ib2(i))] = VAR_BIAS;
+                    // Copy IF bias from old state
+                    let old_bi = ppp.nr() + i;
+                    let new_bi = ppp.ib(i);
+                    if old_bi < self.x.len() {
+                        x_new[new_bi] = self.x[old_bi];
+                        p_new[(new_bi, new_bi)] = self.p[(old_bi, old_bi)];
+                    } else {
+                        p_new[(new_bi, new_bi)] = VAR_BIAS;
+                    }
                 }
             } else {
-                // UDUC→IF: convert N1,N2 back to N_IF
-                let old_nsat = self.last_nsat;
+                // UDUC→IF: copy IF biases (skip iono states)
                 for i in 0..obs_data.len() {
-                    let f1 = f1_vals[i]; let f2 = f2_vals[i];
-                    let lam1 = lam1_vals[i]; let lam2 = lam2_vals[i];
-                    let f1s = f1*f1; let f2s = f2*f2;
-                    // Old UDUC layout: L1 at nr+old_nsat+i, L2 at nr+2*old_nsat+i
-                    let old_l1_idx = ppp.nr() + old_nsat + i;
-                    let old_l2_idx = ppp.nr() + 2 * old_nsat + i;
-                    let old_n1 = if old_l1_idx < self.x.len() { self.x[old_l1_idx] } else { 0.0 };
-                    let old_n2 = if old_l2_idx < self.x.len() { self.x[old_l2_idx] } else { 0.0 };
-                    let n_if = (f1s * old_n1 * lam1 - f2s * old_n2 * lam2) / (f1s - f2s);
                     let bi = ppp.nr() + i;
-                    x_new[bi] = n_if;
-                    p_new[(bi, bi)] = VAR_BIAS;
+                    let old_bi = ppp.ib(i);
+                    if old_bi < self.x.len() {
+                        x_new[bi] = self.x[old_bi];
+                        p_new[(bi, bi)] = self.p[(old_bi, old_bi)].max(VAR_BIAS);
+                    } else {
+                        p_new[(bi, bi)] = VAR_BIAS;
+                    }
                 }
             }
             self.x = x_new;
