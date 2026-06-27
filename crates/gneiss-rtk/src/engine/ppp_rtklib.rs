@@ -185,8 +185,16 @@ impl PppRtklib {
             }; // gradients
         }
         let nr = ppp.nr();
-        for i in 0..ppp.nsat {
-            p[(nr + i, nr + i)] = VAR_BIAS;
+        if ppp.uduc {
+            for i in 0..ppp.nsat {
+                p[(ppp.ni(i), ppp.ni(i))] = VAR_BIAS;   // ionosphere
+                p[(ppp.ib(i), ppp.ib(i))] = VAR_BIAS;    // L1 ambiguity
+                p[(ppp.ib2(i), ppp.ib2(i))] = VAR_BIAS;  // L2 ambiguity
+            }
+        } else {
+            for i in 0..ppp.nsat {
+                p[(nr + i, nr + i)] = VAR_BIAS; // IF bias
+            }
         }
         p
     }
@@ -236,6 +244,10 @@ impl PppRtklib {
         range_offsets: &[f64],                            // PCV+PCO+tide correction (m)
         proc_tropo_dry: &[f64],                           // pre-computed ZHD×GMF mh
         proc_map_wet: &[f64],                             // pre-computed GMF wet mapping
+        lam1_vals: &[f64],                                 // L1 wavelength (UDUC)
+        lam2_vals: &[f64],                                 // L2 wavelength (UDUC)
+        f1_vals: &[f64],                                   // L1 frequency (UDUC)
+        f2_vals: &[f64],                                   // L2 frequency (UDUC)
         sat_pos: &[Vector3<f64>],                       // ECEF satellite positions
         sat_clk: &[f64],                                 // satellite clock corrections (m)
         sat_var: &[f64],                                 // satellite position variance
@@ -286,72 +298,109 @@ impl PppRtklib {
             // Line of sight unit vector
             let e = (rs - Vector3::new(x[0], x[1], x[2])) / dist;
 
-            // ---- Phase measurement ----
-            if lc != 0.0 {
-                for k in 0..nx {
-                    h[(k, nv)] = 0.0;
-                }
-                v[nv] = lc - rng;
-                for k in 0..3 {
-                    h[(k, nv)] = -e[k];
-                }
-                if sys != 1 {
-                    v[nv] -= x[ppp.ic(0)];
-                    h[(ppp.ic(0), nv)] = 1.0;
-                } else {
-                    v[nv] -= x[ppp.ic(1)];
-                    h[(ppp.ic(1), nv)] = 1.0;
-                }
-                // Troposphere: GMF wet mapping (pre-computed)
-                if ppp.nt() >= 1 {
-                    h[(ppp.it(), nv)] = mw;
-                }
-                // Phase bias
-                v[nv] -= x[ppp.ib(i)];
-                h[(ppp.ib(i), nv)] = 1.0;
+            if ppp.uduc {
+                // ---- UDUC: 4 raw measurements per satellite ----
+                let l1 = l1_cyc; let l2 = l2_cyc;
+                let lam1 = lam1_vals[i]; let lam2 = lam2_vals[i];
+                let f1 = f1_vals[i]; let f2 = f2_vals[i];
+                let inv_f1_sq = 1.0 / (f1 * f1);
+                let inv_f2_sq = 1.0 / (f2 * f2);
+                if l2 == 0.0 { continue; } // need both frequencies
 
-                // Measurement variance: σ ≈ 10cm at zenith, scaled by 1/sin(el)
-                let var_phase = 0.01 / libm::sin(el).max(0.1) + sat_var[i] + vart;
-                r[(nv, nv)] = var_phase;
-
-                // Innovation test — tighter threshold for carrier phase
-                if self.max_inno_cp > 0.0 && v[nv].abs() > self.max_inno_cp && sys != 1 {
-                    continue;
+                // ---- PR1 ----
+                if p1 != 0.0 {
+                    for k in 0..nx { h[(k, nv)] = 0.0; }
+                    v[nv] = p1 - rng;
+                    for k in 0..3 { h[(k, nv)] = -e[k]; }
+                    if sys != 1 { v[nv] -= x[ppp.ic(0)]; h[(ppp.ic(0), nv)] = 1.0; }
+                    else { v[nv] -= x[ppp.ic(1)]; h[(ppp.ic(1), nv)] = 1.0; }
+                    if ppp.nt() >= 1 { h[(ppp.it(), nv)] = mw; }
+                    v[nv] -= x[ppp.ni(i)] * inv_f1_sq;
+                    h[(ppp.ni(i), nv)] = inv_f1_sq;
+                    let var_pr = 25.0 / libm::sin(el).max(0.1) + sat_var[i] + vart;
+                    r[(nv, nv)] = var_pr;
+                    if self.max_inno_m > 0.0 && v[nv].abs() > self.max_inno_m && sys != 1 { continue; }
+                    nv += 1;
                 }
-                nv += 1;
-            }
-
-            // ---- Code measurement ----
-            if pc != 0.0 {
-                for k in 0..nx {
-                    h[(k, nv)] = 0.0;
+                // ---- PR2 ----
+                if p2 != 0.0 {
+                    for k in 0..nx { h[(k, nv)] = 0.0; }
+                    v[nv] = p2 - rng;
+                    for k in 0..3 { h[(k, nv)] = -e[k]; }
+                    if sys != 1 { v[nv] -= x[ppp.ic(0)]; h[(ppp.ic(0), nv)] = 1.0; }
+                    else { v[nv] -= x[ppp.ic(1)]; h[(ppp.ic(1), nv)] = 1.0; }
+                    if ppp.nt() >= 1 { h[(ppp.it(), nv)] = mw; }
+                    v[nv] -= x[ppp.ni(i)] * inv_f2_sq;
+                    h[(ppp.ni(i), nv)] = inv_f2_sq;
+                    let var_pr = 25.0 / libm::sin(el).max(0.1) + sat_var[i] + vart;
+                    r[(nv, nv)] = var_pr;
+                    if self.max_inno_m > 0.0 && v[nv].abs() > self.max_inno_m && sys != 1 { continue; }
+                    nv += 1;
                 }
-                v[nv] = pc - rng;
-                for k in 0..3 {
-                    h[(k, nv)] = -e[k];
+                // ---- CP1 ----
+                if l1 != 0.0 {
+                    for k in 0..nx { h[(k, nv)] = 0.0; }
+                    v[nv] = l1 * lam1 - rng;
+                    for k in 0..3 { h[(k, nv)] = -e[k]; }
+                    if sys != 1 { v[nv] -= x[ppp.ic(0)]; h[(ppp.ic(0), nv)] = 1.0; }
+                    else { v[nv] -= x[ppp.ic(1)]; h[(ppp.ic(1), nv)] = 1.0; }
+                    if ppp.nt() >= 1 { h[(ppp.it(), nv)] = mw; }
+                    v[nv] += x[ppp.ni(i)] * inv_f1_sq; // CP iono sign opposite to PR
+                    h[(ppp.ni(i), nv)] = -inv_f1_sq;
+                    v[nv] -= x[ppp.ib(i)] * lam1;
+                    h[(ppp.ib(i), nv)] = lam1;
+                    let var_cp = 0.01 / libm::sin(el).max(0.1) + sat_var[i] + vart;
+                    r[(nv, nv)] = var_cp;
+                    if self.max_inno_cp > 0.0 && v[nv].abs() > self.max_inno_cp && sys != 1 { continue; }
+                    nv += 1;
                 }
-                if sys != 1 {
-                    v[nv] -= x[ppp.ic(0)];
-                    h[(ppp.ic(0), nv)] = 1.0;
-                } else {
-                    v[nv] -= x[ppp.ic(1)];
-                    h[(ppp.ic(1), nv)] = 1.0;
+                // ---- CP2 ----
+                if l2 != 0.0 {
+                    for k in 0..nx { h[(k, nv)] = 0.0; }
+                    v[nv] = l2 * lam2 - rng;
+                    for k in 0..3 { h[(k, nv)] = -e[k]; }
+                    if sys != 1 { v[nv] -= x[ppp.ic(0)]; h[(ppp.ic(0), nv)] = 1.0; }
+                    else { v[nv] -= x[ppp.ic(1)]; h[(ppp.ic(1), nv)] = 1.0; }
+                    if ppp.nt() >= 1 { h[(ppp.it(), nv)] = mw; }
+                    v[nv] += x[ppp.ni(i)] * inv_f2_sq;
+                    h[(ppp.ni(i), nv)] = -inv_f2_sq;
+                    v[nv] -= x[ppp.ib2(i)] * lam2;
+                    h[(ppp.ib2(i), nv)] = lam2;
+                    let var_cp = 0.01 / libm::sin(el).max(0.1) + sat_var[i] + vart;
+                    r[(nv, nv)] = var_cp;
+                    if self.max_inno_cp > 0.0 && v[nv].abs() > self.max_inno_cp && sys != 1 { continue; }
+                    nv += 1;
                 }
-                if ppp.nt() >= 1 {
-                    h[(ppp.it(), nv)] = mw;
+            } else {
+                // ---- IF mode: 2 measurements per satellite ----
+                // ---- Phase measurement ----
+                if lc != 0.0 {
+                    for k in 0..nx { h[(k, nv)] = 0.0; }
+                    v[nv] = lc - rng;
+                    for k in 0..3 { h[(k, nv)] = -e[k]; }
+                    if sys != 1 { v[nv] -= x[ppp.ic(0)]; h[(ppp.ic(0), nv)] = 1.0; }
+                    else { v[nv] -= x[ppp.ic(1)]; h[(ppp.ic(1), nv)] = 1.0; }
+                    if ppp.nt() >= 1 { h[(ppp.it(), nv)] = mw; }
+                    v[nv] -= x[ppp.ib(i)];
+                    h[(ppp.ib(i), nv)] = 1.0;
+                    let var_phase = 0.01 / libm::sin(el).max(0.1) + sat_var[i] + vart;
+                    r[(nv, nv)] = var_phase;
+                    if self.max_inno_cp > 0.0 && v[nv].abs() > self.max_inno_cp && sys != 1 { continue; }
+                    nv += 1;
                 }
-
-                // PR variance: σ≈5m at zenith. Inflated from RTKLIB defaults
-                // because IF pseudorange has systematic biases (~10-15m) that
-                // would otherwise dominate the solution. CP (σ≈0.1m) pulls
-                // toward the true position once biases are initialized.
-                let var_code = 25.0 / libm::sin(el).max(0.1) + sat_var[i] + vart;
-                r[(nv, nv)] = var_code;
-
-                if self.max_inno_m > 0.0 && v[nv].abs() > self.max_inno_m && sys != 1 {
-                    continue;
+                // ---- Code measurement ----
+                if pc != 0.0 {
+                    for k in 0..nx { h[(k, nv)] = 0.0; }
+                    v[nv] = pc - rng;
+                    for k in 0..3 { h[(k, nv)] = -e[k]; }
+                    if sys != 1 { v[nv] -= x[ppp.ic(0)]; h[(ppp.ic(0), nv)] = 1.0; }
+                    else { v[nv] -= x[ppp.ic(1)]; h[(ppp.ic(1), nv)] = 1.0; }
+                    if ppp.nt() >= 1 { h[(ppp.it(), nv)] = mw; }
+                    let var_code = 25.0 / libm::sin(el).max(0.1) + sat_var[i] + vart;
+                    r[(nv, nv)] = var_code;
+                    if self.max_inno_m > 0.0 && v[nv].abs() > self.max_inno_m && sys != 1 { continue; }
+                    nv += 1;
                 }
-                nv += 1;
             }
         }
         nv
@@ -370,6 +419,10 @@ impl PppRtklib {
         let mut range_offsets: Vec<f64> = Vec::new(); // ProcessedSat.dist - our_dist
         let mut proc_tropo_dry: Vec<f64> = Vec::new(); // ProcessedSat.tropo_dry (ZHD×GMF mh)
         let mut proc_map_wet: Vec<f64> = Vec::new();   // ProcessedSat.map_wet (GMF mw)
+        let mut lam1_vals: Vec<f64> = Vec::new();       // L1 wavelength (m)
+        let mut lam2_vals: Vec<f64> = Vec::new();       // L2 wavelength (m)
+        let mut f1_vals: Vec<f64> = Vec::new();          // L1 frequency (Hz)
+        let mut f2_vals: Vec<f64> = Vec::new();          // L2 frequency (Hz)
         let mut sat_pos: Vec<Vector3<f64>> = Vec::new();
         let mut sat_clk: Vec<f64> = Vec::new();
         let mut sat_var: Vec<f64> = Vec::new();
@@ -388,6 +441,10 @@ impl PppRtklib {
             range_offsets.push(sat.dist - our_dist); // PCV + PCO + tide corrections
             proc_tropo_dry.push(sat.tropo_dry);       // ZHD×GMF mh (pre-computed)
             proc_map_wet.push(sat.map_wet);            // GMF wet mapping (pre-computed)
+            lam1_vals.push(sat.lam1);
+            lam2_vals.push(sat.lam2);
+            f1_vals.push(sat.f1);
+            f2_vals.push(sat.f2);
             obs_data.push((sat.sat_obs.sat, sat.cp1.unwrap_or(0.0), sat.cp2.unwrap_or(0.0), sat.p1, sat.p2.unwrap_or(sat.p1), el * R2D));
             lc_if_vals.push(lc_if);
             sat_pos.push(sat.sat_pos_rot);
@@ -414,9 +471,32 @@ impl PppRtklib {
             if ppp.nt() >= 1 {
                 x0[ppp.it()] = self.trop_zwd(rcv_llh);
             }
+            // UDUC: seed ionosphere and L1/L2 ambiguities from raw observables
+            if ppp.uduc {
+                for i in 0..obs_data.len() {
+                    let (_, _, l2_cyc, p1, p2, _) = obs_data[i];
+                    if p2 == 0.0 || l2_cyc == 0.0 { continue; }
+                    let f1 = f1_vals[i]; let f2 = f2_vals[i];
+                    let gamma = (f1 * f1) / (f2 * f2);
+                    let mut i1_est = (p2 - p1) / (gamma - 1.0);
+                    if i1_est.is_nan() || i1_est.abs() > 500.0 { i1_est = 0.0; }
+                    x0[ppp.ni(i)] = i1_est;
+                    // Seed L1/L2 ambiguities from carrier phase residuals
+                    let rs = sat_pos[i]; let dts = sat_clk[i];
+                    let dist = (rs - Vector3::new(x0[0], x0[1], x0[2])).norm();
+                    let el_rad = obs_data[i].5 * D2R;
+                    let dtrp = proc_tropo_dry[i];
+                    let rng = dist - dts + dtrp;
+                    let l1_meas = obs_data[i].1 * lam1_vals[i];
+                    let l2_meas = l2_cyc * lam2_vals[i];
+                    let sys: usize = if obs_data[i].0.constellation == Constellation::Glonass { 1 } else { 0 };
+                    x0[ppp.ib(i)] = (l1_meas - (rng - i1_est + x0[ppp.ic(sys)])) / lam1_vals[i];
+                    x0[ppp.ib2(i)] = (l2_meas - (rng - i1_est * gamma + x0[ppp.ic(sys)])) / lam2_vals[i];
+                }
+            }
             self.x = x0;
             self.p = self.init_covariance(&ppp, nx);
-            self.biases_seeded = false;
+            self.biases_seeded = ppp.uduc; // UDUC biases seeded at init, IF needs warmup
         } else if self.last_nsat != obs_data.len() {
             // nsat changed: resize state vector, preserve existing state values
             let old_nr = ppp.nr();
@@ -453,7 +533,7 @@ impl PppRtklib {
         let mut xp = self.x.clone();
         let mut pp = self.p.clone();
         self.predict(&ppp, &mut xp, &mut pp);
-        let nv_max = obs_data.len() * 2;
+        let nv_max = if ppp.uduc { obs_data.len() * 4 } else { obs_data.len() * 2 };
         let mut v = DVector::zeros(nv_max);
         let mut h_mat = DMatrix::zeros(nx, nv_max);
         let mut r_mat = DMatrix::zeros(nv_max, nv_max);
@@ -465,7 +545,7 @@ impl PppRtklib {
             vec![0.0f64; lc_if_vals.len()]
         };
         for _iter in 0..self.max_iter {
-            let nv = self.residuals(&ppp, &obs_data, &lc_for_filter, &range_offsets, &proc_tropo_dry, &proc_map_wet, &sat_pos, &sat_clk, &sat_var, &xp, &mut v, &mut h_mat, &mut r_mat);
+            let nv = self.residuals(&ppp, &obs_data, &lc_for_filter, &range_offsets, &proc_tropo_dry, &proc_map_wet, &lam1_vals, &lam2_vals, &f1_vals, &f2_vals, &sat_pos, &sat_clk, &sat_var, &xp, &mut v, &mut h_mat, &mut r_mat);
             if nv < 4 { break; }
             let h_s = h_mat.view((0, 0), (nx, nv)).clone_owned();
             let vs = v.rows(0, nv).clone_owned();
@@ -475,7 +555,7 @@ impl PppRtklib {
         // After warmup epoch: seed phase biases from the PR-converged state.
         // Using the filtered position (not SPP) gives biases within ~3m,
         // so CP residuals start small enough for σ=10cm measurements to pull.
-        if !self.biases_seeded {
+        if !self.biases_seeded && !ppp.uduc {
             let mut seeded = 0;
             for i in 0..obs_data.len() {
                 if lc_if_vals[i] == 0.0 { continue; }
@@ -620,7 +700,7 @@ impl PppRtklib {
         }
 
         // Iterated measurement update
-        let nv_max = obs_data.len() * 2;
+        let nv_max = if ppp.uduc { obs_data.len() * 4 } else { obs_data.len() * 2 };
         let mut v = DVector::zeros(nv_max);
         let mut h_mat = DMatrix::zeros(nx, nv_max);
         let mut r_mat = DMatrix::zeros(nv_max, nv_max);
@@ -628,24 +708,12 @@ impl PppRtklib {
         let mut pp = p_mat.clone();
 
         for _iter in 0..self.max_iter {
-            let empty_lc: Vec<f64> = vec![0.0; obs_data.len()];
-            let empty_off: Vec<f64> = vec![0.0; obs_data.len()];
-            let empty_tropo: Vec<f64> = vec![0.0; obs_data.len()];
-            let empty_mw: Vec<f64> = vec![1.0; obs_data.len()];
+            let empty: Vec<f64> = vec![0.0; obs_data.len()];
             let nv = self.residuals(
-                &ppp,
-                &obs_data,
-                &empty_lc,
-                &empty_off,
-                &empty_tropo,
-                &empty_mw,
-                &sat_pos,
-                &sat_clk,
-                &sat_var,
-                &xp,
-                &mut v,
-                &mut h_mat,
-                &mut r_mat,
+                &ppp, &obs_data, &empty, &empty, &empty, &empty,
+                &empty, &empty, &empty, &empty,
+                &sat_pos, &sat_clk, &sat_var,
+                &xp, &mut v, &mut h_mat, &mut r_mat,
             );
             if nv == 0 {
                 break;
