@@ -22,6 +22,7 @@ pub mod ppp_multi_epoch;
 pub mod ppp_multi_epoch_batch;
 pub mod predictor;
 pub mod processed_sat;
+pub mod rtk_multi_base;
 pub mod processor;
 pub mod smoother;
 pub mod spp_tight;
