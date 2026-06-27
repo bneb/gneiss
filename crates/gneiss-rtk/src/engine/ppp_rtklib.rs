@@ -254,6 +254,7 @@ impl PppRtklib {
         range_offsets: &[f64],                            // PCV+PCO+tide correction (m)
         proc_tropo_dry: &[f64],                           // pre-computed ZHD×GMF mh
         proc_map_wet: &[f64],                             // pre-computed GMF wet mapping
+        iono_prior: &[f64],                                // Klobuchar/IONEX L1 iono delay (m)
         lam1_vals: &[f64],                                 // L1 wavelength (UDUC)
         lam2_vals: &[f64],                                 // L2 wavelength (UDUC)
         f1_vals: &[f64],                                   // L1 frequency (UDUC)
@@ -381,6 +382,14 @@ impl PppRtklib {
                     if self.max_inno_cp > 0.0 && v[nv].abs() > self.max_inno_cp && sys != 1 { continue; }
                     nv += 1;
                 }
+                // Ionosphere prior: constrain UDUC iono to Klobuchar/IONEX
+                if iono_prior[i] != 0.0 {
+                    for k in 0..nx { h[(k, nv)] = 0.0; }
+                    v[nv] = x[ppp.ni(i)] - iono_prior[i];
+                    h[(ppp.ni(i), nv)] = 1.0;
+                    r[(nv, nv)] = 25.0; // σ=5m for Klobuchar
+                    nv += 1;
+                }
             } else {
                 // ---- IF mode: 2 measurements per satellite ----
                 // ---- Phase measurement ----
@@ -429,6 +438,7 @@ impl PppRtklib {
         let mut range_offsets: Vec<f64> = Vec::new(); // ProcessedSat.dist - our_dist
         let mut proc_tropo_dry: Vec<f64> = Vec::new(); // ProcessedSat.tropo_dry (ZHD×GMF mh)
         let mut proc_map_wet: Vec<f64> = Vec::new();   // ProcessedSat.map_wet (GMF mw)
+        let mut iono_prior: Vec<f64> = Vec::new();      // ProcessedSat.iono_delay (Klobuchar/IONEX)
         let mut lam1_vals: Vec<f64> = Vec::new();       // L1 wavelength (m)
         let mut lam2_vals: Vec<f64> = Vec::new();       // L2 wavelength (m)
         let mut f1_vals: Vec<f64> = Vec::new();          // L1 frequency (Hz)
@@ -451,6 +461,7 @@ impl PppRtklib {
             range_offsets.push(sat.dist - our_dist); // PCV + PCO + tide corrections
             proc_tropo_dry.push(sat.tropo_dry);       // ZHD×GMF mh (pre-computed)
             proc_map_wet.push(sat.map_wet);            // GMF wet mapping (pre-computed)
+            iono_prior.push(sat.iono_delay);            // Klobuchar/IONEX L1 delay (m)
             lam1_vals.push(sat.lam1);
             lam2_vals.push(sat.lam2);
             f1_vals.push(sat.f1);
@@ -630,7 +641,7 @@ impl PppRtklib {
         let mut xp = self.x.clone();
         let mut pp = self.p.clone();
         self.predict(&ppp, &mut xp, &mut pp);
-        let nv_max = if ppp.uduc { obs_data.len() * 4 } else { obs_data.len() * 2 };
+        let nv_max = if ppp.uduc { obs_data.len() * 5 } else { obs_data.len() * 2 };
         let mut v = DVector::zeros(nv_max);
         let mut h_mat = DMatrix::zeros(nx, nv_max);
         let mut r_mat = DMatrix::zeros(nv_max, nv_max);
@@ -642,7 +653,7 @@ impl PppRtklib {
             vec![0.0f64; lc_if_vals.len()]
         };
         for _iter in 0..self.max_iter {
-            let nv = self.residuals(&ppp, &obs_data, &lc_for_filter, &range_offsets, &proc_tropo_dry, &proc_map_wet, &lam1_vals, &lam2_vals, &f1_vals, &f2_vals, &sat_pos, &sat_clk, &sat_var, &xp, &mut v, &mut h_mat, &mut r_mat);
+            let nv = self.residuals(&ppp, &obs_data, &lc_for_filter, &range_offsets, &proc_tropo_dry, &proc_map_wet, &iono_prior, &lam1_vals, &lam2_vals, &f1_vals, &f2_vals, &sat_pos, &sat_clk, &sat_var, &xp, &mut v, &mut h_mat, &mut r_mat);
             if nv < 4 { break; }
             let h_s = h_mat.view((0, 0), (nx, nv)).clone_owned();
             let vs = v.rows(0, nv).clone_owned();
@@ -718,7 +729,7 @@ impl PppRtklib {
 
             // Fix WL when confident (50+ samples). IF mode only:
             // UDUC AR is handled separately via WL constraint Kalman updates.
-            if !ppp.uduc && count > 50 {
+            if !ppp.uduc && count > 100 {
                 let n_wl = ema.round();
                 if (ema - n_wl).abs() > 0.25 { continue; }
 
@@ -922,7 +933,7 @@ impl PppRtklib {
         }
 
         // Iterated measurement update
-        let nv_max = if ppp.uduc { obs_data.len() * 4 } else { obs_data.len() * 2 };
+        let nv_max = if ppp.uduc { obs_data.len() * 5 } else { obs_data.len() * 2 };
         let mut v = DVector::zeros(nv_max);
         let mut h_mat = DMatrix::zeros(nx, nv_max);
         let mut r_mat = DMatrix::zeros(nv_max, nv_max);
@@ -932,7 +943,7 @@ impl PppRtklib {
         for _iter in 0..self.max_iter {
             let empty: Vec<f64> = vec![0.0; obs_data.len()];
             let nv = self.residuals(
-                &ppp, &obs_data, &empty, &empty, &empty, &empty,
+                &ppp, &obs_data, &empty, &empty, &empty, &empty, &empty,
                 &empty, &empty, &empty, &empty,
                 &sat_pos, &sat_clk, &sat_var,
                 &xp, &mut v, &mut h_mat, &mut r_mat,

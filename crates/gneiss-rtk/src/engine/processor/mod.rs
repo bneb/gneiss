@@ -381,8 +381,8 @@ impl ProcessingEngine {
                 };
                 // Advance mode state machine
                 self.mode_manager.if_epoch_count += 1;
-                // Check for IF→UDUC handoff: ≥6 AR-fixed biases + 50+ epochs
-                if self.mode_manager.mode == crate::engine::ppp_mode_switch::PppSolverMode::If
+                // UDUC needs structural fix — disable handoff for now
+                if false && self.mode_manager.mode == crate::engine::ppp_mode_switch::PppSolverMode::If
                     && self.mode_manager.fallback_count < 3
                     && self.mode_manager.if_epoch_count > 50
                 {
