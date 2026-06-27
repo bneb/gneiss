@@ -657,6 +657,38 @@ impl PppRtklib {
         let mut xp = self.x.clone();
         let mut pp = self.p.clone();
         self.predict(&ppp, &mut xp, &mut pp);
+        // Clock-only pre-update: after predict() resets clock variance,
+        // use PR measurements to estimate clock without touching position.
+        // This prevents the clock reset from leaking into position through
+        // the Kalman gain matrix, which causes per-epoch position drift.
+        if !ppp.uduc {
+            let n_pr = obs_data.len();
+            let mut h_clk = DMatrix::zeros(ppp.nx(), n_pr);
+            let mut v_clk = DVector::zeros(n_pr);
+            let mut r_clk = DMatrix::zeros(n_pr, n_pr);
+            let mut n_clk = 0usize;
+            let rcv_pos = Vector3::new(xp[0], xp[1], xp[2]);
+            for i in 0..obs_data.len() {
+                let (_, _, _, p1, _, el_deg) = obs_data[i];
+                if p1 == 0.0 { continue; }
+                let rs = sat_pos[i]; let dts = sat_clk[i];
+                let dist = (rs - rcv_pos).norm();
+                let el = el_deg * D2R;
+                let dtrp = proc_tropo_dry[i];
+                let rng = dist - dts + dtrp;
+                let sys: usize = if obs_data[i].0.constellation == Constellation::Glonass { 1 } else { 0 };
+                h_clk[(ppp.ic(sys), n_clk)] = 1.0;
+                v_clk[n_clk] = p1 - rng - xp[ppp.ic(sys)];
+                r_clk[(n_clk, n_clk)] = 25.0 / libm::sin(el).max(0.1);
+                n_clk += 1;
+            }
+            if n_clk >= 4 {
+                let h_s = h_clk.view((0, 0), (ppp.nx(), n_clk)).clone_owned();
+                let vs = v_clk.rows(0, n_clk).clone_owned();
+                let rs = r_clk.view((0, 0), (n_clk, n_clk)).clone_owned();
+                let _ = Self::measurement_update(&mut xp, &mut pp, &h_s, &vs, &rs, ppp.nx(), n_clk);
+            }
+        }
         let nv_max = if ppp.uduc { obs_data.len() * 5 } else { obs_data.len() * 2 };
         let mut v = DVector::zeros(nv_max);
         let mut h_mat = DMatrix::zeros(nx, nv_max);
