@@ -651,6 +651,54 @@ impl PppRtklib {
             }
         }
 
+        // After AR fixes: CP-only re-solve with inflated position variance.
+        // Fixed IF ambiguities make CP an unbiased range measurement (σ≈1cm).
+        // Temporarily inflating P_pos lets the filter reposition away from
+        // the biased PR solution toward the CP-only solution.
+        let any_fixed = (0..obs_data.len()).any(|i| {
+            !ppp.uduc && self.p[(ppp.ib(i), ppp.ib(i))] < 0.01
+        });
+        if any_fixed {
+            // Inflate position variance temporarily for CP-only re-convergence
+            for k in 0..3 { self.p[(k, k)] = self.p[(k, k)].max(4.0); } // σ=2m
+            self.p[(ppp.ic(0), ppp.ic(0))] = self.p[(ppp.ic(0), ppp.ic(0))].max(10000.0);
+
+            // One CP-only measurement update pass
+            let mut v_cp = DVector::zeros(obs_data.len());
+            let mut h_cp = DMatrix::zeros(ppp.nx(), obs_data.len());
+            let mut r_cp = DMatrix::zeros(obs_data.len(), obs_data.len());
+            let mut n_cp = 0usize;
+            let rcv_pos = Vector3::new(self.x[0], self.x[1], self.x[2]);
+            for i in 0..obs_data.len() {
+                if ppp.uduc { continue; }
+                if self.p[(ppp.ib(i), ppp.ib(i))] > 0.01 { continue; } // not AR-fixed
+                if lc_if_vals[i] == 0.0 { continue; }
+                let rs = sat_pos[i]; let dts = sat_clk[i];
+                let dist = (rs - rcv_pos).norm();
+                let el_rad = obs_data[i].5 * D2R;
+                let dtrp = proc_tropo_dry[i];
+                let rng = dist - dts + dtrp;
+                let n_if_fixed = self.x[ppp.ib(i)];
+                let (sat, _, _, _, _, _) = obs_data[i];
+                let sys: usize = if sat.constellation == Constellation::Glonass { 1 } else { 0 };
+                let e = (rs - rcv_pos) / dist;
+                for k in 0..ppp.nx() { h_cp[(k, n_cp)] = 0.0; }
+                v_cp[n_cp] = lc_if_vals[i] - rng - self.x[ppp.ic(sys)] - n_if_fixed;
+                for k in 0..3 { h_cp[(k, n_cp)] = -e[k]; }
+                h_cp[(ppp.ic(sys), n_cp)] = 1.0;
+                if ppp.nt() >= 1 { h_cp[(ppp.it(), n_cp)] = proc_map_wet[i]; }
+                h_cp[(ppp.ib(i), n_cp)] = 1.0;
+                r_cp[(n_cp, n_cp)] = 0.0001; // σ=1cm CP
+                n_cp += 1;
+            }
+            if n_cp >= 4 {
+                let h_s = h_cp.view((0, 0), (ppp.nx(), n_cp)).clone_owned();
+                let vs = v_cp.rows(0, n_cp).clone_owned();
+                let rs = r_cp.view((0, 0), (n_cp, n_cp)).clone_owned();
+                let _ = Self::measurement_update(&mut self.x, &mut self.p, &h_s, &vs, &rs, ppp.nx(), n_cp);
+            }
+        }
+
         Ok(())
     }
 
