@@ -319,7 +319,7 @@ impl PppRtklib {
                     if ppp.nt() >= 1 { h[(ppp.it(), nv)] = mw; }
                     v[nv] -= x[ppp.ib(i)];
                     h[(ppp.ib(i), nv)] = 1.0;
-                    let ar_fixed = !ppp.uduc && self.p[(ppp.ib(i), ppp.ib(i))] < 0.01;
+                    let ar_fixed = self.p[(ppp.ib(i), ppp.ib(i))] < 0.01;
                     let cp_var = if ar_fixed { 0.0001 } else { 0.01 };
                     let var_phase = cp_var / libm::sin(el).max(0.1) + sat_var[i] + vart;
                     r[(nv, nv)] = var_phase;
@@ -689,7 +689,7 @@ impl PppRtklib {
 
             // Fix WL when confident (50+ samples). IF mode only:
             // UDUC AR is handled separately via WL constraint Kalman updates.
-            if !ppp.uduc && count > 100 {
+            if count > 100 {
                 let n_wl = ema.round();
                 if (ema - n_wl).abs() > 0.25 { continue; }
 
@@ -728,7 +728,7 @@ impl PppRtklib {
         // Temporarily inflating P_pos lets the filter reposition away from
         // the biased PR solution toward the CP-only solution.
         let any_fixed = (0..obs_data.len()).any(|i| {
-            !ppp.uduc && self.p[(ppp.ib(i), ppp.ib(i))] < 0.01
+            self.p[(ppp.ib(i), ppp.ib(i))] < 0.01
         });
         if any_fixed {
             // Inflate position/clock/ZWD for CP-only re-convergence
