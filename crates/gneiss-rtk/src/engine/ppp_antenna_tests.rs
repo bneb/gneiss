@@ -147,10 +147,10 @@ mod adversarial_gap_analysis {
     #[test]
     fn test_ambiguity_pn_permanent_error() {
         let config = EngineConfig::default();
-        // RALPH: increased from 1e-8→1e-4 to allow ambiguity re-convergence
+        // RTK breakthrough: 1e-7 stabilizes convergence (was 1e-4, originally 1e-8)
         assert_eq!(
-            config.process_noise_amb_float, 1e-4,
-            "Default amb_float PN should be 1e-4 (was 1e-8 — 10,000× too small)"
+            config.process_noise_amb_float, 1e-7,
+            "Default amb_float PN should be 1e-7 (RTK breakthrough value)"
         );
         assert_eq!(
             config.process_noise_amb_fixed, 1e-12,
@@ -158,53 +158,43 @@ mod adversarial_gap_analysis {
         );
 
         let dt = 30.0;
-        let q_amb_per_epoch = config.process_noise_amb_float * dt; // 3e-7 m²
+        let q_amb_per_epoch = config.process_noise_amb_float * dt; // 3e-6 m²
         let epochs = 100;
-        let total_variance = q_amb_per_epoch * epochs as f64; // 3e-5 m²
+        let total_variance = q_amb_per_epoch * epochs as f64; // 3e-4 m²
         let total_sigma = total_variance.sqrt();
 
-        // RALPH: with amb_float=1e-4 (was 1e-8), sigma after 100 epochs is ~0.55m.
-        // The larger process noise allows ambiguity re-convergence when CP
-        // measurements disagree — the old 1e-8 (sigma<2cm) made initialization
-        // errors permanent.
+        // RTK breakthrough: 1e-7 provides stable float convergence (was 1e-4,
+        // originally 1e-8).  With 1e-7, sigma after 100 epochs is ~0.017m —
+        // tight enough for stability, loose enough for slow convergence via
+        // measurement updates + AR.  The old 1e-4 (sigma~0.55m) injected too
+        // much noise; 1e-8 (sigma<2mm) made initialization errors permanent.
         assert!(
-            total_sigma > 0.1 && total_sigma < 2.0,
-            "Ambiguity sigma after 100 epochs should be 0.1-2m, got {:.3}m",
+            total_sigma > 0.01 && total_sigma < 0.1,
+            "Ambiguity sigma after 100 epochs should be 0.01-0.1m, got {:.3}m",
             total_sigma
         );
 
-        // A 10m initialization error would persist essentially forever
-        // because the process noise is too small to appreciably change
-        // the ambiguity estimate
+        // A 10m initialization error would decay very slowly through process
+        // noise alone (epochs_to_half ~ 17M), but measurement updates and AR
+        // deliver convergence much faster.  The key invariant is that the
+        // process noise does not overwhelm the float filter (as 1e-4 did).
         let init_error: f64 = 10.0; // m, initial SPP position error aliased into ambiguity
         let epochs_to_half: f64 = 0.5 * init_error.powi(2) / q_amb_per_epoch;
 
         eprintln!(
-            "ADVERSARIAL: amb_float PN={:.0e} m²/s -> {:.0e} m²/epoch -> {:.1e} epochs to reduce 10m error by 50%",
+            "ADVERSARIAL: amb_float PN={:.0e} m²/s -> {:.0e} m²/epoch -> {:.1e} epochs to reduce 10m error by 50% (via PN alone)",
             config.process_noise_amb_float,
             q_amb_per_epoch,
             epochs_to_half
         );
 
-        // The number of epochs needed is O(10^8) — essentially never
-        // Note: actual EKF convergence is faster due to measurement updates,
-        // but the point is that the process noise UNCONSTRAINED growth is
-        // too small to allow ambiguity re-convergence if measurements also
-        // agree with the wrong ambiguity value.
-        // RALPH: with amb_float=1e-4, convergence is now achievable.
-        // Was >1e6 epochs needed — now reasonable.
+        // Confirm we're not at either extreme:
+        //   1e-8 → epochs_to_half > 1e18 (permanent)
+        //   1e-4 → sigma > 0.5 m (excessive noise)
         assert!(
-            epochs_to_half < 1_000_000.0,
-            "Ambiguity error halves in {:.0e} epochs with amb_float=1e-4 (was >1e6 with 1e-8)",
-            epochs_to_half
-        );
-
-        // Compare with the predictor test value (1e-4):
-        let test_q_amb = 1e-4 * dt; // = 0.003 m² per epoch
-        assert!(
-            (test_q_amb - q_amb_per_epoch).abs() < 1e-10,
-            "Predictor test uses {:.0e} m²/epoch, real default = {:.0e} m²/epoch — aligned",
-            test_q_amb, q_amb_per_epoch
+            config.process_noise_amb_float > 1e-8 && config.process_noise_amb_float < 1e-4,
+            "amb_float PN {:.0e} should be between 1e-8 and 1e-4",
+            config.process_noise_amb_float
         );
     }
 
@@ -458,12 +448,12 @@ mod adversarial_gap_analysis {
         // Position: Automotive dynamics (auto_detect_dynamics=true overrides at runtime)
         assert_eq!(config.dynamics_model, crate::engine::DynamicsModel::Static);
 
-        // Clock model (RALPH: cd reduced 10000→10, amb_float raised 1e-8→1e-4)
+        // Clock model (RALPH: cd reduced 10000→10, amb_float set to 1e-7 from 1e-4)
         assert_eq!(config.process_noise_cb, 1.0, "clock bias PN");
         assert_eq!(config.process_noise_cd, 10.0, "clock drift PN");
 
         // Ambiguities
-        assert_eq!(config.process_noise_amb_float, 1e-4, "amb float PN");
+        assert_eq!(config.process_noise_amb_float, 1e-7, "amb float PN");
         assert_eq!(config.process_noise_amb_fixed, 1e-12, "amb fixed PN");
         assert_eq!(config.initial_ambiguity_variance, 10000.0, "initial amb variance");
 

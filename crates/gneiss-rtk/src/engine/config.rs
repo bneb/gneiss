@@ -177,6 +177,8 @@ pub struct EngineConfig {
 
     // External Tuning configuration
     pub tuning: crate::engine::config::EkfTuningConfig,
+    /// Enable multi-base RTK combining (experimental).
+    pub enable_multi_base_rtk: bool,
 }
 
 impl Default for EngineConfig {
@@ -208,7 +210,7 @@ impl Default for EngineConfig {
             max_base_age_s: 5.0,
             spp_consistency_threshold_m: 15.0,
             initial_ambiguity_variance: 10000.0,
-            ar_min_epoch_count: 5,
+            ar_min_epoch_count: 30,
             ar_min_lock: 3,
             ar_ffrt_prob: 0.001,
             iono_model: IonosphereModel::default(),
@@ -219,13 +221,14 @@ impl Default for EngineConfig {
             process_noise_isb: 0.1,   // ~0.3 m/hr random walk
             process_noise_zwd: 1e-8,
             process_noise_iono: 1e-6,
-            process_noise_amb_float: 1e-4,   // allows ambiguity re-convergence (RALPH: was 1e-8)
+            process_noise_amb_float: 1e-7,   // allows ambiguity re-convergence (RALPH: was 1e-8, RTK breakthrough at 1e-7)
             process_noise_amb_fixed: 1e-12,
             tuning: Default::default(),
             uduc_ar: false, // UDUC experimental — IF mode more accurate for float
             tropo_mapping: gneiss_core::atmosphere::TropoMapping::default(),
             enable_gnn_raim: false,
             export_gnn_dataset_path: None,
+            enable_multi_base_rtk: false,
         }
     }
 }
