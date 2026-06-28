@@ -4,16 +4,55 @@ use gneiss_core::time::GpsTime;
 use std::collections::HashMap;
 use std::io::BufRead;
 
+/// Header metadata extracted from RINEX observation files.
+#[derive(Clone, Debug, Default)]
+pub struct RinexObsHeader {
+    /// APPROX POSITION XYZ (ECEF, meters)
+    pub approx_position: Option<[f64; 3]>,
+    /// ANTENNA: DELTA H/E/N (meters)
+    pub antenna_delta: Option<[f64; 3]>,
+    /// MARKER NAME
+    pub marker_name: Option<String>,
+}
+
+/// Parse a RINEX 14-char float field. Returns None on parse failure or blank.
+fn parse_rinex_f14(s: &str) -> Option<f64> {
+    let s = s.trim();
+    if s.is_empty() { return None; }
+    // RINEX uses D for exponent, not E
+    s.replace('D', "e").replace('d', "e").parse::<f64>().ok()
+}
+
 fn parse_rinex_2_header<I: Iterator<Item = String>>(
     first_line: String,
     lines: &mut I,
-) -> Result<Vec<String>, String> {
+) -> Result<(Vec<String>, RinexObsHeader), String> {
     let mut obs_types: Vec<String> = Vec::new();
     let mut num_obs = 0;
+    let mut header = RinexObsHeader::default();
 
     // Check first_line too, though usually it's RINEX VERSION / TYPE
     let mut current_line = first_line;
     loop {
+        if current_line.contains("APPROX POSITION XYZ") && current_line.len() >= 42 {
+            let x = parse_rinex_f14(&current_line[0..14]);
+            let y = parse_rinex_f14(&current_line[14..28]);
+            let z = parse_rinex_f14(&current_line[28..42]);
+            if let (Some(x), Some(y), Some(z)) = (x, y, z) {
+                header.approx_position = Some([x, y, z]);
+            }
+        }
+        if current_line.contains("ANTENNA: DELTA H/E/N") && current_line.len() >= 42 {
+            let h = parse_rinex_f14(&current_line[0..14]);
+            let e = parse_rinex_f14(&current_line[14..28]);
+            let n = parse_rinex_f14(&current_line[28..42]);
+            if let (Some(h), Some(e), Some(n)) = (h, e, n) {
+                header.antenna_delta = Some([h, e, n]);
+            }
+        }
+        if current_line.contains("MARKER NAME") {
+            header.marker_name = Some(current_line[0..60].trim().to_string());
+        }
         if current_line.contains("# / TYPES OF OBSERV") {
             if num_obs == 0 {
                 num_obs = current_line[0..6].trim().parse::<usize>().unwrap_or(0);
@@ -41,14 +80,15 @@ fn parse_rinex_2_header<I: Iterator<Item = String>>(
     if obs_types.is_empty() {
         return Err("No observation types found in header".into());
     }
-    Ok(obs_types)
+    Ok((obs_types, header))
 }
 
 fn parse_rinex_3_header<I: Iterator<Item = String>>(
     first_line: String,
     lines: &mut I,
-) -> Result<HashMap<Constellation, Vec<String>>, String> {
+) -> Result<(HashMap<Constellation, Vec<String>>, RinexObsHeader), String> {
     let mut const_obs_types = HashMap::new();
+    let mut header = RinexObsHeader::default();
 
     let mut current_line = first_line;
     loop {
@@ -82,6 +122,25 @@ fn parse_rinex_3_header<I: Iterator<Item = String>>(
                 parse_rinex_3_obs_types_list(count, &mut types_str, lines, &mut current_line)?;
             const_obs_types.insert(constellation, types);
         }
+        if current_line.contains("APPROX POSITION XYZ") && current_line.len() >= 42 {
+            let x = parse_rinex_f14(&current_line[0..14]);
+            let y = parse_rinex_f14(&current_line[14..28]);
+            let z = parse_rinex_f14(&current_line[28..42]);
+            if let (Some(x), Some(y), Some(z)) = (x, y, z) {
+                header.approx_position = Some([x, y, z]);
+            }
+        }
+        if current_line.contains("ANTENNA: DELTA H/E/N") && current_line.len() >= 42 {
+            let h = parse_rinex_f14(&current_line[0..14]);
+            let e = parse_rinex_f14(&current_line[14..28]);
+            let n = parse_rinex_f14(&current_line[28..42]);
+            if let (Some(h), Some(e), Some(n)) = (h, e, n) {
+                header.antenna_delta = Some([h, e, n]);
+            }
+        }
+        if current_line.contains("MARKER NAME") {
+            header.marker_name = Some(current_line[0..60].trim().to_string());
+        }
         if current_line.contains("END OF HEADER") {
             break;
         }
@@ -95,7 +154,7 @@ fn parse_rinex_3_header<I: Iterator<Item = String>>(
     if const_obs_types.is_empty() {
         return Err("No observation types found in RINEX 3 header".into());
     }
-    Ok(const_obs_types)
+    Ok((const_obs_types, header))
 }
 
 fn parse_rinex_3_obs_types_list<I: Iterator<Item = String>>(
@@ -132,7 +191,7 @@ fn parse_rinex_3_obs_types_list<I: Iterator<Item = String>>(
 }
 
 /// Parses a RINEX 2.xx or 3.xx Observation file and returns a list of EpochObs.
-pub fn parse_rinex_obs<R: BufRead>(reader: R) -> Result<Vec<EpochObs>, String> {
+pub fn parse_rinex_obs<R: BufRead>(reader: R) -> Result<(Vec<EpochObs>, RinexObsHeader), String> {
     let mut lines = reader.lines().map(|l| l.unwrap_or_default());
     let first_line = lines.next().ok_or("Empty file")?;
 
@@ -143,6 +202,12 @@ pub fn parse_rinex_obs<R: BufRead>(reader: R) -> Result<Vec<EpochObs>, String> {
     } else {
         parse_rinex_2_obs(first_line, &mut lines)
     }
+}
+
+/// Convenience: parse RINEX obs file, discarding the header.
+/// Kept for backward compatibility with code that only needs epochs.
+pub fn parse_rinex_obs_epochs<R: BufRead>(reader: R) -> Result<Vec<EpochObs>, String> {
+    parse_rinex_obs(reader).map(|(epochs, _header)| epochs)
 }
 
 fn parse_rinex_2_obs_sat<I: Iterator<Item = String>>(
@@ -208,10 +273,10 @@ fn parse_rinex_2_obs_sat<I: Iterator<Item = String>>(
 fn parse_rinex_2_obs<I: Iterator<Item = String>>(
     first_line: String,
     lines: &mut I,
-) -> Result<Vec<EpochObs>, String> {
+) -> Result<(Vec<EpochObs>, RinexObsHeader), String> {
     let mut epochs = Vec::new();
 
-    let obs_types = parse_rinex_2_header(first_line, lines)?;
+    let (obs_types, header) = parse_rinex_2_header(first_line, lines)?;
 
     // Parse Epochs
     while let Some(line) = lines.next() {
@@ -282,7 +347,7 @@ fn parse_rinex_2_obs<I: Iterator<Item = String>>(
         }
         epochs.push(EpochObs { time, satellites });
     }
-    Ok(epochs)
+    Ok((epochs, header))
 }
 
 fn parse_rinex_3_obs_line(
@@ -338,10 +403,10 @@ fn parse_rinex_3_obs_line(
 fn parse_rinex_3_obs<I: Iterator<Item = String>>(
     first_line: String,
     lines: &mut I,
-) -> Result<Vec<EpochObs>, String> {
+) -> Result<(Vec<EpochObs>, RinexObsHeader), String> {
     let mut epochs = Vec::new();
 
-    let const_obs_types = parse_rinex_3_header(first_line, lines)?;
+    let (const_obs_types, header) = parse_rinex_3_header(first_line, lines)?;
 
     while let Some(line) = lines.next() {
         if !line.starts_with('>') {
@@ -372,7 +437,7 @@ fn parse_rinex_3_obs<I: Iterator<Item = String>>(
         }
         epochs.push(EpochObs { time, satellites });
     }
-    Ok(epochs)
+    Ok((epochs, header))
 }
 
 fn map_rinex_type(type_str: &str, val: f64, lli: Option<u8>) -> Option<Observation> {
@@ -950,7 +1015,7 @@ mod tests {
   25140000.000   125140000.000        2500.000            42.0  
 ";
         let mut reader = BufReader::new(data.as_bytes());
-        let epochs = parse_rinex_obs(&mut reader).unwrap();
+        let (epochs, _header) = parse_rinex_obs(&mut reader).unwrap();
 
         eprintln!("R2 OBS: epochs={}, sats={}, obs_in_first={}",
             epochs.len(),
@@ -1020,7 +1085,7 @@ G01  25140323.324   125140323.324        2514.032            45.0
 G02  25140000.000   125140000.000        2500.000            42.0    
 ";
         let mut reader = BufReader::new(data.as_bytes());
-        let epochs = parse_rinex_obs(&mut reader).unwrap();
+        let (epochs, _header) = parse_rinex_obs(&mut reader).unwrap();
 
         assert_eq!(epochs.len(), 1);
         let epoch = &epochs[0];
@@ -1064,7 +1129,7 @@ G01  25140323.324   125140323.324        2514.032            45.0
 R06  22100000.000   121000000.000        2200.000            40.0    
 ";
         let mut reader = BufReader::new(data.as_bytes());
-        let epochs = parse_rinex_obs(&mut reader).unwrap();
+        let (epochs, _header) = parse_rinex_obs(&mut reader).unwrap();
         let r06 = &epochs[0].satellites[1];
         for (i, obs) in r06.observations.iter().enumerate() {
             eprintln!("R06 obs[{}]: code={}{}{} val={}",
@@ -1104,7 +1169,7 @@ G01  25140323.324   125140323.324        2514.032            45.0
 R06  22100000.000   121000000.000        2200.000            40.0    
 ";
         let mut reader = BufReader::new(data.as_bytes());
-        let epochs = parse_rinex_obs(&mut reader).unwrap();
+        let (epochs, _header) = parse_rinex_obs(&mut reader).unwrap();
 
         assert_eq!(epochs.len(), 1);
         let epoch = &epochs[0];
@@ -1432,7 +1497,7 @@ G01  25140323.324   125140323.324        2514.032            45.0
   25140323.324   125140323.324        2514.032            45.0      25140323.324  
 ";
         let mut reader = BufReader::new(data.as_bytes());
-        let epochs = parse_rinex_obs(&mut reader).unwrap();
+        let (epochs, _header) = parse_rinex_obs(&mut reader).unwrap();
         assert_eq!(epochs.len(), 1);
         assert_eq!(epochs[0].satellites[0].observations.len(), 5);
     }
@@ -1449,7 +1514,7 @@ E    3 C1C L1C D1C                                             SYS / # / OBS TYP
 E02  27123456.789   127123456.789        2712.345            48.0    
 ";
         let mut reader = BufReader::new(data.as_bytes());
-        let epochs = parse_rinex_obs(&mut reader).unwrap();
+        let (epochs, _header) = parse_rinex_obs(&mut reader).unwrap();
         assert_eq!(epochs.len(), 1);
         assert_eq!(epochs[0].satellites.len(), 1);
         assert_eq!(
@@ -1477,7 +1542,7 @@ G    3 C1C L1C D1C                                             SYS / # / OBS TYP
 G01  25140323.324   125140323.324        2514.032            45.0      
 ";
         let mut reader = BufReader::new(data.as_bytes());
-        let epochs = parse_rinex_obs(&mut reader).unwrap();
+        let (epochs, _header) = parse_rinex_obs(&mut reader).unwrap();
         assert_eq!(epochs.len(), 1);
         assert_eq!(epochs[0].satellites.len(), 1);
         assert_eq!(epochs[0].satellites[0].sat.constellation, Constellation::Gps);
@@ -1500,7 +1565,7 @@ G01  25140323.324   125140323.324        2514.032            45.0
   25130000.000 125130000.000      2500.000          40.0
 ";
         let mut reader = BufReader::new(data.as_bytes());
-        let epochs = parse_rinex_obs(&mut reader).unwrap();
+        let (epochs, _header) = parse_rinex_obs(&mut reader).unwrap();
         assert_eq!(epochs.len(), 2);
         assert_eq!(epochs[0].satellites.len(), 2);
         assert_eq!(epochs[1].satellites.len(), 1);
@@ -1520,7 +1585,7 @@ short
   25140323.324   125140323.324        2514.032            45.0    
 ";
         let mut reader = BufReader::new(data.as_bytes());
-        let epochs = parse_rinex_obs(&mut reader).unwrap();
+        let (epochs, _header) = parse_rinex_obs(&mut reader).unwrap();
         assert_eq!(epochs.len(), 1);
         assert_eq!(epochs[0].satellites[0].sat.prn, 1);
     }
@@ -1751,7 +1816,7 @@ E 2 2020 08 01 12  0  0 -.153846153846D-03  .000000000000E+00  .000000000000E+00
   25140323.324   125140323.32419      2514.032            45.0
 ";
         let mut reader = BufReader::new(data.as_bytes());
-        let epochs = parse_rinex_obs(&mut reader).unwrap();
+        let (epochs, _header) = parse_rinex_obs(&mut reader).unwrap();
         assert_eq!(epochs.len(), 1);
         let g01 = &epochs[0].satellites[0];
 
@@ -1776,7 +1841,7 @@ E 2 2020 08 01 12  0  0 -.153846153846D-03  .000000000000E+00  .000000000000E+00
   25140000.000   125140000.000
 ";
         let mut reader = BufReader::new(data.as_bytes());
-        let epochs = parse_rinex_obs(&mut reader).unwrap();
+        let (epochs, _header) = parse_rinex_obs(&mut reader).unwrap();
         assert_eq!(epochs.len(), 1);
         assert_eq!(epochs[0].satellites.len(), 2);
         assert_eq!(epochs[0].satellites[0].sat.prn, 1);
@@ -1797,7 +1862,7 @@ G    3 C1C L1C D1C                                             SYS / # / OBS TYP
 G01  25140323.324   125140323.32419      2514.032
 ";
         let mut reader = BufReader::new(data.as_bytes());
-        let epochs = parse_rinex_obs(&mut reader).unwrap();
+        let (epochs, _header) = parse_rinex_obs(&mut reader).unwrap();
         assert_eq!(epochs.len(), 1);
         let g01 = &epochs[0].satellites[0];
         let l1c = g01.observations.iter()
@@ -1819,7 +1884,7 @@ G    3 C1C L1C D1C                                             SYS / # / OBS TYP
 G01  25140323.324   125140323.324        2514.032
 ";
         let mut reader = BufReader::new(data.as_bytes());
-        let epochs = parse_rinex_obs(&mut reader).unwrap();
+        let (epochs, _header) = parse_rinex_obs(&mut reader).unwrap();
         assert_eq!(epochs.len(), 1);
     }
 
@@ -1881,7 +1946,7 @@ J    3 C1C L1C D1C                                             SYS / # / OBS TYP
 J01  25140323.324   125140323.324        2514.032
 ";
         let mut reader = BufReader::new(data.as_bytes());
-        let epochs = parse_rinex_obs(&mut reader).unwrap();
+        let (epochs, _header) = parse_rinex_obs(&mut reader).unwrap();
         assert_eq!(epochs.len(), 1);
         assert_eq!(epochs[0].satellites.len(), 1);
         assert_eq!(
@@ -1902,7 +1967,7 @@ J01  25140323.324   125140323.324        2514.032
   25140323.324   25140323.324   125140323.324
 ";
         let mut reader = BufReader::new(data.as_bytes());
-        let epochs = parse_rinex_obs(&mut reader).unwrap();
+        let (epochs, _header) = parse_rinex_obs(&mut reader).unwrap();
         assert_eq!(epochs.len(), 1);
         let g01 = &epochs[0].satellites[0];
         assert!(g01.get_observable(1).is_some());
@@ -1922,7 +1987,7 @@ C    3 C1I L1I D1I                                             SYS / # / OBS TYP
 C01  25140323.324   125140323.324        2514.032
 ";
         let mut reader = BufReader::new(data.as_bytes());
-        let epochs = parse_rinex_obs(&mut reader).unwrap();
+        let (epochs, _header) = parse_rinex_obs(&mut reader).unwrap();
         assert_eq!(epochs.len(), 1);
         assert_eq!(epochs[0].satellites.len(), 1);
         assert_eq!(
@@ -1971,7 +2036,7 @@ R 6 2020 12 24 21 15  0  .189751386642E-03  .000000000000E+00  .422910000000E+06
   22100000.000   121000000.000        2200.000
 ";
         let mut reader = BufReader::new(data.as_bytes());
-        let epochs = parse_rinex_obs(&mut reader).unwrap();
+        let (epochs, _header) = parse_rinex_obs(&mut reader).unwrap();
         assert_eq!(epochs.len(), 1);
         assert_eq!(epochs[0].satellites.len(), 1);
         let r06 = &epochs[0].satellites[0];
@@ -1993,7 +2058,7 @@ R 6 2020 12 24 21 15  0  .189751386642E-03  .000000000000E+00  .422910000000E+06
   25140323.324   125140323.324        2514.032
 ";
         let mut reader = BufReader::new(data.as_bytes());
-        let epochs = parse_rinex_obs(&mut reader).unwrap();
+        let (epochs, _header) = parse_rinex_obs(&mut reader).unwrap();
         assert_eq!(epochs.len(), 1);
         assert_eq!(epochs[0].satellites[0].sat.constellation, Constellation::Gps);
         assert_eq!(epochs[0].satellites[0].sat.prn, 1);
@@ -2011,7 +2076,7 @@ R 6 2020 12 24 21 15  0  .189751386642E-03  .000000000000E+00  .422910000000E+06
   25140323.324   125140323.324        2514.032
 ";
         let mut reader = BufReader::new(data.as_bytes());
-        let epochs = parse_rinex_obs(&mut reader).unwrap();
+        let (epochs, _header) = parse_rinex_obs(&mut reader).unwrap();
         assert_eq!(epochs.len(), 1);
         let s13 = &epochs[0].satellites[0];
         assert_eq!(s13.sat.constellation, Constellation::Sbas);
@@ -2030,7 +2095,7 @@ R 6 2020 12 24 21 15  0  .189751386642E-03  .000000000000E+00  .422910000000E+06
   27123456.789   127123456.789        2712.345
 ";
         let mut reader = BufReader::new(data.as_bytes());
-        let epochs = parse_rinex_obs(&mut reader).unwrap();
+        let (epochs, _header) = parse_rinex_obs(&mut reader).unwrap();
         assert_eq!(epochs.len(), 1);
         let e02 = &epochs[0].satellites[0];
         assert_eq!(e02.sat.constellation, Constellation::Galileo);
@@ -2049,7 +2114,7 @@ R 6 2020 12 24 21 15  0  .189751386642E-03  .000000000000E+00  .422910000000E+06
   25140323.324   125140323.324        2514.032
 ";
         let mut reader = BufReader::new(data.as_bytes());
-        let epochs = parse_rinex_obs(&mut reader).unwrap();
+        let (epochs, _header) = parse_rinex_obs(&mut reader).unwrap();
         assert_eq!(epochs.len(), 1);
         let c01 = &epochs[0].satellites[0];
         assert_eq!(c01.sat.constellation, Constellation::Beidou);
@@ -2068,7 +2133,7 @@ R 6 2020 12 24 21 15  0  .189751386642E-03  .000000000000E+00  .422910000000E+06
   25140323.324   125140323.324        2514.032
 ";
         let mut reader = BufReader::new(data.as_bytes());
-        let epochs = parse_rinex_obs(&mut reader).unwrap();
+        let (epochs, _header) = parse_rinex_obs(&mut reader).unwrap();
         assert_eq!(epochs.len(), 1);
         let j01 = &epochs[0].satellites[0];
         assert_eq!(j01.sat.constellation, Constellation::Qzss);
@@ -2088,7 +2153,7 @@ R 6 2020 12 24 21 15  0  .189751386642E-03  .000000000000E+00  .422910000000E+06
   125140323.324
 ";
         let mut reader = BufReader::new(data.as_bytes());
-        let epochs = parse_rinex_obs(&mut reader).unwrap();
+        let (epochs, _header) = parse_rinex_obs(&mut reader).unwrap();
         assert_eq!(epochs.len(), 1);
         assert_eq!(epochs[0].satellites[0].observations.len(), 6);
     }
@@ -2105,7 +2170,7 @@ R 6 2020 12 24 21 15  0  .189751386642E-03  .000000000000E+00  .422910000000E+06
   25140323.324
 ";
         let mut reader = BufReader::new(data.as_bytes());
-        let epochs = parse_rinex_obs(&mut reader).unwrap();
+        let (epochs, _header) = parse_rinex_obs(&mut reader).unwrap();
         assert_eq!(epochs.len(), 1);
         assert_eq!(epochs[0].satellites.len(), 0);
     }
@@ -2122,7 +2187,7 @@ S    3 C1C L1C D1C                                             SYS / # / OBS TYP
 S01  25140323.324   125140323.324        2514.032
 ";
         let mut reader = BufReader::new(data.as_bytes());
-        let epochs = parse_rinex_obs(&mut reader).unwrap();
+        let (epochs, _header) = parse_rinex_obs(&mut reader).unwrap();
         assert_eq!(epochs.len(), 1);
         assert_eq!(epochs[0].satellites.len(), 1);
         assert_eq!(epochs[0].satellites[0].sat.constellation, Constellation::Sbas);
@@ -2142,7 +2207,7 @@ G    3 C1C L1C D1C                                             SYS / # / OBS TYP
 G01  25140323.324   125140323.324        2514.032
 ";
         let mut reader = BufReader::new(data.as_bytes());
-        let epochs = parse_rinex_obs(&mut reader).unwrap();
+        let (epochs, _header) = parse_rinex_obs(&mut reader).unwrap();
         assert_eq!(epochs.len(), 1);
         assert_eq!(epochs[0].satellites.len(), 1);
     }
@@ -2160,7 +2225,7 @@ random junk line
 G01  25140323.324   125140323.324        2514.032
 ";
         let mut reader = BufReader::new(data.as_bytes());
-        let epochs = parse_rinex_obs(&mut reader).unwrap();
+        let (epochs, _header) = parse_rinex_obs(&mut reader).unwrap();
         assert_eq!(epochs.len(), 1);
     }
 
@@ -2223,7 +2288,7 @@ S 1 2020 06 15 01 30  0 -.271548051387D-03 -.682121026330D-11  .000000000000D+00
   25140323.324   125140323.324        2514.032
 ";
         let mut reader = BufReader::new(data.as_bytes());
-        let epochs = parse_rinex_obs(&mut reader).unwrap();
+        let (epochs, _header) = parse_rinex_obs(&mut reader).unwrap();
         assert_eq!(epochs.len(), 1);
         let expected = GpsTime::from_calendar(2020, 5, 14, 22, 0, 0.0);
         assert_eq!(epochs[0].time.week, expected.week);
@@ -2242,7 +2307,7 @@ S 1 2020 06 15 01 30  0 -.271548051387D-03 -.682121026330D-11  .000000000000D+00
   25140323.324   125140323.324        2514.032
 ";
         let mut reader = BufReader::new(data.as_bytes());
-        let epochs = parse_rinex_obs(&mut reader).unwrap();
+        let (epochs, _header) = parse_rinex_obs(&mut reader).unwrap();
         assert_eq!(epochs.len(), 1);
         let expected = GpsTime::from_calendar(1999, 12, 25, 0, 0, 0.0);
         assert_eq!(epochs[0].time.week, expected.week);
@@ -2260,7 +2325,7 @@ S 1 2020 06 15 01 30  0 -.271548051387D-03 -.682121026330D-11  .000000000000D+00
   25140323.324   25140323.324
 ";
         let mut reader = BufReader::new(data.as_bytes());
-        let epochs = parse_rinex_obs(&mut reader).unwrap();
+        let (epochs, _header) = parse_rinex_obs(&mut reader).unwrap();
         assert_eq!(epochs.len(), 1);
         // X1 is skipped by map_rinex_type, only C1 remains
         assert_eq!(epochs[0].satellites[0].observations.len(), 1);

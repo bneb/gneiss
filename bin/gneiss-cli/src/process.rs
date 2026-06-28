@@ -15,7 +15,7 @@ pub async fn run_process(
 ) -> Result<(), Box<dyn std::error::Error>> {
     info!("Starting PPK Processing Pipeline...");
     
-    let mut rover_rinex_epochs = load_rover_epochs(&rover)?;
+    let (mut rover_rinex_epochs, rover_approx_pos) = load_rover_epochs(&rover)?;
     let (base_rinex_epochs, mut approx_base_pos) = load_base_epochs(&base)?;
 
     if let Some(pos_str) = base_position {
@@ -24,10 +24,21 @@ pub async fn run_process(
     }
 
     let mut engine_config = build_engine_config(
-        config, enable_backward_smoothing, mode, lambda_ratio, lambda_subset, 
+        config, enable_backward_smoothing, mode, lambda_ratio, lambda_subset,
         raim_outlier_m, chi_square_pr, chi_square_cp, nominal_snr, lever_arm, systems,
         clock_jump_threshold, disable_doppler
     )?;
+
+    // Use APPROX POSITION XYZ from RINEX header as initial position.
+    // IGS stations have cm-accurate coordinates in the header — this
+    // enables tight-prior IF mode and NL AR bootstrap.
+    if let Some(pos) = rover_approx_pos {
+        info!("DEBUG: rover_approx_pos={:?}, engine_config.initial_position={:?}", pos, engine_config.initial_position);
+        if engine_config.initial_position.is_none() {
+            info!("Using rover RINEX APPROX POSITION as initial position: {:?}", pos);
+            engine_config.initial_position = Some(pos);
+        }
+    }
 
     if let Some(pos) = approx_base_pos {
         if engine_config.base_position.is_none() {
@@ -61,12 +72,15 @@ pub async fn run_process(
     Ok(())
 }
 
-fn load_rover_epochs(rover: &str) -> Result<Option<Vec<gneiss_core::obs::EpochObs>>, Box<dyn std::error::Error>> {
+fn load_rover_epochs(rover: &str) -> Result<(Option<Vec<gneiss_core::obs::EpochObs>>, Option<[f64; 3]>), Box<dyn std::error::Error>> {
     if rover.ends_with(".obs") || rover.ends_with("o") || rover.ends_with(".rnx") || rover.ends_with(".RNX") {
         let file = std::fs::File::open(rover)?;
-        let epochs = gneiss_parsers::rinex::parse_rinex_obs(std::io::BufReader::new(file))?;
+        let (epochs, header) = gneiss_parsers::rinex::parse_rinex_obs(std::io::BufReader::new(file))?;
         info!("Loaded {} RINEX rover epochs.", epochs.len());
-        Ok(Some(epochs))
+        if let Some(pos) = header.approx_position {
+            info!("Rover APPROX POSITION XYZ: {:.4?}", pos);
+        }
+        Ok((Some(epochs), header.approx_position))
     } else {
         Err("Use RINEX for clinical benchmarks.".into())
     }

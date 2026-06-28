@@ -3,7 +3,7 @@ use std::io::BufRead;
 fn main() {
     let rover = "/Users/kevin/projects/gneiss/tests/datasets/gsdc/2021-04-29-US-SJC-2/Pixel4/supplemental/Pixel4_GnssLog.obs";
     let file = std::fs::File::open(rover).unwrap();
-    let epochs = gneiss_parsers::rinex::parse_rinex_obs(std::io::BufReader::new(file)).unwrap();
+    let epochs = gneiss_parsers::rinex::parse_rinex_obs_epochs(std::io::BufReader::new(file)).unwrap();
     
     let mut last_cp = std::collections::HashMap::new();
     let mut last_time = std::collections::HashMap::new();
