@@ -339,7 +339,8 @@ impl ProcessingEngine {
             | EngineMode::PppIns
             | EngineMode::PppInsLooselyCoupled
             | EngineMode::PppIekf
-            | EngineMode::PppRtklib => {
+            | EngineMode::PppRtklib
+            | EngineMode::PppMultiEpoch => {
                 // Seed state from SPP (required by build_sats)
                 if self.current_state.is_none() {
                     match crate::spp::compute_spp(
@@ -410,7 +411,6 @@ impl ProcessingEngine {
                 }
                 result
             }
-            | EngineMode::PppMultiEpoch => crate::engine::ppp::process_ppp(self, &filtered_rover).err(),
             EngineMode::PppInsIekf => {
                 crate::engine::ppp_ins_iekf::process_ppp_ins_fg(self, &filtered_rover).err()
             }

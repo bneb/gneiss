@@ -12,7 +12,7 @@
 
 use std::collections::HashMap;
 
-use crate::engine::ppp_multi_epoch_batch::MultiEpochCombiner;
+use crate::engine::ppp_multi_epoch_batch::StaticPositionBatchSolver;
 use crate::engine::EngineError;
 use crate::filter::RtkState;
 use crate::measurements::combinations;
@@ -150,8 +150,10 @@ pub struct PppRtklib {
     was_uduc: bool,         // previous epoch's UDUC mode
     /// MW widelane EMA for AR: sat → (count, smoothed_WL_cycles)
     mw_wl_ema: HashMap<SatelliteId, (u32, f64)>,
-    /// Multi-epoch position combiner for static PPP
-    pub epoch_combiner: MultiEpochCombiner,
+    /// Multi-epoch batch position solver for static PPP.
+    /// Uses CP-derived range measurements from AR-fixed satellites
+    /// to jointly estimate position across epochs.
+    pub batch_solver: StaticPositionBatchSolver,
 }
 
 impl Default for PppRtklib {
@@ -172,7 +174,7 @@ impl Default for PppRtklib {
             was_uduc: false,
             enable_multi_epoch: true,
             mw_wl_ema: HashMap::new(),
-            epoch_combiner: MultiEpochCombiner::new(),
+            batch_solver: StaticPositionBatchSolver::new(),
         }
     }
 }
@@ -397,6 +399,7 @@ impl PppRtklib {
     pub fn solve_with_sats(&mut self, state: &mut RtkState, sats: &[crate::engine::processed_sat::ProcessedSat]) -> Result<(), EngineError> {
         let mut obs_data: Vec<(SatelliteId, f64, f64, f64, f64, f64)> = Vec::new();
         let mut lc_if_vals: Vec<f64> = Vec::new();
+        let mut raw_p1_vals: Vec<f64> = Vec::new();     // Raw L1 PR (before IF override)
         let mut range_offsets: Vec<f64> = Vec::new(); // ProcessedSat.dist - our_dist
         let mut proc_tropo_dry: Vec<f64> = Vec::new(); // ProcessedSat.tropo_dry (ZHD×GMF mh)
         let mut proc_map_wet: Vec<f64> = Vec::new();   // ProcessedSat.map_wet (GMF mw)
@@ -429,6 +432,7 @@ impl PppRtklib {
             f1_vals.push(sat.f1);
             f2_vals.push(sat.f2);
             obs_data.push((sat.sat_obs.sat, sat.cp1.unwrap_or(0.0), sat.cp2.unwrap_or(0.0), sat.p1, sat.p2.unwrap_or(sat.p1), el * R2D));
+            raw_p1_vals.push(sat.p1); // Save raw L1 PR for MW WL AR (before IF override)
             lc_if_vals.push(lc_if);
             sat_pos.push(sat.sat_pos_rot);
             sat_clk.push(sat.dt_sat_m);
@@ -436,8 +440,51 @@ impl PppRtklib {
         }
         tracing::debug!("solve_with_sats: {} sats -> {} obs_data ({} with CP)", sats.len(), obs_data.len(), lc_if_vals.iter().filter(|v| **v != 0.0).count()); if obs_data.len() < 4 { return Err(EngineError::InsufficientSatellites); }
         let has_glo = obs_data.iter().any(|(s,_,_,_,_,_)| s.constellation == Constellation::Glonass);
-        // UDUC mode: use raw L1/L2 if not iono-free (ProcessedSat has raw obs)
-        let use_uduc = !sats.is_empty() && !sats[0].is_iono_free && sats[0].p2.is_some();
+
+        // For static receivers with dual-freq data: compute IF combinations
+        // from raw L1/L2 so that geometry-NL AR can fix IF ambiguities.
+        // IF mode cancels ionosphere (1st order), reduces state dimension,
+        // and enables CP re-solve with integer AR.
+        let force_if = !self.dynamics
+            && !sats.is_empty() && !sats[0].is_iono_free && sats[0].p2.is_some();
+        if force_if {
+            let mut if_pr_count = 0u32;
+            let mut if_cp_count = 0u32;
+            for i in 0..obs_data.len() {
+                let (sat, cp1_cyc, cp2_cyc, p1, p2, el) = obs_data[i];
+                if p1 == 0.0 || p2 == 0.0 { continue; }
+                let f1 = f1_vals[i]; let f2 = f2_vals[i];
+                let f1_2 = f1 * f1; let f2_2 = f2 * f2;
+                let denom = f1_2 - f2_2;
+                if denom <= 0.0 { continue; }
+                // IF pseudorange (meters)
+                let if_pr = (f1_2 * p1 - f2_2 * p2) / denom;
+                if_pr_count += 1;
+                // IF carrier phase (meters)
+                let if_cp_m = if cp1_cyc != 0.0 && cp2_cyc != 0.0 {
+                    let cp1_m = cp1_cyc * lam1_vals[i];
+                    let cp2_m = cp2_cyc * lam2_vals[i];
+                    if_cp_count += 1;
+                    (f1_2 * cp1_m - f2_2 * cp2_m) / denom
+                } else {
+                    0.0
+                };
+                obs_data[i] = (sat, cp1_cyc, cp2_cyc, if_pr, p2, el);
+                lc_if_vals[i] = if_cp_m;
+            }
+            if self.epoch == 0 {
+                tracing::info!(
+                    "IF mode forced: {} IF PR, {} IF CP ({} raw obs with CP2={})",
+                    if_pr_count, if_cp_count,
+                    obs_data.iter().filter(|o| o.2 != 0.0).count(),
+                    obs_data.iter().filter(|o| o.2 != 0.0 && o.1 != 0.0).count(),
+                );
+            }
+        }
+        // UDUC mode: use raw L1/L2 if not iono-free (ProcessedSat has raw obs).
+        // Skip UDUC if we forced IF above (needed for static multi-epoch).
+        let use_uduc = !force_if
+            && !sats.is_empty() && !sats[0].is_iono_free && sats[0].p2.is_some();
         let mut ppp = PppState::new(has_glo, self.dynamics, use_uduc);
         ppp.nsat = obs_data.len();
         let nx = ppp.nx();
@@ -667,22 +714,73 @@ impl PppRtklib {
         state.rcv_clk_bias = self.x[ppp.ic(0)];
         state.covariance = self.p.clone();
 
-        // Feed converged positions to multi-epoch combiner (feature-flagged)
-        if self.enable_multi_epoch && self.biases_seeded && self.epoch > 2 {
-            let cov_3x3 = nalgebra::Matrix3::new(
-                self.p[(0,0)], self.p[(0,1)], self.p[(0,2)],
-                self.p[(1,0)], self.p[(1,1)], self.p[(1,2)],
-                self.p[(2,0)], self.p[(2,1)], self.p[(2,2)],
-            );
-            self.epoch_combiner.add_epoch(
-                Vector3::new(self.x[0], self.x[1], self.x[2]),
-                cov_3x3,
-            );
-            // Replace output with multi-epoch weighted average
-            if let Some(avg) = self.epoch_combiner.weighted_average() {
-                state.position.vector.x = avg.x;
-                state.position.vector.y = avg.y;
-                state.position.vector.z = avg.z;
+        // ---- Multi-epoch batch solver: feed CP-derived range ----------------
+        // For UDUC mode, derives geometric range from L1 carrier phase using
+        // the IEKF's ionosphere and IF ambiguity estimates.  Per-satellite
+        // bias elimination in the batch solver absorbs residual errors from
+        // WL notching, fractional-cycle IF ambiguity, and ZWD / orbit biases.
+        if self.enable_multi_epoch && !self.dynamics && ppp.uduc
+            && self.biases_seeded && self.epoch > 5
+        {
+            let rcv_pos = Vector3::new(self.x[0], self.x[1], self.x[2]);
+            let zwd = if ppp.nt() >= 1 { self.x[ppp.it()] } else { 0.0 };
+            for i in 0..obs_data.len() {
+                let (sat, cp1_cyc, _, _, _, el_deg) = obs_data[i];
+                if cp1_cyc == 0.0 { continue; }
+                let el_rad = el_deg * D2R;
+
+                // Low-elevation satellites have stronger atmospheric and
+                // multipath correlation across epochs.  Gate at 15° standard.
+                if el_deg < 15.0 { continue; }
+
+                let lam1 = lam1_vals[i];
+                let l1_cp_m = cp1_cyc * lam1;
+                let iono_l1 = self.x[ppp.ni(i)];        // IEKF ionosphere estimate
+                let n_if = self.x[ppp.ib(i)];            // IEKF IF ambiguity estimate
+                let sys: usize = if sat.constellation == Constellation::Glonass { 1 } else { 0 };
+                let clock = self.x[ppp.ic(sys)];         // receiver clock
+                let dts = sat_clk[i];                    // satellite clock
+                let dtrp = proc_tropo_dry[i] + proc_map_wet[i] * zwd;
+
+                // Derive geometric range from L1 carrier phase:
+                //   L1_CP = ρ - dts + dtrp - I1 + clock + λ1*N1
+                //   ρ = L1_CP + dts - dtrp + I1 - clock - N_IF
+                //     (λ1*N1 ≈ N_IF with residual absorbed by per-sat bias)
+                //
+                // Pack into add_measurement:
+                //   cp_if = L1_CP + dts - dtrp + I1_est
+                //   n_if_fixed = N_IF_est
+                //   clock = receiver_clock
+                let cp_with_corrections = l1_cp_m + dts - dtrp + iono_l1;
+                self.batch_solver.add_measurement(
+                    sat,                  // satellite ID (per-sat bias key)
+                    sat_pos[i],           // satellite ECEF position
+                    cp_with_corrections,  // L1 CP + dts - dtrp + iono (meters)
+                    n_if,                 // IF ambiguity estimate (meters)
+                    0.0,                  // tropo (already in cp_with_corrections)
+                    0.0, 0.0,             // map_wet, zwd (not used)
+                    clock,                // receiver clock (subtracted)
+                    el_rad,               // elevation (radians)
+                );
+            }
+
+            // Periodic reset: flush early, poorly-converged measurements
+            // so the solver doesn't lock onto the IEKF's initial bias.
+            // 300 epochs ≈ 2.5 hours at 30s intervals — long enough for
+            // geometry diversity while preventing stale bias accumulation.
+            if self.epoch > 0 && self.epoch % 300 == 0 {
+                self.batch_solver.clear();
+            }
+
+            // Solve for refined static position.
+            if let Some((refined, _cov)) = self.batch_solver.solve(rcv_pos) {
+                let delta = (refined - rcv_pos).norm();
+                let iepf_sigma = (self.p[(0,0)] + self.p[(1,1)] + self.p[(2,2)]).sqrt();
+                if delta < 5.0 || delta < 3.0 * iepf_sigma.max(1.0) {
+                    state.position.vector.x = refined.x;
+                    state.position.vector.y = refined.y;
+                    state.position.vector.z = refined.z;
+                }
             }
         }
 
@@ -692,10 +790,11 @@ impl PppRtklib {
         // at epoch ~40-60 instead of ~100, halving the pre-AR tail.
         if !ppp.uduc && self.epoch > 30 {
             let rcv_pos = Vector3::new(self.x[0], self.x[1], self.x[2]);
-            let clock = self.x[ppp.ic(0)];
             for i in 0..obs_data.len() {
                 if lc_if_vals[i] == 0.0 { continue; }
                 let (sat, _, _, _, _, _) = obs_data[i];
+                let sys: usize = if sat.constellation == Constellation::Glonass { 1 } else { 0 };
+                let clock = self.x[ppp.ic(sys)];
                 let rs = sat_pos[i]; let dts = sat_clk[i];
                 let dist = (rs - rcv_pos).norm();
                 if dist <= 0.0 { continue; }
@@ -708,7 +807,7 @@ impl PppRtklib {
                 let f1s = f1_vals[i]*f1_vals[i]; let f2s = f2_vals[i]*f2_vals[i];
                 let n_if_fixed = (f1s * n1_rounded * lam1_vals[i] - f2s * n1_rounded * lam2_vals[i]) / (f1s - f2s);
                 let n_if_float = self.x[ppp.ib(i)];
-                if (n_if_float - n_if_fixed).abs() > 0.5 { continue; }
+                if (n_if_float - n_if_fixed).abs() > 0.2 { continue; }
                 // Fix it
                 let bi = ppp.ib(i);
                 self.x[bi] = n_if_fixed;
@@ -723,7 +822,8 @@ impl PppRtklib {
         // Compute Melbourne-Wübbena widelane for each satellite, maintain EMA.
         // When WL is precise enough, fix N_wl → compute N1 → fix N_IF.
         for i in 0..obs_data.len() {
-            let (sat, l1_cyc, l2_cyc, p1_raw, p2_raw, _el_deg) = obs_data[i];
+            let (sat, l1_cyc, l2_cyc, _if_pr, p2_raw, _el_deg) = obs_data[i];
+            let p1_raw = raw_p1_vals.get(i).copied().unwrap_or(0.0); // Use raw L1 PR for MW
             if l1_cyc == 0.0 || l2_cyc == 0.0 || p1_raw == 0.0 || p2_raw == 0.0 { continue; }
             let lam1 = lam1_vals.get(i).copied().unwrap_or(0.1903);
             let lam2 = lam2_vals.get(i).copied().unwrap_or(0.2442);
@@ -767,30 +867,31 @@ impl PppRtklib {
                 let residual = n_if - n_if_fixed;
                 if residual.abs() > 2.0 { continue; } // reject if residual too large
 
-                // Tighten IF bias state to the fixed value
+                // Tighten IF bias state to the fixed value.
+                // Use σ≈10cm (not 1mm hard-lock) so the filter can re-adjust
+                // if position drifts. Hard-locking enables a positive feedback
+                // loop where wrong fixes compound over many epochs.
                 let bi = ppp.ib(i);
                 self.x[bi] = n_if_fixed;
-                self.p[(bi, bi)] = 1e-6; // σ ≈ 1mm — effectively locked
-                // Clear cross-correlations for this bias
-                for j in 0..ppp.nx() {
-                    if j != bi {
-                        self.p[(bi, j)] = 0.0;
-                        self.p[(j, bi)] = 0.0;
-                    }
-                }
+                self.p[(bi, bi)] = 0.01; // σ ≈ 10cm — fixed but adjustable
+                // Keep cross-correlations: preserves position-bias coupling
+                // so the filter can self-correct if the fix was wrong.
             }
         }
 
-        // After AR fixes: CP-only re-solve with inflated position variance.
+        // After AR fixes: CP-only re-solve.
         // Fixed IF ambiguities make CP an unbiased range measurement (σ≈1cm).
-        // Temporarily inflating P_pos lets the filter reposition away from
-        // the biased PR solution toward the CP-only solution.
+        // Do NOT inflate position variance — keeping the current IEKF covariance
+        // ensures the Kalman gain distributes CP corrections between position
+        // and ambiguity according to their actual uncertainties. Inflating
+        // position variance (σ=10m) causes position to absorb all CP correction
+        // even when ambiguities are slightly wrong, enabling a positive feedback
+        // loop where wrong fixes compound over epochs.
         let any_fixed = (0..obs_data.len()).any(|i| {
             self.p[(ppp.ib(i), ppp.ib(i))] < 0.01
         });
         if any_fixed {
-            // Inflate position/clock/ZWD for CP-only re-convergence
-            for k in 0..3 { self.p[(k, k)] = self.p[(k, k)].max(100.0); } // σ=10m pos
+            // Inflate clock/ZWD for CP-only re-convergence (clock is reset each epoch)
             self.p[(ppp.ic(0), ppp.ic(0))] = self.p[(ppp.ic(0), ppp.ic(0))].max(10000.0);
             if ppp.nt() >= 1 { self.p[(ppp.it(), ppp.it())] = self.p[(ppp.it(), ppp.it())].max(9.0); } // σ=3m ZWD
 
@@ -821,12 +922,74 @@ impl PppRtklib {
                 h_cp[(ppp.ib(i), n_cp)] = 1.0;
                 r_cp[(n_cp, n_cp)] = 0.0001; // σ=1cm CP
                 n_cp += 1;
+
+                // Feed CP measurement to static multi-epoch batch solver.
+                // Only high-elevation AR-fixed satellites — low satellites have
+                // stronger atmosphere and multipath correlation across epochs.
+                if self.enable_multi_epoch && !self.dynamics && el_rad > 30.0_f64.to_radians() {
+                    let zwd_val = if ppp.nt() >= 1 { self.x[ppp.it()] } else { 0.0 };
+                    let dtrp = dtrp + proc_map_wet[i] * zwd_val;
+                    self.batch_solver.add_measurement(
+                        sat,                             // satellite ID for per-sat bias
+                        rs,                              // satellite ECEF position
+                        lc_if_vals[i],                   // IF carrier phase (meters)
+                        n_if_fixed,                      // AR-fixed IF ambiguity
+                        dtrp,                            // total tropo delay
+                        0.0, 0.0,                        // map_wet, zwd (already in dtrp)
+                        self.x[ppp.ic(sys)] - dts,       // clock - sat_clock
+                        el_rad,                          // elevation (radians)
+                    );
+                }
             }
             if n_cp >= 4 {
+                // Consistency gate: reject CP-only re-solve if it would
+                // jump position by >1m. Large jumps indicate wrong AR fixes
+                // that would trigger the divergence feedback loop.
+                let pos_before = Vector3::new(self.x[0], self.x[1], self.x[2]);
                 let h_s = h_cp.view((0, 0), (ppp.nx(), n_cp)).clone_owned();
                 let vs = v_cp.rows(0, n_cp).clone_owned();
                 let rs = r_cp.view((0, 0), (n_cp, n_cp)).clone_owned();
                 let _ = Self::measurement_update(&mut self.x, &mut self.p, &h_s, &vs, &rs, ppp.nx(), n_cp);
+                let pos_after = Vector3::new(self.x[0], self.x[1], self.x[2]);
+                let pos_jump = (pos_after - pos_before).norm();
+                if pos_jump > 1.0 {
+                    tracing::warn!("CP-only re-solve rejected: pos jump {:.2}m > 1m ({} fixes)", pos_jump, n_cp);
+                    self.x[0] = pos_before.x;
+                    self.x[1] = pos_before.y;
+                    self.x[2] = pos_before.z;
+                }
+            }
+
+            // Periodic reset: prevent stale AR-fixed measurements from locking
+            // the position to an old solution as geometry evolves.
+            if self.epoch > 0 && self.epoch % 300 == 0 {
+                self.batch_solver.clear();
+            }
+
+            // Solve for refined static position across all accumulated CP measurements
+            if self.enable_multi_epoch && !self.dynamics {
+                let n_meas = self.batch_solver.num_measurements();
+                let rcv_pos = Vector3::new(self.x[0], self.x[1], self.x[2]);
+                if let Some((refined, _cov)) = self.batch_solver.solve(rcv_pos) {
+                    let delta = (refined - rcv_pos).norm();
+                    let iepf_sigma = (self.p[(0,0)] + self.p[(1,1)] + self.p[(2,2)]).sqrt();
+                    if delta < 5.0 || delta < 3.0 * iepf_sigma.max(1.0) {
+                        if delta > 0.01 {
+                            tracing::debug!(
+                                "Batch solver: {} measurements, pos delta={:.3}m",
+                                n_meas, delta
+                            );
+                        }
+                        state.position.vector.x = refined.x;
+                        state.position.vector.y = refined.y;
+                        state.position.vector.z = refined.z;
+                    }
+                } else if n_meas > 0 && self.epoch % 60 == 0 {
+                    tracing::debug!(
+                        "Batch solver: {} measurements but solve failed at epoch {}",
+                        n_meas, self.epoch
+                    );
+                }
             }
         }
 

@@ -23,7 +23,7 @@ statrs = "0.18.0"
 tracing = "0.1.44"
 
 [features]
-default = []
+default = ["gf-slip"]
 gf-slip = []           # Geometry-Free cycle slip detection for RTK
 doppler-velocity = []  # Doppler-based velocity EKF update for SPP
 

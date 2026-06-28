@@ -281,6 +281,8 @@ pub struct PppTwoEpochOptimizer {
     iono_model: IonosphereModel,
     /// LAMBDA AR minimum ratio threshold.
     lambda_min_ratio: f64,
+    /// Diagnostic epoch counter.
+    call_count: u64,
 }
 
 impl Default for PppTwoEpochOptimizer {
@@ -294,6 +296,7 @@ impl Default for PppTwoEpochOptimizer {
             huber_k: 3.0,
             iono_model: IonosphereModel::Klobuchar,
             lambda_min_ratio: 2.0,
+            call_count: 0,
         }
     }
 }
@@ -335,6 +338,7 @@ impl PppTwoEpochOptimizer {
         sats: &[ProcessedSat],
         position_prior: Option<(Vector3<f64>, f64)>,
     ) -> Result<(), EngineError> {
+        self.call_count += 1;
         // --- Step 1: run single-epoch IEKF to get an initial estimate ------
         let iekf = PppIteratedEkf::new()
             .with_iono_model(self.iono_model)
@@ -357,6 +361,7 @@ impl PppTwoEpochOptimizer {
 
         // --- Step 5: try N-epoch joint optimisation ------------------------
         let n_epochs = self.window.len();
+        tracing::info!("ME: attempting {}-epoch optimisation", n_epochs);
         let result = self.try_n_epoch_optimisation(state, sats, position_prior);
 
         match result {
@@ -480,14 +485,37 @@ impl PppTwoEpochOptimizer {
 
         // --- Run LM optimisation ------------------------------------------
         let initial_delta = DVector::zeros(total_dim);
+
+        // Diagnostic: check initial residuals
+        let total_residual_before: f64 = optimizer.factors.iter()
+            .map(|f| f.residual(&initial_delta).norm_squared())
+            .sum();
+        let num_factors = optimizer.factors.len();
+
         let (delta_opt, _cov) = optimizer.optimize(&initial_delta, self.max_iterations, self.convergence_tol);
 
         if delta_opt.iter().any(|x| x.is_nan() || x.is_infinite()) {
             return Err(EngineError::StateDisappeared);
         }
 
+        let total_residual_after: f64 = optimizer.factors.iter()
+            .map(|f| f.residual(&delta_opt).norm_squared())
+            .sum();
+
         // --- Extract newest-epoch correction ------------------------------
         let dx_k = delta_opt.rows(newest_offset, CORE_STATE_SIZE);
+        let pos_delta = (dx_k[0]*dx_k[0] + dx_k[1]*dx_k[1] + dx_k[2]*dx_k[2]).sqrt();
+        let oldest_pos = Vector3::new(epochs[0].state[0], epochs[0].state[1], epochs[0].state[2]);
+        let newest_pos = Vector3::new(newest.state[0], newest.state[1], newest.state[2]);
+        let iepf_diff = (newest_pos - oldest_pos).norm();
+
+        if self.call_count % 60 == 0 || pos_delta > 10.0 {
+            tracing::info!(
+                "ME opt (n={} ep, {} factors): init_res2={:.1} final_res2={:.1} pos_delta={:.3}m iepf_diff={:.3}m",
+                n_epochs, num_factors, total_residual_before, total_residual_after, pos_delta, iepf_diff
+            );
+        }
+
         let mut final_state = newest.state.clone();
         for i in 0..CORE_STATE_SIZE {
             final_state[i] += dx_k[i];

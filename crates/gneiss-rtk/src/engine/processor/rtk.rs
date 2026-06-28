@@ -9,6 +9,12 @@ use gneiss_core::obs::EpochObs;
 use gneiss_core::sat::SatelliteId;
 use nalgebra::{DMatrix, DVector, Vector3};
 
+/// Maximum allowable 3D position change (meters) from an AR fix.
+/// If the fixed position differs from the float position by more than this
+/// threshold, the fix is rejected and the float solution is retained.
+/// This catches wrong AR integer sets that would otherwise jump the position.
+const AR_MAX_POSITION_JUMP_M: f64 = 5.0;
+
 /// Apply adaptive R scaling based on innovation history.
 /// Updates the tracker with current innovations and inflates R diagonals
 /// for measurements with historically large normalized innovations.
@@ -547,20 +553,28 @@ fn handle_ekf_rejection(
         state.consecutive_rejections,
         reason
     );
-    if state.ins_aligned {
-        let inflate_factor = 1.0 + (state.consecutive_rejections as f64 * 0.02).min(0.5);
-        for i in 0..6 {
-            state.covariance[(i, i)] *= inflate_factor;
-        }
-        for i in 0..3 {
-            state.covariance[(i, i)] += 1.0;
-        }
-        for i in 3..6 {
-            state.covariance[(i, i)] += 0.1;
-        }
+
+    // Inflate position/velocity covariance to allow faster recovery.
+    // Also inflate ambiguity covariances so the filter can re-converge
+    // after a wrong AR fix or undetected cycle slip.
+    let inflate_factor = 1.0 + (state.consecutive_rejections as f64 * 0.2).min(0.8);
+    for i in 0..6 {
+        state.covariance[(i, i)] *= inflate_factor;
     }
+    for i in 0..3 {
+        state.covariance[(i, i)] += 1.0;
+    }
+    for i in 3..6 {
+        state.covariance[(i, i)] += 0.1;
+    }
+    // Inflate ambiguity covariances to enable re-convergence
+    let amb_start = crate::filter::CORE_STATE_SIZE;
+    for i in amb_start..state.covariance.nrows() {
+        state.covariance[(i, i)] *= inflate_factor.min(2.0);
+    }
+
     let pos_var = state.covariance[(0, 0)] + state.covariance[(1, 1)] + state.covariance[(2, 2)];
-    if state.ins_aligned && pos_var > 10000.0 {
+    if pos_var > 10000.0 {
         tracing::warn!(
             "Extreme divergence detected (pos_var {:.2}): resetting EKF to SPP fallback.",
             pos_var
@@ -569,9 +583,10 @@ fn handle_ekf_rejection(
             state.reset_to_spp(pos, spp_state_ref, !config.mode.is_ppp());
             state.consecutive_rejections = 0;
         }
-    } else if !state.ins_aligned && state.consecutive_rejections >= 3 {
+    } else if state.consecutive_rejections >= 5 {
         tracing::warn!(
-            "Loosely coupled GNSS EKF rejected for 3 epochs: resetting to SPP fallback."
+            "EKF rejected for {} epochs: resetting to SPP fallback.",
+            state.consecutive_rejections
         );
         if let Some(pos) = spp_pos {
             state.reset_to_spp(pos, spp_state_ref, !config.mode.is_ppp());
@@ -600,12 +615,29 @@ fn handle_ekf_acceptance(
     state.consecutive_rejections = 0;
     if let Ok(res) = state.resolve_ambiguities(ephemerides, config) {
         let fixed_state = res.fixed_state;
-        tracing::info!("RTK AR fixed: {} sats", fixed_state.ambiguities.len());
-        // Apply AR position correction via the multi-epoch combiner.
-        // The fixed position replaces the float position for this epoch.
-        state.is_fixed = true;
-        state.position = fixed_state.position.clone();
-        state.fixed_state = Some(Box::new(fixed_state));
+
+        // Validate the AR fix: reject if the position jump is excessive,
+        // which indicates a wrong integer set. A correct fix on a short
+        // baseline should change position by < 1 m.
+        let pos_jump = (fixed_state.position.vector - state.position.vector).norm();
+        if pos_jump > AR_MAX_POSITION_JUMP_M {
+            tracing::warn!(
+                "AR fix rejected: position jump {:.2}m exceeds {:.1}m threshold",
+                pos_jump,
+                AR_MAX_POSITION_JUMP_M
+            );
+            state.is_fixed = false;
+            state.fixed_state = None;
+        } else {
+            tracing::info!(
+                "RTK AR fixed: {} sats (position jump {:.3}m)",
+                fixed_state.ambiguities.len(),
+                pos_jump
+            );
+            state.is_fixed = true;
+            state.position = fixed_state.position.clone();
+            state.fixed_state = Some(Box::new(fixed_state));
+        }
     } else {
         state.is_fixed = false;
         state.fixed_state = None;
@@ -1041,26 +1073,26 @@ mod tests {
     }
 
     #[test]
-    fn test_handle_ekf_rejection_not_aligned_no_reset_below_3() {
+    fn test_handle_ekf_rejection_not_aligned_no_reset_below_5() {
         let time = GpsTime::new(0, 0.0);
         let pos = Coordinate::new(Vector3::new(5.0, 5.0, 5.0), Datum::WGS84, Frame::ECEF, time);
         let mut state = RtkState::new(time, pos, 1.0);
         state.ins_aligned = false;
-        state.consecutive_rejections = 2;
+        state.consecutive_rejections = 3;
 
         handle_ekf_rejection(&mut state, &EngineConfig::default(), None, None, "test");
-        assert_eq!(state.consecutive_rejections, 3);
-        // Position should NOT be reset because we didn't provide spp_pos
+        assert_eq!(state.consecutive_rejections, 4);
+        // Position should NOT be reset because rejections < 5
         assert!((state.position.vector.x - 5.0).abs() < 1e-6);
     }
 
     #[test]
-    fn test_handle_ekf_rejection_not_aligned_resets_at_3_with_spp() {
+    fn test_handle_ekf_rejection_not_aligned_resets_at_5_with_spp() {
         let time = GpsTime::new(0, 0.0);
         let pos = Coordinate::new(Vector3::new(5.0, 5.0, 5.0), Datum::WGS84, Frame::ECEF, time);
         let mut state = RtkState::new(time, pos, 1.0);
         state.ins_aligned = false;
-        state.consecutive_rejections = 2;
+        state.consecutive_rejections = 4;
 
         let spp_pos = Coordinate::new(
             Vector3::new(50.0, 50.0, 50.0),
@@ -1070,7 +1102,7 @@ mod tests {
         );
 
         handle_ekf_rejection(&mut state, &EngineConfig::default(), Some(spp_pos), None, "test");
-        // Should have been reset
+        // Should have been reset after 5 consecutive rejections
         assert!((state.position.vector.x - 50.0).abs() < 1e-6);
         assert_eq!(state.consecutive_rejections, 0);
     }
