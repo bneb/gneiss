@@ -1,0 +1,10 @@
+{
+    "enable_ar": true,
+    "lambda_min_ratio": 2.0,
+    "elevation_mask_deg": 5.0,
+    "dynamics_model": "static",
+    "auto_detect_dynamics": false,
+    "iono_model": "klobuchar",
+    "process_noise_amb_float": 1e-7,
+    "ar_min_epoch_count": 30
+}

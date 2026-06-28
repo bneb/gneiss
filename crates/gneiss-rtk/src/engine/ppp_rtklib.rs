@@ -170,7 +170,7 @@ impl Default for PppRtklib {
             last_has_glo: false,
             biases_seeded: false,
             was_uduc: false,
-            enable_multi_epoch: false,
+            enable_multi_epoch: true,
             mw_wl_ema: HashMap::new(),
             epoch_combiner: MultiEpochCombiner::new(),
         }

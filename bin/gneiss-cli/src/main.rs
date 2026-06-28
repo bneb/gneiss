@@ -205,7 +205,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                     "ppp-fg" | "ppp-iekf" => gneiss_rtk::engine::EngineMode::PppIekf,
                     "ppp-rtklib" => gneiss_rtk::engine::EngineMode::PppRtklib,
-                    "ppp-rtklib" => gneiss_rtk::engine::EngineMode::PppRtklib,
                     "ppp-me" | "ppp-multi-epoch" => gneiss_rtk::engine::EngineMode::PppMultiEpoch,
                     "ppp-ins-fg" | "tight-fg" | "ppp-ins-iekf" => {
                         gneiss_rtk::engine::EngineMode::PppInsIekf
@@ -458,7 +457,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         gneiss_rtk::engine::EngineMode::RtkInsIekf
                     }
                     "ppp-fg" | "ppp-iekf" => gneiss_rtk::engine::EngineMode::PppIekf,
-                    "ppp-rtklib" => gneiss_rtk::engine::EngineMode::PppRtklib,
                     "ppp-rtklib" => gneiss_rtk::engine::EngineMode::PppRtklib,
                     "ppp-me" | "ppp-multi-epoch" => gneiss_rtk::engine::EngineMode::PppMultiEpoch,
                     "ppp-ins-fg" | "tight-fg" | "ppp-ins-iekf" => {
