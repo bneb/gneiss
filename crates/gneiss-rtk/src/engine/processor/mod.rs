@@ -341,19 +341,32 @@ impl ProcessingEngine {
             | EngineMode::PppIekf
             | EngineMode::PppRtklib
             | EngineMode::PppMultiEpoch => {
-                // Seed state from SPP (required by build_sats)
+                // Seed state from SPP or known initial position
                 if self.current_state.is_none() {
-                    match crate::spp::compute_spp(
-                        &filtered_rover, &self.ephemerides,
-                        self.klobuchar_params.as_ref(),
-                        &crate::spp::SppConfig::default(), None,
-                    ) {
-                        Ok(spp) => {
-                            let mut s = RtkState::new(filtered_rover.time, spp.position, 100.0);
-                            s.rcv_clk_bias = spp.cdt;
-                            self.current_state = Some(s);
+                    if let Some(init_pos) = self.config.initial_position {
+                        let pos = gneiss_core::coords::Coordinate::new(
+                            nalgebra::Vector3::new(init_pos[0], init_pos[1], init_pos[2]),
+                            gneiss_core::coords::Datum::WGS84,
+                            gneiss_core::coords::Frame::ECEF,
+                            filtered_rover.time,
+                        );
+                        // Tight prior: known position accurate to ~1cm
+                        let mut s = RtkState::new(filtered_rover.time, pos, 0.0001);
+                        s.rcv_clk_bias = 0.0;
+                        self.current_state = Some(s);
+                    } else {
+                        match crate::spp::compute_spp(
+                            &filtered_rover, &self.ephemerides,
+                            self.klobuchar_params.as_ref(),
+                            &crate::spp::SppConfig::default(), None,
+                        ) {
+                            Ok(spp) => {
+                                let mut s = RtkState::new(filtered_rover.time, spp.position, 100.0);
+                                s.rcv_clk_bias = spp.cdt;
+                                self.current_state = Some(s);
+                            }
+                            Err(_) => return Err(EngineError::InitialSppFailed),
                         }
-                        Err(_) => return Err(EngineError::InitialSppFailed),
                     }
                 }
                 // Mode-dependent UDUC toggle: when in Uduc mode, produce raw L1/L2
@@ -370,6 +383,11 @@ impl ProcessingEngine {
                     state.position.epoch = filtered_rover.time;
                     let mut solver = self.ppp_rtklib_solver.take()
                         .unwrap_or_else(crate::engine::ppp_rtklib::PppRtklib::default);
+                    // If initial position is known, use tight prior for AR bootstrap
+                    if self.config.initial_position.is_some()
+                        && solver.initial_position_var == 0.0 {
+                        solver.initial_position_var = 0.0001; // σ=1cm for known pos
+                    }
                     let r = std::panic::catch_unwind(
                         std::panic::AssertUnwindSafe(|| solver.solve_with_sats(state, &sats))
                     );

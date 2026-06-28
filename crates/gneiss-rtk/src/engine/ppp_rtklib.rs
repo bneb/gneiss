@@ -141,6 +141,7 @@ pub struct PppRtklib {
     pub dynamics: bool,
     pub tide_corr: bool,
     pub enable_multi_epoch: bool, // feature flag
+    pub initial_position_var: f64, // position variance for known initial pos (0 = use VAR_POS)
     pub x: DVector<f64>,
     pub p: DMatrix<f64>,
     pub epoch: u32,
@@ -173,6 +174,7 @@ impl Default for PppRtklib {
             biases_seeded: false,
             was_uduc: false,
             enable_multi_epoch: true,
+            initial_position_var: 0.0, // 0 = use VAR_POS default
             mw_wl_ema: HashMap::new(),
             batch_solver: StaticPositionBatchSolver::new(),
         }
@@ -183,8 +185,13 @@ impl PppRtklib {
     /// Allocate and return the initial state covariance matrix (RTKLIB defaults).
     fn init_covariance(&self, ppp: &PppState, nx: usize) -> DMatrix<f64> {
         let mut p = DMatrix::zeros(nx, nx);
+        let pos_var = if self.initial_position_var > 0.0 {
+            self.initial_position_var
+        } else {
+            VAR_POS
+        };
         for i in 0..3 {
-            p[(i, i)] = VAR_POS;
+            p[(i, i)] = pos_var;
         }
         if self.dynamics {
             for i in 3..9 {
@@ -445,7 +452,11 @@ impl PppRtklib {
         // from raw L1/L2 so that geometry-NL AR can fix IF ambiguities.
         // IF mode cancels ionosphere (1st order), reduces state dimension,
         // and enables CP re-solve with integer AR.
-        let force_if = !self.dynamics
+        // IF mode disabled by default — UDUC provides better baseline accuracy.
+        // IF mode can be enabled when a tight initial position prior is available
+        // (e.g. known IGS station coordinates), which enables NL AR bootstrap.
+        let force_if = self.initial_position_var > 0.0
+            && !self.dynamics
             && !sats.is_empty() && !sats[0].is_iono_free && sats[0].p2.is_some();
         if force_if {
             let mut if_pr_count = 0u32;
@@ -474,11 +485,22 @@ impl PppRtklib {
             }
             if self.epoch == 0 {
                 tracing::info!(
-                    "IF mode forced: {} IF PR, {} IF CP ({} raw obs with CP2={})",
+                    "IF mode forced: {} IF PR, {} IF CP",
                     if_pr_count, if_cp_count,
-                    obs_data.iter().filter(|o| o.2 != 0.0).count(),
-                    obs_data.iter().filter(|o| o.2 != 0.0 && o.1 != 0.0).count(),
                 );
+                // DEBUG: compare raw vs IF for first sat
+                if obs_data.len() > 0 {
+                    let (_, _, _, raw_p1, raw_p2, _) = obs_data[0];
+                    let (_, _, _, if_p1, _, _) = obs_data[0];
+                    let f1 = f1_vals[0]; let f2 = f2_vals[0];
+                    let f1_2 = f1*f1; let f2_2 = f2*f2;
+                    let denom = f1_2 - f2_2;
+                    let if_check = (f1_2 * raw_p1 - f2_2 * raw_p2) / denom;
+                    tracing::info!(
+                        "IF debug: raw P1={:.1} P2={:.1} IF={:.1} stored={:.1} f1={:.3}MHz f2={:.3}MHz",
+                        raw_p1, raw_p2, if_check, if_p1, f1/1e6, f2/1e6
+                    );
+                }
             }
         }
         // UDUC mode: use raw L1/L2 if not iono-free (ProcessedSat has raw obs).
@@ -802,18 +824,43 @@ impl PppRtklib {
                 let rng = dist - dts + dtrp;
                 let lam_nl = 299792458.0 / (f1_vals[i] + f2_vals[i]);
                 let n1_est = (lc_if_vals[i] - rng - clock) / lam_nl;
-                let n1_rounded = n1_est.round();
-                if (n1_est - n1_rounded).abs() > 0.15 { continue; }
-                let f1s = f1_vals[i]*f1_vals[i]; let f2s = f2_vals[i]*f2_vals[i];
-                let n_if_fixed = (f1s * n1_rounded * lam1_vals[i] - f2s * n1_rounded * lam2_vals[i]) / (f1s - f2s);
-                let n_if_float = self.x[ppp.ib(i)];
-                if (n_if_float - n_if_fixed).abs() > 0.2 { continue; }
-                // Fix it
-                let bi = ppp.ib(i);
-                self.x[bi] = n_if_fixed;
-                self.p[(bi, bi)] = 1e-6;
-                for j in 0..ppp.nx() {
-                    if j != bi { self.p[(bi, j)] = 0.0; self.p[(j, bi)] = 0.0; }
+                let pos_sigma = (self.p[(0,0)] + self.p[(1,1)] + self.p[(2,2)]).sqrt();
+                // When position is well-known (σ<1m): search candidate N1 values
+                // within position uncertainty range. This handles the bootstrap
+                // problem where position error exceeds the NL wavelength (0.107m).
+                if pos_sigma < 1.0 {
+                    let n1_search_radius = ((3.0 * pos_sigma / lam_nl).ceil() as i64).max(1);
+                    let n1_rounded = n1_est.round();
+                    let f1s = f1_vals[i]*f1_vals[i]; let f2s = f2_vals[i]*f2_vals[i];
+                    let n_if_float = self.x[ppp.ib(i)];
+                    let mut best_n_if: Option<f64> = None;
+                    let mut best_residual = f64::MAX;
+                    for dk in -n1_search_radius..=n1_search_radius {
+                        let n1_cand = n1_rounded + dk as f64;
+                        let n_if_cand = (f1s * n1_cand * lam1_vals[i] - f2s * n1_cand * lam2_vals[i]) / (f1s - f2s);
+                        let residual = (n_if_float - n_if_cand).abs();
+                        if residual < 0.2 && residual < best_residual {
+                            best_n_if = Some(n_if_cand);
+                            best_residual = residual;
+                        }
+                    }
+                    if let Some(n_if_fixed) = best_n_if {
+                        let bi = ppp.ib(i);
+                        self.x[bi] = n_if_fixed;
+                        self.p[(bi, bi)] = 0.01;
+                    }
+                } else {
+                    // Standard NL AR: only fix when N1 is close to integer.
+                    // This is more conservative but safer with loose position.
+                    let n1_rounded = n1_est.round();
+                    if (n1_est - n1_rounded).abs() > 0.15 { continue; }
+                    let f1s = f1_vals[i]*f1_vals[i]; let f2s = f2_vals[i]*f2_vals[i];
+                    let n_if_fixed = (f1s * n1_rounded * lam1_vals[i] - f2s * n1_rounded * lam2_vals[i]) / (f1s - f2s);
+                    let n_if_float = self.x[ppp.ib(i)];
+                    if (n_if_float - n_if_fixed).abs() > 0.2 { continue; }
+                    let bi = ppp.ib(i);
+                    self.x[bi] = n_if_fixed;
+                    self.p[(bi, bi)] = 0.01;
                 }
             }
         }
@@ -926,7 +973,7 @@ impl PppRtklib {
                 // Feed CP measurement to static multi-epoch batch solver.
                 // Only high-elevation AR-fixed satellites — low satellites have
                 // stronger atmosphere and multipath correlation across epochs.
-                if self.enable_multi_epoch && !self.dynamics && el_rad > 30.0_f64.to_radians() {
+                if self.enable_multi_epoch && !self.dynamics && el_rad > 15.0_f64.to_radians() {
                     let zwd_val = if ppp.nt() >= 1 { self.x[ppp.it()] } else { 0.0 };
                     let dtrp = dtrp + proc_map_wet[i] * zwd_val;
                     self.batch_solver.add_measurement(
