@@ -1,5 +1,6 @@
 use super::ProcessingEngine;
 use crate::engine::matcher::match_observations;
+use crate::engine::rtk_multi_base::MultiBaseCombiner;
 use crate::engine::updater_math::{CouplingStrategy, LooseCoupling, TightCoupling};
 use crate::engine::{EngineConfig, EngineError, EngineMode};
 use crate::filter::RtkState;
@@ -266,6 +267,12 @@ impl ProcessingEngine {
         rover_obs: &EpochObs,
         base_obs: Option<&EpochObs>,
     ) -> Result<&RtkState, EngineError> {
+        // Route to multi-base path when multi-base data is available
+        if !self.multi_base_observations.is_empty() {
+            let bases = std::mem::take(&mut self.multi_base_observations);
+            return self.process_rtk_multi(rover_obs, &bases);
+        }
+
         let spp_res = self.init_spp_state(rover_obs)?;
         let spp_pos = spp_res.as_ref().map(|s| s.position);
         let spp_state_ref = spp_res.as_ref();
@@ -313,6 +320,176 @@ impl ProcessingEngine {
         }
         self.obs_history
             .push((rover_obs.clone(), base_obs.cloned()));
+        self.current_state
+            .as_ref()
+            .ok_or(EngineError::StateDisappeared)
+    }
+
+    /// Process RTK with multiple base stations.
+    ///
+    /// Each base is processed independently through the single-base RTK pipeline
+    /// (predict, match, update) on a cloned state. The resulting position fixes
+    /// are blended via `MultiBaseCombiner`, where shorter baselines receive
+    /// higher weight. After combining, the primary base (most matched observations)
+    /// drives the state's ambiguity and covariance updates.
+    ///
+    /// `bases` is a slice of `(EpochObs, Vector3<f64>)` pairs, where the vector
+    /// is the base station's ECEF position for baseline distance computation.
+    pub fn process_rtk_multi(
+        &mut self,
+        rover_obs: &EpochObs,
+        bases: &[(EpochObs, Vector3<f64>)],
+    ) -> Result<&RtkState, EngineError> {
+        if bases.is_empty() {
+            return self.process_rtk(rover_obs, None);
+        }
+        if bases.len() == 1 {
+            let (ref base_obs, base_pos) = bases[0];
+            self.config.base_position = Some([base_pos.x, base_pos.y, base_pos.z]);
+            return self.process_rtk(rover_obs, Some(base_obs));
+        }
+
+        // --- standard preprocessing (shared by all bases) ---
+        let spp_res = self.init_spp_state(rover_obs)?;
+        let spp_pos = spp_res.as_ref().map(|s| s.position);
+        let spp_state_ref = spp_res.as_ref();
+
+        let mut rover_smoothed = rover_obs.clone();
+        self.hatch_filter.smooth_epoch(&mut rover_smoothed);
+
+        let dt = rover_obs.time.tow
+            - self
+                .current_state
+                .as_ref()
+                .ok_or(EngineError::StateDisappeared)?
+                .time
+                .tow;
+        self.manage_imu_buffer_on_start();
+        let had_imu_data = !self.imu_buffer.is_empty();
+
+        self.predict_state(dt);
+        self.update_state_time(rover_obs.time)?;
+
+        let state = self
+            .current_state
+            .as_mut()
+            .expect("current_state is Some after ok_or early return");
+        Self::check_covariance_divergence(
+            state,
+            spp_pos,
+            spp_state_ref,
+            !self.config.mode.is_ppp(),
+        );
+        Self::evaluate_gnss_only_coasting(
+            &self.config,
+            state,
+            spp_pos,
+            spp_state_ref,
+            had_imu_data,
+        );
+
+        // --- multi-base: independent RTK fix per base on a cloned snapshot ---
+        let pre_update_state = state.clone();
+        let mut combiner = MultiBaseCombiner::new(1.0);
+        let mut primary_base_idx = 0_usize;
+        let mut best_matched_count = 0_usize;
+
+        for (i, (base_obs, base_pos_ecef)) in bases.iter().enumerate() {
+            let age = (rover_obs.time.tow - base_obs.time.tow).abs();
+            if age > self.config.max_base_age_s {
+                continue;
+            }
+
+            let base_coord = Coordinate::new(
+                *base_pos_ecef,
+                Datum::WGS84,
+                Frame::ECEF,
+                rover_obs.time,
+            );
+
+            let matched_obs =
+                match_observations(&rover_smoothed, base_obs, &self.ephemerides);
+            if matched_obs.len() < 5 {
+                continue;
+            }
+
+            if matched_obs.len() > best_matched_count {
+                best_matched_count = matched_obs.len();
+                primary_base_idx = i;
+            }
+
+            // Clone the pre-update state and run the full RTK update independently
+            let mut base_state = pre_update_state.clone();
+            let gnn_variances = Self::evaluate_gnn(
+                &self.gnn_raim,
+                &self.ephemerides,
+                &rover_smoothed,
+                &matched_obs,
+                &base_state,
+            );
+
+            let ctx = RtkUpdateContext {
+                config: &self.config,
+                ephemerides: &self.ephemerides,
+                imu_history: &self.imu_history,
+                rover_obs: &rover_smoothed,
+                base_obs,
+                matched_obs: &matched_obs,
+                base_coord: &base_coord,
+                spp_pos,
+                spp_state_ref,
+                gnn_variances,
+            };
+            let mut tracker = crate::engine::adaptive::InnovationTracker::new();
+            process_rtk_update::<TightCoupling>(&mut base_state, &mut tracker, &ctx);
+
+            // Collect the position from this base's fix
+            let baseline_m =
+                (pre_update_state.position.vector - base_pos_ecef).norm();
+            let quality = if base_state.is_fixed { 1.0 } else { 0.5 };
+            combiner.add_fix(base_state.position.vector, baseline_m, quality);
+        }
+
+        // --- primary base: drive state bookkeeping (ambiguities, covariances) ---
+        let combined_pos = combiner.weighted_position();
+
+        let (primary_base, primary_pos) = &bases[primary_base_idx];
+        let saved_base_pos = self.config.base_position;
+        self.config.base_position =
+            Some([primary_pos.x, primary_pos.y, primary_pos.z]);
+        self.apply_observations(
+            &rover_smoothed,
+            Some(primary_base),
+            spp_pos,
+            spp_state_ref,
+        )?;
+        self.config.base_position = saved_base_pos;
+
+        // Override position with the multi-base combined estimate
+        if let Some(pos) = combined_pos {
+            let state = self
+                .current_state
+                .as_mut()
+                .expect("state is Some after apply_observations");
+            state.position.vector = pos;
+        }
+
+        // --- post-processing ---
+        {
+            let state = self
+                .current_state
+                .as_mut()
+                .expect("state is Some after above");
+            Self::apply_nhc_updates(&self.config, &self.imu_history, state);
+        }
+        self.attempt_kinematic_alignment();
+
+        if let Some(state) = &self.current_state {
+            self.state_history.push(RtkState::clone(state));
+        }
+        self.obs_history
+            .push((rover_obs.clone(), Some(primary_base.clone())));
+
         self.current_state
             .as_ref()
             .ok_or(EngineError::StateDisappeared)
@@ -582,7 +759,7 @@ mod tests {
     use crate::engine::{EngineConfig, EngineError, EngineMode};
     use crate::filter::{CORE_STATE_SIZE, DdObservation};
     use gneiss_core::coords::{Coordinate, Datum, Frame};
-    use gneiss_core::obs::EpochObs;
+    use gneiss_core::obs::{EpochObs, ObsCode, ObsType, Observation, SatObs, SignalCode};
     use gneiss_core::sat::Constellation;
     use gneiss_core::time::GpsTime;
     use gneiss_geodesy::helmert::HelmertParams;

@@ -43,6 +43,9 @@ pub struct ProcessingEngine {
     /// Last known-good SPP position, used as recovery anchor when the
     /// current epoch's SPP compute fails and PPP covariance has diverged.
     pub last_spp_position: Option<gneiss_core::coords::Coordinate>,
+    /// Multi-base observations for RTK: (EpochObs, base_position_ecef) pairs.
+    /// When configured and non-empty, process_rtk routes to the multi-base path.
+    pub multi_base_observations: Vec<(gneiss_core::obs::EpochObs, nalgebra::Vector3<f64>)>,
 }
 
 impl ProcessingEngine {
@@ -93,6 +96,7 @@ impl ProcessingEngine {
             gnn_raim,
             sinex_bias: None,
             last_spp_position: None,
+            multi_base_observations: Vec::new(),
         }
     }
 
