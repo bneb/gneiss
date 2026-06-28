@@ -332,20 +332,26 @@ impl RtkState {
         if num_amb < config.lambda_min_subset
             || self.epoch_count <= config.ar_min_epoch_count as usize
         {
+            tracing::debug!("AR: insufficient data (amb={} need={} epoch={} need={})",
+                num_amb, config.lambda_min_subset, self.epoch_count, config.ar_min_epoch_count);
             return Err("Insufficient data");
         }
 
         let candidate_vars = select_ar_candidates(self, ephemerides, config.ar_min_lock);
         if candidate_vars.len() < config.lambda_min_subset {
+            tracing::debug!("AR: insufficient candidates (have={} need={})",
+                candidate_vars.len(), config.lambda_min_subset);
             return Err("Insufficient candidates");
         }
 
         let max_subset = candidate_vars.len().min(24);
+        let mut best_ratio = 0.0f64;
         for subset_size in (config.lambda_min_subset..=max_subset).rev() {
             let (_d_mat_small, a_cycles, q_cycles) =
                 build_lambda_matrices(self, &candidate_vars, subset_size, ephemerides);
 
             if let Ok(res) = crate::lambda::resolve_lambda(&a_cycles, &q_cycles) {
+                best_ratio = best_ratio.max(res.ratio);
                 let dynamic_threshold =
                     crate::ffrt::calculate_threshold(subset_size, config.ar_ffrt_prob)
                         .max(config.lambda_min_ratio);
@@ -367,6 +373,8 @@ impl RtkState {
                 }
             }
         }
+        tracing::info!("AR: LAMBDA failed ({} candidates, best ratio={:.2}, need >={:.1})",
+            candidate_vars.len(), best_ratio, config.lambda_min_ratio);
         Err("AR failed to resolve")
     }
 

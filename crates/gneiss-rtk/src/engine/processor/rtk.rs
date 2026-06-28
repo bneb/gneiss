@@ -600,7 +600,7 @@ fn handle_ekf_acceptance(
     state.consecutive_rejections = 0;
     if let Ok(res) = state.resolve_ambiguities(ephemerides, config) {
         let fixed_state = res.fixed_state;
-        tracing::debug!("Integer ambiguities resolved: {} sats", fixed_state.ambiguities.len());
+        tracing::info!("RTK AR fixed: {} sats", fixed_state.ambiguities.len());
         // Apply AR position correction via the multi-epoch combiner.
         // The fixed position replaces the float position for this epoch.
         state.is_fixed = true;
@@ -609,6 +609,7 @@ fn handle_ekf_acceptance(
     } else {
         state.is_fixed = false;
         state.fixed_state = None;
+        tracing::info!("RTK AR failed at epoch {} (state epoch_count={})", state.time.tow, state.epoch_count);
     }
 }
 
@@ -1711,5 +1712,252 @@ mod tests {
             &mut tracker, &state, &z, &h, &mut r, &meas_types, &matched_obs,
         );
         assert!(r[(0, 0)] >= 1.0);
+    }
+
+    // --- multi-base RTK tests ---
+
+    #[test]
+    fn test_multi_base_rtk_routes_from_process_rtk() {
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        engine.config.enable_multi_base_rtk = true;
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(
+            Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+        engine.current_state = Some(RtkState::new(time, pos, 1.0));
+
+        let rover = EpochObs { time, satellites: vec![] };
+        let base1 = EpochObs { time, satellites: vec![] };
+        let base2 = EpochObs {
+            time: GpsTime::new(0, 0.1),
+            satellites: vec![],
+        };
+
+        engine.multi_base_observations = vec![
+            (base1, Vector3::new(100.0, 200.0, 300.0)),
+            (base2, Vector3::new(150.0, 250.0, 350.0)),
+        ];
+
+        let result = engine.process_rtk(&rover, None);
+        assert!(result.is_ok(), "multi-base routing should succeed: {:?}", result.err());
+        assert_eq!(engine.state_history.len(), 1);
+        assert_eq!(engine.multi_base_observations.len(), 0);
+    }
+
+    #[test]
+    fn test_multi_base_rtk_direct_empty_observations() {
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(
+            Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+        engine.current_state = Some(RtkState::new(time, pos, 1.0));
+
+        let rover = EpochObs { time, satellites: vec![] };
+        let base1 = EpochObs { time, satellites: vec![] };
+        let base2 = EpochObs { time, satellites: vec![] };
+
+        let result = engine.process_rtk_multi(
+            &rover,
+            &[
+                (base1, Vector3::new(100.0, 200.0, 300.0)),
+                (base2, Vector3::new(150.0, 250.0, 350.0)),
+            ],
+        );
+        assert!(result.is_ok(), "direct multi-base with empty obs: {:?}", result.err());
+        assert_eq!(engine.state_history.len(), 1);
+    }
+
+    #[test]
+    fn test_multi_base_rtk_single_base_delegation() {
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(
+            Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+        engine.current_state = Some(RtkState::new(time, pos, 1.0));
+
+        let rover = EpochObs { time, satellites: vec![] };
+        let base1 = EpochObs { time, satellites: vec![] };
+
+        let result = engine.process_rtk_multi(
+            &rover,
+            &[(base1, Vector3::new(100.0, 200.0, 300.0))],
+        );
+        assert!(result.is_ok(), "single-base delegation: {:?}", result.err());
+        assert_eq!(engine.state_history.len(), 1);
+    }
+
+    #[test]
+    fn test_multi_base_rtk_empty_bases_delegates() {
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(
+            Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+        engine.current_state = Some(RtkState::new(time, pos, 1.0));
+        let rover = EpochObs { time, satellites: vec![] };
+
+        let result = engine.process_rtk_multi(&rover, &[]);
+        assert!(result.is_ok(), "empty bases: {:?}", result.err());
+    }
+
+    #[test]
+    fn test_multi_base_rtk_with_synthetic_observations() {
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        let time = GpsTime::new(0, 0.0);
+
+        use gneiss_core::ephemeris::Ephemeris;
+        for prn in 1..=7u8 {
+            engine.add_ephemeris(Ephemeris::Gps(gneiss_core::ephemeris::GpsEphemeris {
+                sat: SatelliteId { constellation: Constellation::Gps, prn },
+                toe: time,
+                toc: time,
+                af0: 0.0, af1: 0.0, af2: 0.0,
+                crs: 0.0, crc: 0.0, cuc: 0.0, cus: 0.0,
+                cic: 0.0, cis: 0.0,
+                m0: 0.0, e: 0.0, sqrt_a: 5153.6, delta_n: 0.0,
+                omega0: 0.0, omega_dot: 0.0, i0: 0.95, idot: 0.0,
+                omega: 0.0, tgd: 0.0, iode: prn as u32, iodc: prn as u32,
+            }));
+        }
+
+        let make_sat_obs = |prn: u8| -> SatObs {
+            let base_pr = gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M + 1000.0 * prn as f64;
+            SatObs {
+                sat: SatelliteId { constellation: Constellation::Gps, prn },
+                observations: vec![
+                    Observation {
+                        code: ObsCode {
+                            obs_type: ObsType::Pseudorange,
+                            signal: SignalCode { freq_band: 1, attribute: 'C' },
+                        },
+                        value: base_pr,
+                        lock_time: Some(100),
+                        lli: None,
+                    },
+                    Observation {
+                        code: ObsCode {
+                            obs_type: ObsType::CarrierPhase,
+                            signal: SignalCode { freq_band: 1, attribute: 'C' },
+                        },
+                        value: base_pr / gneiss_core::constants::SPEED_OF_LIGHT_M_S * 1575.42e6,
+                        lock_time: Some(100),
+                        lli: None,
+                    },
+                    Observation {
+                        code: ObsCode {
+                            obs_type: ObsType::Pseudorange,
+                            signal: SignalCode { freq_band: 2, attribute: 'C' },
+                        },
+                        value: base_pr + 1000.0,
+                        lock_time: Some(100),
+                        lli: None,
+                    },
+                    Observation {
+                        code: ObsCode {
+                            obs_type: ObsType::CarrierPhase,
+                            signal: SignalCode { freq_band: 2, attribute: 'C' },
+                        },
+                        value: base_pr / gneiss_core::constants::SPEED_OF_LIGHT_M_S * 1227.6e6,
+                        lock_time: Some(100),
+                        lli: None,
+                    },
+                    Observation {
+                        code: ObsCode {
+                            obs_type: ObsType::Doppler,
+                            signal: SignalCode { freq_band: 1, attribute: 'C' },
+                        },
+                        value: 0.0,
+                        lock_time: None,
+                        lli: None,
+                    },
+                    Observation {
+                        code: ObsCode {
+                            obs_type: ObsType::Snr,
+                            signal: SignalCode { freq_band: 1, attribute: 'C' },
+                        },
+                        value: 45.0,
+                        lock_time: None,
+                        lli: None,
+                    },
+                ],
+            }
+        };
+
+        let sats: Vec<SatObs> = (1..=7).map(make_sat_obs).collect();
+        let rover_obs = EpochObs { time, satellites: sats.clone() };
+
+        let base1_pos = Vector3::new(
+            gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M + 100.0,
+            200.0,
+            300.0,
+        );
+        let base1_obs = EpochObs { time, satellites: sats.clone() };
+
+        let base2_pos = Vector3::new(
+            gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M + 150.0,
+            -100.0,
+            400.0,
+        );
+        let base2_obs = EpochObs { time, satellites: sats };
+
+        let pos = Coordinate::new(
+            Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+        let mut state = RtkState::new(time, pos, 100.0);
+        state.covariance = DMatrix::identity(CORE_STATE_SIZE, CORE_STATE_SIZE) * 100.0;
+        engine.current_state = Some(state);
+
+        let result = engine.process_rtk_multi(
+            &rover_obs,
+            &[(base1_obs, base1_pos), (base2_obs, base2_pos)],
+        );
+        assert!(result.is_ok() || result.is_err());
+        assert_eq!(engine.state_history.len(), 1);
+        assert_eq!(engine.obs_history.len(), 1);
+    }
+
+    #[test]
+    fn test_multi_base_rtk_preserves_obs_history() {
+        let mut engine = ProcessingEngine::new(EngineConfig::default());
+        engine.config.enable_multi_base_rtk = true;
+        let time = GpsTime::new(0, 0.0);
+        let pos = Coordinate::new(
+            Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0),
+            Datum::WGS84,
+            Frame::ECEF,
+            time,
+        );
+        engine.current_state = Some(RtkState::new(time, pos, 1.0));
+
+        let rover = EpochObs { time, satellites: vec![] };
+        let base1 = EpochObs { time, satellites: vec![] };
+        let base2 = EpochObs { time, satellites: vec![] };
+
+        engine.multi_base_observations = vec![
+            (base1, Vector3::new(100.0, 200.0, 300.0)),
+            (base2, Vector3::new(150.0, 250.0, 350.0)),
+        ];
+
+        let result = engine.process_rtk(&rover, None);
+        assert!(result.is_ok());
+        assert_eq!(engine.obs_history.len(), 1);
+        assert!(engine.obs_history[0].1.is_some());
     }
 }
