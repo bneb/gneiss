@@ -161,6 +161,17 @@ impl PppIteratedEkf {
             mw_vals
         );
 
+        // Skip AR when position is already well-known (σ<1cm from RINEX).
+        // The Joseph update can produce singular covariance with tiny P.
+        // At σ<1cm, the float solution is already more accurate than AR
+        // can improve — integer search adds risk without benefit.
+        let pos_var = state.covariance[(0,0)]
+            .max(state.covariance[(1,1)])
+            .max(state.covariance[(2,2)]);
+        if pos_var < 0.0001 {
+            return Err("Position too precise for AR to improve");
+        }
+
         if cands.len() < 4 {
             return Err("Insufficient dual-frequency satellites for AR");
         }

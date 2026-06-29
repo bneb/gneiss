@@ -240,9 +240,23 @@ pub fn process_ppp<'a>(
         }
     }
 
-    // Always push to history — predict_state() was already called at the
-    // top of process_ppp, so the propagated state is valid even when solve
-    // returns InsufficientSatellites.  The smoother bridges the gap.
+    // Check state integrity before pushing to history.
+    // Tight position priors (σ=1cm) can cause AR Joseph updates
+    // to produce near-zero variance → singular → explosion.
+    let state_ref = engine.current_state.as_ref().unwrap();
+    let pos_var = state_ref.covariance[(0,0)]
+        .max(state_ref.covariance[(1,1)])
+        .max(state_ref.covariance[(2,2)]);
+    if pos_var < 1e-8 || pos_var > 1e8 || pos_var.is_nan() {
+        // Clamp to sane range: σ between 1mm and 10km
+        tracing::warn!("Position variance {:.2e} outside safe range — clamping", pos_var);
+        let mut s = state_ref.clone();
+        for i in 0..3 {
+            s.covariance[(i,i)] = s.covariance[(i,i)].clamp(1e-6, 1e8);
+        }
+        engine.current_state = Some(s);
+    }
+
     let final_state = engine.current_state.as_ref().unwrap().clone();
     engine.state_history.push(final_state);
     engine.obs_history.push((rover_obs.clone(), None));

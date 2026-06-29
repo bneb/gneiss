@@ -1611,7 +1611,7 @@ mod mutant_killer_tests {
         let x_i = DVector::zeros(dim);
         let p_pred = DMatrix::identity(dim, dim);
         let p_inv = DMatrix::identity(dim, dim);
-        let result = fg.compute_final_covariance(&state, &[], &x_i, &p_pred, &p_inv);
+        let result = fg.compute_final_covariance(&state, &[], &x_i, &p_pred, &p_inv, None);
         assert_eq!(result, p_pred);
     }
 
@@ -1644,7 +1644,7 @@ mod mutant_killer_tests {
             sat_vel: Vector3::zeros(), sat_clock_drift: 0.0,
             rcv_pos_ecef: Vector3::zeros(), pcv_correction: 0.0,
         };
-        let result = fg.compute_final_covariance(&state, &[sat], &x_i, &p_pred, &p_inv);
+        let result = fg.compute_final_covariance(&state, &[sat], &x_i, &p_pred, &p_inv, None);
         assert_eq!(result.nrows(), dim);
         assert_eq!(result.ncols(), dim);
         assert_ne!(result, p_pred, "covariance should differ from prior with measurements present");
@@ -1679,7 +1679,7 @@ mod mutant_killer_tests {
             sat_vel: Vector3::zeros(), sat_clock_drift: 0.0,
             rcv_pos_ecef: Vector3::zeros(), pcv_correction: 0.0,
         };
-        let result = fg.compute_final_covariance(&state, &[sat], &x_i, &p_pred, &p_inv_nan);
+        let result = fg.compute_final_covariance(&state, &[sat], &x_i, &p_pred, &p_inv_nan, None);
         assert_eq!(result, p_pred, "should fall back to p_pred when inversion fails");
     }
 

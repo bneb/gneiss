@@ -160,12 +160,12 @@ impl PppIteratedEkf {
             }
             let htwh_damped = &htwh + &p_inv;
             let innov = &htwr + &p_inv * (&x_pred - &x_i);
-            match solve_cholesky_svd(&htwh_damped, &innov, 1e-9) {
+            match solve_cholesky_svd(&htwh_damped, &innov, 1e-6) {
                 Ok(sol) => { if sol.norm() < self.convergence_threshold { break; } x_i += sol; }
                 Err(_) => { tracing::warn!("Failed to solve normal equations in PPP FG!"); break; }
             }
         }
-        let final_p = self.compute_final_covariance(state, sats, &x_i, &p_pred, &p_inv);
+        let final_p = self.compute_final_covariance(state, sats, &x_i, &p_pred, &p_inv, position_prior);
         apply_state_vector(state, &x_i, final_p);
         Ok(true)
     }
@@ -213,7 +213,7 @@ impl PppIteratedEkf {
             return Ok(false);
         }
 
-        let final_p = self.compute_final_covariance(state, sats, &x_i, &p_pred, &p_inv);
+        let final_p = self.compute_final_covariance(state, sats, &x_i, &p_pred, &p_inv, position_prior);
         apply_state_vector(state, &x_i, final_p);
         log_ppp_convergence(state, sats, &x_i, &x_pred, &p_pred, self);
         Ok(true)
@@ -276,7 +276,7 @@ impl PppIteratedEkf {
         let htwh_damped = &htwh + p_inv;
         let innov = &htwr + p_inv * (x_pred - x_i);
 
-        match solve_cholesky_svd(&htwh_damped, &innov, 1e-9) {
+        match solve_cholesky_svd(&htwh_damped, &innov, 1e-6) {
             Ok(sol) => Ok(Some(sol)),
             Err(_) => {
                 tracing::warn!("Failed to solve normal equations in PPP FG!");
@@ -292,6 +292,7 @@ impl PppIteratedEkf {
         x_i: &DVector<f64>,
         p_pred: &DMatrix<f64>,
         p_inv: &DMatrix<f64>,
+        position_prior: Option<(Vector3<f64>, f64)>,
     ) -> DMatrix<f64> {
         let last_meas = self.build_measurements(state, sats, x_i, self.max_iterations);
         if last_meas.is_empty() {
@@ -301,13 +302,35 @@ impl PppIteratedEkf {
         let (h_mat, _, r_mat) = assemble_matrices(&last_meas, x_i.len());
         let w_mat = build_weight_matrix(&last_meas, &r_mat);
 
-        let htwh = h_mat.transpose() * &w_mat * h_mat;
+        let mut htwh = h_mat.transpose() * &w_mat * h_mat;
+
+        // Include the position prior in the posterior covariance.
+        // Without this, the prior decays via process noise each epoch:
+        // after 100 epochs at 3e-5/epoch, σ_pos grows from 1cm to 5.6cm.
+        // The prior is re-applied here so the posterior reflects ongoing
+        // constraint from the known position.
+        if let Some((_spp_pos, var)) = position_prior {
+            let w = 1.0 / var;
+            for i in 0..3 {
+                htwh[(i, i)] += w;
+            }
+        }
+
         let htwh_damped = htwh + p_inv;
 
-        invert_matrix(&htwh_damped).unwrap_or_else(|| {
+        let mut final_p = invert_matrix(&htwh_damped).unwrap_or_else(|| {
             tracing::warn!("invert_matrix(&htwh_damped) FAILED! Falling back to p_pred. htwh_damped has NaNs: {}, Infs: {}", htwh_damped.iter().any(|x| x.is_nan()), htwh_damped.iter().any(|x| x.is_infinite()));
             p_pred.clone()
-        })
+        });
+
+        // Clamp diagonal elements to safe range. Tight position priors
+        // (σ=1cm) can make the normal equations nearly singular, producing
+        // negative or exploding variances after inversion.
+        for i in 0..final_p.nrows() {
+            final_p[(i, i)] = final_p[(i, i)].clamp(1e-12, 1e8);
+        }
+
+        final_p
     }
 }
 

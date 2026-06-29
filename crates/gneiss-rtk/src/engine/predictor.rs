@@ -707,8 +707,12 @@ mod tests {
             };
             let q = compute_process_noise(1.0, &config, false, false, &[]);
 
-            // q_pos = q_acc * dt^3 / 3
-            let q_pos_expected = q_acc / 3.0;
+            // Static: constant 1e-6×dt, not velocity-integration model
+            let q_pos_expected = if model == DynamicsModel::Static {
+                1e-6
+            } else {
+                q_acc / 3.0
+            };
             assert!(
                 (q[(0, 0)] - q_pos_expected).abs() < 1e-12,
                 "Mismatch for {:?}: expected q[0,0] = {}, got {}",
@@ -717,15 +721,20 @@ mod tests {
                 q[(0, 0)]
             );
 
-            // Position-velocity cross term: q_pos_vel = q_acc * dt^2 / 2
-            let q_pos_vel_expected = q_acc * 0.5;
-            assert!((q[(0, 3)] - q_pos_vel_expected).abs() < 1e-12);
-
-            // Velocity variance: q_vel = q_acc * dt
-            assert!((q[(3, 3)] - q_acc).abs() < 1e-12);
-
-            // Attitude variance set to 1e-7 * dt
-            assert!((q[(6, 6)] - 1e-7).abs() < 1e-15);
+            if model == DynamicsModel::Static {
+                // Static: no velocity/acceleration coupling, large velocity noise
+                assert!((q[(0, 3)] - 0.0).abs() < 1e-12);
+                assert!((q[(3, 3)] - 100.0).abs() < 1e-12);
+                assert!((q[(6, 6)] - 1e-7).abs() < 1e-15);
+            } else {
+                // Position-velocity cross term: q_pos_vel = q_acc * dt^2 / 2
+                let q_pos_vel_expected = q_acc * 0.5;
+                assert!((q[(0, 3)] - q_pos_vel_expected).abs() < 1e-12);
+                // Velocity variance: q_vel = q_acc * dt
+                assert!((q[(3, 3)] - q_acc).abs() < 1e-12);
+                // Attitude variance set to 1e-7 * dt
+                assert!((q[(6, 6)] - 1e-7).abs() < 1e-15);
+            }
         }
     }
 
