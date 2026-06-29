@@ -294,7 +294,7 @@ impl PppIteratedEkf {
         for svd_thresh in [1e-6_f64, 1e-4, 1e-2, 1.0_f64] {
             if let Ok(sol) = solve_cholesky_svd(&htwh_damped, &innov, svd_thresh) {
                 let pos_dx = (sol[0]*sol[0] + sol[1]*sol[1] + sol[2]*sol[2]).sqrt();
-                if pos_dx < 100.0 {
+                if pos_dx < 1000.0 {
                     return Ok(Some(sol));
                 }
             }

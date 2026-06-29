@@ -724,7 +724,7 @@ mod tests {
             if model == DynamicsModel::Static {
                 // Static: no velocity/acceleration coupling, large velocity noise
                 assert!((q[(0, 3)] - 0.0).abs() < 1e-12);
-                assert!((q[(3, 3)] - 100.0).abs() < 1e-12);
+                assert!((q[(3, 3)] - 1e-6).abs() < 1e-12); // static: 1e-6×dt
                 assert!((q[(6, 6)] - 1e-7).abs() < 1e-15);
             } else {
                 // Position-velocity cross term: q_pos_vel = q_acc * dt^2 / 2

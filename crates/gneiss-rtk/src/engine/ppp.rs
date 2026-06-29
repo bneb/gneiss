@@ -505,11 +505,9 @@ fn add_uduc_ambiguities(
         > 50;
     let init_var = if mw_confident { 0.04 } else { 10000.0 }; // 0.2 cycle or 100m std
     if !state.ambiguity_keys.contains(&(sat.sat_obs.sat, 3)) {
-        let pos_var = state.covariance[(0,0)]
-            .max(state.covariance[(1,1)])
-            .max(state.covariance[(2,2)]);
-        let iono_init_var = if pos_var < 1.0 { 1.0 } else { 10000.0 };
-        state.add_ambiguity(sat.sat_obs.sat, 3, i1_est, iono_init_var);
+        // Ionosphere: always large initial variance (σ=100m). P1-P2
+        // estimate is noisy (~15m) regardless of position accuracy.
+        state.add_ambiguity(sat.sat_obs.sat, 3, i1_est, 10000.0);
     }
     if !state.ambiguity_keys.contains(&(sat.sat_obs.sat, 1)) {
         state.add_ambiguity(
