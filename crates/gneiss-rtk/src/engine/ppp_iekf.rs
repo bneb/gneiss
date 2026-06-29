@@ -278,26 +278,38 @@ impl PppIteratedEkf {
             }
         }
 
-        let mut htwh_damped = &htwh + p_inv;
+        let mut htwh_reg = &htwh + p_inv;
         let mut innov = &htwr + p_inv * (x_pred - x_i);
 
-        // Clamp extreme values in the innovation vector. State resize at
-        // constellation rotation can produce NaN or 1e100+ in the RHS,
-        // which defeats any regularization.
+        // Clamp extreme values in the innovation vector.
         for i in 0..innov.len() {
             if innov[i].is_nan() || innov[i].abs() > 1e8 {
                 innov[i] = 0.0;
             }
         }
 
-        // Adaptive Levenberg-Marquardt regularization.
-        for svd_thresh in [1e-6_f64, 1e-4, 1e-2, 1.0_f64] {
-            if let Ok(sol) = solve_cholesky_svd(&htwh_damped, &innov, svd_thresh) {
+        // Diagonal regularization: the 21+N state with tight position
+        // prior (σ=1cm) has condition number ~1e8 after state resize.
+        // Add λI where λ scales with the max/min diagonal ratio.
+        let max_diag = (0..htwh_reg.nrows()).map(|i| htwh_reg[(i,i)].abs()).fold(0.0_f64, f64::max);
+        let min_diag = (0..htwh_reg.nrows()).map(|i| htwh_reg[(i,i)].abs()).fold(f64::MAX, f64::min);
+        let base_lambda = if min_diag > 0.0 && max_diag / min_diag > 1e6 {
+            (max_diag / min_diag).sqrt() * 1e-8
+        } else {
+            1e-8
+        };
+
+        for mult in [1.0_f64, 1e2, 1e4, 1e6, 1e8] {
+            let lambda = base_lambda * mult;
+            for i in 0..htwh_reg.nrows() { htwh_reg[(i,i)] += lambda; }
+            if let Ok(sol) = solve_cholesky_svd(&htwh_reg, &innov, 1e-6) {
                 let pos_dx = (sol[0]*sol[0] + sol[1]*sol[1] + sol[2]*sol[2]).sqrt();
                 if pos_dx < 1000.0 {
                     return Ok(Some(sol));
                 }
             }
+            // Remove lambda for next iteration
+            for i in 0..htwh_reg.nrows() { htwh_reg[(i,i)] -= lambda; }
         }
         tracing::warn!("IEKF solve failed at all regularization levels");
         Ok(None)

@@ -336,13 +336,37 @@ impl ProcessingEngine {
                 .process_rtk_loosely_coupled(&filtered_rover, filtered_base)
                 .err(),
             // Gneiss-native IEKF: the primary PPP solver.
-            // Uses 21-element core state, LAMBDA cascade AR, and the
-            // full gneiss architecture (smoother, factor graph, FGO).
             EngineMode::Ppp
             | EngineMode::PppIns
             | EngineMode::PppInsLooselyCoupled
             | EngineMode::PppIekf
             | EngineMode::PppMultiEpoch => {
+                // Create initial state if needed (first epoch)
+                if self.current_state.is_none() {
+                    let state = if let Some(init_pos) = self.config.initial_position {
+                        let pos = gneiss_core::coords::Coordinate::new(
+                            nalgebra::Vector3::new(init_pos[0], init_pos[1], init_pos[2]),
+                            gneiss_core::coords::Datum::WGS84,
+                            gneiss_core::coords::Frame::ECEF,
+                            filtered_rover.time,
+                        );
+                        RtkState::new(filtered_rover.time, pos, 0.0001)
+                    } else {
+                        match crate::spp::compute_spp(
+                            &filtered_rover, &self.ephemerides,
+                            self.klobuchar_params.as_ref(),
+                            &crate::spp::SppConfig::default(), None,
+                        ) {
+                            Ok(spp) => {
+                                let mut s = RtkState::new(filtered_rover.time, spp.position, 100.0);
+                                s.rcv_clk_bias = spp.cdt;
+                                s
+                            }
+                            Err(_) => return Err(EngineError::InitialSppFailed),
+                        }
+                    };
+                    self.current_state = Some(state);
+                }
                 crate::engine::ppp::process_ppp(self, &filtered_rover)?;
                 return Ok(self.current_state.as_ref().unwrap());
             }

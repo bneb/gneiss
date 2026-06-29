@@ -38,7 +38,7 @@ mod osb_tests {
             },
             observations: vec![],
         };
-        obs.sat = sat;
+        obs.sat = sat);
         obs.observations.push(gneiss_core::obs::Observation {
             code: ObsCode::from_str("C1C").unwrap(),
             value: 10.0,
@@ -865,7 +865,7 @@ mod ppp_tests {
         state.epoch_count = 5;
         state.mw_sd_counts.insert(sat_id, 51); // > 50 = confident (threshold changed 10→50)
 
-        let expected_base = psat.dist + state.rcv_clk_bias - psat.dt_sat_m + psat.tropo_dry + state.zwd * psat.map_wet;
+        let expected_base = psat.dist + state.rcv_clk_bias - psat.dt_sat_m + psat.tropo_dry + state.zwd * psat.map_wet);
         add_uduc_ambiguities(&mut state, &psat, psat.cp1.unwrap(), 0.0, expected_base);
 
         assert!(state.ambiguity_keys.contains(&(sat_id, 1)), "Should add L1");
@@ -905,7 +905,7 @@ mod ppp_tests {
         state.epoch_count = 5;
         state.mw_sd_counts.insert(sat_id, 5); // not confident (≤10)
 
-        let expected_base = psat.dist + state.rcv_clk_bias - psat.dt_sat_m + psat.tropo_dry + state.zwd * psat.map_wet;
+        let expected_base = psat.dist + state.rcv_clk_bias - psat.dt_sat_m + psat.tropo_dry + state.zwd * psat.map_wet);
         add_uduc_ambiguities(&mut state, &psat, psat.cp1.unwrap(), 0.0, expected_base);
 
         let idx1 = state.ambiguity_keys.iter().position(|&k| k == (sat_id, 1)).unwrap();
@@ -930,7 +930,7 @@ mod ppp_tests {
             Coordinate::new(Vector3::new(6000000.0, 0.0, 0.0), Datum::WGS84, Frame::ECEF, t), 0.0);
         state.epoch_count = 5;
 
-        let expected_base = psat.dist + state.rcv_clk_bias - psat.dt_sat_m + psat.tropo_dry + state.zwd * psat.map_wet;
+        let expected_base = psat.dist + state.rcv_clk_bias - psat.dt_sat_m + psat.tropo_dry + state.zwd * psat.map_wet);
         add_uduc_ambiguities(&mut state, &psat, psat.cp1.unwrap(), 0.0, expected_base);
 
         let idx1 = state.ambiguity_keys.iter().position(|&k| k == (sat_id, 1)).unwrap();
@@ -956,7 +956,7 @@ mod ppp_tests {
             Coordinate::new(Vector3::new(6000000.0, 0.0, 0.0), Datum::WGS84, Frame::ECEF, t), 0.0);
         state.epoch_count = 5;
 
-        let expected_base = psat.dist + state.rcv_clk_bias - psat.dt_sat_m + psat.tropo_dry + state.zwd * psat.map_wet;
+        let expected_base = psat.dist + state.rcv_clk_bias - psat.dt_sat_m + psat.tropo_dry + state.zwd * psat.map_wet);
         add_uduc_ambiguities(&mut state, &psat, psat.cp1.unwrap(), 0.0, expected_base);
 
         let idx3 = state.ambiguity_keys.iter().position(|&k| k == (sat_id, 3)).unwrap();
@@ -985,7 +985,7 @@ mod ppp_tests {
         state.add_ambiguity(sat_id, 3, 300.0, 1.0);
         let amb_count_before = state.ambiguities.len();
 
-        let expected_base = psat.dist + state.rcv_clk_bias - psat.dt_sat_m + psat.tropo_dry + state.zwd * psat.map_wet;
+        let expected_base = psat.dist + state.rcv_clk_bias - psat.dt_sat_m + psat.tropo_dry + state.zwd * psat.map_wet);
         add_uduc_ambiguities(&mut state, &psat, psat.cp1.unwrap(), 0.0, expected_base);
 
         assert_eq!(state.ambiguities.len(), amb_count_before, "Should not add new ambiguities");
@@ -1386,7 +1386,7 @@ mod ppp_tests {
         state.locktimes.insert((sat, 1), 100); // matches observation lock_time
 
         let sats = vec![psat];
-        update_phase_ambiguities(&mut state, &sats, t);
+        update_phase_ambiguities(&mut state, &sats, t, None);
 
         assert!(state.windup.contains_key(&sat), "Windup should be stored");
         assert_eq!(*state.locktimes.get(&(sat, 1)).unwrap_or(&0), 100, "Locktime stays 100");
@@ -1441,7 +1441,7 @@ mod ppp_tests {
         state.epoch_count = 5;
         state.locktimes.insert((sat, 1), 100);
 
-        update_phase_ambiguities(&mut state, &vec![psat], t);
+        update_phase_ambiguities(&mut state, &vec![psat], t, None);
 
         // Simple ambiguity (freq 0) should exist; UDUC ones should NOT
         assert!(state.ambiguity_keys.contains(&(sat, 0)), "Simple ambiguity freq 0");
@@ -1499,7 +1499,7 @@ mod ppp_tests {
         state.epoch_count = 5;
         state.locktimes.insert((sat, 1), 100);
 
-        update_phase_ambiguities(&mut state, &vec![psat], t);
+        update_phase_ambiguities(&mut state, &vec![psat], t, None);
 
         // CRITICAL: IF mode must create band-0 even when raw L1/L2 exist.
         // Before the fix, UDUC bands 1/2/3 were created instead, and
@@ -1563,7 +1563,7 @@ mod ppp_tests {
         state.epoch_count = 5;
         state.locktimes.insert((sat, 1), 100);
 
-        update_phase_ambiguities(&mut state, &vec![psat], t);
+        update_phase_ambiguities(&mut state, &vec![psat], t, None);
 
         assert!(state.ambiguity_keys.contains(&(sat, 0)), "Simple ambiguity exists");
         assert!(!state.ambiguity_keys.contains(&(sat, 1)), "No L1 UDUC ambiguity");
@@ -1626,7 +1626,7 @@ mod ppp_tests {
         state.add_ambiguity(sat, 2, 200.0, 1.0);
         state.add_ambiguity(sat, 3, 300.0, 1.0);
 
-        update_phase_ambiguities(&mut state, &vec![psat], t);
+        update_phase_ambiguities(&mut state, &vec![psat], t, None);
 
         // Covariance should be inflated by 4x for position and velocity
         for i in 0..6 {
@@ -1715,7 +1715,7 @@ mod ppp_tests {
             state.covariance[(i, i)] = 1.0;
         }
 
-        update_phase_ambiguities(&mut state, &vec![psat], t);
+        update_phase_ambiguities(&mut state, &vec![psat], t, None);
 
         // Covariance should be inflated by 4x (MW slip detection)
         for i in 0..6 {
@@ -2066,7 +2066,7 @@ mod ppp_tests {
 
         let sat_id = SatelliteId { constellation: Constellation::Glonass, prn: 1 };
         let (sat, _sat_t) = make_isb_test_sat(sat_id);
-        update_phase_ambiguities(&mut state, &[sat], t);
+        update_phase_ambiguities(&mut state, &[sat], t, None);
 
         // After the update, the satellite should have band-0 ambiguity added
         assert!(
@@ -2097,7 +2097,7 @@ mod ppp_tests {
 
         let sat_id = SatelliteId { constellation: Constellation::Galileo, prn: 1 };
         let (sat, _sat_t) = make_isb_test_sat(sat_id);
-        update_phase_ambiguities(&mut state, &[sat], t);
+        update_phase_ambiguities(&mut state, &[sat], t, None);
 
         assert!(
             state.ambiguity_keys.contains(&(sat_id, 0)),
@@ -2121,7 +2121,7 @@ mod ppp_tests {
 
         let sat_id = SatelliteId { constellation: Constellation::Beidou, prn: 1 };
         let (sat, _sat_t) = make_isb_test_sat(sat_id);
-        update_phase_ambiguities(&mut state, &[sat], t);
+        update_phase_ambiguities(&mut state, &[sat], t, None);
 
         assert!(
             state.ambiguity_keys.contains(&(sat_id, 0)),

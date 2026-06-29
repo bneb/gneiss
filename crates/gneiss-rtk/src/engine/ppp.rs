@@ -132,10 +132,13 @@ pub fn process_ppp<'a>(
     if sats.is_empty() {
         return Err(EngineError::InsufficientSatellites);
     }
+    let known_pos_vec: Option<Vector3<f64>> = engine.config.initial_position
+        .map(|p| Vector3::new(p[0], p[1], p[2]));
+
     // --- IF IEKF solve (in block to drop state borrow) ------------------
     let (solve_result, if_epoch_count) = {
         let state = engine.current_state.as_mut().unwrap();
-        update_phase_ambiguities(state, &sats, rover_obs.time);
+        update_phase_ambiguities(state, &sats, rover_obs.time, known_pos_vec);
         state.prune_stale_ambiguities(state.epoch_count as u32, 10);
         let ec = state.epoch_count;
         let result = if engine.config.mode == EngineMode::PppMultiEpoch {
@@ -176,7 +179,7 @@ pub fn process_ppp<'a>(
             // Initialize UDUC ambiguities (band 1=L1, 2=L2, 3=iono)
             // from the UDUC satellites. Without this, the IEKF has no
             // L1/L2 ambiguities to resolve.
-            update_phase_ambiguities(&mut ar_state, &uduc_sats, rover_obs.time);
+            update_phase_ambiguities(&mut ar_state, &uduc_sats, rover_obs.time, known_pos_vec);
             let ar_iekf = PppIteratedEkf::new()
                 .with_iono_model(crate::engine::types::IonosphereModel::Ionex)
                 .with_lambda_min_ratio(engine.config.lambda_min_ratio);
@@ -355,6 +358,7 @@ pub(crate) fn update_phase_ambiguities(
     state: &mut RtkState,
     sats: &[ProcessedSat],
     t: gneiss_core::time::GpsTime,
+    known_position: Option<Vector3<f64>>,
 ) {
     for sat in sats.iter().filter(|s| s.cp1.unwrap_or(0.0) != 0.0) {
         let cp1 = sat.cp1.unwrap();
@@ -409,7 +413,12 @@ pub(crate) fn update_phase_ambiguities(
             Constellation::Beidou => state.isb_bds,
             _ => 0.0,
         };
-        let expected_base = sat.dist + state.rcv_clk_bias + isb - sat.dt_sat_m
+        let geo_range = if let Some(kp) = known_position {
+            (sat.sat_pos_rot - kp).norm()
+        } else {
+            sat.dist
+        };
+        let expected_base = geo_range + state.rcv_clk_bias + isb - sat.dt_sat_m
             + sat.tropo_dry
             + state.zwd * sat.map_wet;
         // Compute Melbourne-Wübbena widelane for AR seeding.

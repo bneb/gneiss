@@ -28,7 +28,9 @@ pub fn process_ppp_ins_fg<'a>(
     }
 
     let state = engine.current_state.as_mut().unwrap();
-    crate::engine::ppp::update_phase_ambiguities(state, &sats, rover_obs.time);
+    let known_pos = engine.config.initial_position
+        .map(|p| nalgebra::Vector3::new(p[0], p[1], p[2]));
+    crate::engine::ppp::update_phase_ambiguities(state, &sats, rover_obs.time, known_pos);
     state.prune_stale_ambiguities(state.epoch_count as u32, 10);
 
     // SPP position prior — anchors the IEKF during early convergence,
