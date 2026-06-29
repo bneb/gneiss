@@ -452,9 +452,10 @@ impl PppRtklib {
         // from raw L1/L2 so that geometry-NL AR can fix IF ambiguities.
         // IF mode cancels ionosphere (1st order), reduces state dimension,
         // and enables CP re-solve with integer AR.
-        // IF mode disabled by default — UDUC provides better baseline accuracy.
-        // IF mode can be enabled when a tight initial position prior is available
-        // (e.g. known IGS station coordinates), which enables NL AR bootstrap.
+        // For static receivers with dual-freq data and known initial position:
+        // use IF mode so that geometry-NL AR can fix IF ambiguities.
+        // The tight position prior (σ=1cm from RINEX header) keeps N1 error
+        // within the NL AR candidate search radius.
         let force_if = self.initial_position_var > 0.0
             && !self.dynamics
             && !sats.is_empty() && !sats[0].is_iono_free && sats[0].p2.is_some();
@@ -829,7 +830,11 @@ impl PppRtklib {
                 // within position uncertainty range. This handles the bootstrap
                 // problem where position error exceeds the NL wavelength (0.107m).
                 if pos_sigma < 1.0 {
-                    let n1_search_radius = ((3.0 * pos_sigma / lam_nl).ceil() as i64).max(1);
+                    // Position is well-known: use wide candidate search without
+                    // ratio test. The tight prior prevents wrong fixes from causing
+                    // large position excursions. Any candidate within 0.2m of the
+                    // float N_IF is accepted (closest wins).
+                    let n1_search_radius = ((5.0 * pos_sigma / lam_nl).ceil() as i64).max(3);
                     let n1_rounded = n1_est.round();
                     let f1s = f1_vals[i]*f1_vals[i]; let f2s = f2_vals[i]*f2_vals[i];
                     let n_if_float = self.x[ppp.ib(i)];
