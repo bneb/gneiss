@@ -26,14 +26,34 @@ pub fn process_ppp<'a>(
     let pos_nan = state_ref.position.vector.x.is_nan()
         || state_ref.position.vector.y.is_nan()
         || state_ref.position.vector.z.is_nan();
-    if pos_nan || pos_var > 1e8 {
-        tracing::warn!("State corrupted (pos_nan={}, pos_var={:.0}) — resetting", pos_nan, pos_var);
+    if pos_nan || pos_var > 10000.0 {
+        tracing::warn!("State corrupted (pos_nan={}, pos_var={:.0}) — full reset", pos_nan, pos_var);
         if let Some(init_pos) = engine.config.initial_position {
-            let mut s = engine.current_state.as_mut().unwrap();
+            let s = engine.current_state.as_mut().unwrap();
+            // Full reinitialization: position from RINEX, everything else fresh.
+            // Don't clear ambiguities — that would change Vec size and mismatch
+            // the covariance matrix dimensions. Set values to 0 instead.
             s.position.vector.x = init_pos[0];
             s.position.vector.y = init_pos[1];
             s.position.vector.z = init_pos[2];
+            s.velocity = Vector3::zeros();
+            s.rcv_clk_bias = 0.0;
+            s.zwd = 0.2;
+            for a in s.ambiguities.iter_mut() { *a = 0.0; }
+            // Reset covariance: position tight, everything else large
             for i in 0..3 { s.covariance[(i,i)] = 0.0001; }
+            for i in 3..s.covariance.nrows() { s.covariance[(i,i)] = 10000.0; }
+            if s.covariance.nrows() > 19 { s.covariance[(19,19)] = 100.0; }
+            if s.covariance.nrows() > 20 { s.covariance[(20,20)] = 0.09; }
+            // Clear off-diagonals to prevent stale correlations
+            for i in 0..s.covariance.nrows() {
+                for j in 0..s.covariance.ncols() {
+                    if i != j { s.covariance[(i,j)] = 0.0; }
+                }
+            }
+            s.epoch_count = 0; // trigger cold-start reinit
+        } else {
+            return Err(EngineError::StateDisappeared);
         }
     }
 
@@ -311,13 +331,19 @@ pub fn process_ppp<'a>(
     // The RTK/SPP pipelines already call check_covariance_divergence;
     // PPP was missing it — this was the root cause of NKLG's 1600
     // coasting events.
-    if let Some(ref mut state) = engine.current_state {
-        ProcessingEngine::check_covariance_divergence(
-            state,
-            spp_pos_for_recovery,
-            None,
-            false,
-        );
+    // Skip SPP-based recovery when known position is available.
+    // The SPP reset overwrites the RINEX position with a noisy SPP fix,
+    // triggering a reset loop. The full reset at the start of process_ppp
+    // handles recovery correctly using the known position.
+    if engine.config.initial_position.is_none() {
+        if let Some(ref mut state) = engine.current_state {
+            ProcessingEngine::check_covariance_divergence(
+                state,
+                spp_pos_for_recovery,
+                None,
+                false,
+            );
+        }
     }
 
     // Attempt INS alignment for tightly-coupled PPP-INS modes.

@@ -200,12 +200,15 @@ pub fn compute_process_noise(
         }
     }
 
+    let is_static_known = config.dynamics_model == DynamicsModel::Static
+        && config.initial_position.is_some();
+
     if crate::filter::CORE_STATE_SIZE > 15 {
         q[(15, 15)] = config.process_noise_cb * dt_abs;
-        q[(16, 16)] = config.process_noise_isb * dt_abs;
-        q[(17, 17)] = config.process_noise_isb * dt_abs;
-        q[(18, 18)] = config.process_noise_isb * dt_abs;
-        q[(19, 19)] = config.process_noise_cd * dt_abs;
+        q[(16, 16)] = if is_static_known { 1e-8 * dt_abs } else { config.process_noise_isb * dt_abs };
+        q[(17, 17)] = if is_static_known { 1e-8 * dt_abs } else { config.process_noise_isb * dt_abs };
+        q[(18, 18)] = if is_static_known { 1e-8 * dt_abs } else { config.process_noise_isb * dt_abs };
+        q[(19, 19)] = if is_static_known { 1e-8 * dt_abs } else { config.process_noise_cd * dt_abs };
         q[(20, 20)] = config.process_noise_zwd * dt_abs;
     }
 
