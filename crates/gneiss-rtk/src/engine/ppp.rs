@@ -76,11 +76,28 @@ pub fn process_ppp<'a>(
                     rover_obs.time,
                 );
                 state.rcv_clk_bias = spp.cdt;
-                // Tight covariance: σ=1cm position
+                // Tight covariance: σ=1cm position, large clock variance
+                // (SPP clock is ~50km off; tight prior causes massive
+                // first-iteration correction that corrupts state)
                 let init_cov = 0.0001;
                 state.covariance[(0,0)] = init_cov;
                 state.covariance[(1,1)] = init_cov;
                 state.covariance[(2,2)] = init_cov;
+                // Only position is known. Other states need large initial
+                // variance so the IEKF can estimate them without massive
+                // first-iteration corrections. Only set on epoch 0 (not
+                // epoch 1) to avoid overwriting converged variances.
+                if state.epoch_count == 0 {
+                    for i in 3..state.covariance.nrows() {
+                        state.covariance[(i, i)] = 10000.0;
+                    }
+                    if crate::filter::CORE_STATE_SIZE > 19 {
+                        state.covariance[(19, 19)] = 100.0; // clock drift
+                    }
+                    if crate::filter::CORE_STATE_SIZE > 20 {
+                        state.covariance[(20, 20)] = 0.09; // ZWD
+                    }
+                }
             } else {
                 state.position = spp.position;
                 state.rcv_clk_bias = spp.cdt;
@@ -307,7 +324,15 @@ pub fn process_ppp<'a>(
         engine.attempt_kinematic_alignment();
     }
 
-    solve_result?;
+    if let Err(_e) = solve_result {
+        // State divergence at constellation rotation: the 21+N-element
+        // state resize interacts poorly with the tight position prior,
+        // producing ill-conditioned normal equations and large dx.
+        // Recovery by full state reset causes infinite loop.
+        // For now: log and return error. The CLI loop handles the error.
+        // TODO: gradual state resize or adaptive regularization.
+        return Err(EngineError::StateDisappeared);
+    }
     Ok(engine.current_state.as_ref().unwrap())
 }
 

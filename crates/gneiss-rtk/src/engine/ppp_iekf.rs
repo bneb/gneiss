@@ -160,7 +160,7 @@ impl PppIteratedEkf {
             }
             let htwh_damped = &htwh + &p_inv;
             let innov = &htwr + &p_inv * (&x_pred - &x_i);
-            match solve_cholesky_svd(&htwh_damped, &innov, 1e-6) {
+            match solve_cholesky_svd(&htwh_damped, &innov, 1e-4) {
                 Ok(sol) => { if sol.norm() < self.convergence_threshold { break; } x_i += sol; }
                 Err(_) => { tracing::warn!("Failed to solve normal equations in PPP FG!"); break; }
             }
@@ -183,6 +183,7 @@ impl PppIteratedEkf {
         let mut x_i = x_pred.clone();
         let p_inv = invert_matrix(&p_pred).ok_or(EngineError::StateDisappeared)?;
 
+        let mut dx_rejected = false;
         for _iter in 0..self.max_iterations {
             if let Some(dx) = self.compute_iteration_dx(
                 state,
@@ -198,8 +199,12 @@ impl PppIteratedEkf {
                     break;
                 }
             } else {
+                dx_rejected = true;
                 break;
             }
+        }
+        if dx_rejected {
+            return Err(EngineError::StateDisappeared);
         }
 
         if let Some(sat) = self.find_worst_outlier(state, sats, &x_i) {
@@ -276,7 +281,7 @@ impl PppIteratedEkf {
         let htwh_damped = &htwh + p_inv;
         let innov = &htwr + p_inv * (x_pred - x_i);
 
-        match solve_cholesky_svd(&htwh_damped, &innov, 1e-6) {
+        match solve_cholesky_svd(&htwh_damped, &innov, 1e-4) {
             Ok(sol) => {
                 // Clamp position update: reject iterations that would jump
                 // position by >100m (indicates bad measurement or singular
