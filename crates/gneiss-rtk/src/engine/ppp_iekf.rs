@@ -278,27 +278,29 @@ impl PppIteratedEkf {
             }
         }
 
-        let htwh_damped = &htwh + p_inv;
-        let innov = &htwr + p_inv * (x_pred - x_i);
+        let mut htwh_damped = &htwh + p_inv;
+        let mut innov = &htwr + p_inv * (x_pred - x_i);
 
-        match solve_cholesky_svd(&htwh_damped, &innov, 1e-4) {
-            Ok(sol) => {
-                // Clamp position update: reject iterations that would jump
-                // position by >100m (indicates bad measurement or singular
-                // normal equations from tight position prior).
-                let pos_dx = (sol[0]*sol[0] + sol[1]*sol[1] + sol[2]*sol[2]).sqrt();
-                if pos_dx > 100.0 {
-                    tracing::warn!("IEKF position dx {:.0}m > 100m — rejecting iteration", pos_dx);
-                    Ok(None)
-                } else {
-                    Ok(Some(sol))
-                }
-            }
-            Err(_) => {
-                tracing::warn!("Failed to solve normal equations in PPP FG!");
-                Ok(None)
+        // Clamp extreme values in the innovation vector. State resize at
+        // constellation rotation can produce NaN or 1e100+ in the RHS,
+        // which defeats any regularization.
+        for i in 0..innov.len() {
+            if innov[i].is_nan() || innov[i].abs() > 1e8 {
+                innov[i] = 0.0;
             }
         }
+
+        // Adaptive Levenberg-Marquardt regularization.
+        for svd_thresh in [1e-6_f64, 1e-4, 1e-2, 1.0_f64] {
+            if let Ok(sol) = solve_cholesky_svd(&htwh_damped, &innov, svd_thresh) {
+                let pos_dx = (sol[0]*sol[0] + sol[1]*sol[1] + sol[2]*sol[2]).sqrt();
+                if pos_dx < 100.0 {
+                    return Ok(Some(sol));
+                }
+            }
+        }
+        tracing::warn!("IEKF solve failed at all regularization levels");
+        Ok(None)
     }
 
     fn compute_final_covariance(

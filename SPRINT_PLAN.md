@@ -1,125 +1,71 @@
-# Sprint Plan v7 — All-In on Gneiss-Native
+# Sprint Plan v8
 
 ## State (2026-06-29)
 
-### shipped
-- **Native IEKF is default**: `--mode ppp` uses the gneiss-native 21-element core state solver. RTKLIB port demoted to `--mode ppp-rtklib`, maintenance stopped.
-- **RINEX auto-position**: Zero-config cm-accurate initialization from APPROX POSITION XYZ header field.
-- **Tight position prior**: σ=1cm prior preserved through IEKF solve (posterior covariance fix).
-- **Static process noise**: 1e-6×dt (was 9 m²/epoch velocity-integration model).
-- **Corrected IF CP noise**: σ=3cm for IF mode (was σ=1cm, 9× underweight).
-- **Soft AR lock**: σ=10cm Joseph updates, cross-correlations preserved.
-- **AR validation gates**: Position jump check (0.1m tight, 2.0m loose), N_IF consistency, skip when σ_pos<1cm.
-- **RTK baseline**: 1.15m p50, 4.97m p95 Odaiba. Beats RTKLIB on median, p95 dominated by urban canyon.
-- **Position smoother**: Implemented (RTS over 3×3 position covariance).
+Native IEKF is default `--mode ppp`. RTKLIB port is `--mode ppp-rtklib` (regression only, no active development).
 
-### accuracy
-| Mode | Dataset | p50 | p95 | Goal | Gap |
-|------|---------|-----|-----|------|-----|
-| PPP native IEKF | CEDU (500ep) | **1.0cm** | **2.0cm** | 1.00m | ✅ |
-| PPP native IEKF | CEDU (2880ep) | 3.4m | 14.4m | 1.00m | 14× |
-| RTK | Odaiba | 1.15m | 4.97m | 0.25m | 20× |
-| RTK | Shinjuku | 1.21m | 11.16m | 0.25m | 45× |
+### Accuracy
+| Mode | Dataset | Key Metric | Goal | Gap |
+|------|---------|-----------|------|-----|
+| PPP native IEKF | CEDU (1000ep) | **1.7cm p95** | 1.00m | ✅ |
+| PPP native IEKF | CEDU (2880ep) | crashes at ep1500 | 1.00m | 1 bug |
+| RTK | Odaiba | 1.15m p50, 4.97m p95 | 0.25m p95 | 20× |
 
-### one bug remaining
-**Native IEKF variance growth**: Position variance grows from 8mm² to 50000 m² by epoch 1000, triggering SPP reset. Root cause: the 21+N-element state propagation accumulates variance in ambiguity/velocity/ISB dimensions that couples back into position through the measurement Jacobian. The position prior is correctly applied each epoch but the non-position states don't have equivalent priors, creating an information asymmetry that slowly inflates position variance.
+### One bug remaining
+
+Constellation rotation at epoch 1000-1500 causes the 21+N-element state to resize (satellites rise/set). The state resize produces ill-conditioned normal equations with the tight position prior (weight 10000 on position vs ~0.01 on ambiguities). The SVD solve produces large dx, the per-iteration clamp fires, and the solve returns `StateDisappeared`. Root cause: ambiguity initialization during resize uses the tight position variance for new ambiguities, which is correct for the first N sats but too tight when combined with existing converged states — the condition number of the information matrix spikes.
 
 ---
 
-## Phase 1: Fix Native IEKF Variance Growth (0.5-1 session)
+## Phase 1: Fix Constellation Rotation (0.5 session)
 
-**Goal**: Sub-cm accuracy maintained across all 2880 epochs on all 4 IGS stations.
+### Solution: regularize per-ambiguity, not globally
 
-### Task 1.1: Add process noise to non-position states
-**File**: `crates/gneiss-rtk/src/engine/predictor.rs`
-**Problem**: The static process noise fix only addressed position. But velocity, ISB, and ambiguity states accumulate process noise at their original rates (100 m² for velocity, config.process_noise_isb for ISBs, etc.). These couple into position through the measurement Jacobian.
-**Fix**: Clamp non-position state process noise when tight prior is active. Velocity: 0.01 (was 100), ISBs: 1e-8 (was config.process_noise_isb × dt).
+The SVD regularization (1e-4) is applied globally, discarding valid ambiguity information. Instead: add a per-ambiguity regularization term that scales with the ambiguity variance. New ambiguities get large regularization (they're unknown), converged ambiguities get small regularization.
 
-### Task 1.2: Regularize posterior covariance
-**File**: `crates/gneiss-rtk/src/engine/ppp_iekf.rs`
-**Problem**: The posterior covariance `(HᵀWH + P_ext⁻¹ + P_pred⁻¹)⁻¹` can become ill-conditioned when P_pred has inflated non-position variances. The inverse amplifies small eigenvalues.
-**Fix**: Add Tikhonov regularization to the posterior: `P = (HᵀWH + P⁻¹ + λI)⁻¹` with λ=1e-8. This floors all eigenvalues at 1e-8, preventing the inverse from blowing up.
+**Implementation**: In `compute_iteration_dx` and `compute_final_covariance`, add `λI` to the normal equations where `λ` is proportional to `1/σ²_amb` for each ambiguity. This is Tikhonov regularization with a diagonal matrix instead of a scalar.
 
-### Task 1.3: Re-apply position prior as post-hoc correction
-**File**: `crates/gneiss-rtk/src/engine/ppp_iekf.rs`
-**Problem**: Even with correct posterior covariance, the state estimate can drift if non-position states are misestimated. The tight prior is applied during the solve but not as a hard constraint.
-**Fix**: After each IEKF solve, before pushing to history: compute position delta from prior, and if >3σ, pull position back with a Kalman-like update.
+**Alternative**: Simpler — before the SVD solve, check the condition number of `htwh_damped`. If >1e8, add incremental regularization until condition number drops below threshold. This is Levenberg-Marquardt style adaptive damping.
 
-### Task 1.4: Full benchmark
-- All 4 IGS stations, 2880 epochs, native IEKF default
-- Verify no SPP resets, no variance warnings
-- Verify sub-meter p95 on all stations
-- Compare: `--mode ppp` (native) vs `--mode ppp-rtklib` (RTKLIB port)
-- **Target**: 4/4 stations <1m p95, zero divergence events
-
-**Acceptance**: All 4 IGS stations maintain sub-meter p95 across 2880 epochs. Native IEKF conclusively beats RTKLIB port on all metrics.
+**Verification**: Run all 4 IGS stations, 2880 epochs. Zero crashes. Target p95 <0.1m on all stations with known position.
 
 ---
 
-## Phase 2: Multi-Epoch Factor Graph (1-2 sessions)
+## Phase 2: Factor Graph (1-2 sessions)
 
-**Goal**: Joint optimization across epochs with shared parameters. Breaks the single-epoch ceiling for both static and kinematic.
+With the native IEKF stable across all epochs, wire the multi-epoch optimizer.
 
-### Task 2.1: Fix PppTwoEpochOptimizer for native IEKF
-**File**: `crates/gneiss-rtk/src/engine/ppp_multi_epoch.rs`
-**Change**: Remove internal `PppIteratedEkf::solve()` call. Accept pre-solved `RtkState` and `EpochSnapshot` from outside. The processor feeds native IEKF output to the optimizer.
+### 2.1: Fix PppTwoEpochOptimizer
+Remove internal `PppIteratedEkf::solve()`. Accept pre-solved `RtkState`. The processor feeds native IEKF output to the optimizer each epoch.
 
-### Task 2.2: Shared position for static receivers
-**Change**: When dynamics is static, state vector becomes `[position(3), clock_0, tropo_0, ..., clock_{N-1}, tropo_{N-1}, ambiguities]`. One position for the entire window. Clocks, tropo, ambiguities per-epoch.
+### 2.2: Shared position for static
+State vector: `[position(3), clock_0, tropo_0, ..., clock_{N-1}, tropo_{N-1}, ambiguities]`. One position shared across window.
 
-### Task 2.3: Wire into main loop
-**File**: `crates/gneiss-rtk/src/engine/processor/mod.rs`
-**Change**: After each IEKF solve, snapshot state. When window is full (N epochs), run joint optimization. Write smoothed position back to output state.
-
-### Task 2.4: Benchmark
-- Window sizes: 2, 5, 10 epochs
-- Compare multi-epoch vs single-epoch on all IGS stations
-- **Target**: +20% p95 improvement over single-epoch native IEKF
+### 2.3: Benchmark
+Target +20% p95 over single-epoch native IEKF.
 
 ---
 
-## Phase 3: Urban Canyon + Kinematic (1-2 sessions)
+## Phase 3: Urban Canyon (1-2 sessions)
 
-**Goal**: Improve moving-receiver PPP and RTK in urban environments.
+### 3.1: Multi-constellation
+Galileo + QZSS for Tokyo datasets. Already in SP3/CLK files, 21-element state has ISB slots.
 
-### Task 3.1: Multi-constellation for Tokyo
-- Enable Galileo + QZSS (already in SP3/CLK files)
-- Per-constellation ISB and AR already in 21-element state
+### 3.2: Kinematic smoother
+Enable position smoother for automotive dynamics. SPP seed (σ=5m) → forward convergence → backward propagation of converged info.
 
-### Task 3.2: Kinematic position smoother
-- Enable position smoother for automotive dynamics
-- SPP seed (σ=5m) → forward convergence → backward propagation
+### 3.3: RTK AR hardening
+Port PPP cascade AR validation to RTK. Multi-base selection (already in commit 4efe53e).
 
-### Task 3.3: RTK AR hardening
-- Port AR validation gates from PPP cascade AR to RTK AR
-- Position-jump check after RTK AR fix
-- Multi-base selection (already in commit 4efe53e)
-
-### Task 3.4: Elevation/azimuth weighting
-- Exclude <15° satellites from CP in urban canyon
-- C/N0-based variance scaling (already partially implemented)
-
-**Acceptance**: UrbanNav Odaiba PPP p50 <5m (from 7m). RTK Odaiba p95 <3m (from 5m).
+Target: Odaiba PPP p50 <5m (from 7m). RTK p95 <3m (from 5m).
 
 ---
 
 ## Phase 4: INS Coupling (2-3 sessions)
 
-**Goal**: Tightly-coupled GNSS-INS for urban canyon and kinematic. The 21-element core state was designed for this.
+Wire IMU preintegration factors from FGO module into native IEKF loop. NHC already implemented. The 21-element state was designed for this.
 
-### Task 4.1: Wire IMU preintegration factors
-**File**: `crates/gneiss-rtk/src/engine/fgo/factors/imu.rs`
-**Change**: The FGO module already has IMU factors. Wire them into the native IEKF processing loop for `PppIns` mode.
-
-### Task 4.2: NHC (Non-Holonomic Constraints)
-**File**: `crates/gneiss-rtk/src/engine/processor/mod.rs`
-**Change**: NHC already implemented. Verify it works with the native IEKF state layout.
-
-### Task 4.3: Benchmark with UrbanNav IMU data
-- Odaiba + Shinjuku have IMU data
-- Compare PPP vs PPP-INS in urban canyon
-
-**Acceptance**: UrbanNav PPP-INS p50 <2m (from 7m), p95 <5m (from 21m).
+Target: UrbanNav PPP-INS p50 <2m in urban canyon (from 7m).
 
 ---
 
@@ -127,17 +73,9 @@
 
 | Phase | Sessions | Key Metric |
 |-------|----------|------------|
-| 1: Fix variance growth | 0.5-1 | 4/4 IGS <1m p95, zero resets |
-| 2: Multi-epoch factor graph | 1-2 | +20% p95 improvement |
-| 3: Urban canyon hardening | 1-2 | Odaiba PPP p50 <5m, RTK p95 <3m |
-| 4: INS coupling | 2-3 | PPP-INS p50 <2m in urban canyon |
+| 1: Constellation rotation | 0.5 | 4/4 IGS stable 2880ep, p95 <0.1m |
+| 2: Factor graph | 1-2 | +20% p95 over single-epoch |
+| 3: Urban canyon | 1-2 | PPP p50 <5m, RTK p95 <3m |
+| 4: INS coupling | 2-3 | PPP-INS p50 <2m |
 
 **Total: 5-8 sessions to production-ready PPP + RTK + INS.**
-
----
-
-## What We Killed
-
-- **RTKLIB PPP port**: Demoted to `--mode ppp-rtklib`. No further development. Removed from default dispatch. Will be deleted once native IEKF conclusively beats it on all benchmarks.
-- **IF combination code in RTKLIB**: The `force_if` block, NL AR candidate search, IF CP noise correction — all RTKLIB-specific. The native IEKF handles IF/UDUC mode selection through its own measurement model.
-- **Batch solver**: The `StaticPositionBatchSolver` in `ppp_multi_epoch_batch.rs` was an attempt to add multi-epoch capability to the RTKLIB port. The factor graph (Phase 2) is the correct architecture for multi-epoch. Remove batch solver after Phase 2 ships.
