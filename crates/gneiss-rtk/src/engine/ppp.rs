@@ -17,6 +17,26 @@ pub fn process_ppp<'a>(
     if !valid_pos(engine) {
         return engine.process_spp(rover_obs);
     }
+    // Recover from corrupted state: if position variance exploded or
+    // position is NaN, reset to known position (RINEX header) or SPP.
+    let state_ref = engine.current_state.as_ref().unwrap();
+    let pos_var = state_ref.covariance[(0,0)]
+        .max(state_ref.covariance[(1,1)])
+        .max(state_ref.covariance[(2,2)]);
+    let pos_nan = state_ref.position.vector.x.is_nan()
+        || state_ref.position.vector.y.is_nan()
+        || state_ref.position.vector.z.is_nan();
+    if pos_nan || pos_var > 1e8 {
+        tracing::warn!("State corrupted (pos_nan={}, pos_var={:.0}) — resetting", pos_nan, pos_var);
+        if let Some(init_pos) = engine.config.initial_position {
+            let mut s = engine.current_state.as_mut().unwrap();
+            s.position.vector.x = init_pos[0];
+            s.position.vector.y = init_pos[1];
+            s.position.vector.z = init_pos[2];
+            for i in 0..3 { s.covariance[(i,i)] = 0.0001; }
+        }
+    }
+
     let dt = (rover_obs.time.tow - engine.current_state.as_ref().unwrap().time.tow).max(0.0);
     engine.predict_state(dt);
     let state = engine.current_state.as_mut().unwrap();
@@ -227,14 +247,16 @@ pub fn process_ppp<'a>(
                     // and force re-estimation from measurements.
                     state.velocity = nalgebra::Vector3::zeros();
                 }
-                // Inflate position AND velocity covariance to force
-                // the next IEKF solve to re-estimate both from
-                // measurements rather than trusting the prediction.
-                for i in 0..3 {
-                    state.covariance[(i, i)] = state.covariance[(i, i)].max(100.0);
-                }
-                for i in 3..6 {
-                    state.covariance[(i, i)] = state.covariance[(i, i)].max(100.0);
+                // Reset to known position if available (RINEX header).
+                // Don't inflate covariance — that enables the feedback loop
+                // we fixed in the RTKLIB port (wrong AR fixes compounding).
+                if let Some(init_pos) = engine.config.initial_position {
+                    state.position.vector.x = init_pos[0];
+                    state.position.vector.y = init_pos[1];
+                    state.position.vector.z = init_pos[2];
+                    for i in 0..3 {
+                        state.covariance[(i, i)] = 0.0001; // σ=1cm
+                    }
                 }
             }
         }
@@ -383,7 +405,14 @@ pub(crate) fn update_phase_ambiguities(
             let l_meas = (cp1 - wup) * sat.lam1;
             let exp = expected_base;
             if !state.ambiguity_keys.contains(&(sat.sat_obs.sat, 0)) {
-                state.add_ambiguity(sat.sat_obs.sat, 0, l_meas - exp, 10000.0);
+                // Use position variance as initial ambiguity variance when
+                // position is well-known (RINEX header). Prevents variance
+                // explosion when new satellites rise at constellation rotation.
+                let pos_var = state.covariance[(0,0)]
+                    .max(state.covariance[(1,1)])
+                    .max(state.covariance[(2,2)]);
+                let init_var = if pos_var < 1.0 { pos_var.max(0.0001) } else { 10000.0 };
+                state.add_ambiguity(sat.sat_obs.sat, 0, l_meas - exp, init_var);
             }
             state
                 .last_observed
@@ -409,7 +438,11 @@ pub(crate) fn update_phase_ambiguities(
             let l_meas = (cp1 - wup) * sat.lam1;
             let exp = expected_base - sat.iono_delay;
             if !state.ambiguity_keys.contains(&(sat.sat_obs.sat, 0)) {
-                state.add_ambiguity(sat.sat_obs.sat, 0, l_meas - exp, 10000.0);
+                let pos_var = state.covariance[(0,0)]
+                    .max(state.covariance[(1,1)])
+                    .max(state.covariance[(2,2)]);
+                let init_var = if pos_var < 1.0 { pos_var.max(0.0001) } else { 10000.0 };
+                state.add_ambiguity(sat.sat_obs.sat, 0, l_meas - exp, init_var);
             }
             state
                 .last_observed
@@ -447,9 +480,11 @@ fn add_uduc_ambiguities(
         > 50;
     let init_var = if mw_confident { 0.04 } else { 10000.0 }; // 0.2 cycle or 100m std
     if !state.ambiguity_keys.contains(&(sat.sat_obs.sat, 3)) {
-        // Ionosphere: large initial variance (σ=100m) so measurements dominate.
-        // P1-P2 estimate is noisy (~15m); tight prior causes slow convergence.
-        state.add_ambiguity(sat.sat_obs.sat, 3, i1_est, 10000.0);
+        let pos_var = state.covariance[(0,0)]
+            .max(state.covariance[(1,1)])
+            .max(state.covariance[(2,2)]);
+        let iono_init_var = if pos_var < 1.0 { 1.0 } else { 10000.0 };
+        state.add_ambiguity(sat.sat_obs.sat, 3, i1_est, iono_init_var);
     }
     if !state.ambiguity_keys.contains(&(sat.sat_obs.sat, 1)) {
         state.add_ambiguity(

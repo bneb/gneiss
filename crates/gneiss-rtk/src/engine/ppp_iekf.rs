@@ -277,7 +277,18 @@ impl PppIteratedEkf {
         let innov = &htwr + p_inv * (x_pred - x_i);
 
         match solve_cholesky_svd(&htwh_damped, &innov, 1e-6) {
-            Ok(sol) => Ok(Some(sol)),
+            Ok(sol) => {
+                // Clamp position update: reject iterations that would jump
+                // position by >100m (indicates bad measurement or singular
+                // normal equations from tight position prior).
+                let pos_dx = (sol[0]*sol[0] + sol[1]*sol[1] + sol[2]*sol[2]).sqrt();
+                if pos_dx > 100.0 {
+                    tracing::warn!("IEKF position dx {:.0}m > 100m — rejecting iteration", pos_dx);
+                    Ok(None)
+                } else {
+                    Ok(Some(sol))
+                }
+            }
             Err(_) => {
                 tracing::warn!("Failed to solve normal equations in PPP FG!");
                 Ok(None)

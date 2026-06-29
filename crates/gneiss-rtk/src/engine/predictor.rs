@@ -162,7 +162,7 @@ pub fn compute_process_noise(
                 q[(i, i)] = 1e-6 * dt_abs;
             }
             for i in 3..6 {
-                q[(i, i)] = 100.0; // velocity: large noise (not estimated for static)
+                q[(i, i)] = 1e-6 * dt_abs; // velocity: small noise (static receiver)
             }
         } else {
             let q_acc = match config.dynamics_model {
