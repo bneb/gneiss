@@ -335,7 +335,12 @@ impl PppRtklib {
                     v[nv] -= x[ppp.ib(i)];
                     h[(ppp.ib(i), nv)] = 1.0;
                     let ar_fixed = self.p[(ppp.ib(i), ppp.ib(i))] < 0.01;
-                    let cp_var = if ar_fixed { 0.0001 } else { 0.01 };
+                    // IF mode amplifies CP noise ~3× vs raw L1/L2 (σ=3cm vs 1cm)
+                    let cp_var = if ar_fixed {
+                        if ppp.uduc { 0.0001 } else { 0.001 }
+                    } else {
+                        0.01
+                    };
                     let var_phase = cp_var / libm::sin(el).max(0.1) + sat_var[i] + vart;
                     r[(nv, nv)] = var_phase;
                     let cp_thresh = if ar_fixed { 2.0 } else { self.max_inno_cp };
@@ -452,10 +457,9 @@ impl PppRtklib {
         // from raw L1/L2 so that geometry-NL AR can fix IF ambiguities.
         // IF mode cancels ionosphere (1st order), reduces state dimension,
         // and enables CP re-solve with integer AR.
-        // For static receivers with dual-freq data and known initial position:
-        // use IF mode so that geometry-NL AR can fix IF ambiguities.
-        // The tight position prior (σ=1cm from RINEX header) keeps N1 error
-        // within the NL AR candidate search radius.
+        // For static receivers with known position: use IF mode with NL AR.
+        // The tight prior (σ=1cm) keeps position near truth while NL AR fixes
+        // IF ambiguities for mm-level CP measurements.
         let force_if = self.initial_position_var > 0.0
             && !self.dynamics
             && !sats.is_empty() && !sats[0].is_iono_free && sats[0].p2.is_some();
@@ -666,7 +670,8 @@ impl PppRtklib {
                 if lc != 0.0 && pp[(ppp.ib(i), ppp.ib(i))] < 0.01 {
                     h_clk[(ppp.ic(sys), n_clk)] = 1.0;
                     v_clk[n_clk] = lc - rng - xp[ppp.ib(i)] - xp[ppp.ic(sys)];
-                    r_clk[(n_clk, n_clk)] = 0.0001 / libm::sin(el).max(0.1);
+                    let cp_var_clk = if ppp.uduc { 0.0001 } else { 0.001 };
+                    r_clk[(n_clk, n_clk)] = cp_var_clk / libm::sin(el).max(0.1);
                     n_clk += 1;
                 }
             }
@@ -972,7 +977,7 @@ impl PppRtklib {
                 h_cp[(ppp.ic(sys), n_cp)] = 1.0;
                 if ppp.nt() >= 1 { h_cp[(ppp.it(), n_cp)] = proc_map_wet[i]; }
                 h_cp[(ppp.ib(i), n_cp)] = 1.0;
-                r_cp[(n_cp, n_cp)] = 0.0001; // σ=1cm CP
+                r_cp[(n_cp, n_cp)] = if ppp.uduc { 0.0001 } else { 0.001 }; // σ=1cm raw, σ=3cm IF
                 n_cp += 1;
 
                 // Feed CP measurement to static multi-epoch batch solver.
