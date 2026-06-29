@@ -467,13 +467,20 @@ fn process_epochs(
 async fn write_results(engine: &mut ProcessingEngine, output: &str) -> Result<(), Box<dyn std::error::Error>> {
     let results = if engine.config.enable_backward_smoothing {
         info!("Running backward smoothing pass...");
+        // Try RTS smoother first (works for IEKF-mode), then position smoother
         match engine.run_combined_ppk() {
             Ok(s) => s,
             Err(e) => {
-                error!("Backward smoothing failed: {:?}. Falling back to forward results.", e);
+                error!("RTS smoothing failed: {:?}. Trying position smoother...", e);
+                engine.run_position_smoother();
                 engine.state_history.clone()
             }
         }
+    } else if engine.config.mode.is_ppp() {
+        // Static PPP: run position smoother (no-op if position history empty)
+        info!("Running position smoother for PPP...");
+        engine.run_position_smoother();
+        engine.state_history.clone()
     } else {
         info!("Cloning state history...");
         engine.state_history.clone()

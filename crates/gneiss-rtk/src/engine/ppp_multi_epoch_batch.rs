@@ -255,7 +255,7 @@ impl Default for StaticPositionBatchSolver {
 }
 
 /// Try to invert a 3×3 matrix. Returns None if singular.
-fn try_invert_3x3(m: &Matrix3<f64>) -> Option<Matrix3<f64>> {
+pub(crate) fn try_invert_3x3(m: &Matrix3<f64>) -> Option<Matrix3<f64>> {
     let det = m[(0, 0)] * (m[(1, 1)] * m[(2, 2)] - m[(1, 2)] * m[(2, 1)])
         - m[(0, 1)] * (m[(1, 0)] * m[(2, 2)] - m[(1, 2)] * m[(2, 0)])
         + m[(0, 2)] * (m[(1, 0)] * m[(2, 1)] - m[(1, 1)] * m[(2, 0)]);

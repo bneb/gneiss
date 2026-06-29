@@ -1031,10 +1031,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         info!("Running backward smoothing pass...");
                         engine
                             .run_combined_ppk()
-                            .unwrap_or(engine.state_history.clone())
+                            .unwrap_or_else(|e| {
+                                error!("RTS smoothing failed: {:?}", e);
+                                engine.state_history.clone()
+                            })
                     } else {
                         engine.state_history.clone()
                     };
+                    // Run position smoother for PPP modes
+                    if engine.config.mode.is_ppp() {
+                        info!("Running position smoother for PPP...");
+                        engine.run_position_smoother();
+                    }
                     final_processed_epochs = processed_epochs;
                 }
             }

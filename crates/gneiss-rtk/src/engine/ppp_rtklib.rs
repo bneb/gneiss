@@ -21,7 +21,7 @@ use gneiss_core::ephemeris::Ephemeris;
 use gneiss_core::obs::EpochObs;
 use gneiss_core::sat::{Constellation, SatelliteId};
 use gneiss_core::time::GpsTime;
-use nalgebra::{DMatrix, DVector, Vector3};
+use nalgebra::{DMatrix, DVector, Matrix3, Vector3};
 
 // ---- RTKLIB-compatible constants ----
 const SQR: fn(f64) -> f64 = |x| x * x;
@@ -155,6 +155,17 @@ pub struct PppRtklib {
     /// Uses CP-derived range measurements from AR-fixed satellites
     /// to jointly estimate position across epochs.
     pub batch_solver: StaticPositionBatchSolver,
+    /// Position history for RTS backward smoothing (static receivers only).
+    /// Stores forward-pass position and covariance at each epoch.
+    position_history: Vec<PositionEntry>,
+}
+
+/// One epoch of forward-pass position data for backward smoothing.
+struct PositionEntry {
+    pos: Vector3<f64>,       // Updated position (after measurement update)
+    cov: Matrix3<f64>,       // Updated position covariance (3×3)
+    pos_pred: Vector3<f64>,  // Predicted position (before measurement update)
+    cov_pred: Matrix3<f64>,  // Predicted position covariance (3×3)
 }
 
 impl Default for PppRtklib {
@@ -177,6 +188,7 @@ impl Default for PppRtklib {
             initial_position_var: 0.0, // 0 = use VAR_POS default
             mw_wl_ema: HashMap::new(),
             batch_solver: StaticPositionBatchSolver::new(),
+            position_history: Vec::new(),
         }
     }
 }
@@ -640,6 +652,13 @@ impl PppRtklib {
         let mut xp = self.x.clone();
         let mut pp = self.p.clone();
         self.predict(&ppp, &mut xp, &mut pp);
+        // Save predicted position for RTS backward smoothing
+        let pos_pred = Vector3::new(xp[0], xp[1], xp[2]);
+        let cov_pred = Matrix3::new(
+            pp[(0,0)], pp[(0,1)], pp[(0,2)],
+            pp[(1,0)], pp[(1,1)], pp[(1,2)],
+            pp[(2,0)], pp[(2,1)], pp[(2,2)],
+        );
         // Clock-only pre-update: after predict() resets clock variance,
         // use PR and AR-fixed CP measurements to estimate clock without
         // touching position.  CP from AR-fixed biases gives σ≈1cm range,
@@ -736,6 +755,16 @@ impl PppRtklib {
         }
         self.x = xp;
         self.p = pp;
+        // Record position for backward smoothing (static receivers only)
+        if !self.dynamics {
+            let pos_upd = Vector3::new(self.x[0], self.x[1], self.x[2]);
+            let cov_upd = Matrix3::new(
+                self.p[(0,0)], self.p[(0,1)], self.p[(0,2)],
+                self.p[(1,0)], self.p[(1,1)], self.p[(1,2)],
+                self.p[(2,0)], self.p[(2,1)], self.p[(2,2)],
+            );
+            self.record_position(pos_upd, cov_upd, pos_pred, cov_pred);
+        }
         state.position.vector.x = self.x[0];
         state.position.vector.y = self.x[1];
         state.position.vector.z = self.x[2];
@@ -1212,6 +1241,41 @@ impl PppRtklib {
         state.covariance = pp;
 
         Ok(())
+    }
+
+    /// Store forward-pass position data for backward smoothing.
+    fn record_position(&mut self, pos: Vector3<f64>, cov: Matrix3<f64>,
+                        pos_pred: Vector3<f64>, cov_pred: Matrix3<f64>) {
+        self.position_history.push(PositionEntry { pos, cov, pos_pred, cov_pred });
+    }
+
+    /// Run position-only RTS backward smoother over recorded history.
+    /// Returns smoothed positions (ECEF, meters). Assumes static receiver
+    /// (state transition = identity for position).
+    pub fn smooth_positions(&self) -> Vec<Vector3<f64>> {
+        let n = self.position_history.len();
+        if n == 0 { return Vec::new(); }
+
+        let mut smoothed: Vec<Vector3<f64>> = self.position_history.iter()
+            .map(|e| e.pos).collect();
+
+        for k in (0..n-1).rev() {
+            let entry_k = &self.position_history[k];
+            let entry_k1 = &self.position_history[k + 1];
+
+            // C_k = P_k * inv(P_{k+1|k})
+            let p_pred_inv = match crate::engine::ppp_multi_epoch_batch::try_invert_3x3(&entry_k1.cov_pred) {
+                Some(inv) => inv,
+                None => continue,
+            };
+            let c_k = entry_k.cov * p_pred_inv;
+
+            // x_{k|N} = x_k + C_k * (x_{k+1|N} - x_{k+1|k})
+            let dx = smoothed[k + 1] - entry_k1.pos_pred;
+            smoothed[k] = entry_k.pos + c_k * dx;
+        }
+
+        smoothed
     }
 }
 

@@ -484,6 +484,25 @@ impl ProcessingEngine {
         }
         Ok(self.current_state.as_ref().expect("current_state is Some after None check"))
     }
+
+    /// Run position-only RTS backward smoother for static PPP.
+    /// Uses the position history stored by PppRtklib to propagate
+    /// well-converged position information back to early epochs.
+    pub fn run_position_smoother(&mut self) {
+        if self.state_history.is_empty() { return; }
+        let solver = match &self.ppp_rtklib_solver {
+            Some(s) => s,
+            None => return,
+        };
+        let smoothed = solver.smooth_positions();
+        if smoothed.len() != self.state_history.len() { return; }
+
+        for (state, pos) in self.state_history.iter_mut().zip(smoothed.iter()) {
+            state.position.vector.x = pos.x;
+            state.position.vector.y = pos.y;
+            state.position.vector.z = pos.z;
+        }
+    }
 }
 
 pub fn snr_scale(snr: f64) -> f64 {
