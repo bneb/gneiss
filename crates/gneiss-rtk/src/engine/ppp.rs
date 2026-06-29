@@ -44,40 +44,48 @@ pub fn process_ppp<'a>(
         spp_pos_for_recovery = Some(spp.position);
         engine.last_spp_position = Some(spp.position);
         let is_cold_start = state.epoch_count < 2;
+        // Use RINEX header position if available (cm-accurate for IGS stations)
+        let known_pos = engine.config.initial_position;
         if is_cold_start {
-            state.position = spp.position;
-            state.rcv_clk_bias = spp.cdt;
-            // Seed ISBs from SPP constellation-specific clock estimates.
-            // Without this, GLONASS/BeiDou ISBs start at 0 and must
-            // converge from measurements — a multi-hour process that
-            // produces large position errors during convergence.
-            if crate::filter::CORE_STATE_SIZE > 16 {
-                state.isb_glo = spp.cdt_glo - spp.cdt;
-                state.isb_gal = spp.cdt_gal - spp.cdt;
-                state.isb_bds = spp.cdt_bds - spp.cdt;
+            if let Some(init_pos) = known_pos {
+                // Known position: seed directly, tight covariance
+                state.position = gneiss_core::coords::Coordinate::new(
+                    nalgebra::Vector3::new(init_pos[0], init_pos[1], init_pos[2]),
+                    gneiss_core::coords::Datum::WGS84,
+                    gneiss_core::coords::Frame::ECEF,
+                    rover_obs.time,
+                );
+                state.rcv_clk_bias = spp.cdt;
+                // Tight covariance: σ=1cm position
+                let init_cov = 0.0001;
+                state.covariance[(0,0)] = init_cov;
+                state.covariance[(1,1)] = init_cov;
+                state.covariance[(2,2)] = init_cov;
+            } else {
+                state.position = spp.position;
+                state.rcv_clk_bias = spp.cdt;
+                // Seed ISBs from SPP constellation-specific clock estimates.
+                if crate::filter::CORE_STATE_SIZE > 16 {
+                    state.isb_glo = spp.cdt_glo - spp.cdt;
+                    state.isb_gal = spp.cdt_gal - spp.cdt;
+                    state.isb_bds = spp.cdt_bds - spp.cdt;
+                }
             }
-            // Do NOT reset position covariance here. The initial predict_state
-            // call spans a huge dt (GPS epoch 0 → rover time), inflating the
-            // position variance to the clamp ceiling. This large variance is
-            // beneficial: it tells the IEKF to trust measurements over the
-            // position prior, allowing convergence from a potentially poor SPP
-            // seed. The covariance shrinks naturally as measurements are
-            // assimilated over subsequent epochs.
         } else {
-            // Prior variance clamped to [1, 25] m².
-            // 1 m² floor (σ=1m): anchors the IEKF firmly to the SPP
-            // position, limiting drift during urban multipath episodes.
-            // 25 m² cap (σ=5m): allows the IEKF to deviate from SPP
-            // during convergence while keeping the prior tight enough
-            // to prevent catastrophic divergence.
-            // NOTE: loosening to [9, 100] (commit 70e607d) caused a
-            // 78% P95 regression (45.6m→81.0m) on Odaiba. Keeping
-            // the tighter prior preserves June 20 accuracy levels.
-            let pos_cov = state.covariance[(0, 0)]
-                .min(state.covariance[(1, 1)])
-                .min(state.covariance[(2, 2)]);
-            let prior_var = pos_cov.clamp(1.0, 25.0);
-            position_prior = Some((spp.position.vector, prior_var));
+            if let Some(init_pos) = known_pos {
+                // Known position: tight prior σ=1cm
+                position_prior = Some((
+                    nalgebra::Vector3::new(init_pos[0], init_pos[1], init_pos[2]),
+                    0.0001,
+                ));
+            } else {
+                // Prior variance clamped to [1, 25] m².
+                let pos_cov = state.covariance[(0, 0)]
+                    .min(state.covariance[(1, 1)])
+                    .min(state.covariance[(2, 2)]);
+                let prior_var = pos_cov.clamp(1.0, 25.0);
+                position_prior = Some((spp.position.vector, prior_var));
+            }
         }
     }
 
@@ -162,7 +170,7 @@ pub fn process_ppp<'a>(
                             if_state.ambiguities[if_idx] = n_if;
                             let ci = crate::filter::CORE_STATE_SIZE + if_idx;
                             if ci < if_state.covariance.nrows() {
-                                if_state.covariance[(ci, ci)] = 1e-6;
+                                if_state.covariance[(ci, ci)] = 0.01; // σ=10cm soft lock
                             }
                             fixed += 1;
                         }

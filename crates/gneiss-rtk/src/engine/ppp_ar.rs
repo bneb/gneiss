@@ -429,7 +429,7 @@ impl PppIteratedEkf {
         // Tiny regularization prevents p_wl from going singular (Joseph form
         // with zero measurement noise collapses rank). 1e-6 m² per pair keeps
         // the covariance full-rank for downstream NL LAMBDA and gain inversion.
-        let r_wl = DMatrix::identity(keep_indices.len(), keep_indices.len()) * 1e-6;
+        let r_wl = DMatrix::identity(keep_indices.len(), keep_indices.len()) * 0.01; // σ=10cm soft lock
         Ok((
             x + dx_wl,
             crate::math::covariance::apply_joseph_covariance_update(p, &k_wl, &d_wl, &r_wl),
@@ -526,7 +526,7 @@ impl PppIteratedEkf {
             p_wl,
             &k_nl,
             &d_nl,
-            &DMatrix::zeros(keep_indices.len(), keep_indices.len()),
+            &(DMatrix::identity(keep_indices.len(), keep_indices.len()) * 0.01), // σ=10cm soft lock
         );
 
         let pos_corr_str2 = format!("{:.3}", pos_correction_norm);
