@@ -215,13 +215,61 @@ impl PppIteratedEkf {
             return Err("No constellation could fix ambiguities");
         }
 
-        // Global position validation against original float
+        // Global position validation: reject fixes that move position >1m.
+        // Large jumps indicate wrong integer fixes (constellation rotation,
+        // multipath, or low-elevation ambiguity). With tight position prior
+        // (σ=1cm from RINEX header), even 0.5m jumps are suspicious.
         let float_pos = Vector3::new(x[0], x[1], x[2]);
         let fixed_pos = Vector3::new(x_current[0], x_current[1], x_current[2]);
         let jump = (fixed_pos - float_pos).norm();
-        if jump > 20.0 {
-            tracing::warn!("PPP-AR rejected: 3D position jump {:.2}m > 20m", jump);
+        let pos_var = state.covariance[(0,0)];
+        tracing::info!(
+            "PPP-AR validation: jump={:.3}m pos_var={:.6} (σ={:.3}m)",
+            jump, pos_var, pos_var.sqrt()
+        );
+        let max_jump = if pos_var < 0.01 { 0.1 } else { 2.0 };
+        if jump > max_jump {
+            tracing::warn!(
+                "PPP-AR rejected: position jump {:.2}m > {:.1}m (σ_pos={:.3}m)",
+                jump, max_jump,
+                pos_var.sqrt()
+            );
             return Err("Position jump too large after AR fix");
+        }
+
+        // Per-satellite N_IF consistency check: for each fixed satellite,
+        // verify the fixed N_IF is within 0.3m of the float estimate.
+        // This catches wrong NL integers that happen to produce small
+        // position jumps (e.g., when geometry is poor).
+        let mut nif_failures = 0u32;
+        let mut nif_checked = 0u32;
+        for (sat, band) in &state.ambiguity_keys {
+            if *band != 1 { continue; } // L1 band
+            let l1_idx = crate::engine::ppp_common::find_amb_idx(state, *sat, 1);
+            let l2_idx = crate::engine::ppp_common::find_amb_idx(state, *sat, 2);
+            if let (Some(l1), Some(l2)) = (l1_idx, l2_idx) {
+                let l1_float = state.ambiguities[l1];
+                let l1_fixed = x_current[crate::filter::CORE_STATE_SIZE + l1];
+                let l2_float = state.ambiguities[l2];
+                let l2_fixed = x_current[crate::filter::CORE_STATE_SIZE + l2];
+                // Compute N_IF from L1/L2: IF = (f1²·L1 - f2²·L2)/(f1²-f2²)
+                let (f1, f2) = gneiss_core::signal::satellite_frequencies(*sat, 0);
+                let f1s = f1 * f1; let f2s = f2 * f2; let denom = f1s - f2s;
+                if denom <= 0.0 { continue; }
+                let nif_float = (f1s * l1_float - f2s * l2_float) / denom;
+                let nif_fixed = (f1s * l1_fixed - f2s * l2_fixed) / denom;
+                nif_checked += 1;
+                if (nif_float - nif_fixed).abs() > 0.3 {
+                    nif_failures += 1;
+                }
+            }
+        }
+        if nif_checked > 0 && nif_failures as f64 / nif_checked as f64 > 0.5 {
+            tracing::warn!(
+                "PPP-AR rejected: {}/{} sats have N_IF residual >0.3m",
+                nif_failures, nif_checked
+            );
+            return Err("Too many N_IF consistency failures");
         }
 
         tracing::info!(

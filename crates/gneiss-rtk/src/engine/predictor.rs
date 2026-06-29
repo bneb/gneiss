@@ -153,21 +153,34 @@ pub fn compute_process_noise(
     let dt_abs = dt.abs();
 
     if !is_imu_active {
-        let q_acc = match config.dynamics_model {
-            DynamicsModel::Static => 0.001,
-            DynamicsModel::Pedestrian => 1.0,
-            DynamicsModel::Marine => 2.0,
-            DynamicsModel::Automotive => 10.0,
-            DynamicsModel::Airborne => 50.0,
-        };
-        let q_pos = q_acc * dt_abs.powi(3) / 3.0;
-        let q_vel = q_acc * dt_abs;
-        let q_pos_vel = q_acc * dt_abs.powi(2) / 2.0;
-        for i in 0..3 {
-            q[(i, i)] = q_pos;
-            q[(i + 3, i + 3)] = q_vel;
-            q[(i, i + 3)] = q_pos_vel;
-            q[(i + 3, i)] = q_pos_vel;
+        if config.dynamics_model == DynamicsModel::Static {
+            // Static: position process noise is a small constant (σ≈1mm/√s),
+            // matching the RTKLIB port. The velocity-integration model
+            // (q_pos ∝ dt³) produces 9 m²/epoch at 30s, destroying any
+            // tight position prior from RINEX header.
+            for i in 0..3 {
+                q[(i, i)] = 1e-6 * dt_abs;
+            }
+            for i in 3..6 {
+                q[(i, i)] = 100.0; // velocity: large noise (not estimated for static)
+            }
+        } else {
+            let q_acc = match config.dynamics_model {
+                DynamicsModel::Static => 0.001, // unreachable
+                DynamicsModel::Pedestrian => 1.0,
+                DynamicsModel::Marine => 2.0,
+                DynamicsModel::Automotive => 10.0,
+                DynamicsModel::Airborne => 50.0,
+            };
+            let q_pos = q_acc * dt_abs.powi(3) / 3.0;
+            let q_vel = q_acc * dt_abs;
+            let q_pos_vel = q_acc * dt_abs.powi(2) / 2.0;
+            for i in 0..3 {
+                q[(i, i)] = q_pos;
+                q[(i + 3, i + 3)] = q_vel;
+                q[(i, i + 3)] = q_pos_vel;
+                q[(i + 3, i)] = q_pos_vel;
+            }
         }
         for i in 6..9 {
             q[(i, i)] = 1e-7 * dt_abs;

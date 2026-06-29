@@ -90,6 +90,7 @@ impl PppIteratedEkf {
         // These are (ambiguity_index, target_meters).
         let targets: Vec<(usize, f64)> = fixed_amb.to_vec();
         let has_constraints = !targets.is_empty();
+        let saved_prior = position_prior; // Clone before inner solve consumes it
         for outer_iter in 0..4 {
             let done = if has_constraints {
                 self.solve_inner_fixed(state, sats, position_prior, &targets)?
@@ -105,6 +106,20 @@ impl PppIteratedEkf {
         if (!state.is_fixed || has_new_sats) && state.epoch_count > 10 {
             if let Err(e) = self.resolve_cascade_ar(state, sats) {
                 tracing::info!("Cascade AR did not fix: {:?}", e);
+            }
+        }
+        // Re-apply tight position prior after AR to prevent wrong fixes
+        // from cascading into large position errors. With σ=1cm prior,
+        // the IEKF measurement update will reconcile the fixed ambiguities
+        // with the known position.
+        if let Some((prior_pos, prior_var)) = saved_prior {
+            if prior_var < 0.01 {
+                // Tight prior: gently pull position toward known coordinates
+                for i in 0..3 {
+                    let innovation = prior_pos[i] - state.position.vector[i];
+                    let weight = 0.1; // Soft correction: 10% toward prior per epoch
+                    state.position.vector[i] += innovation * weight;
+                }
             }
         }
         Ok(())
