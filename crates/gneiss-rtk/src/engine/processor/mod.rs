@@ -335,12 +335,20 @@ impl ProcessingEngine {
             EngineMode::RtkInsLooselyCoupled => self
                 .process_rtk_loosely_coupled(&filtered_rover, filtered_base)
                 .err(),
+            // Gneiss-native IEKF: the primary PPP solver.
+            // Uses 21-element core state, LAMBDA cascade AR, and the
+            // full gneiss architecture (smoother, factor graph, FGO).
             EngineMode::Ppp
             | EngineMode::PppIns
             | EngineMode::PppInsLooselyCoupled
             | EngineMode::PppIekf
-            | EngineMode::PppRtklib
             | EngineMode::PppMultiEpoch => {
+                crate::engine::ppp::process_ppp(self, &filtered_rover)?;
+                return Ok(self.current_state.as_ref().unwrap());
+            }
+            // RTKLIB port: kept for regression comparison only.
+            // Will be removed once native IEKF matches or exceeds on all benchmarks.
+            EngineMode::PppRtklib => {
                 // Seed state from SPP or known initial position
                 if self.current_state.is_none() {
                     if let Some(init_pos) = self.config.initial_position {
