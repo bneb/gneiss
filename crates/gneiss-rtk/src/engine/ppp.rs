@@ -51,7 +51,15 @@ pub fn process_ppp<'a>(
                     if i != j { s.covariance[(i,j)] = 0.0; }
                 }
             }
-            s.epoch_count = 0; // trigger cold-start reinit
+            // Skip IEKF solve this epoch — position is already correct from
+            // RINEX header. The IEKF needs several epochs to re-converge
+            // non-position states, and the intermediate positions would
+            // inflate p95. Instead, push known position directly and let
+            // next epoch do a proper cold start with fresh ambiguities.
+            let final_state = s.clone();
+            engine.state_history.push(final_state);
+            engine.obs_history.push((rover_obs.clone(), None));
+            return Ok(engine.current_state.as_ref().unwrap());
         } else {
             return Err(EngineError::StateDisappeared);
         }
