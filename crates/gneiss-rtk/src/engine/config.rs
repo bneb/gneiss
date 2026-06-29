@@ -90,7 +90,7 @@ impl Default for EkfTuningConfig {
             dop_abs_thresh: 2.0,
             huber_threshold_loosely: 10.0,
             huber_threshold_tightly: 3.0,
-            min_ar_success_rate: 0.999,
+            min_ar_success_rate: 0.9,
             ekf_max_iterations: 3,
             fgo_pr_robust_threshold: 10.0,
             fgo_cp_robust_threshold: 3.0,
