@@ -13,7 +13,7 @@ use nalgebra::{DMatrix, DVector, Vector3};
 /// If the fixed position differs from the float position by more than this
 /// threshold, the fix is rejected and the float solution is retained.
 /// This catches wrong AR integer sets that would otherwise jump the position.
-const AR_MAX_POSITION_JUMP_M: f64 = 5.0;
+const AR_MAX_POSITION_JUMP_M: f64 = 0.5;
 
 /// Apply adaptive R scaling based on innovation history.
 /// Updates the tracker with current innovations and inflates R diagonals
