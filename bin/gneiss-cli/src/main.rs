@@ -294,31 +294,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             if let Some(base_file) = &base {
                 if base_file.ends_with(".obs") || base_file.ends_with("o") {
                     let file = std::fs::File::open(base_file)?;
-                    let reader = std::io::BufReader::new(file);
-                    use std::io::BufRead;
-                    for line in reader.lines().map_while(Result::ok) {
-                        if line.contains("APPROX POSITION XYZ") {
-                            let parts: Vec<&str> = line[0..60].split_whitespace().collect();
-                            if parts.len() >= 3 {
-                                approx_base_pos =
-                                    Some([parts[0].parse()?, parts[1].parse()?, parts[2].parse()?]);
-                            }
-                        }
-                        if line.contains("MARKER NAME") {
-                            let parts: Vec<&str> = line[0..60].split_whitespace().collect();
-                            if !parts.is_empty() {
-                                base_marker_name = Some(parts[0].to_string());
-                            }
-                        }
-                        if line.contains("END OF HEADER") {
-                            break;
-                        }
-                    }
-
-                    let file2 = std::fs::File::open(base_file)?;
-                    let (epochs, _base_header) =
-                        gneiss_parsers::rinex::parse_rinex_obs(std::io::BufReader::new(file2))?;
+                    let (epochs, base_header) =
+                        gneiss_parsers::rinex::parse_rinex_obs(std::io::BufReader::new(file))?;
                     info!("Loaded {} RINEX base epochs.", epochs.len());
+                    if let Some(pos) = base_header.approx_position {
+                        info!("Base APPROX POSITION: {:?}", pos);
+                        approx_base_pos = Some(pos);
+                    }
+                    if let Some(name) = base_header.marker_name {
+                        base_marker_name = Some(name);
+                    }
                     base_rinex_epochs = Some(epochs);
                 } else if base_file.ends_with(".rtcm3") {
                     info!("Parsing RTCM3 base file...");

@@ -33,7 +33,6 @@ pub async fn run_process(
     // IGS stations have cm-accurate coordinates in the header — this
     // enables tight-prior IF mode and NL AR bootstrap.
     if let Some(pos) = rover_approx_pos {
-        info!("DEBUG: rover_approx_pos={:?}, engine_config.initial_position={:?}", pos, engine_config.initial_position);
         if engine_config.initial_position.is_none() {
             info!("Using rover RINEX APPROX POSITION as initial position: {:?}", pos);
             engine_config.initial_position = Some(pos);
@@ -93,22 +92,9 @@ fn load_base_epochs(base: &Option<String>) -> Result<(Option<Vec<gneiss_core::ob
     if let Some(base_file) = base {
         if base_file.ends_with(".obs") || base_file.ends_with("o") {
             let file = std::fs::File::open(base_file)?;
-            let reader = std::io::BufReader::new(file);
-            for line in reader.lines().map_while(Result::ok) {
-                if line.contains("APPROX POSITION XYZ") {
-                    let parts: Vec<&str> = line[0..60].split_whitespace().collect();
-                    if parts.len() >= 3 {
-                        approx_base_pos = Some([parts[0].parse()?, parts[1].parse()?, parts[2].parse()?]);
-                    }
-                    break;
-                }
-                if line.contains("END OF HEADER") {
-                    break;
-                }
-            }
-            let file2 = std::fs::File::open(base_file)?;
-            let epochs = gneiss_parsers::rinex::parse_rinex_obs(std::io::BufReader::new(file2))?;
+            let (epochs, base_header) = gneiss_parsers::rinex::parse_rinex_obs(std::io::BufReader::new(file))?;
             info!("Loaded {} RINEX base epochs.", epochs.len());
+            approx_base_pos = base_header.approx_position;
             base_rinex_epochs = Some(epochs);
         } else if base_file.ends_with(".rtcm3") {
             info!("Parsing RTCM3 base file...");
