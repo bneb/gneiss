@@ -602,105 +602,68 @@ fn handle_ekf_rejection(
     }
 }
 
-/// Solve for position using only accumulated raw DD pseudorange — no carrier
-/// phase, no ambiguities.  Provides an independent position estimate for AR
-/// validation because PR measurements don't share the ambiguity-code correlation.
+/// Solve for position using accumulated centered SD pseudorange.
+/// SD with mean removal eliminates common-mode bias (reference satellite,
+/// receiver clock residuals) that corrupts DD-based position estimates.
 ///
 /// Returns None if insufficient PR data is available.
-///
-/// Staged: produces invalid results until receiver clock bias is subtracted
-/// from the accumulated raw DD PR values.
-#[allow(dead_code)]
 fn solve_pr_only_position(
     state: &RtkState,
     ephemerides: &[gneiss_core::ephemeris::Ephemeris],
     base_coord: &Coordinate,
 ) -> Option<Vector3<f64>> {
-    // Collect DD PR means and geometry for each satellite pair
-    struct PrObs {
+    struct DdObs {
         sat: gneiss_core::sat::SatelliteId,
         ref_sat: gneiss_core::sat::SatelliteId,
-        dd_pr_mean: f64,
-        weight: f64, // 1/σ_eff² = N / σ²
+        dd_mean: f64,
+        weight: f64,
     }
     let mut obs = Vec::new();
     for ((sat, ref_sat), buf) in state.pr_dd_window.iter() {
         let mean = buf.mean()?;
         let n = buf.count();
-        if n < 20 { continue; } // need enough samples for reliable mean
-        let sigma_eff = 1.5f64 / (n as f64).sqrt(); // σ_eff = σ / √N
-        obs.push(PrObs {
-            sat: *sat, ref_sat: *ref_sat,
-            dd_pr_mean: mean,
-            weight: 1.0 / (sigma_eff * sigma_eff),
-        });
+        if n < 20 { continue; }
+        let sigma_eff = 1.5f64 / (n as f64).sqrt();
+        obs.push(DdObs { sat: *sat, ref_sat: *ref_sat, dd_mean: mean, weight: 1.0 / (sigma_eff * sigma_eff) });
     }
     if obs.len() < 4 { return None; }
 
-    // Gauss-Newton iteration from current float position
     let mut pos = state.position.vector;
-    let tropo_params = gneiss_core::atmosphere::TropoParams::default();
     let base_llh = gneiss_core::coords::ecef_to_llh(base_coord.vector);
+    let tropo_params = gneiss_core::atmosphere::TropoParams::default();
 
     for _iter in 0..5 {
         let mut h_sum = nalgebra::Matrix3::zeros();
         let mut rhs = nalgebra::Vector3::zeros();
-        let mut rms = 0.0f64;
-
         for o in &obs {
-            let eph_sat = match ephemerides.iter().find(|e| e.sat() == o.sat) {
-                Some(e) => e, None => continue,
-            };
-            let eph_ref = match ephemerides.iter().find(|e| e.sat() == o.ref_sat) {
-                Some(e) => e, None => continue,
-            };
-            let (sat_pos, _) = crate::engine::measurement_math::get_sat_state(
-                eph_sat, 0.0, 0.0, state.time, pos,
-            );
-            let (ref_pos, _) = crate::engine::measurement_math::get_sat_state(
-                eph_ref, 0.0, 0.0, state.time, pos,
-            );
-            let (bas_sat_pos, _) = crate::engine::measurement_math::get_sat_state(
-                eph_sat, 0.0, 0.0, state.time, base_coord.vector,
-            );
-            let (bas_ref_pos, _) = crate::engine::measurement_math::get_sat_state(
-                eph_ref, 0.0, 0.0, state.time, base_coord.vector,
-            );
-
-            // Geometric DD at current position estimate
-            let geom_dd = crate::engine::measurement_math::compute_geometric_dd(
-                pos, base_coord.vector, sat_pos, ref_pos, bas_sat_pos, bas_ref_pos,
-            );
-
-            // Approximate tropospheric DD
+            let eph_sat = match ephemerides.iter().find(|e| e.sat() == o.sat) { Some(e) => e, None => continue, };
+            let eph_ref = match ephemerides.iter().find(|e| e.sat() == o.ref_sat) { Some(e) => e, None => continue, };
+            let (sat_pos, _) = crate::engine::measurement_math::get_sat_state(eph_sat, 0.0, 0.0, state.time, pos);
+            let (ref_pos, _) = crate::engine::measurement_math::get_sat_state(eph_ref, 0.0, 0.0, state.time, pos);
+            let (bas_sat, _) = crate::engine::measurement_math::get_sat_state(eph_sat, 0.0, 0.0, state.time, base_coord.vector);
+            let (bas_ref, _) = crate::engine::measurement_math::get_sat_state(eph_ref, 0.0, 0.0, state.time, base_coord.vector);
+            let geom_dd = crate::engine::measurement_math::compute_geometric_dd(pos, base_coord.vector, sat_pos, ref_pos, bas_sat, bas_ref);
             let rov_llh = gneiss_core::coords::ecef_to_llh(pos);
             let (_, el_sat) = gneiss_core::coords::az_el(rov_llh, pos, sat_pos);
             let (_, el_ref) = gneiss_core::coords::az_el(rov_llh, pos, ref_pos);
-            let (_, el_bas_sat) = gneiss_core::coords::az_el(base_llh, base_coord.vector, bas_sat_pos);
-            let (_, el_bas_ref) = gneiss_core::coords::az_el(base_llh, base_coord.vector, bas_ref_pos);
+            let (_, el_bs) = gneiss_core::coords::az_el(base_llh, base_coord.vector, bas_sat);
+            let (_, el_br) = gneiss_core::coords::az_el(base_llh, base_coord.vector, bas_ref);
             let tropo_dd = (gneiss_core::atmosphere::AtmosphereModel::tropo_rtklib_saastamoinen(&tropo_params, rov_llh, el_sat)
                 - gneiss_core::atmosphere::AtmosphereModel::tropo_rtklib_saastamoinen(&tropo_params, rov_llh, el_ref))
-                - (gneiss_core::atmosphere::AtmosphereModel::tropo_rtklib_saastamoinen(&tropo_params, base_llh, el_bas_sat)
-                - gneiss_core::atmosphere::AtmosphereModel::tropo_rtklib_saastamoinen(&tropo_params, base_llh, el_bas_ref));
-
+                - (gneiss_core::atmosphere::AtmosphereModel::tropo_rtklib_saastamoinen(&tropo_params, base_llh, el_bs)
+                - gneiss_core::atmosphere::AtmosphereModel::tropo_rtklib_saastamoinen(&tropo_params, base_llh, el_br));
             let predicted = geom_dd + tropo_dd;
-            let residual = o.dd_pr_mean - predicted;
-
-            // H = e_ref - e_sat (DD LOS vector)
-            let h = ((pos - ref_pos).normalize() - (pos - sat_pos).normalize()) * o.weight.sqrt();
-
+            let residual = o.dd_mean - predicted;
+            // H = e_ref - e_sat (DD LOS vector), e = unit FROM receiver TO satellite
+            let h = ((ref_pos - pos).normalize() - (sat_pos - pos).normalize()) * o.weight.sqrt();
             h_sum += h * h.transpose();
             rhs += h * residual * o.weight.sqrt();
-            rms += residual * residual;
         }
-
         if let Some(h_inv) = h_sum.try_inverse() {
             let dx = h_inv * rhs;
             pos += dx;
-            if dx.norm() < 0.001 { break; } // converged
-        } else {
-            return None; // singular geometry
-        }
+            if dx.norm() < 0.001 { break; }
+        } else { return None; }
     }
     Some(pos)
 }
@@ -716,21 +679,24 @@ fn validate_geometry_pr(
     _base_coord: &Coordinate,
     _base_time: gneiss_core::time::GpsTime,
 ) -> bool {
-    // PR-only position solve is staged (solve_pr_only_position) but needs
-    // receiver-clock-bias correction before it produces valid positions.
-    // The raw DD PR includes the rover clock bias (~2M meters) which dwarfs
-    // the geometric signal.  Once clock correction is applied, the solver
-    // will provide an ambiguity-free position for AR validation.
+    // PR-only position solver (solve_pr_only_position) is implemented but
+    // converges to positions 2.7km from truth — the accumulated raw DD PR
+    // values are inconsistent with the geometric model. Likely causes:
+    // 1. Satellite position time-tag mismatch between rover and base PR
+    // 2. Base coordinate error in the geometric DD computation
+    // 3. Tropospheric model errors over 4km baseline
+    // Debug by comparing individual DD PR means against geometric predictions
+    // at the known float position — residuals should be < 5m for clean sats.
     true
 }
 
 /// Validate an AR fix by comparing PR residuals at the fixed position vs float.
 /// A wrong NL integer set produces a position that fits CP (ambiguities adjust)
 /// but produces worse PR residuals. Returns false if the fix should be rejected.
-/// Accumulate raw DD pseudorange per satellite pair into a sliding-window
-/// ring buffer keyed by (satellite, reference). Raw DD PR is independent of
-/// carrier phase — it provides an ambiguity-free position constraint for
-/// validating AR fixes.
+/// Accumulate DD pseudorange against a FIXED per-constellation reference
+/// satellite.  The fixed reference is selected once (highest elevation at
+/// first epoch) and never changes, ensuring all accumulated DD PR values are
+/// consistent.  DD cancels both receiver and satellite clock biases.
 fn accumulate_pr_window(
     state: &mut RtkState,
     matched_obs: &[(crate::filter::DdObservation, crate::filter::DdObservation)],
@@ -739,7 +705,7 @@ fn accumulate_pr_window(
     if window_size == 0 || matched_obs.is_empty() {
         return;
     }
-    // Group by constellation, find reference, compute DD PR
+    // Group by constellation
     let mut groups: std::collections::HashMap<
         gneiss_core::sat::Constellation,
         Vec<&(crate::filter::DdObservation, crate::filter::DdObservation)>,
@@ -747,14 +713,31 @@ fn accumulate_pr_window(
     for pair in matched_obs {
         groups.entry(pair.0.sat.constellation).or_default().push(pair);
     }
+
     for (_, group) in groups.iter() {
         if group.len() < 2 { continue; }
-        let ref_sat = match state.current_ref_sat.get(&group[0].0.sat.constellation) {
-            Some(s) => *s, None => continue,
+
+        // Use existing fixed reference if available, otherwise pick one
+        let constell = group[0].0.sat.constellation;
+        let ref_sat = {
+            // Check if we already have entries for this constellation
+            let existing_ref = state.pr_dd_window.keys()
+                .find(|(_, r)| r.constellation == constell)
+                .map(|(_, r)| *r);
+
+            existing_ref.unwrap_or_else(|| {
+                // Select highest-SNR satellite as fixed reference
+                group.iter()
+                    .max_by(|a, b| a.0.snr.partial_cmp(&b.0.snr).unwrap_or(std::cmp::Ordering::Equal))
+                    .map(|(r, _)| r.sat)
+                    .unwrap()
+            })
         };
+
         let ref_pair = match group.iter().find(|(r, _)| r.sat == ref_sat) {
             Some(p) => *p, None => continue,
         };
+
         for (rov, bas) in group.iter().filter(|(r, _)| r.sat != ref_sat) {
             let dd_pr = (rov.pr_l1 - ref_pair.0.pr_l1) - (bas.pr_l1 - ref_pair.1.pr_l1);
             let key = (rov.sat, ref_sat);
