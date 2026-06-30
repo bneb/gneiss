@@ -18,10 +18,13 @@ pub async fn run_process(
     let (mut rover_rinex_epochs, rover_approx_pos) = load_rover_epochs(&rover)?;
     let (base_rinex_epochs, mut approx_base_pos) = load_base_epochs(&base)?;
 
-    if let Some(pos_str) = base_position {
-        approx_base_pos = parse_base_position(&pos_str)?;
-        info!("Using CLI overridden base position: {:?}", approx_base_pos);
-    }
+    let cli_base_pos: Option<[f64; 3]> = if let Some(pos_str) = base_position {
+        let parsed = parse_base_position(&pos_str)?;
+        info!("Using CLI overridden base position: {:?}", parsed);
+        parsed
+    } else {
+        None
+    };
 
     let mut engine_config = build_engine_config(
         config, enable_backward_smoothing, mode, lambda_ratio, lambda_subset,
@@ -39,7 +42,10 @@ pub async fn run_process(
         }
     }
 
-    if let Some(pos) = approx_base_pos {
+    // Priority: CLI --base-position > config file > RINEX header
+    if let Some(pos) = cli_base_pos {
+        engine_config.base_position = Some(pos);
+    } else if let Some(pos) = approx_base_pos {
         if engine_config.base_position.is_none() {
             engine_config.base_position = Some(pos);
         }

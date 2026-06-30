@@ -35,6 +35,7 @@ pub(crate) fn compute_dd_components(
         ctx.sat_state.f2,
         ctx.ref_state.f1,
         ctx.ref_state.f2,
+        env.klobuchar_params.as_ref(),
     );
 
     let base_llh = gneiss_core::coords::ecef_to_llh(geom.base_coord_vec);
@@ -110,6 +111,15 @@ pub(crate) fn generate_measurement_updates(
             .iter()
             .position(|&(s, f)| s == sat && f == 2),
         ref_idx_l2,
+        iono_idx_sat: state
+            .ambiguity_keys
+            .iter()
+            .position(|&(s, f)| s == sat && f == 3),
+        iono_idx_ref: state
+            .ambiguity_keys
+            .iter()
+            .position(|&(s, f)| s == mctx.ctx.rov_ref.sat && f == 3),
+        iono_state_vals: &state.ambiguities,
         cp_base_var: mctx.env.tuning.cp_base_var,
     };
 

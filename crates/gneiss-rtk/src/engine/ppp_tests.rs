@@ -38,7 +38,7 @@ mod osb_tests {
             },
             observations: vec![],
         };
-        obs.sat = sat);
+        obs.sat = sat;
         obs.observations.push(gneiss_core::obs::Observation {
             code: ObsCode::from_str("C1C").unwrap(),
             value: 10.0,
@@ -865,7 +865,7 @@ mod ppp_tests {
         state.epoch_count = 5;
         state.mw_sd_counts.insert(sat_id, 51); // > 50 = confident (threshold changed 10→50)
 
-        let expected_base = psat.dist + state.rcv_clk_bias - psat.dt_sat_m + psat.tropo_dry + state.zwd * psat.map_wet);
+        let expected_base = psat.dist + state.rcv_clk_bias - psat.dt_sat_m + psat.tropo_dry + state.zwd * psat.map_wet;
         add_uduc_ambiguities(&mut state, &psat, psat.cp1.unwrap(), 0.0, expected_base);
 
         assert!(state.ambiguity_keys.contains(&(sat_id, 1)), "Should add L1");
@@ -905,7 +905,7 @@ mod ppp_tests {
         state.epoch_count = 5;
         state.mw_sd_counts.insert(sat_id, 5); // not confident (≤10)
 
-        let expected_base = psat.dist + state.rcv_clk_bias - psat.dt_sat_m + psat.tropo_dry + state.zwd * psat.map_wet);
+        let expected_base = psat.dist + state.rcv_clk_bias - psat.dt_sat_m + psat.tropo_dry + state.zwd * psat.map_wet;
         add_uduc_ambiguities(&mut state, &psat, psat.cp1.unwrap(), 0.0, expected_base);
 
         let idx1 = state.ambiguity_keys.iter().position(|&k| k == (sat_id, 1)).unwrap();
@@ -930,7 +930,7 @@ mod ppp_tests {
             Coordinate::new(Vector3::new(6000000.0, 0.0, 0.0), Datum::WGS84, Frame::ECEF, t), 0.0);
         state.epoch_count = 5;
 
-        let expected_base = psat.dist + state.rcv_clk_bias - psat.dt_sat_m + psat.tropo_dry + state.zwd * psat.map_wet);
+        let expected_base = psat.dist + state.rcv_clk_bias - psat.dt_sat_m + psat.tropo_dry + state.zwd * psat.map_wet;
         add_uduc_ambiguities(&mut state, &psat, psat.cp1.unwrap(), 0.0, expected_base);
 
         let idx1 = state.ambiguity_keys.iter().position(|&k| k == (sat_id, 1)).unwrap();
@@ -956,7 +956,7 @@ mod ppp_tests {
             Coordinate::new(Vector3::new(6000000.0, 0.0, 0.0), Datum::WGS84, Frame::ECEF, t), 0.0);
         state.epoch_count = 5;
 
-        let expected_base = psat.dist + state.rcv_clk_bias - psat.dt_sat_m + psat.tropo_dry + state.zwd * psat.map_wet);
+        let expected_base = psat.dist + state.rcv_clk_bias - psat.dt_sat_m + psat.tropo_dry + state.zwd * psat.map_wet;
         add_uduc_ambiguities(&mut state, &psat, psat.cp1.unwrap(), 0.0, expected_base);
 
         let idx3 = state.ambiguity_keys.iter().position(|&k| k == (sat_id, 3)).unwrap();
@@ -985,7 +985,7 @@ mod ppp_tests {
         state.add_ambiguity(sat_id, 3, 300.0, 1.0);
         let amb_count_before = state.ambiguities.len();
 
-        let expected_base = psat.dist + state.rcv_clk_bias - psat.dt_sat_m + psat.tropo_dry + state.zwd * psat.map_wet);
+        let expected_base = psat.dist + state.rcv_clk_bias - psat.dt_sat_m + psat.tropo_dry + state.zwd * psat.map_wet;
         add_uduc_ambiguities(&mut state, &psat, psat.cp1.unwrap(), 0.0, expected_base);
 
         assert_eq!(state.ambiguities.len(), amb_count_before, "Should not add new ambiguities");

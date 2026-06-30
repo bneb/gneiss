@@ -67,6 +67,17 @@ pub fn match_observations(
                 .iter()
                 .find(|o| o.code.obs_type == ObsType::CarrierPhase && o.code.signal.freq_band == 1)
                 .and_then(|o| o.lock_time);
+            let b_snr = b_sat
+                .observations
+                .iter()
+                .find(|o| o.code.obs_type == ObsType::Snr && o.code.signal.freq_band == 1)
+                .map(|o| o.value)
+                .unwrap_or(25.0);
+            let b_lock = b_sat
+                .observations
+                .iter()
+                .find(|o| o.code.obs_type == ObsType::CarrierPhase && o.code.signal.freq_band == 1)
+                .and_then(|o| o.lock_time);
 
             if r_pr_l1.is_none() {
                 tracing::debug!(
@@ -142,8 +153,8 @@ pub fn match_observations(
                         cp_l1: b_cp_l1.map(|o| o.value),
                         cp_l2: b_cp_l2.map(|o| o.value),
                         doppler: b_dop,
-                        snr: 25.0,
-                        locktime: Some(1000),
+                        snr: b_snr,
+                        locktime: b_lock,
                     },
                 ));
             }
@@ -504,10 +515,10 @@ mod tests {
         assert_eq!(result[0].1.cp_l1, Some(301.0));
         assert_eq!(result[0].1.cp_l2, None);
         assert_eq!(result[0].1.doppler, 51.0);
-        // Base SNR always 25.0
+        // Base SNR falls back to 25.0 when missing (no SNR obs in test data)
         assert_eq!(result[0].1.snr, 25.0);
-        // Base locktime always Some(1000)
-        assert_eq!(result[0].1.locktime, Some(1000));
+        // Base locktime from CP observation (lock_time=None in test data)
+        assert_eq!(result[0].1.locktime, None);
     }
 
     #[test]
@@ -679,7 +690,7 @@ mod tests {
         assert_eq!(result.len(), 1);
         // Rover SNR defaults to 25.0 when missing
         assert_eq!(result[0].0.snr, 25.0);
-        // Base SNR is always set to 25.0 in match_observations
+        // Base SNR falls back to 25.0 when missing from observations
         assert_eq!(result[0].1.snr, 25.0);
     }
 
@@ -707,8 +718,8 @@ mod tests {
         assert_eq!(result.len(), 1);
         // Rover locktime comes from CP L1 observation
         assert_eq!(result[0].0.locktime, Some(42));
-        // Base locktime is hardcoded to Some(1000) in match_observations
-        assert_eq!(result[0].1.locktime, Some(1000));
+        // Base locktime extracted from CP observation (lock_time=None in test data)
+        assert_eq!(result[0].1.locktime, None);
     }
 
     #[test]

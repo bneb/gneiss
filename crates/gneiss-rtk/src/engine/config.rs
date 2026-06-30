@@ -73,7 +73,7 @@ pub struct EkfTuningConfig {
 impl Default for EkfTuningConfig {
     fn default() -> Self {
         Self {
-            pr_base_var: 1.0,
+            pr_base_var: 0.5, // σ=71cm — better than 1.0/σ=1m for survey-grade, robust to mild multipath
             cp_base_var: 9e-6,
             dop_base_var: 1.0,
             snr_a: 1.0,
@@ -125,8 +125,10 @@ pub struct EngineConfig {
     pub chi_square_pr_threshold: f64,
     pub chi_square_cp_threshold: f64,
     pub phase_windup_enabled: bool,
+    #[serde(alias = "min_cn0_dbhz")]
     pub min_snr_dbhz: f64,
     /// Satellite elevation mask in degrees.
+    #[serde(alias = "min_elevation_deg")]
     pub elevation_mask_deg: f64,
     pub dynamics_model: DynamicsModel,
     /// Auto-detect dynamics from observations (overrides dynamics_model).
@@ -135,6 +137,10 @@ pub struct EngineConfig {
     pub max_reject_count: usize,
     pub max_base_age_s: f64,
     pub spp_consistency_threshold_m: f64,
+    /// Maximum consecutive EKF rejections before resetting to SPP.
+    /// Allows coasting through brief measurement gaps (bridges, tunnels)
+    /// using the EKF prediction step. At 10Hz, 30 epochs = 3 seconds.
+    pub max_consecutive_rejections: usize,
     pub initial_ambiguity_variance: f64,
     pub ar_min_epoch_count: u32,
     pub ar_min_lock: u32,
@@ -194,12 +200,12 @@ impl Default for EngineConfig {
             imu_to_nhc_lever_arm: [0.0; 3],
             enable_nhc: false,
             enable_backward_smoothing: false,
-            lambda_min_ratio: 3.0, // safe — matches IEKF default, prevents wrong WL fixes
+            lambda_min_ratio: 2.5, // FFRT(pf=0.001) gives 2.36-2.58 for n=7-10 — 2.5 allows borderline-correct fixes
             lambda_min_subset: 5,
             enabled_constellations: None,
             raim_pseudorange_outlier_m: 25.0,
             chi_square_pr_threshold: 3.0,
-            chi_square_cp_threshold: 1e6,
+            chi_square_cp_threshold: 4.0, // 4σ — reject CP innovations >4cm to catch cycle slips / multipath
             phase_windup_enabled: true,
             min_snr_dbhz: 25.0,
             elevation_mask_deg: 5.0,
@@ -209,8 +215,9 @@ impl Default for EngineConfig {
             max_reject_count: 3,
             max_base_age_s: 5.0,
             spp_consistency_threshold_m: 15.0,
-            initial_ambiguity_variance: 10000.0,
-            ar_min_epoch_count: 30,
+            max_consecutive_rejections: 30, // 3s at 10Hz coasting through brief obstructions
+            initial_ambiguity_variance: 100.0, // σ=10m — code multipath + iono residual ≪ 5m for short baselines
+            ar_min_epoch_count: 10, // 1s at 10Hz — float ambiguities converge in 1-3 epochs
             ar_min_lock: 3,
             ar_ffrt_prob: 0.001,
             iono_model: IonosphereModel::default(),

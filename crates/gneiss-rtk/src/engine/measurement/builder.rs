@@ -33,9 +33,17 @@ fn select_reference_satellite(
     state: &RtkState,
     env: &MeasurementEnvironment,
 ) -> usize {
+    let konst = group[0].0.sat.constellation;
+    let current_ref = state.current_ref_sat.get(&konst);
     let mut best_score = -1.0;
     let mut ref_idx = 0;
     let rov_llh = gneiss_core::coords::ecef_to_llh(state.position.vector);
+
+    // Only apply continuity bonus for short baselines (< 5 km) where reference
+    // switching is dominated by geometry (not multipath).  In urban canyons,
+    // sticking to a corrupted reference is worse than switching.
+    let baseline_m = (state.position.vector - env.base_coord.vector).norm();
+    let short_baseline = baseline_m < 5_000.0;
 
     for (i, (r, _)) in group.iter().enumerate() {
         if let Some(eph) = env
@@ -53,7 +61,16 @@ fn select_reference_satellite(
             let (sat_pos, _, _, _): (nalgebra::Vector3<f64>, _, _, _) = eph.position(t_tx);
             let (_, el) = gneiss_core::coords::az_el(rov_llh, state.position.vector, sat_pos);
 
-            let score = if r.cp_l1.is_some() { el + 100.0 } else { el };
+            let cp_bonus = if r.cp_l1.is_some() { 100.0 } else { -100.0 };
+            let continuity_bonus = if short_baseline
+                && current_ref == Some(&r.sat)
+                && el >= 10.0_f64.to_radians()
+            {
+                1000.0
+            } else {
+                0.0
+            };
+            let score = el + cp_bonus + continuity_bonus;
             if score > best_score {
                 best_score = score;
                 ref_idx = i;
@@ -136,35 +153,58 @@ fn build_final_measurement_matrices(
     r_all: &[f64],
     type_all: &[(gneiss_core::sat::SatelliteId, u8, f64)],
 ) -> Option<EkfMeasurementMatrices> {
-    if safe_indices.len() >= 4 {
-        let mut z_vec = DVector::zeros(safe_indices.len());
-        let mut h_mat = DMatrix::zeros(safe_indices.len(), state_size);
-        let mut r_diagonals = Vec::new();
-        let mut t_vec = Vec::new();
-
-        for (new_i, &old_i) in safe_indices.iter().enumerate() {
-            z_vec[new_i] = z_all[old_i];
-            for c in 0..state_size {
-                h_mat[(new_i, c)] = h_all[old_i][c];
-            }
-            r_diagonals.push(r_all[old_i]);
-            t_vec.push(type_all[old_i]);
-        }
-        let r_mat = measurement_math::build_dense_covariance_matrix(&r_diagonals, &t_vec);
-        Some(EkfMeasurementMatrices {
-            z: z_vec,
-            h: h_mat,
-            r: r_mat,
-            mt: t_vec,
-        })
+    let active: Vec<usize> = if safe_indices.len() >= 4 {
+        // Full update: use all measurements that passed chi-square
+        safe_indices
     } else {
-        tracing::warn!(
-            "measurement model empty! all_z={}, safe_indices={}",
-            z_all.len(),
-            safe_indices.len()
-        );
-        None
+        // Partial update: when satellite visibility is marginal (< 4 total
+        // DD measurements), fall back to a PR-only position update.  Even
+        // 2-3 pseudorange measurements constrain the EKF better than a
+        // rejected update that triggers the SPP-reset death spiral.
+        let pr_indices: Vec<usize> = safe_indices
+            .iter()
+            .copied()
+            .filter(|&i| type_all[i].1 == 0)
+            .collect();
+        if pr_indices.len() >= 2 {
+            tracing::debug!(
+                "Partial PR-only update: {} PR out of {} safe / {} total measurements",
+                pr_indices.len(),
+                safe_indices.len(),
+                z_all.len(),
+            );
+            pr_indices
+        } else {
+            tracing::warn!(
+                "measurement model empty! all_z={}, safe_indices={}, pr_only={}",
+                z_all.len(),
+                safe_indices.len(),
+                pr_indices.len(),
+            );
+            return None;
+        }
+    };
+
+    let mut z_vec = DVector::zeros(active.len());
+    let mut h_mat = DMatrix::zeros(active.len(), state_size);
+    let mut r_diagonals = Vec::new();
+    let mut t_vec = Vec::new();
+
+    for (new_i, &old_i) in active.iter().enumerate() {
+        z_vec[new_i] = z_all[old_i];
+        for c in 0..state_size {
+            h_mat[(new_i, c)] = h_all[old_i][c];
+        }
+        r_diagonals.push(r_all[old_i]);
+        t_vec.push(type_all[old_i]);
     }
+    let r_mat = measurement_math::build_dense_covariance_matrix(&r_diagonals, &t_vec);
+    Some(EkfMeasurementMatrices {
+        z: z_vec,
+        h: h_mat,
+        r: r_mat,
+        mt: t_vec,
+    })
 }
 
 pub fn build_measurement_model(
@@ -182,6 +222,17 @@ pub fn build_measurement_model(
             continue;
         }
         let ref_idx = select_reference_satellite(&group, state, env);
+        let konst = group[0].0.sat.constellation;
+        let new_ref_sat = group[ref_idx].0.sat;
+        if state.current_ref_sat.get(&konst) != Some(&new_ref_sat) {
+            tracing::debug!(
+                "Reference satellite changed for {:?}: {:?} -> {:?}",
+                konst,
+                state.current_ref_sat.get(&konst),
+                new_ref_sat,
+            );
+            state.current_ref_sat.insert(konst, new_ref_sat);
+        }
         let mut group_clone = group.clone();
         let (ref_rover, ref_base) = group_clone.remove(ref_idx);
 
@@ -302,6 +353,7 @@ mod tests {
             omega_b: Vector3::zeros(),
             tuning,
             gnn_variances: HashMap::new(),
+            klobuchar_params: None,
         }
     }
 
@@ -514,6 +566,7 @@ mod tests {
         assert!(safe.is_empty());
     }
 
+
     #[test]
     fn test_chi2_doppler_uses_larger_threshold() {
         let time = GpsTime::new(0, 0.0);
@@ -521,10 +574,10 @@ mod tests {
         let mut state = RtkState::new(time, pos, 1.0);
         let sz = CORE_STATE_SIZE;
 
-        // Type 3 (Doppler) threshold = chi_pr * 1000 = 3.0 * 1000.0 = 3000.0
-        // z=50 -> chi2 = 2500 <= 3000 -> pass
-        // z=100 -> chi2 = 10000 > 3000 -> fail
-        let z_all = vec![50.0, 100.0];
+        // Type 3 (Doppler): threshold = chi_pr * 1000.0 (linear), threshold² = (3*1000)² = 9e6
+        // z=50 -> chi2 = 2500 <= 9e6 -> pass
+        // z=4000 -> chi2 = 16e6 > 9e6 -> fail
+        let z_all = vec![50.0, 4000.0];
         let h_all = vec![vec![0.0; sz], vec![0.0; sz]];
         let r_all = vec![1.0, 1.0];
         let mt_all = vec![(gps(1), 3, 0.0), (gps(2), 3, 0.0)];
@@ -537,10 +590,11 @@ mod tests {
     fn test_chi2_unknown_type_falls_back_to_pr_threshold() {
         let time = GpsTime::new(0, 0.0);
         let pos = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, time);
-        let mut state = RtkState::new(time, pos, 1.0);
+        // Use initial_var=0 so pos_scale=1.0, keeping the test focused on type dispatch
+        let mut state = RtkState::new(time, pos, 0.0);
         let sz = CORE_STATE_SIZE;
 
-        // Type 99 (unknown) -> falls to _ => chi_pr * chi_pr = 9.0
+        // Type 99 (unknown) -> falls to _ => chi_pr * pos_scale = 3 * 1 = 3, threshold² = 9
         // z=3 -> chi2 = 9 <= 9 -> pass
         // z=4 -> chi2 = 16 > 9 -> fail
         let z_all = vec![3.0, 4.0];
@@ -641,16 +695,56 @@ mod tests {
     }
 
     #[test]
-    fn test_build_final_insufficient_measurements() {
+    fn test_build_final_partial_update_with_3_pr() {
+        // 3 PR measurements (type 0) should succeed via PR-only fallback
         let sz = CORE_STATE_SIZE;
-        let safe = vec![0, 1, 2]; // only 3, minimum is 4
+        let safe = vec![0, 1, 2];
 
-        let z_all = vec![1.0; 5];
-        let h_all = vec![vec![0.0; sz]; 5];
-        let r_all = vec![0.1; 5];
-        let mt_all = vec![(gps(1), 0, 0.0); 5];
+        let z_all = vec![1.0, 2.0, 3.0];
+        let h_all = vec![vec![0.0; sz], vec![0.0; sz], vec![0.0; sz]];
+        let r_all = vec![0.1, 0.2, 0.3];
+        let mt_all = vec![(gps(1), 0, 0.0), (gps(2), 0, 0.0), (gps(3), 0, 0.0)];
 
         let result = build_final_measurement_matrices(sz, safe, &z_all, &h_all, &r_all, &mt_all);
+        assert!(result.is_some());
+        let m = result.unwrap();
+        assert_eq!(m.z.len(), 3);
+        assert_eq!(m.mt.len(), 3);
+    }
+
+    #[test]
+    fn test_build_final_fails_with_1_pr() {
+        // Only 1 PR measurement — not enough even for PR-only fallback
+        let sz = CORE_STATE_SIZE;
+        let safe = vec![0];
+
+        let z_all = vec![1.0];
+        let h_all = vec![vec![0.0; sz]];
+        let r_all = vec![0.1];
+        let mt_all = vec![(gps(1), 0, 0.0)];
+
+        let result = build_final_measurement_matrices(sz, safe, &z_all, &h_all, &r_all, &mt_all);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_build_final_pr_only_skips_cp_types() {
+        // 2 safe measurements: one PR (type 0), one CP (type 1)
+        // Only the PR should be used in PR-only fallback
+        let sz = CORE_STATE_SIZE + 2;
+        let safe = vec![0, 1];
+
+        let mut h_pr = vec![0.0; sz];
+        h_pr[0] = 1.0;
+        let mut h_cp = vec![0.0; sz];
+        h_cp[CORE_STATE_SIZE] = 1.0;
+        let z_all = vec![10.0, 5.0];
+        let h_all = vec![h_pr, h_cp];
+        let r_all = vec![1.0, 0.01];
+        let mt_all = vec![(gps(1), 0, 0.0), (gps(2), 1, 0.0)];
+
+        let result = build_final_measurement_matrices(sz, safe, &z_all, &h_all, &r_all, &mt_all);
+        // One PR -> not enough (need >= 2)
         assert!(result.is_none());
     }
 

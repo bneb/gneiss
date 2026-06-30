@@ -1,7 +1,37 @@
 use crate::filter::{DdObservation, RtkState};
+use crate::engine::EngineConfig;
 use gneiss_core::coords::Coordinate;
 use gneiss_core::ephemeris::Ephemeris;
+use gneiss_core::sat::SatelliteId;
 use gneiss_core::time::GpsTime;
+
+/// Minimum baseline distance (meters) for ionosphere state estimation.
+const IONO_STATE_MIN_BASELINE_M: f64 = 1000.0;
+
+/// Initial variance for ionosphere states (m²). σ = 0.1 m covers typical
+/// residual DD iono after Klobuchar model correction on 1–10 km baselines.
+const IONO_STATE_INITIAL_VARIANCE: f64 = 0.01;
+
+/// Add an ionosphere state (freq band 3) for a satellite if the baseline
+/// exceeds the threshold and the satellite doesn't already have one.
+fn add_iono_state_if_needed(
+    state: &mut RtkState,
+    config: &EngineConfig,
+    sat: SatelliteId,
+    base_coord: &Coordinate,
+) {
+    let baseline_m = (state.position.vector - base_coord.vector).norm();
+    if baseline_m < IONO_STATE_MIN_BASELINE_M {
+        return;
+    }
+    // Don't add duplicate iono states
+    if state.ambiguity_keys.contains(&(sat, 3)) {
+        return;
+    }
+    // Ionosphere state: residual DD iono delay at L1 after model correction.
+    // Initial value 0.0 (model is unbiased).
+    state.add_ambiguity(sat, 3, 0.0, IONO_STATE_INITIAL_VARIANCE);
+}
 
 pub fn manage_ambiguities_and_slips(
     state: &mut RtkState,
@@ -191,8 +221,16 @@ pub fn manage_ambiguities_and_slips(
             );
             state.remove_ambiguity(r.sat, 1);
             state.remove_ambiguity(r.sat, 2);
+            state.remove_ambiguity(r.sat, 3); // iono state
             state.reject_counts.insert((r.sat, 1), 0);
             state.reject_counts.insert((r.sat, 2), 0);
+            // Reset MW EMA on slip so the smoothed widelane doesn't mix
+            // pre-slip and post-slip values, which would disagree with the
+            // re-initialized LAMBDA integers.
+            state.mw_sd_ema.remove(&r.sat);
+            state.mw_sd_counts.remove(&r.sat);
+            state.nl_sd_ema.remove(&r.sat);
+            state.nl_sd_counts.remove(&r.sat);
         }
 
         if needs_l1 {
@@ -288,6 +326,8 @@ pub fn manage_ambiguities_and_slips(
                                     initial_est_l1,
                                     config.initial_ambiguity_variance,
                                 );
+                                // Add ionosphere state for baselines > 2 km
+                                add_iono_state_if_needed(state, config, r.sat, base_coord);
                                 initialized = true;
                                 break;
                             }
@@ -297,9 +337,30 @@ pub fn manage_ambiguities_and_slips(
             }
 
             if !initialized {
-                let initial_est_l1 = (cp_l1_rov - r.pr_l1) - (cp_l1_base - b.pr_l1);
+                // When position is converged, use geometric range instead of PR
+                // to avoid code multipath.  Fall back to PR-based estimate otherwise.
+                let pos_converged = state.covariance[(0, 0)] < 0.1;
+                let initial_est_l1 = if pos_converged {
+                    if let Some(r_eph) = ephemerides.iter().find(|e| e.sat() == r.sat) {
+                        let (r_sat_vec, _) = crate::engine::measurement_math::get_sat_state(
+                            r_eph, r.pr_l1, state.rcv_clk_bias, rover_time, state.position.vector,
+                        );
+                        let (b_sat_vec, _) = crate::engine::measurement_math::get_sat_state(
+                            r_eph, b.pr_l1, 0.0, base_time, base_coord.vector,
+                        );
+                        let dist_rov = (state.position.vector - r_sat_vec).norm();
+                        let dist_base = (base_coord.vector - b_sat_vec).norm();
+                        (cp_l1_rov - dist_rov) - (cp_l1_base - dist_base)
+                    } else {
+                        (cp_l1_rov - r.pr_l1) - (cp_l1_base - b.pr_l1)
+                    }
+                } else {
+                    (cp_l1_rov - r.pr_l1) - (cp_l1_base - b.pr_l1)
+                };
                 state.add_ambiguity(r.sat, 1, initial_est_l1, config.initial_ambiguity_variance);
             }
+            // Add ionosphere state for baselines > 2 km (once per satellite, with L1)
+            add_iono_state_if_needed(state, config, r.sat, base_coord);
         }
 
         if needs_l2 {
@@ -407,7 +468,24 @@ pub fn manage_ambiguities_and_slips(
             }
 
             if !initialized {
-                let initial_est_l2 = (cp_l2_rov - r_pr2) - (cp_l2_base - b_pr2);
+                let pos_converged = state.covariance[(0, 0)] < 0.1;
+                let initial_est_l2 = if pos_converged {
+                    if let Some(r_eph) = ephemerides.iter().find(|e| e.sat() == r.sat) {
+                        let (r_sat_vec, _) = crate::engine::measurement_math::get_sat_state(
+                            r_eph, r.pr_l1, state.rcv_clk_bias, rover_time, state.position.vector,
+                        );
+                        let (b_sat_vec, _) = crate::engine::measurement_math::get_sat_state(
+                            r_eph, b.pr_l1, 0.0, base_time, base_coord.vector,
+                        );
+                        let dist_rov = (state.position.vector - r_sat_vec).norm();
+                        let dist_base = (base_coord.vector - b_sat_vec).norm();
+                        (cp_l2_rov - dist_rov) - (cp_l2_base - dist_base)
+                    } else {
+                        (cp_l2_rov - r_pr2) - (cp_l2_base - b_pr2)
+                    }
+                } else {
+                    (cp_l2_rov - r_pr2) - (cp_l2_base - b_pr2)
+                };
                 state.add_ambiguity(r.sat, 2, initial_est_l2, config.initial_ambiguity_variance);
             }
         }
@@ -424,6 +502,14 @@ pub fn manage_ambiguities_and_slips(
                 b_cp1_m, b_cp2_m, b.pr_l1, b_pr2, b_f1, b_f2,
             );
             state.update_mw(r.sat, mw_sd / crate::combinations::lambda_wl(r_f1, r_f2));
+
+            // Update narrow-lane EMA for NL integer validation
+            let lam_nl = gneiss_core::constants::SPEED_OF_LIGHT_M_S / (r_f1 + r_f2);
+            let nl_rov = ((r_f1 * r_cp1_m + r_f2 * r_cp2_m) / (r_f1 + r_f2)
+                - (r_f1 * r.pr_l1 + r_f2 * r_pr2) / (r_f1 + r_f2)) / lam_nl;
+            let nl_bas = ((b_f1 * b_cp1_m + b_f2 * b_cp2_m) / (b_f1 + b_f2)
+                - (b_f1 * b.pr_l1 + b_f2 * b_pr2) / (b_f1 + b_f2)) / lam_nl;
+            state.update_nl(r.sat, nl_rov - nl_bas);
         }
     }
 }

@@ -206,6 +206,7 @@ fn test_measurement_model_against_rtklib_golden_data() {
         omega_b: Vector3::zeros(),
         tuning: &config.tuning,
         gnn_variances: std::collections::HashMap::new(),
+        klobuchar_params: None,
     };
     let updates = compute_innovations(&mut state, &matched_obs, &ref_rover, &ref_base, &env)
         .unwrap();
@@ -373,6 +374,7 @@ fn test_compute_innovations() {
         omega_b: Vector3::zeros(),
         tuning: &tuning,
         gnn_variances: std::collections::HashMap::new(),
+        klobuchar_params: None,
     };
 
     let group = vec![(rov_sat, base_sat)];

@@ -69,11 +69,15 @@ pub struct RtkState {
 
     pub mw_sd_ema: std::collections::HashMap<SatelliteId, f64>,
     pub mw_sd_counts: std::collections::HashMap<SatelliteId, usize>,
+    /// Narrow-lane SD EMA (cycles) for NL integer validation
+    pub nl_sd_ema: std::collections::HashMap<SatelliteId, f64>,
+    pub nl_sd_counts: std::collections::HashMap<SatelliteId, usize>,
     pub gf_prev: std::collections::HashMap<SatelliteId, f64>,
     pub mw_prev: std::collections::HashMap<SatelliteId, f64>,
     pub locktimes: std::collections::HashMap<(SatelliteId, u8), u16>,
     pub last_observed: std::collections::HashMap<(SatelliteId, u8), u32>,
     pub windup: std::collections::HashMap<SatelliteId, f64>,
+    pub current_ref_sat: std::collections::HashMap<gneiss_core::sat::Constellation, SatelliteId>,
     pub innovation_cov: std::collections::HashMap<(SatelliteId, u8), f64>, // For IAE
     pub innovation_counts: std::collections::HashMap<(SatelliteId, u8), usize>,
     pub reject_counts: std::collections::HashMap<(SatelliteId, u8), usize>,
@@ -158,11 +162,14 @@ impl RtkState {
 
             mw_sd_ema: std::collections::HashMap::new(),
             mw_sd_counts: std::collections::HashMap::new(),
+            nl_sd_ema: std::collections::HashMap::new(),
+            nl_sd_counts: std::collections::HashMap::new(),
             gf_prev: std::collections::HashMap::new(),
             mw_prev: std::collections::HashMap::new(),
             locktimes: std::collections::HashMap::new(),
             last_observed: std::collections::HashMap::new(),
             windup: std::collections::HashMap::new(),
+            current_ref_sat: std::collections::HashMap::new(),
             innovation_cov: std::collections::HashMap::new(),
             innovation_counts: std::collections::HashMap::new(),
             reject_counts: std::collections::HashMap::new(),
@@ -323,6 +330,16 @@ impl RtkState {
         *count += 1;
     }
 
+    /// Update the narrow-lane SD EMA with a new measurement (cycles).
+    /// Used to validate LAMBDA NL integers against time-averaged code.
+    pub fn update_nl(&mut self, sat: SatelliteId, nl_cycles: f64) {
+        let count = self.nl_sd_counts.entry(sat).or_insert(0);
+        let ema = self.nl_sd_ema.entry(sat).or_insert(nl_cycles);
+        let alpha = 1.0 / ((*count + 1) as f64).min(100.0);
+        *ema = *ema * (1.0 - alpha) + nl_cycles * alpha;
+        *count += 1;
+    }
+
     pub fn resolve_ambiguities(
         &self,
         ephemerides: &[gneiss_core::ephemeris::Ephemeris],
@@ -346,19 +363,40 @@ impl RtkState {
 
         let max_subset = candidate_vars.len().min(24);
         let mut best_ratio = 0.0f64;
+        let mut best_success_rate = 0.0f64;
+        let mut best_subset_size = 0;
         for subset_size in (config.lambda_min_subset..=max_subset).rev() {
             let (_d_mat_small, a_cycles, q_cycles) =
                 build_lambda_matrices(self, &candidate_vars, subset_size, ephemerides);
 
             if let Ok(res) = crate::lambda::resolve_lambda(&a_cycles, &q_cycles) {
-                best_ratio = best_ratio.max(res.ratio);
+                // Diagnostics: track best attempt across all subset sizes
+                if res.ratio > best_ratio {
+                    best_ratio = res.ratio;
+                    best_success_rate = res.success_rate;
+                    best_subset_size = subset_size;
+                }
                 let dynamic_threshold =
                     crate::ffrt::calculate_threshold(subset_size, config.ar_ffrt_prob)
                         .max(config.lambda_min_ratio);
-                // Accept if it passes the ratio test OR if the bootstrapped success rate is > min_ar_success_rate
+                // Accept if it passes the ratio test AND the MW widelane validation
                 if res.ratio >= dynamic_threshold
                     || res.success_rate >= config.tuning.min_ar_success_rate
                 {
+                    if !validate_mw_widelane(self, &candidate_vars, &res, subset_size) {
+                        tracing::debug!(
+                            "AR: MW WL validation failed (subset={}, ratio={:.2}, sr={:.3})",
+                            subset_size, res.ratio, res.success_rate
+                        );
+                        continue;
+                    }
+                    if !validate_nl_narrowlane(self, &candidate_vars, &res, subset_size) {
+                        tracing::debug!(
+                            "AR: NL validation failed (subset={}, ratio={:.2}, sr={:.3})",
+                            subset_size, res.ratio, res.success_rate
+                        );
+                        continue;
+                    }
                     let fix_res =
                         self.apply_ar_fix(subset_size, &candidate_vars, &res, ephemerides)?;
                     let (fixed_state, da_meters, d_full) =
@@ -373,8 +411,13 @@ impl RtkState {
                 }
             }
         }
-        tracing::info!("AR: LAMBDA failed ({} candidates, best ratio={:.2}, need >={:.1})",
-            candidate_vars.len(), best_ratio, config.lambda_min_ratio);
+        // Diagnostic: log why AR failed — what was the best ratio and which threshold blocked it
+        let ffrt_at_best = crate::ffrt::calculate_threshold(best_subset_size, config.ar_ffrt_prob);
+        let effective_threshold = ffrt_at_best.max(config.lambda_min_ratio);
+        tracing::info!(
+            "AR: LAMBDA failed ({} candidates, best ratio={:.2}, success_rate={:.3}, subset={}, ffrt={:.2}, threshold={:.2})",
+            candidate_vars.len(), best_ratio, best_success_rate, best_subset_size, ffrt_at_best, effective_threshold
+        );
         Err("AR failed to resolve")
     }
 
@@ -1573,9 +1616,47 @@ pub fn select_ar_candidates(
         gneiss_core::sat::Constellation::Beidou,
         gneiss_core::sat::Constellation::Glonass,
     ];
+
+    // Diagnostic: log AR vs EKF reference mismatch per constellation
+    for &constell in &constellations {
+        let ekf_ref = state.current_ref_sat.get(&constell);
+        if let Some(ar_ref_idx) = find_best_reference_sat(state, constell, ar_min_lock) {
+            let ar_ref_sat = state.ambiguity_keys[ar_ref_idx].0;
+            if ekf_ref != Some(&ar_ref_sat) {
+                tracing::debug!(
+                    "AR ref mismatch {:?}: EKF={:?} AR={:?}",
+                    constell,
+                    ekf_ref,
+                    ar_ref_sat,
+                );
+            }
+        }
+    }
+
     let candidates = filter_by_locktime(state, &constellations, ar_min_lock);
     let mut candidate_vars = compute_candidate_variance(state, ephemerides, &candidates);
     candidate_vars.sort_by(|a, b| a.3.partial_cmp(&b.3).unwrap_or(std::cmp::Ordering::Equal));
+
+    // Diagnostic: log top-5 candidate DD variances
+    if tracing::enabled!(tracing::Level::DEBUG) && !candidate_vars.is_empty() {
+        let top_n = candidate_vars.len().min(5);
+        let vars_cycles: Vec<String> = candidate_vars[..top_n]
+            .iter()
+            .map(|(rov, _, _, var_m2)| {
+                let sat = state.ambiguity_keys[*rov].0;
+                let lam = gneiss_core::constants::SPEED_OF_LIGHT_M_S
+                    / gneiss_core::signal::satellite_frequencies(sat, 0).0;
+                let var_cyc = var_m2 / (lam * lam);
+                format!("{:?}={:.1}", sat, var_cyc)
+            })
+            .collect();
+        tracing::debug!(
+            "AR candidates: {} total, top var (cyc²): [{}]",
+            candidate_vars.len(),
+            vars_cycles.join(", ")
+        );
+    }
+
     candidate_vars
 }
 
@@ -1622,6 +1703,154 @@ fn find_best_reference_sat(
         }
     }
     best_ref_idx
+}
+
+/// Validate LAMBDA integer fix against the geometry-free Melbourne-Wübbena
+/// widelane combination.  Returns false if any satellite with sufficient MW
+/// data disagrees with the LAMBDA integers by more than `mw_tolerance` cycles.
+fn validate_mw_widelane(
+    state: &RtkState,
+    candidates: &[(usize, usize, u16, f64)],
+    lambda_result: &crate::ambiguity::lambda::LambdaResult,
+    subset_size: usize,
+) -> bool {
+    let mw_tolerance: f64 = 0.3; // cycles of widelane (~86cm wavelength)
+    let subset = &candidates[..subset_size];
+
+    // Map L1 DD integers by rover satellite index for quick lookup
+    // lambda_result.best_integers[i] corresponds to subset[i]
+    let l1_ints: std::collections::HashMap<usize, f64> = subset
+        .iter()
+        .enumerate()
+        .filter(|(_, &(rov, _, _, _))| state.ambiguity_keys[rov].1 == 1)
+        .map(|(i, &(rov, _, _, _))| (rov, lambda_result.best_integers[i]))
+        .collect();
+
+    let l2_ints: std::collections::HashMap<usize, f64> = subset
+        .iter()
+        .enumerate()
+        .filter(|(_, &(rov, _, _, _))| state.ambiguity_keys[rov].1 == 2)
+        .map(|(i, &(rov, _, _, _))| (rov, lambda_result.best_integers[i]))
+        .collect();
+
+    for &(rov_idx, ref_idx, _, _) in subset {
+        let (rov_sat, freq) = state.ambiguity_keys[rov_idx];
+        if freq != 1 {
+            continue; // only validate L1 candidates (they pair with L2)
+        }
+
+        // Find L2 candidate for same satellite
+        if let Some(l2_rov_idx) = state
+            .ambiguity_keys
+            .iter()
+            .position(|&(s, f)| s == rov_sat && f == 2)
+        {
+            let ref_sat = state.ambiguity_keys[ref_idx].0;
+
+            if let (Some(&n1_dd), Some(&n2_dd)) =
+                (l1_ints.get(&rov_idx), l2_ints.get(&l2_rov_idx))
+            {
+                let wl_lambda = n1_dd - n2_dd; // widelane from LAMBDA (cycles)
+
+                // Wideline from MW EMA
+                let mw_rov = state.mw_sd_ema.get(&rov_sat).copied().unwrap_or(0.0);
+                let mw_ref = state.mw_sd_ema.get(&ref_sat).copied().unwrap_or(0.0);
+                let mw_counts_rov = state.mw_sd_counts.get(&rov_sat).copied().unwrap_or(0);
+                let mw_counts_ref = state.mw_sd_counts.get(&ref_sat).copied().unwrap_or(0);
+
+                // Both rover and reference must have sufficient MW data;
+                // otherwise mw_ref defaults to 0.0, introducing a systematic
+                // offset equal to the reference satellite's true SD MW value
+                // in EVERY DD comparison, rejecting all fixes.
+                if mw_counts_rov >= 10 && mw_counts_ref >= 10 {
+                    let wl_mw = mw_rov - mw_ref; // DD widelane from MW (cycles)
+                    let diff = (wl_lambda - wl_mw).abs();
+                    if diff > mw_tolerance {
+                        tracing::debug!(
+                            "MW validation failed for {:?}: LAMBDA WL={:.2} MW WL={:.2} diff={:.2} (rov_cnt={}, ref_cnt={})",
+                            rov_sat, wl_lambda, wl_mw, diff, mw_counts_rov, mw_counts_ref
+                        );
+                        return false;
+                    }
+                }
+            }
+        }
+    }
+    true
+}
+
+/// Validate LAMBDA narrow-lane integers against time-averaged code-based NL.
+/// Returns false if any satellite disagrees by more than `nl_tolerance` cycles.
+fn validate_nl_narrowlane(
+    state: &RtkState,
+    candidates: &[(usize, usize, u16, f64)],
+    lambda_result: &crate::ambiguity::lambda::LambdaResult,
+    subset_size: usize,
+) -> bool {
+    let nl_tolerance: f64 = 0.5; // cycles of narrow-lane (~10.7cm wavelength)
+    let subset = &candidates[..subset_size];
+
+    // LAMBDA best_integers[i] = DD integer for subset[i] (already rover - reference)
+    // Build maps: rov_idx -> DD integer
+    let l1_dd_ints: std::collections::HashMap<usize, f64> = subset
+        .iter()
+        .enumerate()
+        .filter(|(_, &(rov, _, _, _))| state.ambiguity_keys[rov].1 == 1)
+        .map(|(i, &(rov, _, _, _))| (rov, lambda_result.best_integers[i]))
+        .collect();
+
+    let l2_dd_ints: std::collections::HashMap<usize, f64> = subset
+        .iter()
+        .enumerate()
+        .filter(|(_, &(rov, _, _, _))| state.ambiguity_keys[rov].1 == 2)
+        .map(|(i, &(rov, _, _, _))| (rov, lambda_result.best_integers[i]))
+        .collect();
+
+    // Use GPS frequencies for NL combination (same ratio works for all GNSS)
+    let f1 = gneiss_core::signal::FREQ_GPS_L1; // 1575.42 MHz
+    let f2 = gneiss_core::signal::FREQ_GPS_L2; // 1227.60 MHz
+
+    for &(rov_idx, _, _, _) in subset {
+        let (rov_sat, freq) = state.ambiguity_keys[rov_idx];
+        if freq != 1 {
+            continue;
+        }
+        // Find L2 DD integer for same satellite
+        if let Some(l2_rov_idx) = state
+            .ambiguity_keys
+            .iter()
+            .position(|&(s, f)| s == rov_sat && f == 2)
+        {
+            if let (Some(&n1_dd), Some(&n2_dd)) =
+                (l1_dd_ints.get(&rov_idx), l2_dd_ints.get(&l2_rov_idx))
+            {
+                // DD narrow-lane from LAMBDA integers (cycles of NL)
+                let nl_dd = (f1 * n1_dd + f2 * n2_dd) / (f1 + f2);
+
+                // DD narrow-lane from code EMA
+                let nl_rov = state.nl_sd_ema.get(&rov_sat).copied().unwrap_or(0.0);
+                let nl_ref_sat = state.ambiguity_keys[subset.iter()
+                    .find(|&&(r, _, _, _)| r == rov_idx)
+                    .map(|&(_, r, _, _)| r)
+                    .unwrap_or(0)].0;
+                let nl_ref = state.nl_sd_ema.get(&nl_ref_sat).copied().unwrap_or(0.0);
+                let nl_counts_rov = state.nl_sd_counts.get(&rov_sat).copied().unwrap_or(0);
+                let nl_counts_ref = state.nl_sd_counts.get(&nl_ref_sat).copied().unwrap_or(0);
+
+                if nl_counts_rov >= 10 && nl_counts_ref >= 10 {
+                    let nl_ema_dd = nl_rov - nl_ref;
+                    if (nl_dd - nl_ema_dd).abs() > nl_tolerance {
+                        tracing::debug!(
+                            "NL validation failed for {:?}: LAMBDA NL={:.2} EMA NL={:.2} diff={:.2}",
+                            rov_sat, nl_dd, nl_ema_dd, (nl_dd - nl_ema_dd).abs()
+                        );
+                        return false;
+                    }
+                }
+            }
+        }
+    }
+    true
 }
 
 fn collect_candidates_for_constellation(

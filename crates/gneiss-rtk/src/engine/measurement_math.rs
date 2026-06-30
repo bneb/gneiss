@@ -58,9 +58,10 @@ pub fn compute_atmospheric_delays(
     sat_f2: f64,
     ref_f1: f64,
     ref_f2: f64,
+    iono_params: Option<&gneiss_core::atmosphere::KlobucharParams>,
 ) -> (f64, f64, f64) {
     let tropo_params = gneiss_core::atmosphere::TropoParams::default();
-    let iono_params = gneiss_core::atmosphere::KlobucharParams::default();
+    let iono_params = iono_params.cloned().unwrap_or_default();
 
     let base_llh = gneiss_core::coords::ecef_to_llh(base_coord_vec);
     let rov_llh = gneiss_core::coords::ecef_to_llh(pos_apc);
@@ -403,6 +404,7 @@ mod tests {
             sat_f2,
             ref_f1,
             ref_f2,
+            None,
         );
         // Since rover and base are at same position and vectors are identical, double difference should be 0.
         assert!(tropo.abs() < 1e-9);
@@ -564,6 +566,7 @@ fn test_compute_atmospheric_delays_catches_tropo_mutation() {
         1.0,
         1.0,
         1.0,
+        None,
     );
 
     assert!((tropo_dd - 0.0).abs() > 1e-6);

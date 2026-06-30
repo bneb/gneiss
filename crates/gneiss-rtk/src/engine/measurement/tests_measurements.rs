@@ -89,6 +89,7 @@ fn test_compute_atmospheric_delays() {
         sat_f2,
         ref_f1,
         ref_f2,
+        None,
     );
     assert!((tropo_dd - 0.0).abs() < 1e-6);
     assert!((iono_dd_l1 - (-0.00020734960295598626)).abs() < 1e-6);
@@ -191,6 +192,7 @@ fn test_compute_dd_pseudorange() {
         omega_b: Vector3::zeros(),
         tuning: &tuning,
         gnn_variances: std::collections::HashMap::new(),
+        klobuchar_params: None,
     };
 
     let ugeom = UpdateGeometry {
@@ -328,6 +330,7 @@ fn test_compute_dd_doppler() {
         omega_b: Vector3::zeros(),
         tuning: &tuning,
         gnn_variances: std::collections::HashMap::new(),
+        klobuchar_params: None,
     };
 
     let r_b_e_rot = state.attitude.to_rotation_matrix();

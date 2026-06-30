@@ -13,6 +13,7 @@ pub struct MeasurementEnvironment<'a> {
     pub omega_b: Vector3<f64>,
     pub tuning: &'a crate::engine::config::EkfTuningConfig,
     pub gnn_variances: std::collections::HashMap<gneiss_core::sat::SatelliteId, f64>,
+    pub klobuchar_params: Option<gneiss_core::atmosphere::KlobucharParams>,
 }
 
 pub struct SatState {
@@ -104,5 +105,10 @@ pub struct DdCarrierPhaseParams<'a> {
     pub ref_idx_l1: Option<usize>,
     pub sat_idx_l2: Option<usize>,
     pub ref_idx_l2: Option<usize>,
+    /// Ionosphere state index and value for the rover satellite (freq band 3)
+    pub iono_idx_sat: Option<usize>,
+    /// Ionosphere state index and value for the reference satellite (freq band 3)
+    pub iono_idx_ref: Option<usize>,
+    pub iono_state_vals: &'a [f64], // all ambiguity values (includes iono states)
     pub cp_base_var: f64,
 }

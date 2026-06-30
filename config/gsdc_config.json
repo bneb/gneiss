@@ -26,5 +26,5 @@
     "doppler_slip_threshold_cycles": 10000.0,
     "dynamics_model": "automotive",
     "max_reject_count": 10,
-    "base_position": [-2689639.5060, -4290438.6360, 3865050.9560]
+    "base_position": [-2689640.291, -4290437.370, 3865050.934]
 }

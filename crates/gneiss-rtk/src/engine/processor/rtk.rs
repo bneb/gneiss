@@ -13,7 +13,7 @@ use nalgebra::{DMatrix, DVector, Vector3};
 /// If the fixed position differs from the float position by more than this
 /// threshold, the fix is rejected and the float solution is retained.
 /// This catches wrong AR integer sets that would otherwise jump the position.
-const AR_MAX_POSITION_JUMP_M: f64 = 0.5;
+const AR_MAX_POSITION_JUMP_M: f64 = 2.0;
 
 /// Apply adaptive R scaling based on innovation history.
 /// Updates the tracker with current innovations and inflates R diagonals
@@ -257,6 +257,7 @@ impl ProcessingEngine {
                     spp_pos,
                     spp_state_ref,
                     gnn_variances,
+                    klobuchar_params: self.klobuchar_params,
                 };
                 process_rtk_update::<TightCoupling>(state, &mut self.innovation_tracker, &ctx);
             } else {
@@ -445,6 +446,7 @@ impl ProcessingEngine {
                 spp_pos,
                 spp_state_ref,
                 gnn_variances,
+                klobuchar_params: self.klobuchar_params,
             };
             let mut tracker = crate::engine::adaptive::InnovationTracker::new();
             process_rtk_update::<TightCoupling>(&mut base_state, &mut tracker, &ctx);
@@ -510,6 +512,7 @@ fn build_measurement_environment<'a>(
     ephemerides: &'a [gneiss_core::ephemeris::Ephemeris],
     base_coord: &'a Coordinate,
     base_time: gneiss_core::time::GpsTime,
+    klobuchar_params: Option<gneiss_core::atmosphere::KlobucharParams>,
 ) -> crate::engine::measurement::MeasurementEnvironment<'a> {
     let omega_ib_b = if let Some(imu_buf) = imu_history.last() {
         if let Some(last_imu) = imu_buf.last() {
@@ -537,6 +540,7 @@ fn build_measurement_environment<'a>(
         omega_b: omega_ib_b - r_e_b * omega_ie_e,
         tuning: &config.tuning,
         gnn_variances: std::collections::HashMap::new(),
+        klobuchar_params,
     }
 }
 
@@ -554,23 +558,25 @@ fn handle_ekf_rejection(
         reason
     );
 
-    // Inflate position/velocity covariance to allow faster recovery.
-    // Also inflate ambiguity covariances so the filter can re-converge
-    // after a wrong AR fix or undetected cycle slip.
-    let inflate_factor = 1.0 + (state.consecutive_rejections as f64 * 0.2).min(0.8);
-    for i in 0..6 {
-        state.covariance[(i, i)] *= inflate_factor;
-    }
-    for i in 0..3 {
-        state.covariance[(i, i)] += 1.0;
-    }
-    for i in 3..6 {
-        state.covariance[(i, i)] += 0.1;
-    }
-    // Inflate ambiguity covariances to enable re-convergence
-    let amb_start = crate::filter::CORE_STATE_SIZE;
-    for i in amb_start..state.covariance.nrows() {
-        state.covariance[(i, i)] *= inflate_factor.min(2.0);
+    // Only inflate covariance for the first few rejections to allow recovery.
+    // After that, stop inflating so position variance doesn't blow past the
+    // extreme-divergence threshold before the coasting period expires.
+    if state.consecutive_rejections <= 5 {
+        let inflate_factor = 1.0 + (state.consecutive_rejections as f64 * 0.2).min(0.8);
+        for i in 0..6 {
+            state.covariance[(i, i)] *= inflate_factor;
+        }
+        for i in 0..3 {
+            state.covariance[(i, i)] += 1.0;
+        }
+        for i in 3..6 {
+            state.covariance[(i, i)] += 0.1;
+        }
+        // Inflate ambiguity covariances to enable re-convergence
+        let amb_start = crate::filter::CORE_STATE_SIZE;
+        for i in amb_start..state.covariance.nrows() {
+            state.covariance[(i, i)] *= inflate_factor.min(2.0);
+        }
     }
 
     let pos_var = state.covariance[(0, 0)] + state.covariance[(1, 1)] + state.covariance[(2, 2)];
@@ -583,10 +589,11 @@ fn handle_ekf_rejection(
             state.reset_to_spp(pos, spp_state_ref, !config.mode.is_ppp());
             state.consecutive_rejections = 0;
         }
-    } else if state.consecutive_rejections >= 5 {
+    } else if state.consecutive_rejections >= config.max_consecutive_rejections {
         tracing::warn!(
-            "EKF rejected for {} epochs: resetting to SPP fallback.",
-            state.consecutive_rejections
+            "EKF rejected for {} epochs: resetting to SPP fallback (max_consecutive_rejections={}).",
+            state.consecutive_rejections,
+            config.max_consecutive_rejections,
         );
         if let Some(pos) = spp_pos {
             state.reset_to_spp(pos, spp_state_ref, !config.mode.is_ppp());
@@ -595,12 +602,64 @@ fn handle_ekf_rejection(
     }
 }
 
+/// Validate an AR fix by comparing PR residuals at the fixed position vs float.
+/// A wrong NL integer set produces a position that fits CP (ambiguities adjust)
+/// but produces worse PR residuals. Returns false if the fix should be rejected.
+fn validate_pr_residuals(
+    state: &RtkState,
+    fixed_state: &RtkState,
+    m: Option<&crate::engine::measurement::EkfMeasurementMatrices>,
+    valid_indices: Option<&[usize]>,
+) -> bool {
+    let (Some(meas), Some(valid)) = (m, valid_indices) else { return true };
+    let dx = fixed_state.position.vector - state.position.vector;
+    let state_size = state.covariance.nrows();
+
+    let mut float_rms = 0.0f64;
+    let mut fixed_rms = 0.0f64;
+    let mut count = 0usize;
+
+    for &i in valid {
+        if meas.mt[i].1 != 0 { continue; } // PR measurements only (type 0)
+        let z_float = meas.z[i]; // innovation at float position
+        // Predicted change in PR DD from position change: H[0:3] · dx
+        let h_dot_dx: f64 = (0..3.min(state_size))
+            .map(|c| meas.h[(i, c)] * dx[c])
+            .sum();
+        let z_fixed = z_float - h_dot_dx;
+        float_rms += z_float * z_float;
+        fixed_rms += z_fixed * z_fixed;
+        count += 1;
+    }
+
+    if count < 4 { return true; } // too few PR measurements to validate
+
+    float_rms = (float_rms / count as f64).sqrt();
+    fixed_rms = (fixed_rms / count as f64).sqrt();
+
+    tracing::debug!(
+        "AR PR residuals: float={:.1}m fixed={:.1}m ratio={:.2} ({} PR)",
+        float_rms, fixed_rms, if float_rms > 0.01 { fixed_rms / float_rms } else { 1.0 }, count
+    );
+    // Reject if fixed position significantly degrades PR fit
+    if fixed_rms > float_rms * 1.5 && fixed_rms > 1.5 {
+        tracing::warn!(
+            "AR fix rejected by PR residuals: float={:.1}m fixed={:.1}m ({} PR)",
+            float_rms, fixed_rms, count
+        );
+        return false;
+    }
+    true
+}
+
 fn handle_ekf_acceptance(
     state: &mut RtkState,
     config: &EngineConfig,
     ephemerides: &[gneiss_core::ephemeris::Ephemeris],
     spp_pos: Option<Coordinate>,
     spp_state_ref: Option<&crate::spp::SppState>,
+    m: Option<&crate::engine::measurement::EkfMeasurementMatrices>,
+    valid_indices: Option<&[usize]>,
 ) {
     let pos_var = state.covariance[(0, 0)] + state.covariance[(1, 1)] + state.covariance[(2, 2)];
     if pos_var > 10000.0 {
@@ -628,6 +687,9 @@ fn handle_ekf_acceptance(
             );
             state.is_fixed = false;
             state.fixed_state = None;
+        } else if !validate_pr_residuals(state, &fixed_state, m, valid_indices) {
+            state.is_fixed = false;
+            state.fixed_state = None;
         } else {
             tracing::info!(
                 "RTK AR fixed: {} sats (position jump {:.3}m)",
@@ -636,12 +698,24 @@ fn handle_ekf_acceptance(
             );
             state.is_fixed = true;
             state.position = fixed_state.position.clone();
+            // Apply fixed ambiguity values to the live EKF state so the
+            // carrier-phase measurements use the correct integer ambiguities.
+            // Without this, the EKF continues to estimate float ambiguities
+            // and the AR fix has no persistent effect.
+            if state.ambiguities.len() == fixed_state.ambiguities.len() {
+                state.ambiguities.copy_from_slice(&fixed_state.ambiguities);
+                state.covariance = fixed_state.covariance.clone();
+            }
             state.fixed_state = Some(Box::new(fixed_state));
         }
     } else {
-        state.is_fixed = false;
-        state.fixed_state = None;
-        tracing::info!("RTK AR failed at epoch {} (state epoch_count={})", state.time.tow, state.epoch_count);
+        // Maintain previous fix across epochs — don't un-fix because
+        // LAMBDA failed on this particular epoch. The fix is cleared
+        // only by a cycle slip (which removes the ambiguity from state).
+        if !state.is_fixed {
+            state.fixed_state = None;
+            tracing::info!("RTK AR failed at epoch {} (state epoch_count={})", state.time.tow, state.epoch_count);
+        }
     }
 }
 
@@ -656,6 +730,7 @@ pub struct RtkUpdateContext<'a> {
     pub spp_pos: Option<Coordinate>,
     pub spp_state_ref: Option<&'a crate::spp::SppState>,
     pub gnn_variances: std::collections::HashMap<gneiss_core::sat::SatelliteId, f64>,
+    pub klobuchar_params: Option<gneiss_core::atmosphere::KlobucharParams>,
 }
 
 fn process_rtk_update<C: CouplingStrategy>(
@@ -681,6 +756,7 @@ fn process_rtk_update<C: CouplingStrategy>(
         ctx.ephemerides,
         ctx.base_coord,
         ctx.base_obs.time,
+        ctx.klobuchar_params,
     );
     env.gnn_variances = ctx.gnn_variances.clone();
 
@@ -752,6 +828,8 @@ fn execute_ekf_update<C: CouplingStrategy>(
                 ctx.ephemerides,
                 ctx.spp_pos,
                 ctx.spp_state_ref,
+                Some(m),
+                Some(&valid_indices),
             );
         }
     }
@@ -1073,7 +1151,7 @@ mod tests {
     }
 
     #[test]
-    fn test_handle_ekf_rejection_not_aligned_no_reset_below_5() {
+    fn test_handle_ekf_rejection_not_aligned_no_reset_below_threshold() {
         let time = GpsTime::new(0, 0.0);
         let pos = Coordinate::new(Vector3::new(5.0, 5.0, 5.0), Datum::WGS84, Frame::ECEF, time);
         let mut state = RtkState::new(time, pos, 1.0);
@@ -1082,17 +1160,17 @@ mod tests {
 
         handle_ekf_rejection(&mut state, &EngineConfig::default(), None, None, "test");
         assert_eq!(state.consecutive_rejections, 4);
-        // Position should NOT be reset because rejections < 5
+        // Position should NOT be reset because rejections < max_consecutive_rejections (30)
         assert!((state.position.vector.x - 5.0).abs() < 1e-6);
     }
 
     #[test]
-    fn test_handle_ekf_rejection_not_aligned_resets_at_5_with_spp() {
+    fn test_handle_ekf_rejection_not_aligned_resets_at_threshold_with_spp() {
         let time = GpsTime::new(0, 0.0);
         let pos = Coordinate::new(Vector3::new(5.0, 5.0, 5.0), Datum::WGS84, Frame::ECEF, time);
         let mut state = RtkState::new(time, pos, 1.0);
         state.ins_aligned = false;
-        state.consecutive_rejections = 4;
+        state.consecutive_rejections = 29;
 
         let spp_pos = Coordinate::new(
             Vector3::new(50.0, 50.0, 50.0),
@@ -1102,7 +1180,7 @@ mod tests {
         );
 
         handle_ekf_rejection(&mut state, &EngineConfig::default(), Some(spp_pos), None, "test");
-        // Should have been reset after 5 consecutive rejections
+        // Should have been reset after max_consecutive_rejections (30) consecutive rejections
         assert!((state.position.vector.x - 50.0).abs() < 1e-6);
         assert_eq!(state.consecutive_rejections, 0);
     }
@@ -1114,7 +1192,7 @@ mod tests {
         let mut state = RtkState::new(time, pos, 1.0);
         state.consecutive_rejections = 5;
 
-        handle_ekf_acceptance(&mut state, &EngineConfig::default(), &[], None, None);
+        handle_ekf_acceptance(&mut state, &EngineConfig::default(), &[], None, None, None, None);
         assert_eq!(state.consecutive_rejections, 0);
     }
 
@@ -1135,7 +1213,7 @@ mod tests {
             time,
         );
 
-        handle_ekf_acceptance(&mut state, &EngineConfig::default(), &[], Some(spp_pos), None);
+        handle_ekf_acceptance(&mut state, &EngineConfig::default(), &[], Some(spp_pos), None, None, None);
         // Should be reset
         assert!((state.position.vector.x - 50.0).abs() < 1e-6);
         assert_eq!(state.consecutive_rejections, 0);
@@ -1161,6 +1239,7 @@ mod tests {
             &[],
             &base_coord,
             time,
+            None,
         );
 
         assert_eq!(env.base_coord.vector.x, 110.0);
@@ -1421,6 +1500,7 @@ mod tests {
             spp_pos: None,
             spp_state_ref: None,
             gnn_variances: std::collections::HashMap::new(),
+            klobuchar_params: None,
         };
 
         let mut tracker = crate::engine::adaptive::InnovationTracker::new();
@@ -1457,6 +1537,7 @@ mod tests {
             spp_pos: None,
             spp_state_ref: None,
             gnn_variances: std::collections::HashMap::new(),
+            klobuchar_params: None,
         };
 
         let core_size = CORE_STATE_SIZE;
@@ -1503,6 +1584,7 @@ mod tests {
             spp_pos: None,
             spp_state_ref: None,
             gnn_variances: std::collections::HashMap::new(),
+            klobuchar_params: None,
         };
 
         let core_size = CORE_STATE_SIZE;
@@ -1557,6 +1639,7 @@ mod tests {
             &[],
             &base_coord,
             time,
+            None,
         );
 
         assert!(env.lever_arm.norm() > 0.0, "Lever arm should be non-zero when ins_aligned");
@@ -1586,6 +1669,7 @@ mod tests {
             spp_pos: None,
             spp_state_ref: None,
             gnn_variances: std::collections::HashMap::new(),
+            klobuchar_params: None,
         };
         export_gnn_dataset(
             &state,
@@ -1690,7 +1774,7 @@ mod tests {
         state.covariance[(0, 0)] = 20000.0;
         state.consecutive_rejections = 5;
 
-        handle_ekf_acceptance(&mut state, &config, &[], None, None);
+        handle_ekf_acceptance(&mut state, &config, &[], None, None, None, None);
         assert_eq!(state.consecutive_rejections, 0);
         assert!((state.position.vector.x - 5.0).abs() < 1e-6);
     }

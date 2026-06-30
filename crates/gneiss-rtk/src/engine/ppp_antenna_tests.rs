@@ -455,7 +455,7 @@ mod adversarial_gap_analysis {
         // Ambiguities
         assert_eq!(config.process_noise_amb_float, 1e-7, "amb float PN");
         assert_eq!(config.process_noise_amb_fixed, 1e-12, "amb fixed PN");
-        assert_eq!(config.initial_ambiguity_variance, 10000.0, "initial amb variance");
+        assert_eq!(config.initial_ambiguity_variance, 100.0, "initial amb variance");
 
         // Clock variances
         assert_eq!(
