@@ -7,11 +7,12 @@ use gneiss_core::time::GpsTime;
 
 pub const CORE_STATE_SIZE: usize = 21;
 
-/// Ring buffer for accumulating DD pseudorange over a sliding window.
+/// Ring buffer for accumulating DD pseudorange innovations over a sliding window.
+/// Each entry stores the innovation and the reference satellite used for DD at that epoch.
 /// Maintains a running sum for O(1) mean computation.
 #[derive(Debug, Clone)]
 pub struct PrRingBuffer {
-    buf: VecDeque<f64>,
+    buf: VecDeque<(f64, SatelliteId)>,
     sum: f64,
     capacity: usize,
 }
@@ -21,17 +22,27 @@ impl PrRingBuffer {
         Self { buf: VecDeque::with_capacity(capacity), sum: 0.0, capacity }
     }
 
-    pub fn push(&mut self, val: f64) {
+    pub fn push(&mut self, innov: f64, ref_sat: SatelliteId) {
         if self.buf.len() >= self.capacity {
-            self.sum -= self.buf.pop_front().unwrap_or(0.0);
+            self.sum -= self.buf.pop_front().map(|(v, _)| v).unwrap_or(0.0);
         }
-        self.buf.push_back(val);
-        self.sum += val;
+        self.buf.push_back((innov, ref_sat));
+        self.sum += innov;
     }
 
     pub fn mean(&self) -> Option<f64> {
         if self.buf.is_empty() { None }
         else { Some(self.sum / self.buf.len() as f64) }
+    }
+
+    /// Returns the most common reference satellite in the window (mode).
+    pub fn dominant_ref(&self) -> Option<SatelliteId> {
+        if self.buf.is_empty() { return None; }
+        let mut counts: std::collections::HashMap<SatelliteId, usize> = std::collections::HashMap::new();
+        for &(_, ref_sat) in &self.buf {
+            *counts.entry(ref_sat).or_default() += 1;
+        }
+        counts.into_iter().max_by_key(|&(_, c)| c).map(|(s, _)| s)
     }
 
     pub fn count(&self) -> usize { self.buf.len() }

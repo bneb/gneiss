@@ -604,56 +604,36 @@ fn handle_ekf_rejection(
 
 /// Validate an AR fix using time-averaged PR innovations.
 ///
-/// PR innovations (observed - predicted at float position) are accumulated per
-/// satellite.  At the fixed position, the innovation shifts by H·dx where dx is
-/// the position change and H is the DD line-of-sight vector.  If the shifted
-/// mean exceeds the expected noise floor (σ/√N), the fix position disagrees
-/// with the time-averaged PR — indicating wrong NL integers.
-///
-/// Uses the CURRENT reference satellite geometry to compute the shift.  This
-/// approximation is valid because the geometric shift from position change
-/// (|H·dx| ≈ |dx| ≈ 0.9m) dominates the reference-change error (< 0.1m over
-/// a 20-second window).
+/// Each ring buffer is keyed by (satellite, reference), so all entries in a
+/// buffer share the same reference.  The geometric shift H·dx is computed
+/// using the buffer's specific reference satellite, making the validation
+/// robust to reference changes across the window.
 fn validate_geometry_pr(
     state: &RtkState,
     fixed_state: &RtkState,
     ephemerides: &[gneiss_core::ephemeris::Ephemeris],
-    base_coord: &Coordinate,
-    base_time: gneiss_core::time::GpsTime,
+    _base_coord: &Coordinate,
+    _base_time: gneiss_core::time::GpsTime,
 ) -> bool {
-    let dummy_ref = gneiss_core::sat::SatelliteId {
-        constellation: gneiss_core::sat::Constellation::Gps,
-        prn: 255,
-    };
     let dx = fixed_state.position.vector - state.position.vector;
     let mut checked = 0usize;
     let mut failed = 0usize;
 
-    // Group accumulated satellites by constellation for reference lookup
-    for ((sat, key_ref), buf) in state.pr_dd_window.iter() {
-        if *key_ref != dummy_ref { continue; }
+    for ((sat, ref_sat), buf) in state.pr_dd_window.iter() {
         let mean_innov = match buf.mean() {
             Some(m) => m, None => continue,
         };
         let n = buf.count();
         if n < 10 { continue; }
 
-        // Find current reference for this satellite's constellation
-        let ref_sat = match state.current_ref_sat.get(&sat.constellation) {
-            Some(s) => *s, None => continue,
-        };
-        if *sat == ref_sat { continue; } // reference itself, no DD
-
         let eph_sat = match ephemerides.iter().find(|e| e.sat() == *sat) {
             Some(e) => e, None => continue,
         };
-        let eph_ref = match ephemerides.iter().find(|e| e.sat() == ref_sat) {
+        let eph_ref = match ephemerides.iter().find(|e| e.sat() == *ref_sat) {
             Some(e) => e, None => continue,
         };
 
-        // Geometric shift at fixed position: Δpred = H·dx
-        // H is the DD LOS vector at the float position. Compute using current
-        // geometry as approximation for the window mean.
+        // DD LOS vector at float position: H_dd = e_ref - e_sat
         let (sat_pos, _) = crate::engine::measurement_math::get_sat_state(
             eph_sat, 0.0, 0.0, state.time, state.position.vector,
         );
@@ -662,34 +642,39 @@ fn validate_geometry_pr(
         );
         let e_sat = (state.position.vector - sat_pos).normalize();
         let e_ref = (state.position.vector - ref_pos).normalize();
-        let h_dd = e_ref - e_sat; // DD LOS vector (unitless)
-        let pred_shift = h_dd.dot(&dx); // change in predicted DD PR at fixed pos
+        let pred_shift = (e_ref - e_sat).dot(&dx);
 
-        // At fixed position: innov_fixed = innov_float + pred_shift
-        // Mean innovation at fixed position should be ~0 for correct fix
-        let shifted_mean = mean_innov + pred_shift;
+        // Shifted mean at fixed position — should be ~0 for correct fix
+        let shifted = mean_innov + pred_shift;
 
-        // Expected noise: σ/√N. Use σ=1.5m (conservative for DD PR).
+        // σ_eff = σ / √N. σ ≈ 1.5m for DD PR.
         let threshold = 5.0 * 1.5 / (n as f64).sqrt();
         checked += 1;
-        if shifted_mean.abs() > threshold {
-            tracing::debug!(
-                "GEO-PR {:?}: mean={:.2} shift={:.2} shifted={:.2} thresh={:.2} n={}",
-                sat, mean_innov, pred_shift, shifted_mean, threshold, n
-            );
+        tracing::debug!(
+            "GEO-PR {:?}|{:?}: mean={:.2} shift={:.2} shifted={:.2} thresh={:.2} n={}",
+            sat, ref_sat, mean_innov, pred_shift, shifted, threshold, n
+        );
+        if shifted.abs() > threshold {
             failed += 1;
         }
     }
 
-    // TODO: Enable rejection once reference-switching is handled correctly.
-    // The accumulated innovations use varying reference satellites across
-    // the window, making the current-epoch geometric shift inconsistent
-    // with historical values.  Fix: either store reference per entry, or
-    // accumulate DD PR against a fixed per-constellation reference.
-    if checked >= 4 {
-        tracing::debug!(
-            "Geometry PR: {}/{} sats OK (validation disabled)",
-            checked - failed, checked
+    // Require at least 4 pairs to pass (not majority). Code multipath on
+    // some satellites produces PR biases of 1-4m that no amount of averaging
+    // can fix — those pairs will always fail.  We only need a quorum of
+    // clean satellites to validate the fix.
+    let passed = checked - failed;
+    if checked >= 4 && passed < 4 {
+        tracing::warn!(
+            "AR fix rejected by geometry PR: only {}/{} pairs passed (need 4)",
+            passed, checked
+        );
+        return false;
+    }
+    if passed >= 4 {
+        tracing::info!(
+            "Geometry PR validated: {}/{} pairs OK",
+            passed, checked
         );
     }
     true
@@ -699,13 +684,9 @@ fn validate_geometry_pr(
 /// A wrong NL integer set produces a position that fits CP (ambiguities adjust)
 /// but produces worse PR residuals. Returns false if the fix should be rejected.
 /// Accumulate pseudorange innovations (observed - predicted) per satellite
-/// into a sliding-window ring buffer.  Unlike raw PR, innovations are already
-/// double-differenced and corrected for atmosphere, so reference satellite
-/// changes are handled by the measurement model.  The mean innovation should
-/// converge to zero for a correctly modeled position.
-///
-/// This is called from `execute_ekf_update` which has access to the measurement
-/// matrices `m` containing post-fit innovations.
+/// into a sliding-window ring buffer.  Each entry stores the innovation and
+/// the reference satellite used for DD at that epoch.  This enables correct
+/// geometric shift computation even when the reference changes across the window.
 fn accumulate_pr_window(
     state: &mut RtkState,
     m: &crate::engine::measurement::EkfMeasurementMatrices,
@@ -714,23 +695,20 @@ fn accumulate_pr_window(
     if window_size == 0 {
         return;
     }
-    let dummy_ref = gneiss_core::sat::SatelliteId {
-        constellation: gneiss_core::sat::Constellation::Gps,
-        prn: 255,
-    };
+    // Find the reference satellite per constellation from state
     for i in 0..m.z.nrows() {
-        // PR measurements only (type 0)
-        if m.mt[i].1 != 0 {
-            continue;
-        }
+        if m.mt[i].1 != 0 { continue; } // PR only (type 0)
         let sat = m.mt[i].0;
-        let innovation = m.z[i]; // observed - predicted at current float position
-        let key = (sat, dummy_ref);
+        let innovation = m.z[i];
+        // Look up reference for this satellite's constellation
+        let ref_sat = state.current_ref_sat.get(&sat.constellation).copied()
+            .unwrap_or(sat); // fallback: use self as reference (shouldn't happen)
+        let key = (sat, ref_sat);
         let buf = state
             .pr_dd_window
             .entry(key)
             .or_insert_with(|| crate::filter::PrRingBuffer::new(window_size));
-        buf.push(innovation);
+        buf.push(innovation, ref_sat);
     }
 }
 
