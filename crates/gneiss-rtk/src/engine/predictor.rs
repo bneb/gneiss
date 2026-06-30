@@ -461,6 +461,7 @@ mod tests {
             process_noise_amb_float: 1e-4,
             process_noise_amb_fixed: 1e-7,
             uduc_ar: false,
+            pr_window_size: 100,
             tropo_mapping: gneiss_core::atmosphere::TropoMapping::default(),
             tuning: crate::engine::config::EkfTuningConfig::default(),
         };
@@ -539,6 +540,7 @@ mod tests {
             process_noise_amb_float: 1e-4,
             process_noise_amb_fixed: 1e-7,
             uduc_ar: false,
+            pr_window_size: 100,
             tropo_mapping: gneiss_core::atmosphere::TropoMapping::default(),
             tuning: crate::engine::config::EkfTuningConfig::default(),
         }

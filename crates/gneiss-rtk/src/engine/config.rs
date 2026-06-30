@@ -172,6 +172,11 @@ pub struct EngineConfig {
     pub process_noise_amb_float: f64,
     pub process_noise_amb_fixed: f64,
 
+    /// Sliding-window size for DD pseudorange accumulation.
+    /// Used for multi-epoch code averaging in geometry-based AR validation.
+    /// 100 epochs at 10 Hz = 10 seconds of averaging.
+    pub pr_window_size: usize,
+
     pub uduc_ar: bool,
 
     /// Tropospheric mapping function selection.
@@ -231,6 +236,7 @@ impl Default for EngineConfig {
             process_noise_amb_float: 1e-7,   // allows ambiguity re-convergence (RALPH: was 1e-8, RTK breakthrough at 1e-7)
             process_noise_amb_fixed: 1e-12,
             tuning: Default::default(),
+            pr_window_size: 100, // 10 s at 10 Hz — reduces code noise σ from 1m to 0.1m
             uduc_ar: false, // UDUC experimental — IF mode more accurate for float
             tropo_mapping: gneiss_core::atmosphere::TropoMapping::default(),
             enable_gnn_raim: false,

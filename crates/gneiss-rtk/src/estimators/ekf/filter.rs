@@ -1,10 +1,41 @@
 use gneiss_core::coords::Coordinate;
 use gneiss_core::sat::SatelliteId;
 use nalgebra::{DMatrix, DVector, UnitQuaternion, Vector3};
+use std::collections::VecDeque;
 
 use gneiss_core::time::GpsTime;
 
 pub const CORE_STATE_SIZE: usize = 21;
+
+/// Ring buffer for accumulating DD pseudorange over a sliding window.
+/// Maintains a running sum for O(1) mean computation.
+#[derive(Debug, Clone)]
+pub struct PrRingBuffer {
+    buf: VecDeque<f64>,
+    sum: f64,
+    capacity: usize,
+}
+
+impl PrRingBuffer {
+    pub fn new(capacity: usize) -> Self {
+        Self { buf: VecDeque::with_capacity(capacity), sum: 0.0, capacity }
+    }
+
+    pub fn push(&mut self, val: f64) {
+        if self.buf.len() >= self.capacity {
+            self.sum -= self.buf.pop_front().unwrap_or(0.0);
+        }
+        self.buf.push_back(val);
+        self.sum += val;
+    }
+
+    pub fn mean(&self) -> Option<f64> {
+        if self.buf.is_empty() { None }
+        else { Some(self.sum / self.buf.len() as f64) }
+    }
+
+    pub fn count(&self) -> usize { self.buf.len() }
+}
 
 /// Initial variance for receiver clock bias (m²).
 ///
@@ -72,6 +103,8 @@ pub struct RtkState {
     /// Narrow-lane SD EMA (cycles) for NL integer validation
     pub nl_sd_ema: std::collections::HashMap<SatelliteId, f64>,
     pub nl_sd_counts: std::collections::HashMap<SatelliteId, usize>,
+    /// Sliding-window DD pseudorange accumulator: (rov_sat, ref_sat) → ring buffer
+    pub pr_dd_window: std::collections::HashMap<(SatelliteId, SatelliteId), PrRingBuffer>,
     pub gf_prev: std::collections::HashMap<SatelliteId, f64>,
     pub mw_prev: std::collections::HashMap<SatelliteId, f64>,
     pub locktimes: std::collections::HashMap<(SatelliteId, u8), u16>,
@@ -164,6 +197,7 @@ impl RtkState {
             mw_sd_counts: std::collections::HashMap::new(),
             nl_sd_ema: std::collections::HashMap::new(),
             nl_sd_counts: std::collections::HashMap::new(),
+            pr_dd_window: std::collections::HashMap::new(),
             gf_prev: std::collections::HashMap::new(),
             mw_prev: std::collections::HashMap::new(),
             locktimes: std::collections::HashMap::new(),

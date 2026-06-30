@@ -1,71 +1,130 @@
-# Sprint Plan v8
+# Sprint Plan v9
 
-## State (2026-06-29)
+## State (2026-06-29, post-commit 4272587)
 
-Native IEKF is default `--mode ppp`. RTKLIB port is `--mode ppp-rtklib` (regression only, no active development).
+Single-epoch RTK architecture is at its fundamental limit. AR is fully functional with
+87% fix rate and 40-sat full-constellation resolution. The solution is perfectly stable
+(0.000m position jumps after first fix, p50-p95 spread = 1.4cm) but systematically biased
+by 0.9m from wrong first-fix NL integers.
 
 ### Accuracy
 | Mode | Dataset | Key Metric | Goal | Gap |
 |------|---------|-----------|------|-----|
-| PPP native IEKF | CEDU (1000ep) | **1.7cm p95** | 1.00m | ✅ |
+| RTK single-epoch | Odaiba 4km | **0.91m p50, 0.94m p95** | 0.25m p95 | **3.8×** |
+| RTK single-epoch | F9P 8km | 1.94m p50, 3.83m p95 | 0.25m p95 | 15× |
+| PPP native IEKF | CEDU (1000ep) | 1.7cm p95 | 1.00m | ✅ |
 | PPP native IEKF | CEDU (2880ep) | crashes at ep1500 | 1.00m | 1 bug |
-| RTK | Odaiba | 1.15m p50, 4.97m p95 | 0.25m p95 | 20× |
 
-### One bug remaining
+### Root cause of 0.9m RTK bias
+Code multipath (σ≈1m) biases the float solution by ~1m. The first AR fix picks the
+LAMBDA integer set closest to the biased float estimates. MW and NL validations both pass
+because code multipath biases their EMAs identically. PR residuals can't distinguish
+correct from wrong fixes (ratio only 1.18×). **The bias source contaminates all
+single-epoch validation pathways equally.**
 
-Constellation rotation at epoch 1000-1500 causes the 21+N-element state to resize (satellites rise/set). The state resize produces ill-conditioned normal equations with the tight position prior (weight 10000 on position vs ~0.01 on ambiguities). The SVD solve produces large dx, the per-iteration clamp fires, and the solve returns `StateDisappeared`. Root cause: ambiguity initialization during resize uses the tight position variance for new ambiguities, which is correct for the first N sats but too tight when combined with existing converged states — the condition number of the information matrix spikes.
+### Why multi-epoch code averaging breaks the deadlock
+Averaging DD pseudorange over N epochs reduces code multipath noise by √N.
+With N=100 epochs (10s at 10Hz), PR noise drops from σ=1m to σ=0.1m. This is
+precise enough to resolve NL integers (±5.4cm half-cycle at 2σ confidence).
 
----
-
-## Phase 1: Fix Constellation Rotation (0.5 session)
-
-### Solution: regularize per-ambiguity, not globally
-
-The SVD regularization (1e-4) is applied globally, discarding valid ambiguity information. Instead: add a per-ambiguity regularization term that scales with the ambiguity variance. New ambiguities get large regularization (they're unknown), converged ambiguities get small regularization.
-
-**Implementation**: In `compute_iteration_dx` and `compute_final_covariance`, add `λI` to the normal equations where `λ` is proportional to `1/σ²_amb` for each ambiguity. This is Tikhonov regularization with a diagonal matrix instead of a scalar.
-
-**Alternative**: Simpler — before the SVD solve, check the condition number of `htwh_damped`. If >1e8, add incremental regularization until condition number drops below threshold. This is Levenberg-Marquardt style adaptive damping.
-
-**Verification**: Run all 4 IGS stations, 2880 epochs. Zero crashes. Target p95 <0.1m on all stations with known position.
+Critically, the averaged PR provides an INDEPENDENT validation pathway — unlike MW/NL
+EMAs which are derived from the same biased code measurements, the position-constrained
+PR average uses satellite geometry to break the ambiguity-code correlation.
 
 ---
 
-## Phase 2: Factor Graph (1-2 sessions)
+## Phase 5: Multi-Epoch Code Averaging (1-2 sessions)
 
-With the native IEKF stable across all epochs, wire the multi-epoch optimizer.
+**Goal**: p95 horizontal ≤ 25cm on Odaiba 4km by resolving the first-fix NL integer bias.
 
-### 2.1: Fix PppTwoEpochOptimizer
-Remove internal `PppIteratedEkf::solve()`. Accept pre-solved `RtkState`. The processor feeds native IEKF output to the optimizer each epoch.
+### 5.1: Sliding-window PR accumulator (0.5 session)
 
-### 2.2: Shared position for static
-State vector: `[position(3), clock_0, tropo_0, ..., clock_{N-1}, tropo_{N-1}, ambiguities]`. One position shared across window.
+Add a per-satellite-pair ring buffer to `RtkState` that accumulates DD pseudorange
+over the last N epochs. At each epoch, push the current DD PR and pop the oldest.
+Maintain the running mean and variance.
 
-### 2.3: Benchmark
-Target +20% p95 over single-epoch native IEKF.
+```
+state.pr_dd_accum: HashMap<(SatId, SatId), RingBuffer<f64>>
+state.pr_dd_mean: HashMap<(SatId, SatId), f64>
+```
+
+The PR DD for satellite pair (rov, ref) is already computed in the measurement model.
+Store it after each successful EKF update.
+
+### 5.2: Position-constrained PR validation (0.5 session)
+
+At AR time, use the time-averaged PR to validate the LAMBDA NL integers through
+geometry rather than through the code-minus-phase NL combination:
+
+1. Compute the expected DD PR at the fixed position using satellite geometry
+2. Compare against the time-averaged DD PR from the accumulator
+3. If the residual exceeds the expected noise (σ/√N), reject the fix
+
+The validation function:
+```
+fn validate_geometry_pr(
+    fixed_state: &RtkState,
+    pr_accum: &PrAccumulator,
+    ephemerides: &[Ephemeris],
+) -> bool {
+    for each (sat, ref) pair with N >= 10 accumulated epochs:
+        expected_pr_dd = geometric_dd(fixed_pos, sat_pos, ref_pos, base_pos)
+        residual = expected_pr_dd - pr_accum.mean[(sat, ref)]
+        if residual > 3.0 * pr_accum.std[(sat, ref)] / sqrt(N):
+            return false
+    true
+}
+```
+
+**Expected outcome**: Wrong first-fix NL integers (off by 1-2 cycles = 10-21cm at NL)
+produce PR residuals of 10-21cm, which exceed the 3σ threshold of 3×0.1m=0.3m with
+N=100. Correct fixes produce residuals < 0.3m. The first wrong fix is rejected,
+the float solution continues to converge, and a subsequent correct fix is accepted.
+
+### 5.3: Shared-position batch estimator (optional, 0.5 session)
+
+If 5.2 alone doesn't close the gap, implement a lightweight batch estimator that
+jointly solves for position across the sliding window using accumulated PR:
+
+```
+minimize Σ ||PR_dd_observed(t) - PR_dd_predicted(pos, t)||²
+```
+
+This replaces the single-epoch float position with a multi-epoch smoothed position.
+The improved float position reduces the LAMBDA search space, making the first fix
+more likely correct even before the geometry validation in 5.2.
+
+### 5.4: Benchmark (0.5 session)
+
+Run full Odaiba + F9P datasets. Target p95 ≤ 0.25m horizontal on Odaiba 4km.
+If achieved, test on highway dataset (UrbanNav Odaiba open-sky segments or GSDC
+after fixing the 60m vertical issue).
 
 ---
 
-## Phase 3: Urban Canyon (1-2 sessions)
+## Phase 6: Highway + Suburban Validation (1 session)
 
-### 3.1: Multi-constellation
-Galileo + QZSS for Tokyo datasets. Already in SP3/CLK files, 21-element state has ISB slots.
+With multi-epoch averaging delivering 25cm on Odaiba:
 
-### 3.2: Kinematic smoother
-Enable position smoother for automotive dynamics. SPP seed (σ=5m) → forward convergence → backward propagation of converged info.
+### 6.1: Fix GSDC 60m vertical
+Root cause identified: smartphone L1-only, min_elevation_deg silently ignored.
+Config aliases already fixed. Need to verify on full dataset.
 
-### 3.3: RTK AR hardening
-Port PPP cascade AR validation to RTK. Multi-base selection (already in commit 4efe53e).
+### 6.2: Odaiba open-sky segments
+Identify highway sections in UrbanNav Odaiba (Rainbow Bridge crossing, Bayshore Route).
+Evaluate p95 on these segments separately from urban canyon.
 
-Target: Odaiba PPP p50 <5m (from 7m). RTK p95 <3m (from 5m).
+### 6.3: RTKLIB comparison
+Run RTKLIB on same datasets with equivalent settings. Target: Gneiss p95 ≤ RTKLIB p95.
 
 ---
 
-## Phase 4: INS Coupling (2-3 sessions)
+## Phase 7: INS Coupling (2-3 sessions)
 
-Wire IMU preintegration factors from FGO module into native IEKF loop. NHC already implemented. The 21-element state was designed for this.
+Wire IMU preintegration factors into the multi-epoch estimator. NHC already implemented.
+The 21-element state was designed for this.
 
-Target: UrbanNav PPP-INS p50 <2m in urban canyon (from 7m).
+Target: RTK-INS p50 < 0.15m in suburban, < 0.5m in urban canyon.
 
 ---
 
@@ -73,9 +132,8 @@ Target: UrbanNav PPP-INS p50 <2m in urban canyon (from 7m).
 
 | Phase | Sessions | Key Metric |
 |-------|----------|------------|
-| 1: Constellation rotation | 0.5 | 4/4 IGS stable 2880ep, p95 <0.1m |
-| 2: Factor graph | 1-2 | +20% p95 over single-epoch |
-| 3: Urban canyon | 1-2 | PPP p50 <5m, RTK p95 <3m |
-| 4: INS coupling | 2-3 | PPP-INS p50 <2m |
+| **5: Multi-epoch code averaging** | **1-2** | **RTK p95 ≤ 0.25m on Odaiba 4km** |
+| 6: Highway + suburban validation | 1 | RTK p95 ≤ 0.25m on highway/suburban |
+| 7: INS coupling | 2-3 | RTK-INS p50 < 0.15m suburban |
 
-**Total: 5-8 sessions to production-ready PPP + RTK + INS.**
+**Next session: Phase 5.1-5.2 — sliding-window PR accumulator + geometry-based validation.**

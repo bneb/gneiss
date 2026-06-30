@@ -602,9 +602,108 @@ fn handle_ekf_rejection(
     }
 }
 
+/// Validate an AR fix using time-averaged PR innovations.
+/// Accumulated innovations (observed - predicted at float position) should have
+/// mean ~0 for a correctly modeled position.  At the fixed position, the
+/// innovation shifts by H·dx where dx is the position change.  If the shifted
+/// mean exceeds the expected noise floor, the fix position is inconsistent
+/// with the time-averaged PR measurements — indicating wrong NL integers.
+fn validate_geometry_pr(
+    state: &RtkState,
+    fixed_state: &RtkState,
+    _ephemerides: &[gneiss_core::ephemeris::Ephemeris],
+    _base_coord: &Coordinate,
+    _base_time: gneiss_core::time::GpsTime,
+) -> bool {
+    let dummy_ref = gneiss_core::sat::SatelliteId {
+        constellation: gneiss_core::sat::Constellation::Gps,
+        prn: 255,
+    };
+    let dx = fixed_state.position.vector - state.position.vector;
+    let state_size = state.covariance.nrows();
+    let mut checked = 0usize;
+    let mut failed = 0usize;
+
+    for ((sat, key_ref), buf) in state.pr_dd_window.iter() {
+        if *key_ref != dummy_ref {
+            continue;
+        }
+        let mean_innov = match buf.mean() {
+            Some(m) => m,
+            None => continue,
+        };
+        let n = buf.count();
+        if n < 10 {
+            continue;
+        }
+        // Expected PR innovation noise per epoch: σ ≈ 1.0m.
+        // After averaging N epochs: σ_mean = σ / √N.
+        // Use 5σ threshold to avoid false positives.
+        let sigma = 1.0f64;
+        let threshold = 5.0 * sigma / (n as f64).sqrt();
+
+        // Innovation shift at fixed position ≈ H·dx (position part only)
+        // For PR, H[0:3] is the DD line-of-sight vector. We don't have H
+        // per-satellite here, so approximate: the geometric change in DD PR
+        // from position shift dx is roughly |dx| projected along LOS.
+        // Conservative bound: |h_dot_dx| ≤ |dx|, so residual ≤ |mean| + |dx|
+        let residual = mean_innov.abs() + dx.norm();
+        checked += 1;
+        tracing::debug!(
+            "GEO-PR-INNOV {:?}: mean={:.3} |dx|={:.3} res={:.3} thresh={:.3} n={}",
+            sat, mean_innov, dx.norm(), residual, threshold, n
+        );
+        if residual > threshold {
+            failed += 1;
+        }
+    }
+
+    // TODO: Enable rejection once PR accumulation reaches sufficient window size
+    // and the noise floor drops below NL half-cycle (5.4cm). Currently the
+    // threshold is too loose to distinguish correct from wrong fixes.
+    let _ = (checked, failed);
+    true
+}
+
 /// Validate an AR fix by comparing PR residuals at the fixed position vs float.
 /// A wrong NL integer set produces a position that fits CP (ambiguities adjust)
 /// but produces worse PR residuals. Returns false if the fix should be rejected.
+/// Accumulate pseudorange innovations (observed - predicted) per satellite
+/// into a sliding-window ring buffer.  Unlike raw PR, innovations are already
+/// double-differenced and corrected for atmosphere, so reference satellite
+/// changes are handled by the measurement model.  The mean innovation should
+/// converge to zero for a correctly modeled position.
+///
+/// This is called from `execute_ekf_update` which has access to the measurement
+/// matrices `m` containing post-fit innovations.
+fn accumulate_pr_window(
+    state: &mut RtkState,
+    m: &crate::engine::measurement::EkfMeasurementMatrices,
+    window_size: usize,
+) {
+    if window_size == 0 {
+        return;
+    }
+    let dummy_ref = gneiss_core::sat::SatelliteId {
+        constellation: gneiss_core::sat::Constellation::Gps,
+        prn: 255,
+    };
+    for i in 0..m.z.nrows() {
+        // PR measurements only (type 0)
+        if m.mt[i].1 != 0 {
+            continue;
+        }
+        let sat = m.mt[i].0;
+        let innovation = m.z[i]; // observed - predicted at current float position
+        let key = (sat, dummy_ref);
+        let buf = state
+            .pr_dd_window
+            .entry(key)
+            .or_insert_with(|| crate::filter::PrRingBuffer::new(window_size));
+        buf.push(innovation);
+    }
+}
+
 fn validate_pr_residuals(
     state: &RtkState,
     fixed_state: &RtkState,
@@ -652,6 +751,22 @@ fn validate_pr_residuals(
     true
 }
 
+/// Apply an accepted AR fix to the live EKF state.
+fn accept_ar_fix(state: &mut RtkState, fixed_state: RtkState, pos_jump: f64) {
+    tracing::info!(
+        "RTK AR fixed: {} sats (position jump {:.3}m)",
+        fixed_state.ambiguities.len(),
+        pos_jump
+    );
+    state.is_fixed = true;
+    state.position = fixed_state.position.clone();
+    if state.ambiguities.len() == fixed_state.ambiguities.len() {
+        state.ambiguities.copy_from_slice(&fixed_state.ambiguities);
+        state.covariance = fixed_state.covariance.clone();
+    }
+    state.fixed_state = Some(Box::new(fixed_state));
+}
+
 fn handle_ekf_acceptance(
     state: &mut RtkState,
     config: &EngineConfig,
@@ -660,6 +775,8 @@ fn handle_ekf_acceptance(
     spp_state_ref: Option<&crate::spp::SppState>,
     m: Option<&crate::engine::measurement::EkfMeasurementMatrices>,
     valid_indices: Option<&[usize]>,
+    base_coord: Option<&Coordinate>,
+    base_time: Option<gneiss_core::time::GpsTime>,
 ) {
     let pos_var = state.covariance[(0, 0)] + state.covariance[(1, 1)] + state.covariance[(2, 2)];
     if pos_var > 10000.0 {
@@ -690,23 +807,15 @@ fn handle_ekf_acceptance(
         } else if !validate_pr_residuals(state, &fixed_state, m, valid_indices) {
             state.is_fixed = false;
             state.fixed_state = None;
-        } else {
-            tracing::info!(
-                "RTK AR fixed: {} sats (position jump {:.3}m)",
-                fixed_state.ambiguities.len(),
-                pos_jump
-            );
-            state.is_fixed = true;
-            state.position = fixed_state.position.clone();
-            // Apply fixed ambiguity values to the live EKF state so the
-            // carrier-phase measurements use the correct integer ambiguities.
-            // Without this, the EKF continues to estimate float ambiguities
-            // and the AR fix has no persistent effect.
-            if state.ambiguities.len() == fixed_state.ambiguities.len() {
-                state.ambiguities.copy_from_slice(&fixed_state.ambiguities);
-                state.covariance = fixed_state.covariance.clone();
+        } else if let (Some(bc), Some(bt)) = (base_coord, base_time) {
+            if !validate_geometry_pr(state, &fixed_state, ephemerides, bc, bt) {
+                state.is_fixed = false;
+                state.fixed_state = None;
+            } else {
+                accept_ar_fix(state, fixed_state, pos_jump);
             }
-            state.fixed_state = Some(Box::new(fixed_state));
+        } else {
+            accept_ar_fix(state, fixed_state, pos_jump);
         }
     } else {
         // Maintain previous fix across epochs — don't un-fix because
@@ -769,6 +878,8 @@ fn process_rtk_update<C: CouplingStrategy>(
     ) {
         apply_adaptive_r_scaling(tracker, state, &m.z, &m.h, &mut m.r, &m.mt, ctx.matched_obs);
         execute_ekf_update::<C>(state, ctx, &m);
+        // Accumulate PR innovations for multi-epoch averaging
+        accumulate_pr_window(state, &m, ctx.config.pr_window_size);
     } else {
         handle_ekf_rejection(
             state,
@@ -830,6 +941,8 @@ fn execute_ekf_update<C: CouplingStrategy>(
                 ctx.spp_state_ref,
                 Some(m),
                 Some(&valid_indices),
+                Some(ctx.base_coord),
+                Some(ctx.base_obs.time),
             );
         }
     }
@@ -1192,7 +1305,7 @@ mod tests {
         let mut state = RtkState::new(time, pos, 1.0);
         state.consecutive_rejections = 5;
 
-        handle_ekf_acceptance(&mut state, &EngineConfig::default(), &[], None, None, None, None);
+        handle_ekf_acceptance(&mut state, &EngineConfig::default(), &[], None, None, None, None, None, None);
         assert_eq!(state.consecutive_rejections, 0);
     }
 
@@ -1213,7 +1326,7 @@ mod tests {
             time,
         );
 
-        handle_ekf_acceptance(&mut state, &EngineConfig::default(), &[], Some(spp_pos), None, None, None);
+        handle_ekf_acceptance(&mut state, &EngineConfig::default(), &[], Some(spp_pos), None, None, None, None, None);
         // Should be reset
         assert!((state.position.vector.x - 50.0).abs() < 1e-6);
         assert_eq!(state.consecutive_rejections, 0);
@@ -1774,7 +1887,7 @@ mod tests {
         state.covariance[(0, 0)] = 20000.0;
         state.consecutive_rejections = 5;
 
-        handle_ekf_acceptance(&mut state, &config, &[], None, None, None, None);
+        handle_ekf_acceptance(&mut state, &config, &[], None, None, None, None, None, None);
         assert_eq!(state.consecutive_rejections, 0);
         assert!((state.position.vector.x - 5.0).abs() < 1e-6);
     }
