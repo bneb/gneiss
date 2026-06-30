@@ -73,6 +73,54 @@ impl PrRingBuffer {
     pub fn count(&self) -> usize { self.buf.len() }
 }
 
+/// Per-measurement data extracted from the EKF H matrix for one DD observation.
+/// Used by the two-epoch factor graph to build linear measurement factors
+/// without recomputing satellite geometry.
+#[derive(Debug, Clone)]
+pub struct StoredDdMeasurement {
+    pub sat_id: SatelliteId,
+    pub ref_sat_id: SatelliteId,
+    /// Pre-computed DD innovation z = observed - predicted (meters).
+    pub z: f64,
+    /// DD LOS Jacobian for position: h_pos = e_ref - e_sat (unit vector
+    /// difference between reference and target satellite line-of-sight).
+    pub h_pos: [f64; 3],
+    /// Variance of this measurement (extracted from R diagonal).
+    pub variance: f64,
+    /// True if this is a pseudorange measurement (type 0), false for
+    /// carrier phase (type 1 or 2).
+    pub is_pr: bool,
+    /// Frequency band: 1 = L1, 2 = L2.
+    pub freq_band: u8,
+    /// Index of this satellite's ambiguity in the epoch's ambiguity_keys
+    /// vector (None for PR-only measurements).
+    pub amb_idx: Option<usize>,
+    /// Index of the reference satellite's ambiguity (None for PR).
+    pub ref_amb_idx: Option<usize>,
+    /// Ionosphere state indices and scale (if iono states present).
+    /// (sat_iono_idx, ref_iono_idx, iono_scale).
+    pub iono_pair: Option<(usize, usize, f64)>,
+}
+
+/// Snapshot of a previous epoch's measurement data for the two-epoch
+/// RTK factor graph. Stored at the end of each successful EKF update.
+#[derive(Debug, Clone)]
+pub struct PrevEpochMeasurements {
+    /// GPS time of week (seconds).
+    pub time: f64,
+    /// EKF position at this epoch (ECEF, meters).
+    pub pos: nalgebra::Vector3<f64>,
+    /// EKF velocity at this epoch (ECEF, m/s).
+    pub vel: nalgebra::Vector3<f64>,
+    /// Receiver clock bias at this epoch (meters).
+    pub clk: f64,
+    /// Per-measurement DD data extracted from the H matrix.
+    pub measurements: Vec<StoredDdMeasurement>,
+    /// Ambiguity keys at this epoch, for mapping to the combined
+    /// factor graph ambiguity block.
+    pub ambiguity_keys: Vec<(SatelliteId, u8)>,
+}
+
 /// Initial variance for receiver clock bias (m²).
 ///
 /// RTKLIB uses VAR_CLK = 100² = 10,000 m² for the PPP filter, reset
@@ -162,6 +210,8 @@ pub struct RtkState {
     /// Previous epoch's float position for two-epoch smoothing
     pub prev_epoch_pos: Option<Vector3<f64>>,
     pub prev_epoch_cov: Option<nalgebra::Matrix3<f64>>,
+    /// Previous epoch's measurement data for two-epoch factor graph AR validation.
+    pub prev_epoch_meas: Option<PrevEpochMeasurements>,
     pub predicted_position: Option<Coordinate>,
     pub predicted_velocity: Option<Vector3<f64>>,
     pub predicted_attitude: Option<UnitQuaternion<f64>>,
@@ -255,6 +305,7 @@ impl RtkState {
             full_x_predict: None,
             prev_epoch_pos: None,
             prev_epoch_cov: None,
+            prev_epoch_meas: None,
             predicted_position: None,
             predicted_velocity: None,
             predicted_attitude: None,

@@ -2390,6 +2390,119 @@ impl Factor for ErrorStateDopplerFactor {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Double-Differenced (DD) RTK measurement factors
+// ---------------------------------------------------------------------------
+// These use pre-computed DD innovations and LOS Jacobians from the EKF's
+// H matrix. They are LINEAR factors: residual = H·δx - z, and the Jacobian
+// is the constant H row. This avoids recomputing satellite geometry during
+// factor graph optimization.
+
+/// Linear DD pseudorange factor using pre-computed EKF innovation and LOS Jacobian.
+///
+/// `h_pos` is the DD line-of-sight vector `e_ref - e_sat` (unitless).
+/// The residual is `h_pos · δx_pos - z` where `z` is the pre-computed
+/// DD innovation (observed minus predicted at the EKF linearization point).
+pub struct ErrorStateDdPseudorangeFactor {
+    pub sat_id: gneiss_core::sat::SatelliteId,
+    pub ref_sat_id: gneiss_core::sat::SatelliteId,
+    /// Pre-computed DD innovation (meters).
+    pub z: f64,
+    /// DD LOS Jacobian for position: [e_ref - e_sat] (3 elements).
+    pub h_pos: [f64; 3],
+    /// Measurement variance (from EKF R diagonal).
+    pub variance: f64,
+    /// Factor graph state indices for position (px, py, pz) for this epoch.
+    pub index_px: usize,
+    pub index_py: usize,
+    pub index_pz: usize,
+    /// Total error-state dimension (for zero-padding Jacobian).
+    pub total_dim: usize,
+}
+
+impl Factor for ErrorStateDdPseudorangeFactor {
+    fn residual(&self, delta: &DVector<f64>) -> DVector<f64> {
+        let pred = self.h_pos[0] * delta[self.index_px]
+            + self.h_pos[1] * delta[self.index_py]
+            + self.h_pos[2] * delta[self.index_pz];
+        DVector::from_vec(vec![pred - self.z])
+    }
+
+    fn jacobian(&self, _delta: &DVector<f64>) -> DMatrix<f64> {
+        let mut jac = DMatrix::zeros(1, self.total_dim);
+        jac[(0, self.index_px)] = self.h_pos[0];
+        jac[(0, self.index_py)] = self.h_pos[1];
+        jac[(0, self.index_pz)] = self.h_pos[2];
+        jac
+    }
+
+    fn information(&self) -> DMatrix<f64> {
+        DMatrix::from_element(1, 1, 1.0 / self.variance.max(1e-9))
+    }
+}
+
+/// Linear DD carrier phase factor using pre-computed EKF innovation and LOS Jacobian.
+///
+/// The residual is `h_pos · δx_pos - z + δamb[sat] - δamb[ref]`,
+/// where `δamb` is the error-state correction to the float ambiguity estimate
+/// (in meters, since ambiguities are stored in meters in the EKF state).
+pub struct ErrorStateDdCarrierPhaseFactor {
+    pub sat_id: gneiss_core::sat::SatelliteId,
+    pub ref_sat_id: gneiss_core::sat::SatelliteId,
+    /// Pre-computed DD innovation (meters).
+    pub z: f64,
+    /// DD LOS Jacobian for position: [e_ref - e_sat] (3 elements).
+    pub h_pos: [f64; 3],
+    /// Measurement variance (from EKF R diagonal).
+    pub variance: f64,
+    /// Factor graph state indices for position (px, py, pz) for this epoch.
+    pub index_px: usize,
+    pub index_py: usize,
+    pub index_pz: usize,
+    /// Factor graph ambiguity index for the satellite.
+    pub index_amb_sat: usize,
+    /// Factor graph ambiguity index for the reference satellite.
+    pub index_amb_ref: usize,
+    /// Ionosphere state indices and scale in the factor graph ambiguity block.
+    /// (sat_iono_fg_idx, ref_iono_fg_idx, iono_scale).
+    pub iono_pair: Option<(usize, usize, f64)>,
+    /// Total error-state dimension (for zero-padding Jacobian).
+    pub total_dim: usize,
+}
+
+impl Factor for ErrorStateDdCarrierPhaseFactor {
+    fn residual(&self, delta: &DVector<f64>) -> DVector<f64> {
+        let pred = self.h_pos[0] * delta[self.index_px]
+            + self.h_pos[1] * delta[self.index_py]
+            + self.h_pos[2] * delta[self.index_pz]
+            + delta[self.index_amb_sat]
+            - delta[self.index_amb_ref];
+        if let Some((si, ri, scale)) = self.iono_pair {
+            DVector::from_vec(vec![pred - self.z + scale * (delta[si] - delta[ri])])
+        } else {
+            DVector::from_vec(vec![pred - self.z])
+        }
+    }
+
+    fn jacobian(&self, _delta: &DVector<f64>) -> DMatrix<f64> {
+        let mut jac = DMatrix::zeros(1, self.total_dim);
+        jac[(0, self.index_px)] = self.h_pos[0];
+        jac[(0, self.index_py)] = self.h_pos[1];
+        jac[(0, self.index_pz)] = self.h_pos[2];
+        jac[(0, self.index_amb_sat)] = 1.0;
+        jac[(0, self.index_amb_ref)] = -1.0;
+        if let Some((si, ri, scale)) = self.iono_pair {
+            jac[(0, si)] = scale;
+            jac[(0, ri)] = -scale;
+        }
+        jac
+    }
+
+    fn information(&self) -> DMatrix<f64> {
+        DMatrix::from_element(1, 1, 1.0 / self.variance.max(1e-9))
+    }
+}
+
 #[cfg(test)]
 mod doppler_tests {
     use super::*;

@@ -774,7 +774,133 @@ fn validate_geometry_pr(
     true
 }
 
-/// Validate an AR fix by comparing PR residuals at the fixed position vs float.
+/// Validate an AR fix using the two-epoch factor graph.
+/// The factor graph jointly estimates position and DD ambiguities across
+/// epochs k-1 and k with shared ambiguity states, providing an independent
+/// geometric constraint that breaks the code-multipath circularity.
+/// Returns true if the fix passes (or if the factor graph is unavailable).
+fn validate_factor_graph(
+    state: &RtkState,
+    fixed_state: &RtkState,
+    m: Option<&crate::engine::measurement::EkfMeasurementMatrices>,
+) -> bool {
+    let Some(meas) = m else { return true; };
+    if state.prev_epoch_meas.is_none() {
+        return true; // No previous epoch data yet — first epoch
+    }
+    match crate::engine::rtk_multi_epoch::run_two_epoch_factor_graph(state, meas) {
+        Some(result) => {
+            let fg_error = (fixed_state.position.vector - result.pos_k).norm();
+            let threshold = 0.5; // meters, tune down to 0.25m
+            tracing::info!(
+                "RTK FG validation: fg_error={:.3}m thresh={:.3}m converged={}",
+                fg_error, threshold, result.converged
+            );
+            if fg_error > threshold {
+                tracing::warn!(
+                    "AR fix rejected by factor graph: fg_error={:.2}m > thresh={:.2}m",
+                    fg_error, threshold
+                );
+                return false;
+            }
+            true
+        }
+        None => {
+            tracing::debug!("RTK FG: factor graph solve failed, falling back to existing validation");
+            true // Don't block on solver failure
+        }
+    }
+}
+
+/// Save the current epoch's measurement data for use by the
+/// two-epoch factor graph in the next epoch.
+fn save_prev_epoch_measurements(
+    state: &mut RtkState,
+    m: &crate::engine::measurement::EkfMeasurementMatrices,
+) {
+    use crate::filter::{PrevEpochMeasurements, StoredDdMeasurement};
+    use crate::filter::CORE_STATE_SIZE;
+
+    let mut measurements = Vec::with_capacity(m.z.nrows());
+
+    for i in 0..m.z.nrows() {
+        let (sat_id, type_code, _r_ref) = m.mt[i];
+        let z = m.z[i];
+        let variance = m.r[(i, i)].max(1e-4);
+        let h_pos = [m.h[(i, 0)], m.h[(i, 1)], m.h[(i, 2)]];
+        let is_pr = type_code == 0;
+        let freq_band = match type_code {
+            0 => 1,
+            1 => 1,
+            2 => 2,
+            _ => 1,
+        };
+
+        // Extract ambiguity indices from H matrix columns >= CORE_STATE_SIZE
+        let mut amb_idx: Option<usize> = None;
+        let mut ref_amb_idx: Option<usize> = None;
+        let mut iono_sat_idx: Option<usize> = None;
+        let mut iono_ref_idx: Option<usize> = None;
+        let mut iono_scale: Option<f64> = None;
+
+        if !is_pr {
+            for col in CORE_STATE_SIZE..m.h.ncols() {
+                let val = m.h[(i, col)];
+                if val.abs() < 1e-9 {
+                    continue;
+                }
+                let key_idx = col - CORE_STATE_SIZE;
+                if key_idx >= state.ambiguity_keys.len() {
+                    continue;
+                }
+                let (_, freq) = state.ambiguity_keys[key_idx];
+                if freq == 3 {
+                    if val > 0.0 {
+                        iono_sat_idx = Some(key_idx);
+                        iono_scale = Some(val);
+                    } else {
+                        iono_ref_idx = Some(key_idx);
+                    }
+                } else if val > 0.0 {
+                    amb_idx = Some(key_idx);
+                } else {
+                    ref_amb_idx = Some(key_idx);
+                }
+            }
+        }
+
+        let ref_sat_id = ref_amb_idx
+            .and_then(|ri| state.ambiguity_keys.get(ri).map(|k| k.0))
+            .unwrap_or(sat_id);
+
+        let iono_pair = match (iono_sat_idx, iono_ref_idx, iono_scale) {
+            (Some(si), Some(ri), Some(sc)) => Some((si, ri, sc)),
+            _ => None,
+        };
+
+        measurements.push(StoredDdMeasurement {
+            sat_id,
+            ref_sat_id,
+            z,
+            h_pos,
+            variance,
+            is_pr,
+            freq_band,
+            amb_idx,
+            ref_amb_idx,
+            iono_pair,
+        });
+    }
+
+    state.prev_epoch_meas = Some(PrevEpochMeasurements {
+        time: state.time.tow,
+        pos: state.position.vector,
+        vel: state.velocity,
+        clk: state.rcv_clk_bias,
+        measurements,
+        ambiguity_keys: state.ambiguity_keys.clone(),
+    });
+}
 /// A wrong NL integer set produces a position that fits CP (ambiguities adjust)
 /// but produces worse PR residuals. Returns false if the fix should be rejected.
 /// Accumulate EKF pseudorange innovations (already clock/tropo/iono corrected)
@@ -916,6 +1042,9 @@ fn handle_ekf_acceptance(
         } else if !validate_pr_residuals(state, &fixed_state, m, valid_indices) {
             state.is_fixed = false;
             state.fixed_state = None;
+        } else if !validate_factor_graph(state, &fixed_state, m) {
+            state.is_fixed = false;
+            state.fixed_state = None;
         } else if let (Some(bc), Some(bt)) = (base_coord, base_time) {
             if !validate_geometry_pr(state, &fixed_state, ephemerides, bc, bt) {
                 state.is_fixed = false;
@@ -1053,6 +1182,8 @@ fn execute_ekf_update<C: CouplingStrategy>(
                 Some(ctx.base_coord),
                 Some(ctx.base_obs.time),
             );
+            // Save measurement data for the next epoch's two-epoch factor graph
+            save_prev_epoch_measurements(state, m);
         }
     }
 }
