@@ -908,7 +908,7 @@ mod mutant_killer_tests {
         ));
 
         {
-            let mut mock_lock = crate::engine::ppp_ar::AR_MOCK.lock().unwrap();
+            let mut mock_lock = crate::engine::ppp_ar::AR_MOCK.lock().unwrap_or_else(|e| e.into_inner());
             *mock_lock = Some(crate::engine::ppp_ar::ArMock {
                 wl_result: Some(mock_wl),
                 nl_result: Some(mock_nl),
@@ -930,7 +930,7 @@ mod mutant_killer_tests {
 
         // Clear mock
         {
-            let mut mock_lock = crate::engine::ppp_ar::AR_MOCK.lock().unwrap();
+            let mut mock_lock = crate::engine::ppp_ar::AR_MOCK.lock().unwrap_or_else(|e| e.into_inner());
             *mock_lock = None;
         }
     }
@@ -2154,7 +2154,7 @@ mod mutant_killer_tests {
 
     #[test]
     fn test_resolve_narrowlane_ar_mock() {
-        let _ = crate::engine::ppp_ar::AR_MOCK.lock().map(|mut m| *m = None);
+        { let mut lock = crate::engine::ppp_ar::AR_MOCK.lock().unwrap_or_else(|e| e.into_inner()); *lock = None; }
         // Use crate::engine::ppp_ar::AR_MOCK to verify NL resolution returns expected modified state
         let fg = PppIteratedEkf::default();
         let state = dummy_rtk_state();
@@ -2172,7 +2172,7 @@ mod mutant_killer_tests {
             DMatrix::zeros(dim, dim),
         ));
         {
-            let mut lock = crate::engine::ppp_ar::AR_MOCK.lock().unwrap();
+            let mut lock = crate::engine::ppp_ar::AR_MOCK.lock().unwrap_or_else(|e| e.into_inner());
             *lock = Some(crate::engine::ppp_ar::ArMock { wl_result: None, nl_result: Some(mock_nl), nl_calls: 0 });
         }
 
@@ -2184,11 +2184,11 @@ mod mutant_killer_tests {
         assert!((p_fixed[(0, 0)] - 0.5).abs() < 1e-10, "NL scales covariance by 0.5");
         // Verify nl_calls was incremented
         {
-            let lock = crate::engine::ppp_ar::AR_MOCK.lock().unwrap();
+            let lock = crate::engine::ppp_ar::AR_MOCK.lock().unwrap_or_else(|e| e.into_inner());
             assert_eq!(lock.as_ref().unwrap().nl_calls, 1);
         }
         // Clean up mock
-        { let mut lock = crate::engine::ppp_ar::AR_MOCK.lock().unwrap(); *lock = None; }
+        { let mut lock = crate::engine::ppp_ar::AR_MOCK.lock().unwrap_or_else(|e| e.into_inner()); *lock = None; }
     }
 
     // ============ process_constellation_group tests (uses crate::engine::ppp_ar::AR_MOCK) ============
@@ -2209,7 +2209,7 @@ mod mutant_killer_tests {
 
     #[test]
     fn test_process_constellation_group_empty_keep_indices() {
-        let _ = crate::engine::ppp_ar::AR_MOCK.lock().map(|mut m| *m = None);
+        { let mut lock = crate::engine::ppp_ar::AR_MOCK.lock().unwrap_or_else(|e| e.into_inner()); *lock = None; }
         // WL returns empty keep_indices -> process_constellation_group returns None
         let fg = PppIteratedEkf::default();
         let state = dummy_rtk_state();
@@ -2227,7 +2227,7 @@ mod mutant_killer_tests {
             vec![],
         ));
         {
-            let mut lock = crate::engine::ppp_ar::AR_MOCK.lock().unwrap();
+            let mut lock = crate::engine::ppp_ar::AR_MOCK.lock().unwrap_or_else(|e| e.into_inner());
             *lock = Some(crate::engine::ppp_ar::ArMock { wl_result: Some(mock_wl), nl_result: None, nl_calls: 0 });
         }
 
@@ -2236,12 +2236,12 @@ mod mutant_killer_tests {
         );
         assert!(result.is_none(), "empty keep_indices -> None");
 
-        { let mut lock = crate::engine::ppp_ar::AR_MOCK.lock().unwrap(); *lock = None; }
+        { let mut lock = crate::engine::ppp_ar::AR_MOCK.lock().unwrap_or_else(|e| e.into_inner()); *lock = None; }
     }
 
     #[test]
     fn test_process_constellation_group_mock_success() {
-        let _ = crate::engine::ppp_ar::AR_MOCK.lock().map(|mut m| *m = None);
+        { let mut lock = crate::engine::ppp_ar::AR_MOCK.lock().unwrap_or_else(|e| e.into_inner()); *lock = None; }
         // With mock WL+NL, group resolves successfully (jump 9.5 < 10 passes position check)
         let fg = PppIteratedEkf::default();
         let state = dummy_rtk_state();
@@ -2256,7 +2256,7 @@ mod mutant_killer_tests {
         let mock_wl = Ok((DVector::zeros(dim), DMatrix::identity(dim, dim), vec![0]));
         let mock_nl = Ok((DVector::zeros(dim), DMatrix::zeros(dim, dim)));
         {
-            let mut lock = crate::engine::ppp_ar::AR_MOCK.lock().unwrap();
+            let mut lock = crate::engine::ppp_ar::AR_MOCK.lock().unwrap_or_else(|e| e.into_inner());
             *lock = Some(crate::engine::ppp_ar::ArMock { wl_result: Some(mock_wl), nl_result: Some(mock_nl), nl_calls: 0 });
         }
 
@@ -2267,7 +2267,7 @@ mod mutant_killer_tests {
         let (_xf, _pf, n_sats) = result.unwrap();
         assert_eq!(n_sats, 2, "keep_indices.len() + 1 = 1 + 1 = 2");
 
-        { let mut lock = crate::engine::ppp_ar::AR_MOCK.lock().unwrap(); *lock = None; }
+        { let mut lock = crate::engine::ppp_ar::AR_MOCK.lock().unwrap_or_else(|e| e.into_inner()); *lock = None; }
     }
 
     // ============ compute_iteration_dx tests ============
@@ -2307,7 +2307,7 @@ mod mutant_killer_tests {
 
     #[test]
     fn test_try_inter_constellation_fallback_empty_keep_indices() {
-        let _ = crate::engine::ppp_ar::AR_MOCK.lock().map(|mut m| *m = None);
+        { let mut lock = crate::engine::ppp_ar::AR_MOCK.lock().unwrap_or_else(|e| e.into_inner()); *lock = None; }
         // WL mock returns empty keep_indices -> returns None
         let fg = PppIteratedEkf::default();
         let state = dummy_rtk_state();
@@ -2323,17 +2323,17 @@ mod mutant_killer_tests {
         ];
         let mock_wl = Ok((DVector::zeros(dim), DMatrix::identity(dim, dim), vec![]));
         {
-            let mut lock = crate::engine::ppp_ar::AR_MOCK.lock().unwrap();
+            let mut lock = crate::engine::ppp_ar::AR_MOCK.lock().unwrap_or_else(|e| e.into_inner());
             *lock = Some(crate::engine::ppp_ar::ArMock { wl_result: Some(mock_wl), nl_result: None, nl_calls: 0 });
         }
         let result = fg.try_inter_constellation_fallback(&state, &p_current, &x_current, &cands);
         assert!(result.is_none(), "empty keep_indices -> None");
-        { let mut lock = crate::engine::ppp_ar::AR_MOCK.lock().unwrap(); *lock = None; }
+        { let mut lock = crate::engine::ppp_ar::AR_MOCK.lock().unwrap_or_else(|e| e.into_inner()); *lock = None; }
     }
 
     #[test]
     fn test_try_inter_constellation_fallback_success() {
-        let _ = crate::engine::ppp_ar::AR_MOCK.lock().map(|mut m| *m = None);
+        { let mut lock = crate::engine::ppp_ar::AR_MOCK.lock().unwrap_or_else(|e| e.into_inner()); *lock = None; }
         // Full mock success path with valid WL keep_indices and NL resolution
         let fg = PppIteratedEkf::default();
         let state = dummy_rtk_state();
@@ -2349,7 +2349,7 @@ mod mutant_killer_tests {
         let mock_wl = Ok((DVector::zeros(dim), DMatrix::identity(dim, dim), vec![0, 1, 2]));
         let mock_nl = Ok((DVector::zeros(dim), DMatrix::zeros(dim, dim)));
         {
-            let mut lock = crate::engine::ppp_ar::AR_MOCK.lock().unwrap();
+            let mut lock = crate::engine::ppp_ar::AR_MOCK.lock().unwrap_or_else(|e| e.into_inner());
             *lock = Some(crate::engine::ppp_ar::ArMock { wl_result: Some(mock_wl), nl_result: Some(mock_nl), nl_calls: 0 });
         }
         let result = fg.try_inter_constellation_fallback(&state, &p_current, &x_current, &cands);
@@ -2358,7 +2358,7 @@ mod mutant_killer_tests {
         assert_eq!(n_sats, 4, "keep_indices.len() + 1 = 3 + 1 = 4");
         // Mock NL adds 9.5 to x_wl[0] and jump=9.5 <= 20.0 passes position check
         assert!((xf[0] - 9.5).abs() < 1e-10, "NL adds 9.5 to x[0]");
-        { let mut lock = crate::engine::ppp_ar::AR_MOCK.lock().unwrap(); *lock = None; }
+        { let mut lock = crate::engine::ppp_ar::AR_MOCK.lock().unwrap_or_else(|e| e.into_inner()); *lock = None; }
     }
 
     // ============ solve() convergence with measurements ============
