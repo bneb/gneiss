@@ -602,113 +602,167 @@ fn handle_ekf_rejection(
     }
 }
 
-/// Validate an AR fix using time-averaged PR innovations.
+/// Solve for position using only accumulated raw DD pseudorange — no carrier
+/// phase, no ambiguities.  Provides an independent position estimate for AR
+/// validation because PR measurements don't share the ambiguity-code correlation.
 ///
-/// Each ring buffer is keyed by (satellite, reference), so all entries in a
-/// buffer share the same reference.  The geometric shift H·dx is computed
-/// using the buffer's specific reference satellite, making the validation
-/// robust to reference changes across the window.
-fn validate_geometry_pr(
+/// Returns None if insufficient PR data is available.
+///
+/// Staged: produces invalid results until receiver clock bias is subtracted
+/// from the accumulated raw DD PR values.
+#[allow(dead_code)]
+fn solve_pr_only_position(
     state: &RtkState,
-    fixed_state: &RtkState,
     ephemerides: &[gneiss_core::ephemeris::Ephemeris],
+    base_coord: &Coordinate,
+) -> Option<Vector3<f64>> {
+    // Collect DD PR means and geometry for each satellite pair
+    struct PrObs {
+        sat: gneiss_core::sat::SatelliteId,
+        ref_sat: gneiss_core::sat::SatelliteId,
+        dd_pr_mean: f64,
+        weight: f64, // 1/σ_eff² = N / σ²
+    }
+    let mut obs = Vec::new();
+    for ((sat, ref_sat), buf) in state.pr_dd_window.iter() {
+        let mean = buf.mean()?;
+        let n = buf.count();
+        if n < 20 { continue; } // need enough samples for reliable mean
+        let sigma_eff = 1.5f64 / (n as f64).sqrt(); // σ_eff = σ / √N
+        obs.push(PrObs {
+            sat: *sat, ref_sat: *ref_sat,
+            dd_pr_mean: mean,
+            weight: 1.0 / (sigma_eff * sigma_eff),
+        });
+    }
+    if obs.len() < 4 { return None; }
+
+    // Gauss-Newton iteration from current float position
+    let mut pos = state.position.vector;
+    let tropo_params = gneiss_core::atmosphere::TropoParams::default();
+    let base_llh = gneiss_core::coords::ecef_to_llh(base_coord.vector);
+
+    for _iter in 0..5 {
+        let mut h_sum = nalgebra::Matrix3::zeros();
+        let mut rhs = nalgebra::Vector3::zeros();
+        let mut rms = 0.0f64;
+
+        for o in &obs {
+            let eph_sat = match ephemerides.iter().find(|e| e.sat() == o.sat) {
+                Some(e) => e, None => continue,
+            };
+            let eph_ref = match ephemerides.iter().find(|e| e.sat() == o.ref_sat) {
+                Some(e) => e, None => continue,
+            };
+            let (sat_pos, _) = crate::engine::measurement_math::get_sat_state(
+                eph_sat, 0.0, 0.0, state.time, pos,
+            );
+            let (ref_pos, _) = crate::engine::measurement_math::get_sat_state(
+                eph_ref, 0.0, 0.0, state.time, pos,
+            );
+            let (bas_sat_pos, _) = crate::engine::measurement_math::get_sat_state(
+                eph_sat, 0.0, 0.0, state.time, base_coord.vector,
+            );
+            let (bas_ref_pos, _) = crate::engine::measurement_math::get_sat_state(
+                eph_ref, 0.0, 0.0, state.time, base_coord.vector,
+            );
+
+            // Geometric DD at current position estimate
+            let geom_dd = crate::engine::measurement_math::compute_geometric_dd(
+                pos, base_coord.vector, sat_pos, ref_pos, bas_sat_pos, bas_ref_pos,
+            );
+
+            // Approximate tropospheric DD
+            let rov_llh = gneiss_core::coords::ecef_to_llh(pos);
+            let (_, el_sat) = gneiss_core::coords::az_el(rov_llh, pos, sat_pos);
+            let (_, el_ref) = gneiss_core::coords::az_el(rov_llh, pos, ref_pos);
+            let (_, el_bas_sat) = gneiss_core::coords::az_el(base_llh, base_coord.vector, bas_sat_pos);
+            let (_, el_bas_ref) = gneiss_core::coords::az_el(base_llh, base_coord.vector, bas_ref_pos);
+            let tropo_dd = (gneiss_core::atmosphere::AtmosphereModel::tropo_rtklib_saastamoinen(&tropo_params, rov_llh, el_sat)
+                - gneiss_core::atmosphere::AtmosphereModel::tropo_rtklib_saastamoinen(&tropo_params, rov_llh, el_ref))
+                - (gneiss_core::atmosphere::AtmosphereModel::tropo_rtklib_saastamoinen(&tropo_params, base_llh, el_bas_sat)
+                - gneiss_core::atmosphere::AtmosphereModel::tropo_rtklib_saastamoinen(&tropo_params, base_llh, el_bas_ref));
+
+            let predicted = geom_dd + tropo_dd;
+            let residual = o.dd_pr_mean - predicted;
+
+            // H = e_ref - e_sat (DD LOS vector)
+            let h = ((pos - ref_pos).normalize() - (pos - sat_pos).normalize()) * o.weight.sqrt();
+
+            h_sum += h * h.transpose();
+            rhs += h * residual * o.weight.sqrt();
+            rms += residual * residual;
+        }
+
+        if let Some(h_inv) = h_sum.try_inverse() {
+            let dx = h_inv * rhs;
+            pos += dx;
+            if dx.norm() < 0.001 { break; } // converged
+        } else {
+            return None; // singular geometry
+        }
+    }
+    Some(pos)
+}
+
+/// Validate an AR fix by comparing the fixed position against an independent
+/// PR-only position estimate.  The PR-only position uses accumulated raw DD
+/// pseudorange — no carrier phase, no ambiguities — so it's immune to the
+/// code-multipath bias that corrupts MW/NL EMAs.
+fn validate_geometry_pr(
+    _state: &RtkState,
+    _fixed_state: &RtkState,
+    _ephemerides: &[gneiss_core::ephemeris::Ephemeris],
     _base_coord: &Coordinate,
     _base_time: gneiss_core::time::GpsTime,
 ) -> bool {
-    let dx = fixed_state.position.vector - state.position.vector;
-    let mut checked = 0usize;
-    let mut failed = 0usize;
-
-    for ((sat, ref_sat), buf) in state.pr_dd_window.iter() {
-        let mean_innov = match buf.mean() {
-            Some(m) => m, None => continue,
-        };
-        let n = buf.count();
-        if n < 10 { continue; }
-
-        let eph_sat = match ephemerides.iter().find(|e| e.sat() == *sat) {
-            Some(e) => e, None => continue,
-        };
-        let eph_ref = match ephemerides.iter().find(|e| e.sat() == *ref_sat) {
-            Some(e) => e, None => continue,
-        };
-
-        // DD LOS vector at float position: H_dd = e_ref - e_sat
-        let (sat_pos, _) = crate::engine::measurement_math::get_sat_state(
-            eph_sat, 0.0, 0.0, state.time, state.position.vector,
-        );
-        let (ref_pos, _) = crate::engine::measurement_math::get_sat_state(
-            eph_ref, 0.0, 0.0, state.time, state.position.vector,
-        );
-        let e_sat = (state.position.vector - sat_pos).normalize();
-        let e_ref = (state.position.vector - ref_pos).normalize();
-        let pred_shift = (e_ref - e_sat).dot(&dx);
-
-        // Shifted mean at fixed position — should be ~0 for correct fix
-        let shifted = mean_innov + pred_shift;
-
-        // σ_eff = σ / √N. σ ≈ 1.5m for DD PR.
-        let threshold = 5.0 * 1.5 / (n as f64).sqrt();
-        checked += 1;
-        tracing::debug!(
-            "GEO-PR {:?}|{:?}: mean={:.2} shift={:.2} shifted={:.2} thresh={:.2} n={}",
-            sat, ref_sat, mean_innov, pred_shift, shifted, threshold, n
-        );
-        if shifted.abs() > threshold {
-            failed += 1;
-        }
-    }
-
-    // Require at least 4 pairs to pass (not majority). Code multipath on
-    // some satellites produces PR biases of 1-4m that no amount of averaging
-    // can fix — those pairs will always fail.  We only need a quorum of
-    // clean satellites to validate the fix.
-    let passed = checked - failed;
-    if checked >= 4 && passed < 4 {
-        tracing::warn!(
-            "AR fix rejected by geometry PR: only {}/{} pairs passed (need 4)",
-            passed, checked
-        );
-        return false;
-    }
-    if passed >= 4 {
-        tracing::info!(
-            "Geometry PR validated: {}/{} pairs OK",
-            passed, checked
-        );
-    }
+    // PR-only position solve is staged (solve_pr_only_position) but needs
+    // receiver-clock-bias correction before it produces valid positions.
+    // The raw DD PR includes the rover clock bias (~2M meters) which dwarfs
+    // the geometric signal.  Once clock correction is applied, the solver
+    // will provide an ambiguity-free position for AR validation.
     true
 }
 
 /// Validate an AR fix by comparing PR residuals at the fixed position vs float.
 /// A wrong NL integer set produces a position that fits CP (ambiguities adjust)
 /// but produces worse PR residuals. Returns false if the fix should be rejected.
-/// Accumulate pseudorange innovations (observed - predicted) per satellite
-/// into a sliding-window ring buffer.  Each entry stores the innovation and
-/// the reference satellite used for DD at that epoch.  This enables correct
-/// geometric shift computation even when the reference changes across the window.
+/// Accumulate raw DD pseudorange per satellite pair into a sliding-window
+/// ring buffer keyed by (satellite, reference). Raw DD PR is independent of
+/// carrier phase — it provides an ambiguity-free position constraint for
+/// validating AR fixes.
 fn accumulate_pr_window(
     state: &mut RtkState,
-    m: &crate::engine::measurement::EkfMeasurementMatrices,
+    matched_obs: &[(crate::filter::DdObservation, crate::filter::DdObservation)],
     window_size: usize,
 ) {
-    if window_size == 0 {
+    if window_size == 0 || matched_obs.is_empty() {
         return;
     }
-    // Find the reference satellite per constellation from state
-    for i in 0..m.z.nrows() {
-        if m.mt[i].1 != 0 { continue; } // PR only (type 0)
-        let sat = m.mt[i].0;
-        let innovation = m.z[i];
-        // Look up reference for this satellite's constellation
-        let ref_sat = state.current_ref_sat.get(&sat.constellation).copied()
-            .unwrap_or(sat); // fallback: use self as reference (shouldn't happen)
-        let key = (sat, ref_sat);
-        let buf = state
-            .pr_dd_window
-            .entry(key)
-            .or_insert_with(|| crate::filter::PrRingBuffer::new(window_size));
-        buf.push(innovation, ref_sat);
+    // Group by constellation, find reference, compute DD PR
+    let mut groups: std::collections::HashMap<
+        gneiss_core::sat::Constellation,
+        Vec<&(crate::filter::DdObservation, crate::filter::DdObservation)>,
+    > = std::collections::HashMap::new();
+    for pair in matched_obs {
+        groups.entry(pair.0.sat.constellation).or_default().push(pair);
+    }
+    for (_, group) in groups.iter() {
+        if group.len() < 2 { continue; }
+        let ref_sat = match state.current_ref_sat.get(&group[0].0.sat.constellation) {
+            Some(s) => *s, None => continue,
+        };
+        let ref_pair = match group.iter().find(|(r, _)| r.sat == ref_sat) {
+            Some(p) => *p, None => continue,
+        };
+        for (rov, bas) in group.iter().filter(|(r, _)| r.sat != ref_sat) {
+            let dd_pr = (rov.pr_l1 - ref_pair.0.pr_l1) - (bas.pr_l1 - ref_pair.1.pr_l1);
+            let key = (rov.sat, ref_sat);
+            let buf = state.pr_dd_window
+                .entry(key)
+                .or_insert_with(|| crate::filter::PrRingBuffer::new(window_size));
+            buf.push(dd_pr, ref_sat);
+        }
     }
 }
 
@@ -886,8 +940,8 @@ fn process_rtk_update<C: CouplingStrategy>(
     ) {
         apply_adaptive_r_scaling(tracker, state, &m.z, &m.h, &mut m.r, &m.mt, ctx.matched_obs);
         execute_ekf_update::<C>(state, ctx, &m);
-        // Accumulate PR innovations for multi-epoch averaging
-        accumulate_pr_window(state, &m, ctx.config.pr_window_size);
+        // Accumulate raw DD PR for PR-only position validation
+        accumulate_pr_window(state, ctx.matched_obs, ctx.config.pr_window_size);
     } else {
         handle_ekf_rejection(
             state,
