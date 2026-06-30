@@ -8,11 +8,11 @@ use gneiss_core::time::GpsTime;
 pub const CORE_STATE_SIZE: usize = 21;
 
 /// Ring buffer for accumulating raw DD pseudorange over a sliding window.
-/// Each entry stores the raw DD PR (rov-bas differenced against a fixed reference)
-/// and the reference satellite used. Maintains a running sum for O(1) mean.
+/// Each entry stores (dd_pr, ref_sat, rover_position) for motion compensation.
+/// Maintains a running sum for O(1) mean computation.
 #[derive(Debug, Clone)]
 pub struct PrRingBuffer {
-    buf: VecDeque<(f64, SatelliteId)>,
+    buf: VecDeque<(f64, SatelliteId, nalgebra::Vector3<f64>)>,
     sum: f64,
     capacity: usize,
 }
@@ -22,17 +22,52 @@ impl PrRingBuffer {
         Self { buf: VecDeque::with_capacity(capacity), sum: 0.0, capacity }
     }
 
-    pub fn push(&mut self, dd_pr: f64, ref_sat: SatelliteId) {
+    pub fn push(&mut self, dd_pr: f64, ref_sat: SatelliteId, rov_pos: nalgebra::Vector3<f64>) {
         if self.buf.len() >= self.capacity {
-            self.sum -= self.buf.pop_front().map(|(v, _)| v).unwrap_or(0.0);
+            self.sum -= self.buf.pop_front().map(|(v, _, _)| v).unwrap_or(0.0);
         }
-        self.buf.push_back((dd_pr, ref_sat));
+        self.buf.push_back((dd_pr, ref_sat, rov_pos));
         self.sum += dd_pr;
     }
 
     pub fn mean(&self) -> Option<f64> {
         if self.buf.is_empty() { None }
         else { Some(self.sum / self.buf.len() as f64) }
+    }
+
+    /// Motion-compensated mean: shifts each DD PR to the reference position
+    /// by subtracting the geometric DD change between the entry's rover position
+    /// and the reference position. Returns (compensated_mean, ref_position).
+    pub fn compensated_mean(
+        &self,
+        sat: gneiss_core::sat::SatelliteId,
+        ref_sat: gneiss_core::sat::SatelliteId,
+        ref_pos: nalgebra::Vector3<f64>,
+        ephemerides: &[gneiss_core::ephemeris::Ephemeris],
+        time: gneiss_core::time::GpsTime,
+        base_pos: nalgebra::Vector3<f64>,
+        base_time: gneiss_core::time::GpsTime,
+    ) -> Option<f64> {
+        if self.buf.is_empty() { return None; }
+        let eph_sat = ephemerides.iter().find(|e| e.sat() == sat)?;
+        let eph_ref = ephemerides.iter().find(|e| e.sat() == ref_sat)?;
+        let (ref_sat_pos, _) = crate::engine::measurement_math::get_sat_state(eph_sat, 0.0, 0.0, time, ref_pos);
+        let (ref_ref_pos, _) = crate::engine::measurement_math::get_sat_state(eph_ref, 0.0, 0.0, time, ref_pos);
+        let (ref_bas_sat, _) = crate::engine::measurement_math::get_sat_state(eph_sat, 0.0, 0.0, base_time, base_pos);
+        let (ref_bas_ref, _) = crate::engine::measurement_math::get_sat_state(eph_ref, 0.0, 0.0, base_time, base_pos);
+        let ref_geom = crate::engine::measurement_math::compute_geometric_dd(ref_pos, base_pos, ref_sat_pos, ref_ref_pos, ref_bas_sat, ref_bas_ref);
+
+        let mut comp_sum = 0.0f64;
+        for &(dd_pr, _, entry_pos) in &self.buf {
+            let (es, _) = crate::engine::measurement_math::get_sat_state(eph_sat, 0.0, 0.0, time, entry_pos);
+            let (er, _) = crate::engine::measurement_math::get_sat_state(eph_ref, 0.0, 0.0, time, entry_pos);
+            let (bs, _) = crate::engine::measurement_math::get_sat_state(eph_sat, 0.0, 0.0, base_time, base_pos);
+            let (br, _) = crate::engine::measurement_math::get_sat_state(eph_ref, 0.0, 0.0, base_time, base_pos);
+            let entry_geom = crate::engine::measurement_math::compute_geometric_dd(entry_pos, base_pos, es, er, bs, br);
+            // Shift DD PR to reference position: dd_pr_ref = dd_pr - (entry_geom - ref_geom)
+            comp_sum += dd_pr - (entry_geom - ref_geom);
+        }
+        Some(comp_sum / self.buf.len() as f64)
     }
 
     pub fn count(&self) -> usize { self.buf.len() }

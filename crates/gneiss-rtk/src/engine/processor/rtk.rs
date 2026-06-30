@@ -619,17 +619,21 @@ fn solve_pr_only_position(
         dd_mean: f64,
         weight: f64,
     }
+    let ref_pos = state.position.vector; // compensate all entries to current float position
     let mut obs = Vec::new();
     for ((sat, ref_sat), buf) in state.pr_dd_window.iter() {
-        let mean = buf.mean()?;
         let n = buf.count();
         if n < 20 { continue; }
+        let comp_mean = buf.compensated_mean(
+            *sat, *ref_sat, ref_pos, ephemerides, state.time,
+            base_coord.vector, base_time,
+        )?;
         let sigma_eff = 1.5f64 / (n as f64).sqrt();
-        obs.push(DdObs { sat: *sat, ref_sat: *ref_sat, dd_mean: mean, weight: 1.0 / (sigma_eff * sigma_eff) });
+        obs.push(DdObs { sat: *sat, ref_sat: *ref_sat, dd_mean: comp_mean, weight: 1.0 / (sigma_eff * sigma_eff) });
     }
     if obs.len() < 4 { return None; }
 
-    let mut pos = state.position.vector;
+    let mut pos = ref_pos;
 
     for _iter in 0..8 {
         let mut h_sum = nalgebra::Matrix3::zeros();
@@ -690,81 +694,59 @@ fn solve_pr_only_position(
 /// pseudorange — no carrier phase, no ambiguities — so it's immune to the
 /// code-multipath bias that corrupts MW/NL EMAs.
 fn validate_geometry_pr(
-    _state: &RtkState,
-    _fixed_state: &RtkState,
-    _ephemerides: &[gneiss_core::ephemeris::Ephemeris],
-    _base_coord: &Coordinate,
-    _base_time: gneiss_core::time::GpsTime,
+    state: &RtkState,
+    fixed_state: &RtkState,
+    ephemerides: &[gneiss_core::ephemeris::Ephemeris],
+    base_coord: &Coordinate,
+    base_time: gneiss_core::time::GpsTime,
 ) -> bool {
-    // PR-only solver disabled for kinematic receivers.
-    // Root cause: the car moves during the accumulation window (200 epochs =
-    // 20s, covering up to 200m).  The DD PR mean is an average over a
-    // trajectory, not a single position — a single-position solver is
-    // fundamentally inconsistent.  DD PR residuals drift from -152m to
-    // +178m across epochs as the car moves.
-    //
-    // For static receivers, the solver would work (residuals < 5m expected
-    // after fixing the clock/epoch-matching issues).  Consider gating on
-    // state.velocity.norm() < 0.1 m/s to enable for static periods.
+    // Only run PR solver when approximately stationary — motion compensation
+    // handles residual drift but large trajectory spans still degrade accuracy.
+    if state.velocity.norm() > 2.0 || state.pr_dd_window.is_empty() {
+        return true;
+    }
+    if let Some(pr_pos) = solve_pr_only_position(state, ephemerides, base_coord, base_time) {
+        let fixed_err = (fixed_state.position.vector - pr_pos).norm();
+        let float_err = (state.position.vector - pr_pos).norm();
+        tracing::info!(
+            "PR-only pos (v={:.1}m/s): float_err={:.2}m fixed_err={:.2}m",
+            state.velocity.norm(), float_err, fixed_err
+        );
+        // Reject if fixed position is far from PR-only position
+        if fixed_err > 3.0 && fixed_err > float_err * 1.5 {
+            tracing::warn!("AR fix rejected by PR-only pos: fixed_err={:.2}m", fixed_err);
+            return false;
+        }
+    }
     true
 }
 
 /// Validate an AR fix by comparing PR residuals at the fixed position vs float.
 /// A wrong NL integer set produces a position that fits CP (ambiguities adjust)
 /// but produces worse PR residuals. Returns false if the fix should be rejected.
-/// Accumulate DD pseudorange against a FIXED per-constellation reference
-/// satellite.  The fixed reference is selected once (highest elevation at
-/// first epoch) and never changes, ensuring all accumulated DD PR values are
-/// consistent.  DD cancels both receiver and satellite clock biases.
+/// Accumulate EKF pseudorange innovations (already clock/tropo/iono corrected)
+/// per satellite pair.  Innovations are reference-correct and model-consistent,
+/// avoiding the raw-PR biases that plague direct DD PR accumulation.
+/// Keyed by (satellite, reference) from the current EKF reference.
 fn accumulate_pr_window(
     state: &mut RtkState,
-    matched_obs: &[(crate::filter::DdObservation, crate::filter::DdObservation)],
+    m: &crate::engine::measurement::EkfMeasurementMatrices,
     window_size: usize,
 ) {
-    if window_size == 0 || matched_obs.is_empty() {
+    if window_size == 0 {
         return;
     }
-    // Group by constellation
-    let mut groups: std::collections::HashMap<
-        gneiss_core::sat::Constellation,
-        Vec<&(crate::filter::DdObservation, crate::filter::DdObservation)>,
-    > = std::collections::HashMap::new();
-    for pair in matched_obs {
-        groups.entry(pair.0.sat.constellation).or_default().push(pair);
-    }
-
-    for (_, group) in groups.iter() {
-        if group.len() < 2 { continue; }
-
-        // Use existing fixed reference if available, otherwise pick one
-        let constell = group[0].0.sat.constellation;
-        let ref_sat = {
-            // Check if we already have entries for this constellation
-            let existing_ref = state.pr_dd_window.keys()
-                .find(|(_, r)| r.constellation == constell)
-                .map(|(_, r)| *r);
-
-            existing_ref.unwrap_or_else(|| {
-                // Select highest-SNR satellite as fixed reference
-                group.iter()
-                    .max_by(|a, b| a.0.snr.partial_cmp(&b.0.snr).unwrap_or(std::cmp::Ordering::Equal))
-                    .map(|(r, _)| r.sat)
-                    .unwrap()
-            })
-        };
-
-        let ref_pair = match group.iter().find(|(r, _)| r.sat == ref_sat) {
-            Some(p) => *p, None => continue,
-        };
-
-        for (rov, bas) in group.iter().filter(|(r, _)| r.sat != ref_sat) {
-            let dd_pr = (rov.pr_l1 - ref_pair.0.pr_l1) - (bas.pr_l1 - ref_pair.1.pr_l1);
-            let key = (rov.sat, ref_sat);
-            let buf = state.pr_dd_window
-                .entry(key)
-                .or_insert_with(|| crate::filter::PrRingBuffer::new(window_size));
-            buf.push(dd_pr, ref_sat);
-        }
+    for i in 0..m.z.nrows() {
+        if m.mt[i].1 != 0 { continue; } // PR only (type 0)
+        let sat = m.mt[i].0;
+        let innovation = m.z[i];
+        let ref_sat = state.current_ref_sat.get(&sat.constellation).copied()
+            .unwrap_or(sat);
+        let key = (sat, ref_sat);
+        let buf = state.pr_dd_window
+            .entry(key)
+            .or_insert_with(|| crate::filter::PrRingBuffer::new(window_size));
+        buf.push(innovation, ref_sat, state.position.vector);
     }
 }
 
@@ -952,8 +934,8 @@ fn process_rtk_update<C: CouplingStrategy>(
     ) {
         apply_adaptive_r_scaling(tracker, state, &m.z, &m.h, &mut m.r, &m.mt, ctx.matched_obs);
         execute_ekf_update::<C>(state, ctx, &m);
-        // Accumulate raw DD PR for PR-only position validation
-        accumulate_pr_window(state, ctx.matched_obs, ctx.config.pr_window_size);
+        // Accumulate PR innovations for motion-compensated position validation
+        accumulate_pr_window(state, &m, ctx.config.pr_window_size);
     } else {
         handle_ekf_rejection(
             state,
