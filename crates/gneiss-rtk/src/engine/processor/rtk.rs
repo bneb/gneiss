@@ -423,7 +423,6 @@ impl ProcessingEngine {
                     cov: state.covariance.fixed_view::<3, 3>(0, 0).into_owned(),
                 };
                 state.pos_smooth_buffer.push_back(snap);
-                // Keep last 300 epochs (60s at 5Hz)
                 while state.pos_smooth_buffer.len() > 300 {
                     state.pos_smooth_buffer.pop_front();
                 }
@@ -745,7 +744,6 @@ impl ProcessingEngine {
                     cov: state.covariance.fixed_view::<3, 3>(0, 0).into_owned(),
                 };
                 state.pos_smooth_buffer.push_back(snap);
-                // Keep last 300 epochs (60s at 5Hz)
                 while state.pos_smooth_buffer.len() > 300 {
                     state.pos_smooth_buffer.pop_front();
                 }
@@ -899,10 +897,7 @@ fn solve_pr_only_position(
     for ((sat, ref_sat), buf) in state.pr_dd_window.iter() {
         let n = buf.count();
         if n < 20 { continue; }
-        let comp_mean = buf.compensated_mean(
-            *sat, *ref_sat, ref_pos, ephemerides, state.time,
-            base_coord.vector, base_time,
-        )?;
+        let comp_mean = buf.compensated_mean(ref_pos, base_coord.vector)?;
         let sigma_eff = 1.5f64 / (n as f64).sqrt();
         obs.push(DdObs { sat: *sat, ref_sat: *ref_sat, dd_mean: comp_mean, weight: 1.0 / (sigma_eff * sigma_eff) });
     }
@@ -1041,8 +1036,7 @@ fn solve_tdcp_anchored_position(
         if n < 20 { continue; }
 
         let recon_mean = match buf.innovation_reconstructed_mean(
-            *sat, *ref_sat, ephemerides, state.time,
-            base_coord.vector, base_time,
+            base_coord.vector,
         ) {
             Some(m) => m,
             None => continue,
@@ -1346,13 +1340,17 @@ fn save_prev_epoch_measurements(
 /// Accumulate EKF pseudorange innovations (clock-corrected DD) per satellite
 /// pair for multi-epoch PR validation.  When `tdcp_pos` is provided, the
 /// TDCP-propagated position (mm-level relative accuracy) is stored alongside
-/// each entry and used for unbiased geometry reconstruction during the mean
-/// computation, breaking the EKF code-multipath bias loop.
+/// each entry and used for unbiased geometry reconstruction.
+///
+/// Satellite positions at entry time are stored so that geometry
+/// reconstruction uses the correct satellite location for each epoch.
 fn accumulate_pr_window(
     state: &mut RtkState,
     m: &crate::engine::measurement::EkfMeasurementMatrices,
     window_size: usize,
     tdcp_pos: Option<nalgebra::Vector3<f64>>,
+    ephemerides: &[gneiss_core::ephemeris::Ephemeris],
+    _base_coord: &Coordinate,
 ) {
     if window_size == 0 {
         return;
@@ -1364,13 +1362,37 @@ fn accumulate_pr_window(
         let ref_sat = state.current_ref_sat.get(&sat.constellation).copied()
             .unwrap_or(sat);
         let key = (sat, ref_sat);
+
+        let sat_pos = match crate::engine::measurement::geometry::find_ephemeris(
+            ephemerides, sat, state.time.tow,
+        ) {
+            Some(eph) => {
+                let (pos, _) = crate::engine::measurement_math::get_sat_state(
+                    eph, 0.0, 0.0, state.time, state.position.vector,
+                );
+                pos
+            }
+            None => continue,
+        };
+        let ref_sat_pos = match crate::engine::measurement::geometry::find_ephemeris(
+            ephemerides, ref_sat, state.time.tow,
+        ) {
+            Some(eph) => {
+                let (pos, _) = crate::engine::measurement_math::get_sat_state(
+                    eph, 0.0, 0.0, state.time, state.position.vector,
+                );
+                pos
+            }
+            None => continue,
+        };
+
         let buf = state.pr_dd_window
             .entry(key)
             .or_insert_with(|| crate::filter::PrRingBuffer::new(window_size));
         if let Some(tdcp) = tdcp_pos {
-            buf.push_with_tdcp(innovation, ref_sat, state.position.vector, tdcp);
+            buf.push_with_tdcp(innovation, ref_sat, state.position.vector, tdcp, sat_pos, ref_sat_pos);
         } else {
-            buf.push(innovation, ref_sat, state.position.vector);
+            buf.push(innovation, ref_sat, state.position.vector, sat_pos, ref_sat_pos);
         }
     }
 }
@@ -1399,11 +1421,7 @@ fn validate_multiepoch_pr_compensated(
         // Each innovation z = obs - pred ≈ obs - geom(entry_pos).
         // Adding back geom(entry_pos) reconstructs the raw DD PR.
         let recon_mean = match buf.innovation_reconstructed_mean(
-            *sat, *ref_sat,
-            ephemerides,
-            state.time,
             base_coord.vector,
-            base_time,
         ) {
             Some(m) => m,
             None => continue,
@@ -1673,7 +1691,10 @@ fn process_rtk_update<C: CouplingStrategy>(
     ) {
         apply_adaptive_r_scaling(tracker, state, &m.z, &m.h, &mut m.r, &m.mt, ctx.matched_obs);
         execute_ekf_update::<C>(state, ctx, &m);
-        accumulate_pr_window(state, &m, ctx.config.pr_window_size, ctx.tdcp_pos);
+        accumulate_pr_window(
+            state, &m, ctx.config.pr_window_size, ctx.tdcp_pos,
+            ctx.ephemerides, ctx.base_coord,
+        );
     } else {
         handle_ekf_rejection(
             state,
