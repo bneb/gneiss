@@ -701,18 +701,30 @@ fn solve_pr_only_position(
 /// pseudorange — no carrier phase, no ambiguities — so it's immune to the
 /// code-multipath bias that corrupts MW/NL EMAs.
 fn validate_geometry_pr(
-    _state: &RtkState,
-    _fixed_state: &RtkState,
-    _ephemerides: &[gneiss_core::ephemeris::Ephemeris],
-    _base_coord: &Coordinate,
-    _base_time: gneiss_core::time::GpsTime,
+    state: &RtkState,
+    fixed_state: &RtkState,
+    ephemerides: &[gneiss_core::ephemeris::Ephemeris],
+    base_coord: &Coordinate,
+    base_time: gneiss_core::time::GpsTime,
 ) -> bool {
-    // PR-only solver (solve_pr_only_position) is implemented with fixed-reference
-    // DD accumulation and damped Gauss-Newton but produces positions 2.7km from
-    // truth. Root cause: raw DD PR has ~95m bias at the float position because
-    // satellite clock terms don't perfectly cancel when rover and base epochs
-    // differ (max_base_age_s=5s). Precise epoch synchronization or clock
-    // correction is needed for sub-meter PR-based positioning.
+    // PR-only position validation (enable_pr_validation feature).
+    // Solver produces positions ~2.7km from truth — raw DD PR has an
+    // unresolved systematic bias. See solve_pr_only_position comments.
+    if !state.pr_dd_window.is_empty() {
+        if let Some(pr_pos) = solve_pr_only_position(state, ephemerides, base_coord, base_time) {
+            let fixed_err = (fixed_state.position.vector - pr_pos).norm();
+            let float_err = (state.position.vector - pr_pos).norm();
+            tracing::info!(
+                "PR-only pos: float_err={:.2}m fixed_err={:.2}m",
+                float_err, fixed_err
+            );
+            let sigma_pos = 1.0; // relaxed for epoch-synced mode
+            if fixed_err > 5.0 * sigma_pos && fixed_err > float_err * 1.5 {
+                tracing::warn!("AR fix rejected by PR-only pos: fixed_err={:.2}m", fixed_err);
+                return false;
+            }
+        }
+    }
     true
 }
 
@@ -872,6 +884,16 @@ fn handle_ekf_acceptance(
                 "AR fix rejected: position jump {:.2}m exceeds {:.1}m threshold",
                 pos_jump,
                 AR_MAX_POSITION_JUMP_M
+            );
+            state.is_fixed = false;
+            state.fixed_state = None;
+        } else if config.enable_ins_validation
+            && pos_jump > state.velocity.norm().max(0.5) * 2.0
+            && pos_jump > 0.3
+        {
+            tracing::warn!(
+                "AR fix rejected by INS: jump {:.2}m > 2× expected motion ({:.2}m/s)",
+                pos_jump, state.velocity.norm()
             );
             state.is_fixed = false;
             state.fixed_state = None;

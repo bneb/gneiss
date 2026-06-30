@@ -190,6 +190,12 @@ pub struct EngineConfig {
     pub tuning: crate::engine::config::EkfTuningConfig,
     /// Enable multi-base RTK combining (experimental).
     pub enable_multi_base_rtk: bool,
+    /// Enable PR-only position validation for AR fixes.
+    /// Requires strict epoch sync (max_base_age_s enforced to ≤0.5s).
+    pub enable_pr_validation: bool,
+    /// Enable IMU-based validation for AR fixes.
+    /// Compares AR position jump against IMU-predicted motion.
+    pub enable_ins_validation: bool,
 }
 
 impl Default for EngineConfig {
@@ -242,6 +248,8 @@ impl Default for EngineConfig {
             enable_gnn_raim: false,
             export_gnn_dataset_path: None,
             enable_multi_base_rtk: false,
+            enable_pr_validation: false,
+            enable_ins_validation: false,
         }
     }
 }
