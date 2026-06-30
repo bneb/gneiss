@@ -96,6 +96,160 @@ impl Default for MultiBaseCombiner {
     fn default() -> Self { Self::new(1.0) }
 }
 
+// ---------------------------------------------------------------------------
+// Cross-Base AR Validator
+// ---------------------------------------------------------------------------
+
+/// Result of cross-base AR consensus check.
+#[derive(Clone, Debug)]
+pub struct CrossBaseResult {
+    /// Whether the cross-base consensus check passed.
+    pub accepted: bool,
+    /// Indices of bases whose AR fixes agree (within threshold of each other).
+    pub agreed_indices: Vec<usize>,
+    /// Consensus position (weighted average of agreeing fixes), if any.
+    pub consensus_position: Option<Vector3<f64>>,
+    /// Maximum pairwise disagreement among all fix-producing bases (meters).
+    pub max_disagreement_m: f64,
+}
+
+/// Cross-base AR validator for multi-base RTK.
+///
+/// When ≥2 bases produce AR fixes, this validator checks that their position
+/// solutions agree within a configurable threshold. Disagreement indicates
+/// that different bases likely picked different (wrong) NL integers due to
+/// different code multipath at each base. In that case, all fixes are rejected
+/// and the solution stays in float mode.
+///
+/// If bases agree, both have likely found correct integers — the
+/// weighted-average fix is accepted.
+pub struct CrossBaseArValidator {
+    /// Maximum allowable 3D position difference between two bases' AR fixes (meters).
+    /// Default 0.3m — about 1.5× NL wavelength, tight enough to catch wrong integer fixes.
+    agreement_threshold_m: f64,
+}
+
+impl CrossBaseArValidator {
+    /// Create a new validator with the given agreement threshold.
+    pub fn new(agreement_threshold_m: f64) -> Self {
+        Self {
+            agreement_threshold_m,
+        }
+    }
+
+    /// Validate AR fixes from multiple bases.
+    ///
+    /// `fixes` is a list of `(position, is_fixed, baseline_distance_m)` tuples,
+    /// one per base. Returns the consensus result.
+    ///
+    /// Logic:
+    /// - < 2 AR-fixed bases → accept whatever we have (no cross-validation possible)
+    /// - ≥ 2 AR-fixed bases → check pairwise agreement
+    ///   - If the two closest fixes agree within threshold → accept, return
+    ///     consensus of all agreeing fixes
+    ///   - If no pair agrees within threshold → reject all fixes
+    pub fn validate(
+        &self,
+        fixes: &[(Vector3<f64>, bool, f64)],
+    ) -> CrossBaseResult {
+        // Collect indices of bases that produced AR fixes
+        let fixed_indices: Vec<usize> = fixes
+            .iter()
+            .enumerate()
+            .filter(|(_, (_, is_fixed, _))| *is_fixed)
+            .map(|(i, _)| i)
+            .collect();
+
+        if fixed_indices.len() < 2 {
+            // Not enough fixed bases to cross-validate.
+            // Return the single fix (if any) as accepted.
+            let consensus = if fixed_indices.len() == 1 {
+                Some(fixes[fixed_indices[0]].0)
+            } else {
+                None
+            };
+            return CrossBaseResult {
+                accepted: true,
+                agreed_indices: fixed_indices,
+                consensus_position: consensus,
+                max_disagreement_m: 0.0,
+            };
+        }
+
+        // Compute pairwise distances among fixed positions
+        let n_fixed = fixed_indices.len();
+        let mut max_disagreement = 0.0_f64;
+        let mut min_distance = f64::MAX;
+        let mut min_pair: (usize, usize) = (0, 0);
+
+        for i in 0..n_fixed {
+            for j in (i + 1)..n_fixed {
+                let dist = (fixes[fixed_indices[i]].0 - fixes[fixed_indices[j]].0).norm();
+                max_disagreement = max_disagreement.max(dist);
+                if dist < min_distance {
+                    min_distance = dist;
+                    min_pair = (fixed_indices[i], fixed_indices[j]);
+                }
+            }
+        }
+
+        if min_distance > self.agreement_threshold_m {
+            // Closest pair still disagrees → all fixes are suspect
+            return CrossBaseResult {
+                accepted: false,
+                agreed_indices: Vec::new(),
+                consensus_position: None,
+                max_disagreement_m: max_disagreement,
+            };
+        }
+
+        // At least the closest pair agrees. Find all fixes that agree with
+        // either of the agreeing pair (transitive closure).
+        let mut agreed: Vec<usize> = vec![min_pair.0, min_pair.1];
+        for &idx in &fixed_indices {
+            if agreed.contains(&idx) {
+                continue;
+            }
+            // Check if this fix agrees with any already-agreed fix
+            let agrees = agreed.iter().any(|&a| {
+                (fixes[idx].0 - fixes[a].0).norm() <= self.agreement_threshold_m
+            });
+            if agrees {
+                agreed.push(idx);
+            }
+        }
+
+        // Weighted average of agreeing fixes (weight = 1/baseline_distance)
+        let mut weighted_pos = Vector3::zeros();
+        let mut total_weight = 0.0_f64;
+        for &idx in &agreed {
+            let baseline = fixes[idx].2.max(100.0); // min 100m
+            let w = 1.0 / (baseline * baseline);
+            weighted_pos += fixes[idx].0 * w;
+            total_weight += w;
+        }
+
+        let consensus = if total_weight > 0.0 {
+            Some(weighted_pos / total_weight)
+        } else {
+            Some(fixes[agreed[0]].0)
+        };
+
+        CrossBaseResult {
+            accepted: true,
+            agreed_indices: agreed,
+            consensus_position: consensus,
+            max_disagreement_m: max_disagreement,
+        }
+    }
+}
+
+impl Default for CrossBaseArValidator {
+    fn default() -> Self {
+        Self::new(0.3)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -175,5 +329,117 @@ mod tests {
         c.add_fix(Vector3::zeros(), 1.0, 1.0);
         c.add_fix(Vector3::zeros(), 1.0, 1.0);
         assert!((c.expected_improvement() - 0.5).abs() < 0.01);
+    }
+
+    // -----------------------------------------------------------------------
+    // CrossBaseArValidator tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_cross_base_less_than_two_fixes_accepted() {
+        let v = CrossBaseArValidator::new(0.3);
+        // Only one base with a fix → accepted (nothing to cross-validate)
+        let fixes = vec![
+            (Vector3::new(1.0, 0.0, 0.0), true, 5000.0),
+            (Vector3::new(5.0, 0.0, 0.0), false, 8000.0), // float, not fixed
+        ];
+        let result = v.validate(&fixes);
+        assert!(result.accepted);
+        assert_eq!(result.agreed_indices, vec![0]);
+        assert!(result.consensus_position.is_some());
+    }
+
+    #[test]
+    fn test_cross_base_two_agreeing_fixes_accepted() {
+        let v = CrossBaseArValidator::new(0.3);
+        let fixes = vec![
+            (Vector3::new(1.0, 0.0, 0.0), true, 5000.0),
+            (Vector3::new(1.15, 0.0, 0.0), true, 8000.0), // 0.15m away → agrees
+        ];
+        let result = v.validate(&fixes);
+        assert!(result.accepted);
+        assert_eq!(result.agreed_indices.len(), 2);
+        assert!(result.consensus_position.is_some());
+        // Consensus should be between the two positions
+        let cp = result.consensus_position.unwrap();
+        assert!(cp.x > 1.0 && cp.x < 1.15);
+    }
+
+    #[test]
+    fn test_cross_base_two_disagreeing_fixes_rejected() {
+        let v = CrossBaseArValidator::new(0.3);
+        let fixes = vec![
+            (Vector3::new(1.0, 0.0, 0.0), true, 5000.0),
+            (Vector3::new(2.0, 0.0, 0.0), true, 8000.0), // 1.0m away → disagrees
+        ];
+        let result = v.validate(&fixes);
+        assert!(!result.accepted);
+        assert!(result.agreed_indices.is_empty());
+        assert!(result.consensus_position.is_none());
+        assert!(result.max_disagreement_m > 0.9);
+    }
+
+    #[test]
+    fn test_cross_base_three_two_agree_one_disagree() {
+        let v = CrossBaseArValidator::new(0.3);
+        let fixes = vec![
+            (Vector3::new(1.0, 0.0, 0.0), true, 5000.0),
+            (Vector3::new(1.1, 0.0, 0.0), true, 8000.0),  // agrees with #0
+            (Vector3::new(5.0, 0.0, 0.0), true, 12000.0), // 4m away → disagrees
+        ];
+        let result = v.validate(&fixes);
+        assert!(result.accepted);
+        assert_eq!(result.agreed_indices.len(), 2);
+        assert!(!result.agreed_indices.contains(&2)); // index 2 excluded
+        assert!(result.max_disagreement_m > 3.9);
+    }
+
+    #[test]
+    fn test_cross_base_no_fixes_accepted() {
+        let v = CrossBaseArValidator::new(0.3);
+        let fixes = vec![
+            (Vector3::new(1.0, 0.0, 0.0), false, 5000.0),
+            (Vector3::new(2.0, 0.0, 0.0), false, 8000.0),
+        ];
+        let result = v.validate(&fixes);
+        assert!(result.accepted); // nothing to reject
+        assert!(result.agreed_indices.is_empty());
+        assert!(result.consensus_position.is_none());
+    }
+
+    #[test]
+    fn test_cross_base_default_threshold() {
+        let v = CrossBaseArValidator::default();
+        // Default threshold is 0.3m
+        let fixes = vec![
+            (Vector3::new(0.0, 0.0, 0.0), true, 5000.0),
+            (Vector3::new(0.25, 0.0, 0.0), true, 8000.0), // 0.25m < 0.3m
+        ];
+        let result = v.validate(&fixes);
+        assert!(result.accepted);
+    }
+
+    #[test]
+    fn test_cross_base_at_threshold_boundary() {
+        // Exactly at threshold should be rejected (> not >=)
+        let v = CrossBaseArValidator::new(0.3);
+        let fixes = vec![
+            (Vector3::new(0.0, 0.0, 0.0), true, 5000.0),
+            (Vector3::new(0.3, 0.0, 0.0), true, 8000.0), // exactly 0.3m
+        ];
+        let result = v.validate(&fixes);
+        // 0.3 is NOT > 0.3, so it should be accepted
+        assert!(result.accepted);
+    }
+
+    #[test]
+    fn test_cross_base_barely_over_threshold() {
+        let v = CrossBaseArValidator::new(0.3);
+        let fixes = vec![
+            (Vector3::new(0.0, 0.0, 0.0), true, 5000.0),
+            (Vector3::new(0.3000001, 0.0, 0.0), true, 8000.0),
+        ];
+        let result = v.validate(&fixes);
+        assert!(!result.accepted);
     }
 }

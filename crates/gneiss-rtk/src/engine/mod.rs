@@ -29,6 +29,7 @@ pub mod smoother;
 pub mod spp_tight;
 pub mod ssr;
 pub mod tcar;
+pub mod tdcp;
 pub mod tight_iekf;
 pub mod types;
 pub mod updater;

@@ -46,6 +46,19 @@ pub struct ProcessingEngine {
     /// Multi-base observations for RTK: (EpochObs, base_position_ecef) pairs.
     /// When configured and non-empty, process_rtk routes to the multi-base path.
     pub multi_base_observations: Vec<(gneiss_core::obs::EpochObs, nalgebra::Vector3<f64>)>,
+    /// TDCP (Time-Differenced Carrier Phase) delta-position solver.
+    /// Computes mm-level position changes between epochs without AR.
+    pub tdcp_solver: crate::engine::tdcp::TdcpSolver,
+    /// TDCP sliding-window trajectory accumulator.
+    pub tdcp_trajectory: crate::engine::tdcp::TdcpTrajectory,
+    /// Matched rover/base observations from the most recent epoch.
+    /// Stored for TDCP time-differencing at the next epoch.
+    pub last_matched_obs: Vec<(
+        crate::filter::DdObservation,
+        crate::filter::DdObservation,
+    )>,
+    /// Base coordinate from the most recent epoch.
+    pub last_base_coord: Option<gneiss_core::coords::Coordinate>,
 }
 
 impl ProcessingEngine {
@@ -63,6 +76,7 @@ impl ProcessingEngine {
         let tropo_mapping = config.tropo_mapping;
         let iono_model = config.iono_model;
         let lambda_min_ratio = config.lambda_min_ratio;
+        let tdcp_window_size = config.tdcp_window_size;
 
         Self {
             config,
@@ -97,6 +111,10 @@ impl ProcessingEngine {
             sinex_bias: None,
             last_spp_position: None,
             multi_base_observations: Vec::new(),
+            tdcp_solver: crate::engine::tdcp::TdcpSolver::new(),
+            tdcp_trajectory: crate::engine::tdcp::TdcpTrajectory::new(tdcp_window_size),
+            last_matched_obs: Vec::new(),
+            last_base_coord: None,
         }
     }
 

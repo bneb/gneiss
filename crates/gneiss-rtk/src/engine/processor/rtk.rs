@@ -15,6 +15,11 @@ use nalgebra::{DMatrix, DVector, Vector3};
 /// This catches wrong AR integer sets that would otherwise jump the position.
 const AR_MAX_POSITION_JUMP_M: f64 = 2.0;
 
+/// Ring buffer size for factor graph previous-epoch snapshots.
+const FG_BUFFER_SIZE: usize = 300;
+/// Minimum entries before factor graph uses oldest (geometry-diverse) entry.
+const FG_MIN_DIVERSE: usize = 30;
+
 /// Apply adaptive R scaling based on innovation history.
 /// Updates the tracker with current innovations and inflates R diagonals
 /// for measurements with historically large normalized innovations.
@@ -238,6 +243,10 @@ impl ProcessingEngine {
             let base_coord = base_coord_res?;
             let matched_obs = match_observations(rover_obs, base, &self.ephemerides);
 
+            // Store for TDCP time-differencing at next epoch
+            self.last_matched_obs = matched_obs.clone();
+            self.last_base_coord = Some(base_coord.clone());
+
             if matched_obs.len() >= 5 {
                 let gnn_variances = Self::evaluate_gnn(
                     &self.gnn_raim,
@@ -319,6 +328,58 @@ impl ProcessingEngine {
 
         let state = self.current_state.as_mut().expect("current_state is Some after apply_observations");
         Self::apply_nhc_updates(&self.config, &self.imu_history, state);
+
+        // --- TDCP: time-differenced carrier phase delta-position ---
+        if self.config.enable_tdcp && !self.last_matched_obs.is_empty() {
+            if let Some(ref base_coord) = self.last_base_coord {
+                let state = self.current_state.as_mut()
+                    .expect("current_state is Some");
+                let ref_sats: Vec<(gneiss_core::sat::Constellation, gneiss_core::sat::SatelliteId)> =
+                    state.current_ref_sat.iter()
+                        .map(|(c, s)| (*c, *s))
+                        .collect();
+
+                if let Some((delta, cov)) = self.tdcp_solver.compute_delta(
+                    &self.last_matched_obs,
+                    &ref_sats,
+                    state.position.vector,
+                    base_coord.vector,
+                    &self.ephemerides,
+                    rover_obs.time,
+                ) {
+                    // Feed delta as position-change measurement into EKF.
+                    // Innovation z = delta (the TDCP-estimated correction to
+                    // predicted position). H = I₃ for position states.
+                    let mut h = nalgebra::DMatrix::zeros(3, state.covariance.ncols());
+                    h[(0, 0)] = 1.0;
+                    h[(1, 1)] = 1.0;
+                    h[(2, 2)] = 1.0;
+                    let z = nalgebra::DVector::from_vec(vec![delta.x, delta.y, delta.z]);
+                    let _ = crate::engine::updater::update::<
+                        crate::engine::updater_math::TightCoupling,
+                    >(
+                        state,
+                        &z,
+                        &h,
+                        &cov,
+                        9.0, // chi-square threshold for 3-DOF
+                        None,
+                        &self.config.tuning,
+                    );
+                    self.tdcp_trajectory.push(delta, &cov);
+                }
+
+                // Store current-epoch data for next TDCP computation
+                self.tdcp_solver.store_epoch(
+                    &self.last_matched_obs,
+                    &ref_sats,
+                    state.position.vector,
+                    base_coord.vector,
+                    &self.ephemerides,
+                    rover_obs.time,
+                );
+            }
+        }
 
         self.attempt_kinematic_alignment();
 
@@ -405,6 +466,7 @@ impl ProcessingEngine {
         let mut combiner = MultiBaseCombiner::new(1.0);
         let mut primary_base_idx = 0_usize;
         let mut best_matched_count = 0_usize;
+        let mut fix_infos: Vec<(nalgebra::Vector3<f64>, bool, f64)> = Vec::new();
 
         for (i, (base_obs, base_pos_ecef)) in bases.iter().enumerate() {
             let age = (rover_obs.time.tow - base_obs.time.tow).abs();
@@ -460,11 +522,45 @@ impl ProcessingEngine {
             let baseline_m =
                 (pre_update_state.position.vector - base_pos_ecef).norm();
             let quality = if base_state.is_fixed { 1.0 } else { 0.5 };
+            fix_infos.push((base_state.position.vector, base_state.is_fixed, baseline_m));
             combiner.add_fix(base_state.position.vector, baseline_m, quality);
         }
 
+        // --- cross-base AR validation ---
+        let mut cross_base_accepted = true;
+        let mut cross_base_consensus: Option<nalgebra::Vector3<f64>> = None;
+        if self.config.enable_cross_base_ar_validation && fix_infos.len() >= 2 {
+            let validator = crate::engine::rtk_multi_base::CrossBaseArValidator::new(
+                self.config.cross_base_agreement_threshold_m,
+            );
+            let result = validator.validate(&fix_infos);
+            cross_base_accepted = result.accepted;
+            cross_base_consensus = result.consensus_position;
+            if !result.accepted {
+                tracing::warn!(
+                    "Cross-base AR rejected: {} fixed bases disagree (max={:.2}m > thresh={:.2}m). Staying in float.",
+                    fix_infos.iter().filter(|(_, f, _)| *f).count(),
+                    result.max_disagreement_m,
+                    self.config.cross_base_agreement_threshold_m,
+                );
+            } else if result.agreed_indices.len() >= 2 {
+                tracing::info!(
+                    "Cross-base AR consensus: {}/{} bases agree (max_disagreement={:.2}m)",
+                    result.agreed_indices.len(),
+                    fix_infos.iter().filter(|(_, f, _)| *f).count(),
+                    result.max_disagreement_m,
+                );
+            }
+        }
+
         // --- primary base: drive state bookkeeping (ambiguities, covariances) ---
-        let combined_pos = combiner.weighted_position();
+        let combined_pos = if cross_base_accepted {
+            // Prefer cross-base consensus if available, otherwise weighted position
+            cross_base_consensus.or_else(|| combiner.weighted_position())
+        } else {
+            // Cross-base rejected: use weighted position but clear fix state
+            combiner.weighted_position()
+        };
 
         let (primary_base, primary_pos) = &bases[primary_base_idx];
         let saved_base_pos = self.config.base_position;
@@ -487,6 +583,21 @@ impl ProcessingEngine {
             state.position.vector = pos;
         }
 
+        // If cross-base AR validation rejected, clear the fix state so the
+        // solution stays in float mode. Wrong integers from different multipath
+        // at each base are worse than a clean float solution.
+        if !cross_base_accepted {
+            let state = self
+                .current_state
+                .as_mut()
+                .expect("state is Some after apply_observations");
+            if state.is_fixed {
+                tracing::info!("Cross-base AR rejected: clearing fix state, staying in float.");
+                state.is_fixed = false;
+                state.fixed_state = None;
+            }
+        }
+
         // --- post-processing ---
         {
             let state = self
@@ -495,6 +606,55 @@ impl ProcessingEngine {
                 .expect("state is Some after above");
             Self::apply_nhc_updates(&self.config, &self.imu_history, state);
         }
+
+        // --- TDCP: time-differenced carrier phase delta-position ---
+        if self.config.enable_tdcp && !self.last_matched_obs.is_empty() {
+            if let Some(ref base_coord) = self.last_base_coord {
+                let state = self.current_state.as_mut()
+                    .expect("current_state is Some");
+                let ref_sats: Vec<(gneiss_core::sat::Constellation, gneiss_core::sat::SatelliteId)> =
+                    state.current_ref_sat.iter()
+                        .map(|(c, s)| (*c, *s))
+                        .collect();
+
+                if let Some((delta, cov)) = self.tdcp_solver.compute_delta(
+                    &self.last_matched_obs,
+                    &ref_sats,
+                    state.position.vector,
+                    base_coord.vector,
+                    &self.ephemerides,
+                    rover_obs.time,
+                ) {
+                    let mut h = nalgebra::DMatrix::zeros(3, state.covariance.ncols());
+                    h[(0, 0)] = 1.0;
+                    h[(1, 1)] = 1.0;
+                    h[(2, 2)] = 1.0;
+                    let z = nalgebra::DVector::from_vec(vec![delta.x, delta.y, delta.z]);
+                    let _ = crate::engine::updater::update::<
+                        crate::engine::updater_math::TightCoupling,
+                    >(
+                        state,
+                        &z,
+                        &h,
+                        &cov,
+                        9.0,
+                        None,
+                        &self.config.tuning,
+                    );
+                    self.tdcp_trajectory.push(delta, &cov);
+                }
+
+                self.tdcp_solver.store_epoch(
+                    &self.last_matched_obs,
+                    &ref_sats,
+                    state.position.vector,
+                    base_coord.vector,
+                    &self.ephemerides,
+                    rover_obs.time,
+                );
+            }
+        }
+
         self.attempt_kinematic_alignment();
 
         // Save current position/cov as prev-epoch for two-epoch smoothing
@@ -774,27 +934,56 @@ fn validate_geometry_pr(
     true
 }
 
-/// Validate an AR fix using the two-epoch factor graph.
-/// The factor graph jointly estimates position and DD ambiguities across
-/// epochs k-1 and k with shared ambiguity states, providing an independent
-/// geometric constraint that breaks the code-multipath circularity.
+/// Validate an AR fix using the two-epoch factor graph, and feed the factor
+/// graph's independent position estimate back into the EKF as a weak position
+/// measurement. This improves the float solution over time, breaking the
+/// code-multipath circularity that biases single-epoch AR validation.
+///
 /// Returns true if the fix passes (or if the factor graph is unavailable).
 fn validate_factor_graph(
-    state: &RtkState,
+    state: &mut RtkState,
     fixed_state: &RtkState,
     m: Option<&crate::engine::measurement::EkfMeasurementMatrices>,
 ) -> bool {
     let Some(meas) = m else { return true; };
     if state.prev_epoch_meas.is_none() {
-        return true; // No previous epoch data yet — first epoch
+        return true;
     }
     match crate::engine::rtk_multi_epoch::run_two_epoch_factor_graph(state, meas) {
         Some(result) => {
+            // Feed factor graph position back into EKF as a weak measurement.
+            // This improves the float solution independently of code multipath,
+            // since the factor graph uses geometry diversity across epochs.
+            let pos_jump = (result.pos_k - state.position.vector).norm();
+            if result.converged && pos_jump < 5.0 {
+                // Weak position feedback: σ = 1.0m floor.
+                // Nudges the EKF toward the FG position without dominating
+                // the measurements. Over many epochs this improves the float
+                // solution and makes LAMBDA more likely to find correct integers.
+                let sigma = pos_jump.max(1.0);
+                let mut h = nalgebra::DMatrix::zeros(3, state.covariance.ncols());
+                h[(0, 0)] = 1.0;
+                h[(1, 1)] = 1.0;
+                h[(2, 2)] = 1.0;
+                let z = result.pos_k - state.position.vector;
+                let z_vec = nalgebra::DVector::from_vec(vec![z.x, z.y, z.z]);
+                let r = nalgebra::DMatrix::from_diagonal(&nalgebra::DVector::from_element(3, sigma * sigma));
+                let _ = crate::engine::updater::update::<crate::engine::updater_math::TightCoupling>(
+                    state, &z_vec, &h, &r, 9.0, None,
+                    &crate::engine::EngineConfig::default().tuning,
+                );
+            }
+
             let fg_error = (fixed_state.position.vector - result.pos_k).norm();
-            let threshold = 0.5; // meters, tune down to 0.25m
+            // Threshold balances false positives (wrong fixes accepted) against
+            // false negatives (correct fixes rejected). Wrong NL integers
+            // produce ~0.5-1.0m disagreement with the geometry-constrained FG
+            // position. 0.5m catches most wrong fixes while accepting correct
+            // ones that may have ~0.2-0.4m fg_error due to FG position noise.
+            let threshold = 0.5; // meters
             tracing::info!(
-                "RTK FG validation: fg_error={:.3}m thresh={:.3}m converged={}",
-                fg_error, threshold, result.converged
+                "RTK FG validation: fg_error={:.3}m thresh={:.3}m converged={} pos_fb={:.2}m",
+                fg_error, threshold, result.converged, pos_jump
             );
             if fg_error > threshold {
                 tracing::warn!(
@@ -892,6 +1081,11 @@ fn save_prev_epoch_measurements(
         });
     }
 
+    // Store current epoch as previous-epoch reference for the two-epoch
+    // factor graph. Uses 1-epoch spacing — satellite geometry barely changes
+    // but the FG still provides a useful consistency check against wrong AR
+    // fixes. Multi-epoch geometry diversity requires a ring buffer with
+    // ambiguity-key matching, which is fragile (see Phase 5.1-5.2).
     state.prev_epoch_meas = Some(PrevEpochMeasurements {
         time: state.time.tow,
         pos: state.position.vector,
@@ -901,12 +1095,8 @@ fn save_prev_epoch_measurements(
         ambiguity_keys: state.ambiguity_keys.clone(),
     });
 }
-/// A wrong NL integer set produces a position that fits CP (ambiguities adjust)
-/// but produces worse PR residuals. Returns false if the fix should be rejected.
-/// Accumulate EKF pseudorange innovations (already clock/tropo/iono corrected)
-/// per satellite pair.  Innovations are reference-correct and model-consistent,
-/// avoiding the raw-PR biases that plague direct DD PR accumulation.
-/// Keyed by (satellite, reference) from the current EKF reference.
+/// Accumulate EKF pseudorange innovations (clock-corrected DD) per satellite
+/// pair for multi-epoch PR validation.
 fn accumulate_pr_window(
     state: &mut RtkState,
     m: &crate::engine::measurement::EkfMeasurementMatrices,
@@ -927,6 +1117,115 @@ fn accumulate_pr_window(
             .or_insert_with(|| crate::filter::PrRingBuffer::new(window_size));
         buf.push(innovation, ref_sat, state.position.vector);
     }
+}
+
+/// Validate AR fix using time-averaged PR innovations compensated to the
+/// fixed position. The compensated mean reconstructs the raw DD PR at the
+/// reference position by accounting for rover motion between epochs.
+/// A wrong NL fix produces a position inconsistent with the PR average.
+fn validate_multiepoch_pr_compensated(
+    state: &RtkState,
+    fixed_state: &RtkState,
+    ephemerides: &[gneiss_core::ephemeris::Ephemeris],
+    base_coord: &Coordinate,
+    base_time: gneiss_core::time::GpsTime,
+) -> bool {
+    let mut pairs_checked = 0usize;
+    let mut pairs_failed = 0usize;
+
+    for ((sat, ref_sat), buf) in state.pr_dd_window.iter() {
+        let n = buf.count();
+        if n < 20 {
+            continue;
+        }
+
+        // Reconstruct time-averaged raw DD PR from stored EKF innovations.
+        // Each innovation z = obs - pred ≈ obs - geom(entry_pos).
+        // Adding back geom(entry_pos) reconstructs the raw DD PR.
+        let recon_mean = match buf.innovation_reconstructed_mean(
+            *sat, *ref_sat,
+            ephemerides,
+            state.time,
+            base_coord.vector,
+            base_time,
+        ) {
+            Some(m) => m,
+            None => continue,
+        };
+
+        // Compute expected DD PR at the fixed position from satellite geometry
+        let eph_sat = match ephemerides.iter().find(|e| e.sat() == *sat) {
+            Some(e) => e,
+            None => continue,
+        };
+        let eph_ref = match ephemerides.iter().find(|e| e.sat() == *ref_sat) {
+            Some(e) => e,
+            None => continue,
+        };
+        let (sat_pos_approx, _) = crate::engine::measurement_math::get_sat_state(
+            eph_sat, 0.0, 0.0, state.time, fixed_state.position.vector,
+        );
+        let range_sat = (sat_pos_approx - fixed_state.position.vector).norm();
+        let (sat_pos, _) = crate::engine::measurement_math::get_sat_state(
+            eph_sat, range_sat, 0.0, state.time, fixed_state.position.vector,
+        );
+        let (ref_pos_approx, _) = crate::engine::measurement_math::get_sat_state(
+            eph_ref, 0.0, 0.0, state.time, fixed_state.position.vector,
+        );
+        let range_ref = (ref_pos_approx - fixed_state.position.vector).norm();
+        let (ref_pos, _) = crate::engine::measurement_math::get_sat_state(
+            eph_ref, range_ref, 0.0, state.time, fixed_state.position.vector,
+        );
+        let (bas_sat_approx, _) = crate::engine::measurement_math::get_sat_state(
+            eph_sat, 0.0, 0.0, base_time, base_coord.vector,
+        );
+        let range_bas = (bas_sat_approx - base_coord.vector).norm();
+        let (bas_sat, _) = crate::engine::measurement_math::get_sat_state(
+            eph_sat, range_bas, 0.0, base_time, base_coord.vector,
+        );
+        let (bas_ref_approx, _) = crate::engine::measurement_math::get_sat_state(
+            eph_ref, 0.0, 0.0, base_time, base_coord.vector,
+        );
+        let range_bref = (bas_ref_approx - base_coord.vector).norm();
+        let (bas_ref, _) = crate::engine::measurement_math::get_sat_state(
+            eph_ref, range_bref, 0.0, base_time, base_coord.vector,
+        );
+
+        let expected = crate::engine::measurement_math::compute_geometric_dd(
+            fixed_state.position.vector,
+            base_coord.vector,
+            sat_pos,
+            ref_pos,
+            bas_sat,
+            bas_ref,
+        );
+
+        let residual = (expected - recon_mean).abs();
+        let threshold = 3.0 * 1.5 / (n as f64).sqrt();
+
+        pairs_checked += 1;
+        if residual > threshold {
+            pairs_failed += 1;
+            tracing::info!(
+                "Multi-epoch PR: sat={:?} ref={:?} n={} resid={:.3}m thresh={:.3}m recon={:.3}m expected={:.3}m FAIL",
+                sat, ref_sat, n, residual, threshold, recon_mean, expected
+            );
+        }
+    }
+
+    if pairs_checked < 4 {
+        return true; // Not enough data
+    }
+    let pass_rate = (pairs_checked - pairs_failed) as f64 / pairs_checked as f64;
+    tracing::info!(
+        "Multi-epoch PR: {}/{} pairs passed ({:.0}%)",
+        pairs_checked - pairs_failed, pairs_checked, pass_rate * 100.0
+    );
+    if pass_rate < 0.5 {
+        tracing::warn!("AR fix rejected by multi-epoch PR");
+        return false;
+    }
+    true
 }
 
 fn validate_pr_residuals(
@@ -1030,8 +1329,8 @@ fn handle_ekf_acceptance(
             state.is_fixed = false;
             state.fixed_state = None;
         } else if config.enable_ins_validation
-            && pos_jump > state.velocity.norm().max(0.05) * 3.0
-            && pos_jump > 0.15
+            && pos_jump > state.velocity.norm().max(0.5) * 3.0
+            && pos_jump > 0.5
         {
             tracing::warn!(
                 "AR fix rejected by INS: jump {:.2}m > 2× expected motion ({:.2}m/s)",
@@ -1116,7 +1415,6 @@ fn process_rtk_update<C: CouplingStrategy>(
     ) {
         apply_adaptive_r_scaling(tracker, state, &m.z, &m.h, &mut m.r, &m.mt, ctx.matched_obs);
         execute_ekf_update::<C>(state, ctx, &m);
-        // Accumulate PR innovations for motion-compensated position validation
         accumulate_pr_window(state, &m, ctx.config.pr_window_size);
     } else {
         handle_ekf_rejection(

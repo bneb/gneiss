@@ -196,6 +196,23 @@ pub struct EngineConfig {
     /// Enable IMU-based validation for AR fixes.
     /// Compares AR position jump against IMU-predicted motion.
     pub enable_ins_validation: bool,
+    /// Enable Time-Differenced Carrier Phase (TDCP) delta-position solver.
+    /// Differences DD carrier phase between consecutive epochs to cancel
+    /// ambiguities, yielding mm-level position-change measurements that are
+    /// immune to code multipath. Fed into the EKF as position-change constraints.
+    pub enable_tdcp: bool,
+    /// Sliding-window size for TDCP trajectory accumulation (epochs).
+    /// 30-60 epochs smooths delta positions while capturing maneuver dynamics.
+    pub tdcp_window_size: usize,
+    /// Enable cross-base AR validation for multi-base RTK.
+    /// When ≥2 bases produce AR fixes, requires position agreement within
+    /// `cross_base_agreement_threshold_m`. Disagreement indicates wrong NL
+    /// integers from different multipath at each base — stay in float mode.
+    pub enable_cross_base_ar_validation: bool,
+    /// Maximum allowable position difference between two bases' AR fixes
+    /// for cross-base consensus (meters). Default 0.3m — about 1.5× NL
+    /// wavelength, tight enough to catch wrong integer fixes.
+    pub cross_base_agreement_threshold_m: f64,
 }
 
 impl Default for EngineConfig {
@@ -250,6 +267,10 @@ impl Default for EngineConfig {
             enable_multi_base_rtk: false,
             enable_pr_validation: false,
             enable_ins_validation: false,
+            enable_tdcp: false,
+            tdcp_window_size: 60,
+            enable_cross_base_ar_validation: false,
+            cross_base_agreement_threshold_m: 0.3,
         }
     }
 }

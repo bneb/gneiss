@@ -466,6 +466,7 @@ mod tests {
             pr_window_size: 100,
             tropo_mapping: gneiss_core::atmosphere::TropoMapping::default(),
             tuning: crate::engine::config::EkfTuningConfig::default(),
+            ..Default::default()
         };
 
         crate::engine::predictor::predict(&mut state, 1.0, &config, &[]);
@@ -547,6 +548,7 @@ mod tests {
             pr_window_size: 100,
             tropo_mapping: gneiss_core::atmosphere::TropoMapping::default(),
             tuning: crate::engine::config::EkfTuningConfig::default(),
+            ..Default::default()
         }
     }
 
