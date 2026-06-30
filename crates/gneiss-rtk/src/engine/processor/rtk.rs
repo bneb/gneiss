@@ -888,8 +888,8 @@ fn handle_ekf_acceptance(
             state.is_fixed = false;
             state.fixed_state = None;
         } else if config.enable_ins_validation
-            && pos_jump > state.velocity.norm().max(0.5) * 2.0
-            && pos_jump > 0.3
+            && pos_jump > state.velocity.norm().max(0.05) * 3.0
+            && pos_jump > 0.15
         {
             tracing::warn!(
                 "AR fix rejected by INS: jump {:.2}m > 2× expected motion ({:.2}m/s)",
