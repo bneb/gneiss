@@ -322,7 +322,12 @@ impl ProcessingEngine {
 
         self.attempt_kinematic_alignment();
 
-        if let Some(state) = &self.current_state {
+        // Save current position/cov as prev-epoch for two-epoch smoothing
+        if let Some(ref mut state) = self.current_state {
+            state.prev_epoch_pos = Some(state.position.vector);
+            state.prev_epoch_cov = Some(state.covariance.fixed_view::<3, 3>(0, 0).into_owned());
+        }
+        if let Some(ref state) = self.current_state {
             self.state_history.push(RtkState::clone(state));
         }
         self.obs_history
@@ -492,7 +497,12 @@ impl ProcessingEngine {
         }
         self.attempt_kinematic_alignment();
 
-        if let Some(state) = &self.current_state {
+        // Save current position/cov as prev-epoch for two-epoch smoothing
+        if let Some(ref mut state) = self.current_state {
+            state.prev_epoch_pos = Some(state.position.vector);
+            state.prev_epoch_cov = Some(state.covariance.fixed_view::<3, 3>(0, 0).into_owned());
+        }
+        if let Some(ref state) = self.current_state {
             self.state_history.push(RtkState::clone(state));
         }
         self.obs_history
@@ -693,30 +703,73 @@ fn solve_pr_only_position(
 /// PR-only position estimate.  The PR-only position uses accumulated raw DD
 /// pseudorange — no carrier phase, no ambiguities — so it's immune to the
 /// code-multipath bias that corrupts MW/NL EMAs.
+/// Two-epoch covariance-weighted position smoother.
+/// Combines the current and previous epoch's float positions using their
+/// covariance matrices. Returns the smoothed position, or the current position
+/// if previous epoch data is unavailable.
+fn smooth_two_epoch_position(state: &RtkState) -> (Vector3<f64>, f64) {
+    let cur_pos = state.position.vector;
+    let cur_cov = state.covariance.fixed_view::<3, 3>(0, 0).into_owned();
+
+    let prev_pos = match state.prev_epoch_pos {
+        Some(p) => p,
+        None => {
+            let tr = cur_cov.trace();
+            return (cur_pos, (tr / 3.0).sqrt());
+        }
+    };
+    let prev_cov = match state.prev_epoch_cov {
+        Some(ref c) => c.clone(),
+        None => {
+            let tr = cur_cov.trace();
+            return (cur_pos, (tr / 3.0).sqrt());
+        }
+    };
+
+    // Covariance-weighted average: P_smooth = (P_cur^{-1} + P_prev^{-1})^{-1}
+    let cur_inv = match cur_cov.try_inverse() {
+        Some(inv) => inv,
+        None => return (cur_pos, 100.0),
+    };
+    let prev_inv = match prev_cov.try_inverse() {
+        Some(inv) => inv,
+        None => return (cur_pos, 100.0),
+    };
+    let p_smooth_inv = cur_inv + prev_inv;
+    let p_smooth = match p_smooth_inv.try_inverse() {
+        Some(p) => p,
+        None => return (cur_pos, 100.0),
+    };
+
+    let pos_smooth = &p_smooth * (&cur_inv * cur_pos + &prev_inv * prev_pos);
+    let sigma_smooth = (p_smooth.trace() / 3.0).sqrt();
+
+    (pos_smooth, sigma_smooth)
+}
+
 fn validate_geometry_pr(
     state: &RtkState,
     fixed_state: &RtkState,
-    ephemerides: &[gneiss_core::ephemeris::Ephemeris],
-    base_coord: &Coordinate,
-    base_time: gneiss_core::time::GpsTime,
+    _ephemerides: &[gneiss_core::ephemeris::Ephemeris],
+    _base_coord: &Coordinate,
+    _base_time: gneiss_core::time::GpsTime,
 ) -> bool {
-    // Only run PR solver when approximately stationary — motion compensation
-    // handles residual drift but large trajectory spans still degrade accuracy.
-    if state.velocity.norm() > 2.0 || state.pr_dd_window.is_empty() {
-        return true;
-    }
-    if let Some(pr_pos) = solve_pr_only_position(state, ephemerides, base_coord, base_time) {
-        let fixed_err = (fixed_state.position.vector - pr_pos).norm();
-        let float_err = (state.position.vector - pr_pos).norm();
-        tracing::info!(
-            "PR-only pos (v={:.1}m/s): float_err={:.2}m fixed_err={:.2}m",
-            state.velocity.norm(), float_err, fixed_err
-        );
-        // Reject if fixed position is far from PR-only position
-        if fixed_err > 3.0 && fixed_err > float_err * 1.5 {
-            tracing::warn!("AR fix rejected by PR-only pos: fixed_err={:.2}m", fixed_err);
-            return false;
-        }
+    // Two-epoch smoothed position provides an improved float estimate
+    // that averages down PR noise by √2 compared to single-epoch.
+    let (smooth_pos, sigma_smooth) = smooth_two_epoch_position(state);
+    let fixed_err = (fixed_state.position.vector - smooth_pos).norm();
+    let float_err = (state.position.vector - smooth_pos).norm();
+
+    // Reject if fixed position is far from smoothed position
+    let threshold = 5.0 * sigma_smooth.max(0.5);
+    tracing::info!(
+        "2-epoch smooth: float_err={:.2}m fixed_err={:.2}m sigma={:.2}m thresh={:.2}m",
+        float_err, fixed_err, sigma_smooth, threshold
+    );
+
+    if fixed_err > threshold && fixed_err > float_err * 1.5 {
+        tracing::warn!("AR fix rejected by 2-epoch smoother: fixed_err={:.2}m > thresh={:.2}m", fixed_err, threshold);
+        return false;
     }
     true
 }

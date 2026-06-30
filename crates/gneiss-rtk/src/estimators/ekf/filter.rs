@@ -159,6 +159,9 @@ pub struct RtkState {
     pub core_phi: Option<DMatrix<f64>>, // State transition from k-1 to k
     pub full_p_predict: Option<DMatrix<f64>>, // Predicted covariance P_{k|k-1}
     pub full_x_predict: Option<DVector<f64>>, // Predicted nominal state x_{k|k-1}
+    /// Previous epoch's float position for two-epoch smoothing
+    pub prev_epoch_pos: Option<Vector3<f64>>,
+    pub prev_epoch_cov: Option<nalgebra::Matrix3<f64>>,
     pub predicted_position: Option<Coordinate>,
     pub predicted_velocity: Option<Vector3<f64>>,
     pub predicted_attitude: Option<UnitQuaternion<f64>>,
@@ -250,6 +253,8 @@ impl RtkState {
             core_phi: None,
             full_p_predict: None,
             full_x_predict: None,
+            prev_epoch_pos: None,
+            prev_epoch_cov: None,
             predicted_position: None,
             predicted_velocity: None,
             predicted_attitude: None,
