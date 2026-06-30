@@ -1,0 +1,31 @@
+{
+    "mode": "Rtk",
+    "elevation_mask_deg": 15.0,
+    "min_snr_dbhz": 25.0,
+    "chi_square_pr_threshold": 3.0,
+    "chi_square_cp_threshold": 3.0,
+    "raim_pseudorange_outlier_m": 30.0,
+    "max_base_age_s": 5.0,
+    "initial_ambiguity_variance": 4.0,
+    "lambda_min_ratio": 1.4,
+    "lambda_min_subset": 4,
+    "ar_min_epoch_count": 50,
+    "ar_min_lock": 3,
+    "spp_consistency_threshold_m": 15.0,
+    "doppler_slip_threshold_cycles": 10.0,
+    "dynamics_model": "automotive",
+    "max_reject_count": 30,
+    "max_consecutive_rejections": 30,
+    "pr_window_size": 200,
+    "ar_ffrt_prob": 0.001,
+    "enable_pr_validation": true,
+    "enable_tdcp": true,
+    "tdcp_window_size": 60,
+    "process_noise_cb": 1.0,
+    "process_noise_cd": 10.0,
+    "tuning": {
+        "pr_base_var": 0.5,
+        "cp_base_var": 9e-6,
+        "min_ar_success_rate": 0.85
+    }
+}

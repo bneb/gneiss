@@ -246,6 +246,7 @@ impl ProcessingEngine {
             // Store for TDCP time-differencing at next epoch
             self.last_matched_obs = matched_obs.clone();
             self.last_base_coord = Some(base_coord.clone());
+            self.last_base_time = Some(base.time);
 
             if matched_obs.len() >= 5 {
                 let gnn_variances = Self::evaluate_gnn(
@@ -267,6 +268,7 @@ impl ProcessingEngine {
                     spp_state_ref,
                     gnn_variances,
                     klobuchar_params: self.klobuchar_params,
+                    tdcp_pos: self.tdcp_position,
                 };
                 process_rtk_update::<TightCoupling>(state, &mut self.innovation_tracker, &ctx);
             } else {
@@ -339,6 +341,9 @@ impl ProcessingEngine {
                         .map(|(c, s)| (*c, *s))
                         .collect();
 
+                // TDCP: compute delta position from time-differenced CP.
+                // Used only for AR validation (not fed into EKF — avoids
+                // feedback loop where EKF error biases TDCP measurement).
                 if let Some((delta, cov)) = self.tdcp_solver.compute_delta(
                     &self.last_matched_obs,
                     &ref_sats,
@@ -347,29 +352,21 @@ impl ProcessingEngine {
                     &self.ephemerides,
                     rover_obs.time,
                 ) {
-                    // Feed delta as position-change measurement into EKF.
-                    // Innovation z = delta (the TDCP-estimated correction to
-                    // predicted position). H = I₃ for position states.
-                    let mut h = nalgebra::DMatrix::zeros(3, state.covariance.ncols());
-                    h[(0, 0)] = 1.0;
-                    h[(1, 1)] = 1.0;
-                    h[(2, 2)] = 1.0;
-                    let z = nalgebra::DVector::from_vec(vec![delta.x, delta.y, delta.z]);
-                    let _ = crate::engine::updater::update::<
-                        crate::engine::updater_math::TightCoupling,
-                    >(
-                        state,
-                        &z,
-                        &h,
-                        &cov,
-                        9.0, // chi-square threshold for 3-DOF
-                        None,
-                        &self.config.tuning,
-                    );
                     self.tdcp_trajectory.push(delta, &cov);
+                    self.last_tdcp_delta = Some((delta, cov.clone()));
+
+                    // Update TDCP-propagated position: init from EKF on first
+                    // delta, then accumulate. This position has mm-level
+                    // relative accuracy and is used for PR accumulation to
+                    // break the EKF code-multipath bias loop.
+                    if let Some(ref mut tdcp_pos) = self.tdcp_position {
+                        *tdcp_pos += delta;
+                    } else {
+                        self.tdcp_position = Some(state.position.vector);
+                    }
                 }
 
-                // Store current-epoch data for next TDCP computation
+                // Always store current epoch for next TDCP computation
                 self.tdcp_solver.store_epoch(
                     &self.last_matched_obs,
                     &ref_sats,
@@ -383,10 +380,70 @@ impl ProcessingEngine {
 
         self.attempt_kinematic_alignment();
 
-        // Save current position/cov as prev-epoch for two-epoch smoothing
+        // --- TDCP-based AR validation ---
+        // After TDCP computation, validate any AR fix by comparing the
+        // total position change since the last epoch against the TDCP delta.
+        // TDCP uses time-differenced CP (mm-level), so a wrong AR fix that
+        // introduces a position jump will disagree with the TDCP measurement.
+        if let Some(ref mut state) = self.current_state {
+            if state.is_fixed {
+                if let Some((tdcp_delta, _)) = &self.last_tdcp_delta {
+                    if let Some(prev_pos) = state.prev_epoch_pos {
+                        let total_change = state.position.vector - prev_pos;
+                        let tdcp_diff = (total_change - tdcp_delta).norm();
+                        if tdcp_diff > 0.5 {
+                            tracing::warn!(
+                                "TDCP validation: unfixing AR — change {:.2}m vs TDCP {:.2}m (diff {:.3}m > 0.5m)",
+                                total_change.norm(),
+                                tdcp_delta.norm(),
+                                tdcp_diff
+                            );
+                            state.is_fixed = false;
+                            state.fixed_state = None;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Save current position/cov as prev-epoch for two-epoch smoothing + multi-epoch buffer
         if let Some(ref mut state) = self.current_state {
             state.prev_epoch_pos = Some(state.position.vector);
             state.prev_epoch_cov = Some(state.covariance.fixed_view::<3, 3>(0, 0).into_owned());
+
+            // Push position snapshot for multi-epoch smoothing.
+            // Skip the first few epochs while the EKF is converging from
+            // SPP resets — those positions are unreliable and corrupt the
+            // buffer with 100m+ outliers.
+            if state.epoch_count >= 5 {
+                let snap = crate::filter::PositionSnapshot {
+                    time: state.time.tow,
+                    pos: state.position.vector,
+                    vel: state.velocity,
+                    cov: state.covariance.fixed_view::<3, 3>(0, 0).into_owned(),
+                };
+                state.pos_smooth_buffer.push_back(snap);
+                // Keep last 300 epochs (60s at 5Hz)
+                while state.pos_smooth_buffer.len() > 300 {
+                    state.pos_smooth_buffer.pop_front();
+                }
+            }
+
+            // Compute multi-epoch smoothed position for output.
+            // Gate on buffer maturity: need enough epochs for code multipath
+            // to decorrelate and average down. 50 epochs = 10s at 5Hz.
+            if state.pos_smooth_buffer.len() >= 50 {
+                let (smooth_pos, sigma_smooth) = smooth_multi_epoch_position(state);
+                // Safety: don't use smoothed position if it's far from the
+                // current EKF estimate (possible filter divergence or buffer
+                // contamination)
+                let jump = (smooth_pos - state.position.vector).norm();
+                if jump < 10.0 && sigma_smooth < 5.0 {
+                    state.smoothed_position = Some(smooth_pos);
+                } else {
+                    state.smoothed_position = None;
+                }
+            }
         }
         if let Some(ref state) = self.current_state {
             self.state_history.push(RtkState::clone(state));
@@ -514,6 +571,7 @@ impl ProcessingEngine {
                 spp_state_ref,
                 gnn_variances,
                 klobuchar_params: self.klobuchar_params,
+                tdcp_pos: self.tdcp_position,
             };
             let mut tracker = crate::engine::adaptive::InnovationTracker::new();
             process_rtk_update::<TightCoupling>(&mut base_state, &mut tracker, &ctx);
@@ -627,21 +685,8 @@ impl ProcessingEngine {
                 ) {
                     let mut h = nalgebra::DMatrix::zeros(3, state.covariance.ncols());
                     h[(0, 0)] = 1.0;
-                    h[(1, 1)] = 1.0;
-                    h[(2, 2)] = 1.0;
-                    let z = nalgebra::DVector::from_vec(vec![delta.x, delta.y, delta.z]);
-                    let _ = crate::engine::updater::update::<
-                        crate::engine::updater_math::TightCoupling,
-                    >(
-                        state,
-                        &z,
-                        &h,
-                        &cov,
-                        9.0,
-                        None,
-                        &self.config.tuning,
-                    );
                     self.tdcp_trajectory.push(delta, &cov);
+                    self.last_tdcp_delta = Some((delta, cov.clone()));
                 }
 
                 self.tdcp_solver.store_epoch(
@@ -657,10 +702,70 @@ impl ProcessingEngine {
 
         self.attempt_kinematic_alignment();
 
-        // Save current position/cov as prev-epoch for two-epoch smoothing
+        // --- TDCP-based AR validation ---
+        // After TDCP computation, validate any AR fix by comparing the
+        // total position change since the last epoch against the TDCP delta.
+        // TDCP uses time-differenced CP (mm-level), so a wrong AR fix that
+        // introduces a position jump will disagree with the TDCP measurement.
+        if let Some(ref mut state) = self.current_state {
+            if state.is_fixed {
+                if let Some((tdcp_delta, _)) = &self.last_tdcp_delta {
+                    if let Some(prev_pos) = state.prev_epoch_pos {
+                        let total_change = state.position.vector - prev_pos;
+                        let tdcp_diff = (total_change - tdcp_delta).norm();
+                        if tdcp_diff > 0.5 {
+                            tracing::warn!(
+                                "TDCP validation: unfixing AR — change {:.2}m vs TDCP {:.2}m (diff {:.3}m > 0.5m)",
+                                total_change.norm(),
+                                tdcp_delta.norm(),
+                                tdcp_diff
+                            );
+                            state.is_fixed = false;
+                            state.fixed_state = None;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Save current position/cov as prev-epoch for two-epoch smoothing + multi-epoch buffer
         if let Some(ref mut state) = self.current_state {
             state.prev_epoch_pos = Some(state.position.vector);
             state.prev_epoch_cov = Some(state.covariance.fixed_view::<3, 3>(0, 0).into_owned());
+
+            // Push position snapshot for multi-epoch smoothing.
+            // Skip the first few epochs while the EKF is converging from
+            // SPP resets — those positions are unreliable and corrupt the
+            // buffer with 100m+ outliers.
+            if state.epoch_count >= 5 {
+                let snap = crate::filter::PositionSnapshot {
+                    time: state.time.tow,
+                    pos: state.position.vector,
+                    vel: state.velocity,
+                    cov: state.covariance.fixed_view::<3, 3>(0, 0).into_owned(),
+                };
+                state.pos_smooth_buffer.push_back(snap);
+                // Keep last 300 epochs (60s at 5Hz)
+                while state.pos_smooth_buffer.len() > 300 {
+                    state.pos_smooth_buffer.pop_front();
+                }
+            }
+
+            // Compute multi-epoch smoothed position for output.
+            // Gate on buffer maturity: need enough epochs for code multipath
+            // to decorrelate and average down. 50 epochs = 10s at 5Hz.
+            if state.pos_smooth_buffer.len() >= 50 {
+                let (smooth_pos, sigma_smooth) = smooth_multi_epoch_position(state);
+                // Safety: don't use smoothed position if it's far from the
+                // current EKF estimate (possible filter divergence or buffer
+                // contamination)
+                let jump = (smooth_pos - state.position.vector).norm();
+                if jump < 10.0 && sigma_smooth < 5.0 {
+                    state.smoothed_position = Some(smooth_pos);
+                } else {
+                    state.smoothed_position = None;
+                }
+            }
         }
         if let Some(ref state) = self.current_state {
             self.state_history.push(RtkState::clone(state));
@@ -907,6 +1012,148 @@ fn smooth_two_epoch_position(state: &RtkState) -> (Vector3<f64>, f64) {
     (pos_smooth, sigma_smooth)
 }
 
+/// Solve for absolute position using TDCP-compensated, time-averaged DD
+/// pseudorange.  The PR ring buffer uses TDCP-propagated positions (mm-level
+/// relative accuracy) for geometry reconstruction, breaking the EKF code-
+/// multipath bias loop that limits single-epoch float accuracy to ~3m.
+///
+/// Long-arc PR averaging (200 epochs) reduces code noise by √200 ≈ 14×,
+/// and TDCP compensation removes the kinematic smear that previously
+/// caused 2.5km bias in the raw PR solver (commit 8d802d1).
+///
+/// Returns (position_ecef, sigma_meters) or None if insufficient data.
+fn solve_tdcp_anchored_position(
+    state: &RtkState,
+    ephemerides: &[gneiss_core::ephemeris::Ephemeris],
+    base_coord: &Coordinate,
+    base_time: gneiss_core::time::GpsTime,
+) -> Option<(Vector3<f64>, f64)> {
+    struct PrObs {
+        sat: SatelliteId,
+        ref_sat: SatelliteId,
+        dd_mean: f64,
+        weight: f64,
+    }
+
+    let mut obs = Vec::new();
+    for ((sat, ref_sat), buf) in state.pr_dd_window.iter() {
+        let n = buf.count();
+        if n < 20 { continue; }
+
+        let recon_mean = match buf.innovation_reconstructed_mean(
+            *sat, *ref_sat, ephemerides, state.time,
+            base_coord.vector, base_time,
+        ) {
+            Some(m) => m,
+            None => continue,
+        };
+
+        let sigma_eff = 1.5_f64 / (n as f64).sqrt();
+        obs.push(PrObs {
+            sat: *sat, ref_sat: *ref_sat, dd_mean: recon_mean,
+            weight: 1.0 / (sigma_eff * sigma_eff),
+        });
+    }
+
+    if obs.len() < 5 { return None; }
+
+    // WLS: minimize Σ w_i · (dd_mean_i - geom_dd(pos))²
+    let mut pos = state.position.vector;
+    let mut final_rms = 0.0_f64;
+
+    for _iter in 0..8 {
+        let mut h_sum = nalgebra::Matrix3::zeros();
+        let mut rhs = nalgebra::Vector3::zeros();
+        let mut rms = 0.0_f64;
+
+        for o in &obs {
+            let eph_sat = match ephemerides.iter().find(|e| e.sat() == o.sat) { Some(e) => e, None => continue };
+            let eph_ref = match ephemerides.iter().find(|e| e.sat() == o.ref_sat) { Some(e) => e, None => continue };
+            let (sat_pos, _) = crate::engine::measurement_math::get_sat_state(eph_sat, 0.0, 0.0, state.time, pos);
+            let (ref_pos, _) = crate::engine::measurement_math::get_sat_state(eph_ref, 0.0, 0.0, state.time, pos);
+            let (bas_sat, _) = crate::engine::measurement_math::get_sat_state(eph_sat, 0.0, 0.0, base_time, base_coord.vector);
+            let (bas_ref, _) = crate::engine::measurement_math::get_sat_state(eph_ref, 0.0, 0.0, base_time, base_coord.vector);
+            let geom_dd = crate::engine::measurement_math::compute_geometric_dd(pos, base_coord.vector, sat_pos, ref_pos, bas_sat, bas_ref);
+            let residual = o.dd_mean - geom_dd;
+            let los = (ref_pos - pos).normalize() - (sat_pos - pos).normalize();
+            let w = o.weight;
+            h_sum += los * los.transpose() * w;
+            rhs += los * (residual * w);
+            rms += residual * residual;
+        }
+
+        rms = (rms / obs.len() as f64).sqrt();
+        final_rms = rms;
+        if let Some(h_inv) = h_sum.try_inverse() {
+            let dx = &h_inv * rhs;
+            let dx_norm = dx.norm();
+            let step = if dx_norm > 100.0 { dx * 100.0 / dx_norm } else { dx };
+            pos += step;
+            if step.norm() < 0.01 { break; }
+        } else { return None; }
+    }
+
+    let sigma = (final_rms / (obs.len() as f64).sqrt()).max(0.3);
+    Some((pos, sigma))
+}
+
+/// Multi-epoch position smoother: covariance-weighted average over a
+/// sliding window of recent EKF positions.  Each historical position is
+/// propagated to the current epoch using the stored velocity before
+/// averaging, so the smoother tracks kinematic motion.
+///
+/// Returns (smoothed_position_ecef, sigma_meters).
+fn smooth_multi_epoch_position(state: &RtkState) -> (Vector3<f64>, f64) {
+    if state.pos_smooth_buffer.len() < 2 {
+        let cur_cov = state.covariance.fixed_view::<3, 3>(0, 0).into_owned();
+        let tr = cur_cov.trace();
+        return (state.position.vector, (tr / 3.0).sqrt().max(0.5));
+    }
+
+    let cur_time = state.time.tow;
+    let cur_cov = state.covariance.fixed_view::<3, 3>(0, 0).into_owned();
+    let cur_inv = match cur_cov.try_inverse() {
+        Some(inv) => inv,
+        None => return (state.position.vector, 5.0),
+    };
+
+    let mut sum_info = cur_inv.clone();
+    let mut sum_weighted = &cur_inv * state.position.vector;
+
+    for snap in &state.pos_smooth_buffer {
+        let dt = cur_time - snap.time;
+        if dt < 0.0 || dt > 120.0 {
+            continue; // skip future or very old snapshots
+        }
+
+        // Propagate position to current epoch using stored velocity
+        let pos_prop = snap.pos + snap.vel * dt;
+
+        // Inflate covariance for propagation uncertainty.
+        // Process noise: ~0.1 m²/s for position random walk (automotive).
+        let prop_noise = nalgebra::Matrix3::identity() * (0.1 * dt.abs());
+        let cov_prop = snap.cov + prop_noise;
+
+        let inv = match cov_prop.try_inverse() {
+            Some(inv) => inv,
+            None => continue,
+        };
+
+        sum_info += &inv;
+        sum_weighted += &inv * pos_prop;
+    }
+
+    let p_smooth = match sum_info.try_inverse() {
+        Some(p) => p,
+        None => return (state.position.vector, 5.0),
+    };
+
+    let pos_smooth = &p_smooth * sum_weighted;
+    let sigma_smooth = (p_smooth.trace() / 3.0).sqrt().max(0.1);
+
+    (pos_smooth, sigma_smooth)
+}
+
 fn validate_geometry_pr(
     state: &RtkState,
     fixed_state: &RtkState,
@@ -914,21 +1161,22 @@ fn validate_geometry_pr(
     _base_coord: &Coordinate,
     _base_time: gneiss_core::time::GpsTime,
 ) -> bool {
-    // Two-epoch smoothed position provides an improved float estimate
-    // that averages down PR noise by √2 compared to single-epoch.
-    let (smooth_pos, sigma_smooth) = smooth_two_epoch_position(state);
+    // Multi-epoch smoothed position: averages down code multipath over
+    // the sliding window, providing a better float position reference than
+    // the single-epoch EKF state.
+    let (smooth_pos, sigma_smooth) = smooth_multi_epoch_position(state);
     let fixed_err = (fixed_state.position.vector - smooth_pos).norm();
     let float_err = (state.position.vector - smooth_pos).norm();
 
     // Reject if fixed position is far from smoothed position
     let threshold = 5.0 * sigma_smooth.max(0.5);
     tracing::info!(
-        "2-epoch smooth: float_err={:.2}m fixed_err={:.2}m sigma={:.2}m thresh={:.2}m",
+        "multi-epoch smooth: float_err={:.2}m fixed_err={:.2}m sigma={:.2}m thresh={:.2}m",
         float_err, fixed_err, sigma_smooth, threshold
     );
 
     if fixed_err > threshold && fixed_err > float_err * 1.5 {
-        tracing::warn!("AR fix rejected by 2-epoch smoother: fixed_err={:.2}m > thresh={:.2}m", fixed_err, threshold);
+        tracing::warn!("AR fix rejected by multi-epoch smoother: fixed_err={:.2}m > thresh={:.2}m", fixed_err, threshold);
         return false;
     }
     true
@@ -1096,11 +1344,15 @@ fn save_prev_epoch_measurements(
     });
 }
 /// Accumulate EKF pseudorange innovations (clock-corrected DD) per satellite
-/// pair for multi-epoch PR validation.
+/// pair for multi-epoch PR validation.  When `tdcp_pos` is provided, the
+/// TDCP-propagated position (mm-level relative accuracy) is stored alongside
+/// each entry and used for unbiased geometry reconstruction during the mean
+/// computation, breaking the EKF code-multipath bias loop.
 fn accumulate_pr_window(
     state: &mut RtkState,
     m: &crate::engine::measurement::EkfMeasurementMatrices,
     window_size: usize,
+    tdcp_pos: Option<nalgebra::Vector3<f64>>,
 ) {
     if window_size == 0 {
         return;
@@ -1115,7 +1367,11 @@ fn accumulate_pr_window(
         let buf = state.pr_dd_window
             .entry(key)
             .or_insert_with(|| crate::filter::PrRingBuffer::new(window_size));
-        buf.push(innovation, ref_sat, state.position.vector);
+        if let Some(tdcp) = tdcp_pos {
+            buf.push_with_tdcp(innovation, ref_sat, state.position.vector, tdcp);
+        } else {
+            buf.push(innovation, ref_sat, state.position.vector);
+        }
     }
 }
 
@@ -1377,6 +1633,8 @@ pub struct RtkUpdateContext<'a> {
     pub spp_state_ref: Option<&'a crate::spp::SppState>,
     pub gnn_variances: std::collections::HashMap<gneiss_core::sat::SatelliteId, f64>,
     pub klobuchar_params: Option<gneiss_core::atmosphere::KlobucharParams>,
+    /// TDCP-propagated position for unbiased PR geometry reconstruction.
+    pub tdcp_pos: Option<nalgebra::Vector3<f64>>,
 }
 
 fn process_rtk_update<C: CouplingStrategy>(
@@ -1415,7 +1673,7 @@ fn process_rtk_update<C: CouplingStrategy>(
     ) {
         apply_adaptive_r_scaling(tracker, state, &m.z, &m.h, &mut m.r, &m.mt, ctx.matched_obs);
         execute_ekf_update::<C>(state, ctx, &m);
-        accumulate_pr_window(state, &m, ctx.config.pr_window_size);
+        accumulate_pr_window(state, &m, ctx.config.pr_window_size, ctx.tdcp_pos);
     } else {
         handle_ekf_rejection(
             state,
@@ -2152,6 +2410,7 @@ mod tests {
             spp_state_ref: None,
             gnn_variances: std::collections::HashMap::new(),
             klobuchar_params: None,
+                    tdcp_pos: None,
         };
 
         let mut tracker = crate::engine::adaptive::InnovationTracker::new();
@@ -2189,6 +2448,7 @@ mod tests {
             spp_state_ref: None,
             gnn_variances: std::collections::HashMap::new(),
             klobuchar_params: None,
+                    tdcp_pos: None,
         };
 
         let core_size = CORE_STATE_SIZE;
@@ -2236,6 +2496,7 @@ mod tests {
             spp_state_ref: None,
             gnn_variances: std::collections::HashMap::new(),
             klobuchar_params: None,
+                    tdcp_pos: None,
         };
 
         let core_size = CORE_STATE_SIZE;
@@ -2321,6 +2582,7 @@ mod tests {
             spp_state_ref: None,
             gnn_variances: std::collections::HashMap::new(),
             klobuchar_params: None,
+                    tdcp_pos: None,
         };
         export_gnn_dataset(
             &state,

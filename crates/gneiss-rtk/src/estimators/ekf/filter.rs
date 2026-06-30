@@ -12,7 +12,8 @@ pub const CORE_STATE_SIZE: usize = 21;
 /// Maintains a running sum for O(1) mean computation.
 #[derive(Debug, Clone)]
 pub struct PrRingBuffer {
-    buf: VecDeque<(f64, SatelliteId, nalgebra::Vector3<f64>)>,
+    /// Each entry: (innovation_z, ref_sat, ekf_position, tdcp_position_opt)
+    buf: VecDeque<(f64, SatelliteId, nalgebra::Vector3<f64>, Option<nalgebra::Vector3<f64>>)>,
     sum: f64,
     capacity: usize,
 }
@@ -24,9 +25,24 @@ impl PrRingBuffer {
 
     pub fn push(&mut self, dd_pr: f64, ref_sat: SatelliteId, rov_pos: nalgebra::Vector3<f64>) {
         if self.buf.len() >= self.capacity {
-            self.sum -= self.buf.pop_front().map(|(v, _, _)| v).unwrap_or(0.0);
+            self.sum -= self.buf.pop_front().map(|(v, _, _, _)| v).unwrap_or(0.0);
         }
-        self.buf.push_back((dd_pr, ref_sat, rov_pos));
+        self.buf.push_back((dd_pr, ref_sat, rov_pos, None));
+        self.sum += dd_pr;
+    }
+
+    /// Push with TDCP-propagated position for unbiased geometry reconstruction.
+    pub fn push_with_tdcp(
+        &mut self,
+        dd_pr: f64,
+        ref_sat: SatelliteId,
+        rov_pos: nalgebra::Vector3<f64>,
+        tdcp_pos: nalgebra::Vector3<f64>,
+    ) {
+        if self.buf.len() >= self.capacity {
+            self.sum -= self.buf.pop_front().map(|(v, _, _, _)| v).unwrap_or(0.0);
+        }
+        self.buf.push_back((dd_pr, ref_sat, rov_pos, Some(tdcp_pos)));
         self.sum += dd_pr;
     }
 
@@ -35,9 +51,48 @@ impl PrRingBuffer {
         else { Some(self.sum / self.buf.len() as f64) }
     }
 
+    /// Reconstruct raw DD pseudorange from stored EKF innovations.
+    ///
+    /// Each stored entry contains an EKF innovation `z = obs_dd_pr - pred_dd_pr`
+    /// where `pred_dd_pr ≈ geom_dd(entry_pos)`. This function adds back the
+    /// geometric DD at each entry's position to reconstruct the raw DD PR,
+    /// then takes the mean across all epochs.
+    ///
+    /// With N epochs, code noise averages to σ/√N. For validation, compare
+    /// the result against `compute_geometric_dd` at the position of interest.
+    pub fn innovation_reconstructed_mean(
+        &self,
+        sat: gneiss_core::sat::SatelliteId,
+        ref_sat: gneiss_core::sat::SatelliteId,
+        ephemerides: &[gneiss_core::ephemeris::Ephemeris],
+        time: gneiss_core::time::GpsTime,
+        base_pos: nalgebra::Vector3<f64>,
+        base_time: gneiss_core::time::GpsTime,
+    ) -> Option<f64> {
+        if self.buf.is_empty() { return None; }
+        let eph_sat = ephemerides.iter().find(|e| e.sat() == sat)?;
+        let eph_ref = ephemerides.iter().find(|e| e.sat() == ref_sat)?;
+
+        let mut sum = 0.0f64;
+        for &(z, _, entry_pos, tdcp_pos) in &self.buf {
+            // Use TDCP-propagated position when available for unbiased
+            // geometry reconstruction.  TDCP has mm-level relative accuracy,
+            // avoiding the EKF's code-multipath bias (p50≈3m).
+            let geom_pos = tdcp_pos.unwrap_or(entry_pos);
+            let (es, _) = crate::engine::measurement_math::get_sat_state(eph_sat, 0.0, 0.0, time, geom_pos);
+            let (er, _) = crate::engine::measurement_math::get_sat_state(eph_ref, 0.0, 0.0, time, geom_pos);
+            let (bs, _) = crate::engine::measurement_math::get_sat_state(eph_sat, 0.0, 0.0, base_time, base_pos);
+            let (br, _) = crate::engine::measurement_math::get_sat_state(eph_ref, 0.0, 0.0, base_time, base_pos);
+            let entry_geom = crate::engine::measurement_math::compute_geometric_dd(geom_pos, base_pos, es, er, bs, br);
+            // Reconstruct: obs_dd_pr = z + pred_dd_pr ≈ z + entry_geom
+            sum += z + entry_geom;
+        }
+        Some(sum / self.buf.len() as f64)
+    }
+
     /// Motion-compensated mean: shifts each DD PR to the reference position
     /// by subtracting the geometric DD change between the entry's rover position
-    /// and the reference position. Returns (compensated_mean, ref_position).
+    /// and the reference position. Designed for raw DD PR values (not innovations).
     pub fn compensated_mean(
         &self,
         sat: gneiss_core::sat::SatelliteId,
@@ -58,12 +113,13 @@ impl PrRingBuffer {
         let ref_geom = crate::engine::measurement_math::compute_geometric_dd(ref_pos, base_pos, ref_sat_pos, ref_ref_pos, ref_bas_sat, ref_bas_ref);
 
         let mut comp_sum = 0.0f64;
-        for &(dd_pr, _, entry_pos) in &self.buf {
-            let (es, _) = crate::engine::measurement_math::get_sat_state(eph_sat, 0.0, 0.0, time, entry_pos);
-            let (er, _) = crate::engine::measurement_math::get_sat_state(eph_ref, 0.0, 0.0, time, entry_pos);
+        for &(dd_pr, _, entry_pos, tdcp_pos) in &self.buf {
+            let geom_pos = tdcp_pos.unwrap_or(entry_pos);
+            let (es, _) = crate::engine::measurement_math::get_sat_state(eph_sat, 0.0, 0.0, time, geom_pos);
+            let (er, _) = crate::engine::measurement_math::get_sat_state(eph_ref, 0.0, 0.0, time, geom_pos);
             let (bs, _) = crate::engine::measurement_math::get_sat_state(eph_sat, 0.0, 0.0, base_time, base_pos);
             let (br, _) = crate::engine::measurement_math::get_sat_state(eph_ref, 0.0, 0.0, base_time, base_pos);
-            let entry_geom = crate::engine::measurement_math::compute_geometric_dd(entry_pos, base_pos, es, er, bs, br);
+            let entry_geom = crate::engine::measurement_math::compute_geometric_dd(geom_pos, base_pos, es, er, bs, br);
             // Shift DD PR to reference position: dd_pr_ref = dd_pr - (entry_geom - ref_geom)
             comp_sum += dd_pr - (entry_geom - ref_geom);
         }
@@ -119,6 +175,19 @@ pub struct PrevEpochMeasurements {
     /// Ambiguity keys at this epoch, for mapping to the combined
     /// factor graph ambiguity block.
     pub ambiguity_keys: Vec<(SatelliteId, u8)>,
+}
+
+/// Position snapshot for multi-epoch smoothing.
+#[derive(Clone, Debug)]
+pub struct PositionSnapshot {
+    /// GPS time of week (seconds).
+    pub time: f64,
+    /// EKF position (ECEF, meters).
+    pub pos: nalgebra::Vector3<f64>,
+    /// EKF velocity (ECEF, m/s).
+    pub vel: nalgebra::Vector3<f64>,
+    /// Position covariance (3×3, meters²).
+    pub cov: nalgebra::Matrix3<f64>,
 }
 
 /// Initial variance for receiver clock bias (m²).
@@ -212,6 +281,18 @@ pub struct RtkState {
     pub prev_epoch_cov: Option<nalgebra::Matrix3<f64>>,
     /// Previous epoch's measurement data for two-epoch factor graph AR validation.
     pub prev_epoch_meas: Option<PrevEpochMeasurements>,
+    /// Ring buffer of past epoch snapshots. The factor graph uses the oldest
+    /// entry to maximize satellite geometry diversity between epochs.
+    pub prev_epoch_buffer: std::collections::VecDeque<PrevEpochMeasurements>,
+    /// Multi-epoch position smoother buffer. Stores position, velocity, and
+    /// covariance at recent epochs for covariance-weighted position averaging.
+    /// Propagated to current epoch using velocity before averaging.
+    pub pos_smooth_buffer: std::collections::VecDeque<PositionSnapshot>,
+    /// Multi-epoch smoothed position (ECEF, meters). Computed after each
+    /// EKF update by averaging the sliding window of recent positions.
+    /// More accurate than the single-epoch float position because code
+    /// multipath averages down over diverse geometries.
+    pub smoothed_position: Option<nalgebra::Vector3<f64>>,
     pub predicted_position: Option<Coordinate>,
     pub predicted_velocity: Option<Vector3<f64>>,
     pub predicted_attitude: Option<UnitQuaternion<f64>>,
@@ -303,9 +384,12 @@ impl RtkState {
             core_phi: None,
             full_p_predict: None,
             full_x_predict: None,
+            pos_smooth_buffer: std::collections::VecDeque::new(),
+            smoothed_position: None,
             prev_epoch_pos: None,
             prev_epoch_cov: None,
             prev_epoch_meas: None,
+            prev_epoch_buffer: std::collections::VecDeque::new(),
             predicted_position: None,
             predicted_velocity: None,
             predicted_attitude: None,

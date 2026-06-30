@@ -59,6 +59,21 @@ pub struct ProcessingEngine {
     )>,
     /// Base coordinate from the most recent epoch.
     pub last_base_coord: Option<gneiss_core::coords::Coordinate>,
+    /// Base observation time from the most recent epoch.
+    pub last_base_time: Option<gneiss_core::time::GpsTime>,
+    /// TDCP-propagated position (ECEF, meters). Accumulates TDCP delta
+    /// positions to track the absolute position with mm-level relative
+    /// accuracy. Drifts slowly (~5mm/epoch random walk). Used as the
+    /// reference position for PR accumulation to break the EKF code-
+    /// multipath bias loop.
+    pub tdcp_position: Option<nalgebra::Vector3<f64>>,
+    /// Most recent TDCP delta position (ECEF, meters) and its covariance.
+    /// Used for AR validation: comparing AR position jump against the
+    /// CP-measured position change since the last epoch.
+    pub last_tdcp_delta: Option<(
+        nalgebra::Vector3<f64>,
+        nalgebra::DMatrix<f64>,
+    )>,
 }
 
 impl ProcessingEngine {
@@ -115,6 +130,9 @@ impl ProcessingEngine {
             tdcp_trajectory: crate::engine::tdcp::TdcpTrajectory::new(tdcp_window_size),
             last_matched_obs: Vec::new(),
             last_base_coord: None,
+            last_base_time: None,
+            tdcp_position: None,
+            last_tdcp_delta: None,
         }
     }
 

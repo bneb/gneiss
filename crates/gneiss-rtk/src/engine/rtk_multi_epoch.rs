@@ -44,6 +44,11 @@ pub struct FactorGraphResult {
     pub converged: bool,
     /// Final residual norm (diagnostic).
     pub final_error: f64,
+    /// Ambiguity corrections (delta from float values) in cycles.
+    /// Index maps to state.ambiguity_keys.
+    pub amb_corrections: Vec<f64>,
+    /// Ambiguity keys matching amb_corrections indices.
+    pub amb_keys: Vec<(SatelliteId, u8)>,
 }
 
 /// Run the two-epoch factor graph to get an independent position estimate at
@@ -143,7 +148,7 @@ pub fn run_two_epoch_factor_graph(
 
     // --- Solve ---
     let initial_delta = DVector::zeros(total_dim);
-    let (delta_opt, _cov) = optimizer.optimize(&initial_delta, 5, 1e-4);
+    let (delta_opt, _cov) = optimizer.optimize(&initial_delta, 10, 1e-4);
 
     // Check for NaN/Inf
     if delta_opt.iter().any(|x| x.is_nan() || x.is_infinite()) {
@@ -173,10 +178,21 @@ pub fn run_two_epoch_factor_graph(
         pos_k.x, pos_k.y, pos_k.z
     );
 
+    // Extract ambiguity corrections (delta from float values).
+    // The factor graph ambiguity states are in DD cycles; the EKF stores
+    // UDUC ambiguities in meters. We extract the DD corrections here
+    // and convert to cycles in the caller.
+    let amb_corrections: Vec<f64> = (0..n_amb)
+        .map(|i| delta_opt[OFF_AMB + i])
+        .collect();
+    let amb_keys = state.ambiguity_keys.clone();
+
     Some(FactorGraphResult {
         pos_k,
         converged: pos_delta < 10.0,
         final_error,
+        amb_corrections,
+        amb_keys,
     })
 }
 
@@ -431,10 +447,15 @@ fn add_dynamics_factor(
 ) {
     let dt = dt.max(0.1);
 
-    // Process noise standard deviations (per √s for pos/vel, per epoch for clk)
-    let sigma_pos: f64 = 0.1; // 10 cm/√s — static assumption
-    let sigma_vel: f64 = 1.0; // 1 m/s/√s
-    let sigma_clk: f64 = 10.0; // 10 m — loose, DD cancels clock anyway
+    // Process noise intensities (per √s for pos/vel, per epoch for clk).
+    // sigma_pos controls how much position can deviate from the constant-velocity
+    // prediction. 3.0 m/√s allows ~3m position deviation after 1s (highway
+    // acceleration) while still providing weak temporal regularization.
+    // sigma_vel controls velocity random walk. 1.0 m/s/√s allows mild
+    // acceleration changes between epochs.
+    let sigma_pos: f64 = 3.0; // m/√s — accommodates vehicle acceleration
+    let sigma_vel: f64 = 1.0; // m/s/√s
+    let sigma_clk: f64 = 10.0; // m — loose, DD cancels clock anyway
 
     // Build Q_inv (7x7 diagonal)
     let q_inv_diag = vec![
@@ -536,13 +557,10 @@ impl Factor for TwoEpochDynamicsFactor {
     }
 
     fn information(&self) -> DMatrix<f64> {
-        let mut full_info = DMatrix::zeros(self.total_dim, self.total_dim);
-        for i in 0..7 {
-            for j in 0..7 {
-                full_info[(OFF_PREV_POS + i, OFF_PREV_POS + j)] = self.q_inv[(i, j)];
-            }
-        }
-        full_info
+        // Return 7×7 information matrix matching the 7-dimensional residual.
+        // The residual function returns a 7-element vector (pos, vel, clk),
+        // so the information matrix must be 7×7, NOT total_dim×total_dim.
+        self.q_inv.clone()
     }
 }
 
