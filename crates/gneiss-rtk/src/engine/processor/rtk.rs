@@ -690,30 +690,22 @@ fn solve_pr_only_position(
 /// pseudorange — no carrier phase, no ambiguities — so it's immune to the
 /// code-multipath bias that corrupts MW/NL EMAs.
 fn validate_geometry_pr(
-    state: &RtkState,
-    fixed_state: &RtkState,
-    ephemerides: &[gneiss_core::ephemeris::Ephemeris],
-    base_coord: &Coordinate,
-    base_time: gneiss_core::time::GpsTime,
+    _state: &RtkState,
+    _fixed_state: &RtkState,
+    _ephemerides: &[gneiss_core::ephemeris::Ephemeris],
+    _base_coord: &Coordinate,
+    _base_time: gneiss_core::time::GpsTime,
 ) -> bool {
-    // PR-only position validation (enable_pr_validation feature).
-    // Solver produces positions ~2.7km from truth — raw DD PR has an
-    // unresolved systematic bias. See solve_pr_only_position comments.
-    if !state.pr_dd_window.is_empty() {
-        if let Some(pr_pos) = solve_pr_only_position(state, ephemerides, base_coord, base_time) {
-            let fixed_err = (fixed_state.position.vector - pr_pos).norm();
-            let float_err = (state.position.vector - pr_pos).norm();
-            tracing::info!(
-                "PR-only pos: float_err={:.2}m fixed_err={:.2}m",
-                float_err, fixed_err
-            );
-            let sigma_pos = 1.0; // relaxed for epoch-synced mode
-            if fixed_err > 5.0 * sigma_pos && fixed_err > float_err * 1.5 {
-                tracing::warn!("AR fix rejected by PR-only pos: fixed_err={:.2}m", fixed_err);
-                return false;
-            }
-        }
-    }
+    // PR-only solver disabled for kinematic receivers.
+    // Root cause: the car moves during the accumulation window (200 epochs =
+    // 20s, covering up to 200m).  The DD PR mean is an average over a
+    // trajectory, not a single position — a single-position solver is
+    // fundamentally inconsistent.  DD PR residuals drift from -152m to
+    // +178m across epochs as the car moves.
+    //
+    // For static receivers, the solver would work (residuals < 5m expected
+    // after fixing the clock/epoch-matching issues).  Consider gating on
+    // state.velocity.norm() < 0.1 m/s to enable for static periods.
     true
 }
 
