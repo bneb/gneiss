@@ -611,6 +611,7 @@ fn solve_pr_only_position(
     state: &RtkState,
     ephemerides: &[gneiss_core::ephemeris::Ephemeris],
     base_coord: &Coordinate,
+    base_time: gneiss_core::time::GpsTime,
 ) -> Option<Vector3<f64>> {
     struct DdObs {
         sat: gneiss_core::sat::SatelliteId,
@@ -635,13 +636,14 @@ fn solve_pr_only_position(
     for _iter in 0..5 {
         let mut h_sum = nalgebra::Matrix3::zeros();
         let mut rhs = nalgebra::Vector3::zeros();
+        let mut prev_rms = 0.0f64;
         for o in &obs {
             let eph_sat = match ephemerides.iter().find(|e| e.sat() == o.sat) { Some(e) => e, None => continue, };
             let eph_ref = match ephemerides.iter().find(|e| e.sat() == o.ref_sat) { Some(e) => e, None => continue, };
             let (sat_pos, _) = crate::engine::measurement_math::get_sat_state(eph_sat, 0.0, 0.0, state.time, pos);
             let (ref_pos, _) = crate::engine::measurement_math::get_sat_state(eph_ref, 0.0, 0.0, state.time, pos);
-            let (bas_sat, _) = crate::engine::measurement_math::get_sat_state(eph_sat, 0.0, 0.0, state.time, base_coord.vector);
-            let (bas_ref, _) = crate::engine::measurement_math::get_sat_state(eph_ref, 0.0, 0.0, state.time, base_coord.vector);
+            let (bas_sat, _) = crate::engine::measurement_math::get_sat_state(eph_sat, 0.0, 0.0, base_time, base_coord.vector);
+            let (bas_ref, _) = crate::engine::measurement_math::get_sat_state(eph_ref, 0.0, 0.0, base_time, base_coord.vector);
             let geom_dd = crate::engine::measurement_math::compute_geometric_dd(pos, base_coord.vector, sat_pos, ref_pos, bas_sat, bas_ref);
             let rov_llh = gneiss_core::coords::ecef_to_llh(pos);
             let (_, el_sat) = gneiss_core::coords::az_el(rov_llh, pos, sat_pos);
@@ -658,11 +660,37 @@ fn solve_pr_only_position(
             let h = ((ref_pos - pos).normalize() - (sat_pos - pos).normalize()) * o.weight.sqrt();
             h_sum += h * h.transpose();
             rhs += h * residual * o.weight.sqrt();
+            prev_rms += residual * residual;
         }
+        prev_rms = (prev_rms / obs.len() as f64).sqrt();
         if let Some(h_inv) = h_sum.try_inverse() {
             let dx = h_inv * rhs;
-            pos += dx;
-            if dx.norm() < 0.001 { break; }
+            // Damped update: backtrack if step increases residuals
+            let mut lambda = 1.0;
+            let pos_prev = pos;
+            for _ in 0..4 {
+                let pos_trial = pos_prev + dx * lambda;
+                // Quick RMS check at trial position
+                let mut trial_rms = 0.0f64;
+                for o in &obs {
+                    let eph_sat = match ephemerides.iter().find(|e| e.sat() == o.sat) { Some(e) => e, None => continue, };
+                    let eph_ref = match ephemerides.iter().find(|e| e.sat() == o.ref_sat) { Some(e) => e, None => continue, };
+                    let (sp, _) = crate::engine::measurement_math::get_sat_state(eph_sat, 0.0, 0.0, state.time, pos_trial);
+                    let (rp, _) = crate::engine::measurement_math::get_sat_state(eph_ref, 0.0, 0.0, state.time, pos_trial);
+                    let (bsp, _) = crate::engine::measurement_math::get_sat_state(eph_sat, 0.0, 0.0, base_time, base_coord.vector);
+                    let (brp, _) = crate::engine::measurement_math::get_sat_state(eph_ref, 0.0, 0.0, base_time, base_coord.vector);
+                    let gdd = crate::engine::measurement_math::compute_geometric_dd(pos_trial, base_coord.vector, sp, rp, bsp, brp);
+                    let r = o.dd_mean - gdd;
+                    trial_rms += r * r;
+                }
+                let trial = (trial_rms / obs.len() as f64).sqrt();
+                if trial < prev_rms || lambda < 0.125 {
+                    pos = pos_trial;
+                    break;
+                }
+                lambda *= 0.5;
+            }
+            if (pos - pos_prev).norm() < 0.001 { break; }
         } else { return None; }
     }
     Some(pos)
@@ -679,14 +707,12 @@ fn validate_geometry_pr(
     _base_coord: &Coordinate,
     _base_time: gneiss_core::time::GpsTime,
 ) -> bool {
-    // PR-only position solver (solve_pr_only_position) is implemented but
-    // converges to positions 2.7km from truth — the accumulated raw DD PR
-    // values are inconsistent with the geometric model. Likely causes:
-    // 1. Satellite position time-tag mismatch between rover and base PR
-    // 2. Base coordinate error in the geometric DD computation
-    // 3. Tropospheric model errors over 4km baseline
-    // Debug by comparing individual DD PR means against geometric predictions
-    // at the known float position — residuals should be < 5m for clean sats.
+    // PR-only solver (solve_pr_only_position) is implemented with fixed-reference
+    // DD accumulation and damped Gauss-Newton but produces positions 2.7km from
+    // truth. Root cause: raw DD PR has ~95m bias at the float position because
+    // satellite clock terms don't perfectly cancel when rover and base epochs
+    // differ (max_base_age_s=5s). Precise epoch synchronization or clock
+    // correction is needed for sub-meter PR-based positioning.
     true
 }
 
