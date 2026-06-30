@@ -630,10 +630,8 @@ fn solve_pr_only_position(
     if obs.len() < 4 { return None; }
 
     let mut pos = state.position.vector;
-    let base_llh = gneiss_core::coords::ecef_to_llh(base_coord.vector);
-    let tropo_params = gneiss_core::atmosphere::TropoParams::default();
 
-    for _iter in 0..5 {
+    for _iter in 0..8 {
         let mut h_sum = nalgebra::Matrix3::zeros();
         let mut rhs = nalgebra::Vector3::zeros();
         let mut prev_rms = 0.0f64;
@@ -645,18 +643,7 @@ fn solve_pr_only_position(
             let (bas_sat, _) = crate::engine::measurement_math::get_sat_state(eph_sat, 0.0, 0.0, base_time, base_coord.vector);
             let (bas_ref, _) = crate::engine::measurement_math::get_sat_state(eph_ref, 0.0, 0.0, base_time, base_coord.vector);
             let geom_dd = crate::engine::measurement_math::compute_geometric_dd(pos, base_coord.vector, sat_pos, ref_pos, bas_sat, bas_ref);
-            let rov_llh = gneiss_core::coords::ecef_to_llh(pos);
-            let (_, el_sat) = gneiss_core::coords::az_el(rov_llh, pos, sat_pos);
-            let (_, el_ref) = gneiss_core::coords::az_el(rov_llh, pos, ref_pos);
-            let (_, el_bs) = gneiss_core::coords::az_el(base_llh, base_coord.vector, bas_sat);
-            let (_, el_br) = gneiss_core::coords::az_el(base_llh, base_coord.vector, bas_ref);
-            let tropo_dd = (gneiss_core::atmosphere::AtmosphereModel::tropo_rtklib_saastamoinen(&tropo_params, rov_llh, el_sat)
-                - gneiss_core::atmosphere::AtmosphereModel::tropo_rtklib_saastamoinen(&tropo_params, rov_llh, el_ref))
-                - (gneiss_core::atmosphere::AtmosphereModel::tropo_rtklib_saastamoinen(&tropo_params, base_llh, el_bs)
-                - gneiss_core::atmosphere::AtmosphereModel::tropo_rtklib_saastamoinen(&tropo_params, base_llh, el_br));
-            let predicted = geom_dd + tropo_dd;
-            let residual = o.dd_mean - predicted;
-            // H = e_ref - e_sat (DD LOS vector), e = unit FROM receiver TO satellite
+            let residual = o.dd_mean - geom_dd;
             let h = ((ref_pos - pos).normalize() - (sat_pos - pos).normalize()) * o.weight.sqrt();
             h_sum += h * h.transpose();
             rhs += h * residual * o.weight.sqrt();
@@ -664,13 +651,15 @@ fn solve_pr_only_position(
         }
         prev_rms = (prev_rms / obs.len() as f64).sqrt();
         if let Some(h_inv) = h_sum.try_inverse() {
-            let dx = h_inv * rhs;
-            // Damped update: backtrack if step increases residuals
+            let mut dx = h_inv * rhs;
+            // Trust-region: clamp step to 500m max per iteration
+            let dx_norm = dx.norm();
+            if dx_norm > 500.0 { dx *= 500.0 / dx_norm; }
+            // Line search: only accept if RMS improves by at least 2%
+            let mut accepted = false;
             let mut lambda = 1.0;
-            let pos_prev = pos;
-            for _ in 0..4 {
-                let pos_trial = pos_prev + dx * lambda;
-                // Quick RMS check at trial position
+            for _ in 0..5 {
+                let pos_trial = pos + dx * lambda;
                 let mut trial_rms = 0.0f64;
                 for o in &obs {
                     let eph_sat = match ephemerides.iter().find(|e| e.sat() == o.sat) { Some(e) => e, None => continue, };
@@ -680,17 +669,17 @@ fn solve_pr_only_position(
                     let (bsp, _) = crate::engine::measurement_math::get_sat_state(eph_sat, 0.0, 0.0, base_time, base_coord.vector);
                     let (brp, _) = crate::engine::measurement_math::get_sat_state(eph_ref, 0.0, 0.0, base_time, base_coord.vector);
                     let gdd = crate::engine::measurement_math::compute_geometric_dd(pos_trial, base_coord.vector, sp, rp, bsp, brp);
-                    let r = o.dd_mean - gdd;
-                    trial_rms += r * r;
+                    trial_rms += (o.dd_mean - gdd).powi(2);
                 }
                 let trial = (trial_rms / obs.len() as f64).sqrt();
-                if trial < prev_rms || lambda < 0.125 {
+                if trial < prev_rms * 0.98 || lambda < 0.0625 {
                     pos = pos_trial;
+                    accepted = true;
                     break;
                 }
                 lambda *= 0.5;
             }
-            if (pos - pos_prev).norm() < 0.001 { break; }
+            if !accepted || dx_norm * lambda < 0.01 { break; }
         } else { return None; }
     }
     Some(pos)
