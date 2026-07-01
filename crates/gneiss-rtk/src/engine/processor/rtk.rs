@@ -445,7 +445,6 @@ impl ProcessingEngine {
                             let _ = crate::engine::updater::update::<
                                 crate::engine::updater_math::TightCoupling,
                             >(state, &z, &h, &r, 9.0, None, &self.config.tuning);
-                            self.tdcp_position = Some(anchor);
                         }
                     }
                 }
@@ -461,13 +460,13 @@ impl ProcessingEngine {
                     if let Some(prev_pos) = state.prev_epoch_pos {
                         let total_change = state.position.vector - prev_pos;
                         let tdcp_diff = (total_change - tdcp_delta).norm();
-                        if tdcp_diff > 0.5 {
+                        if tdcp_diff > self.config.tdcp_validation_threshold_m {
                             tracing::warn!(
-                                "TDCP validation: unfixing AR — change {:.2}m vs TDCP {:.2}m (diff {:.3}m > 0.5m)",
+                                "TDCP validation: unfixing AR — change {:.2}m vs TDCP {:.2}m (diff {:.3}m > {:.2}m)",
                                 total_change.norm(),
                                 tdcp_delta.norm(),
-                                tdcp_diff
-                            );
+                                tdcp_diff,
+                            self.config.tdcp_validation_threshold_m);
                             state.is_fixed = false;
                             state.fixed_state = None;
                         }
@@ -816,7 +815,6 @@ impl ProcessingEngine {
                             let _ = crate::engine::updater::update::<
                                 crate::engine::updater_math::TightCoupling,
                             >(state, &z, &h, &r, 9.0, None, &self.config.tuning);
-                            self.tdcp_position = Some(anchor);
                         }
                     }
                 }
@@ -832,13 +830,13 @@ impl ProcessingEngine {
                     if let Some(prev_pos) = state.prev_epoch_pos {
                         let total_change = state.position.vector - prev_pos;
                         let tdcp_diff = (total_change - tdcp_delta).norm();
-                        if tdcp_diff > 0.5 {
+                        if tdcp_diff > self.config.tdcp_validation_threshold_m {
                             tracing::warn!(
-                                "TDCP validation: unfixing AR — change {:.2}m vs TDCP {:.2}m (diff {:.3}m > 0.5m)",
+                                "TDCP validation: unfixing AR — change {:.2}m vs TDCP {:.2}m (diff {:.3}m > {:.2}m)",
                                 total_change.norm(),
                                 tdcp_delta.norm(),
-                                tdcp_diff
-                            );
+                                tdcp_diff,
+                            self.config.tdcp_validation_threshold_m);
                             state.is_fixed = false;
                             state.fixed_state = None;
                         }
