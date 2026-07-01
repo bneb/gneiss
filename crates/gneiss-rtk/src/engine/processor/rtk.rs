@@ -75,6 +75,16 @@ impl ProcessingEngine {
         if self.current_state.is_none() {
             if let Some(spp) = &spp_res {
                 self.current_state = Some(RtkState::new(rover_obs.time, spp.position, 100.0));
+            } else if let Some(init_pos) = self.config.initial_position {
+                let coord = Coordinate::new(
+                    Vector3::new(init_pos[0], init_pos[1], init_pos[2]),
+                    Datum::WGS84, Frame::ECEF, rover_obs.time,
+                );
+                tracing::info!(
+                    "SPP failed but initial_position provided — using as seed: {:?}",
+                    init_pos
+                );
+                self.current_state = Some(RtkState::new(rover_obs.time, coord, 100.0));
             } else {
                 return Err(EngineError::InitialSppFailed);
             }
