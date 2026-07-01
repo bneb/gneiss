@@ -1592,10 +1592,59 @@ fn validate_pr_residuals(
         "AR PR residuals: float={:.1}m fixed={:.1}m ratio={:.2} ({} PR)",
         float_rms, fixed_rms, if float_rms > 0.01 { fixed_rms / float_rms } else { 1.0 }, count
     );
-    // Reject if fixed position significantly degrades PR fit
     if fixed_rms > float_rms * 1.5 && fixed_rms > 1.5 {
         tracing::warn!(
             "AR fix rejected by PR residuals: float={:.1}m fixed={:.1}m ({} PR)",
+            float_rms, fixed_rms, count
+        );
+        return false;
+    }
+    true
+}
+
+/// Validate AR fix using carrier phase residuals. CP is mm-level precise,
+/// so wrong NL integers (19cm/cycle at L1) produce CP residuals 10-100×
+/// larger than correct integers.  More sensitive than PR validation for
+/// catching wrong fixes.
+fn validate_cp_residuals(
+    state: &RtkState,
+    fixed_state: &RtkState,
+    m: Option<&crate::engine::measurement::EkfMeasurementMatrices>,
+    valid_indices: Option<&[usize]>,
+) -> bool {
+    let (Some(meas), Some(valid)) = (m, valid_indices) else { return true };
+    let dx = fixed_state.position.vector - state.position.vector;
+    let state_size = state.covariance.nrows();
+
+    let mut float_rms = 0.0f64;
+    let mut fixed_rms = 0.0f64;
+    let mut count = 0usize;
+
+    for &i in valid {
+        if meas.mt[i].1 != 1 && meas.mt[i].1 != 2 { continue; } // CP only (types 1,2)
+        let z_float = meas.z[i];
+        let h_dot_dx: f64 = (0..3.min(state_size))
+            .map(|c| meas.h[(i, c)] * dx[c])
+            .sum();
+        let z_fixed = z_float - h_dot_dx;
+        float_rms += z_float * z_float;
+        fixed_rms += z_fixed * z_fixed;
+        count += 1;
+    }
+
+    if count < 6 { return true; } // too few CP measurements
+
+    float_rms = (float_rms / count as f64).sqrt();
+    fixed_rms = (fixed_rms / count as f64).sqrt();
+
+    tracing::debug!(
+        "AR CP residuals: float={:.3}m fixed={:.3}m ratio={:.2} ({} CP)",
+        float_rms, fixed_rms, if float_rms > 0.001 { fixed_rms / float_rms } else { 1.0 }, count
+    );
+    // CP is mm-level: reject if fixed degrades fit by >2× and exceeds 3cm
+    if fixed_rms > float_rms * 2.0 && fixed_rms > 0.03 {
+        tracing::warn!(
+            "AR fix rejected by CP residuals: float={:.3}m fixed={:.3}m ({} CP)",
             float_rms, fixed_rms, count
         );
         return false;
@@ -1667,6 +1716,9 @@ fn handle_ekf_acceptance(
             state.is_fixed = false;
             state.fixed_state = None;
         } else if !validate_pr_residuals(state, &fixed_state, m, valid_indices) {
+            state.is_fixed = false;
+            state.fixed_state = None;
+        } else if !validate_cp_residuals(state, &fixed_state, m, valid_indices) {
             state.is_fixed = false;
             state.fixed_state = None;
         } else if !validate_factor_graph(state, &fixed_state, m) {
