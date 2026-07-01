@@ -213,6 +213,11 @@ pub struct EngineConfig {
     /// for cross-base consensus (meters). Default 0.3m — about 1.5× NL
     /// wavelength, tight enough to catch wrong integer fixes.
     pub cross_base_agreement_threshold_m: f64,
+    /// TDCP AR validation threshold (meters). If the position change since
+    /// the last epoch differs from the TDCP delta by more than this value,
+    /// the AR fix is rejected. Default 0.5m catches 1-cycle NL errors.
+    /// Raise to 1.0-2.0m to increase fix rate at the cost of accuracy.
+    pub tdcp_validation_threshold_m: f64,
 }
 
 impl Default for EngineConfig {
@@ -271,6 +276,7 @@ impl Default for EngineConfig {
             tdcp_window_size: 60,
             enable_cross_base_ar_validation: false,
             cross_base_agreement_threshold_m: 0.3,
+            tdcp_validation_threshold_m: 0.5,
         }
     }
 }

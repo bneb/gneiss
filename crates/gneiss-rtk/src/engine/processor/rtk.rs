@@ -344,10 +344,13 @@ impl ProcessingEngine {
                 // TDCP: compute delta position from time-differenced CP.
                 // Used only for AR validation (not fed into EKF — avoids
                 // feedback loop where EKF error biases TDCP measurement).
+                let tdcp_pos = state.predicted_position
+                    .map(|c| c.vector)
+                    .unwrap_or(state.position.vector);
                 if let Some((delta, cov)) = self.tdcp_solver.compute_delta(
                     &self.last_matched_obs,
                     &ref_sats,
-                    state.position.vector,
+                    tdcp_pos,
                     base_coord.vector,
                     &self.ephemerides,
                     rover_obs.time,
@@ -366,15 +369,27 @@ impl ProcessingEngine {
                     }
                 }
 
-                // Always store current epoch for next TDCP computation
-                self.tdcp_solver.store_epoch(
-                    &self.last_matched_obs,
-                    &ref_sats,
-                    state.position.vector,
-                    base_coord.vector,
-                    &self.ephemerides,
-                    rover_obs.time,
-                );
+                // Use PREDICTED position for TDCP geometry, not post-update.
+                // EKF step corrections can be several meters per epoch and
+                // contaminate time-differenced geometric DD as spurious
+                // motion.  The predicted position is continuous (pure
+                // process model propagation) and represents the true
+                // trajectory that TDCP should measure.
+                let tdcp_geom_pos = state.predicted_position
+                    .map(|c| c.vector)
+                    .unwrap_or(state.position.vector);
+
+                // Gate storage: skip epochs where EKF hasn't converged.
+                if state.epoch_count >= 10 {
+                    self.tdcp_solver.store_epoch(
+                        &self.last_matched_obs,
+                        &ref_sats,
+                        tdcp_geom_pos,
+                        base_coord.vector,
+                        &self.ephemerides,
+                        rover_obs.time,
+                    );
+                }
             }
         }
 
@@ -674,10 +689,13 @@ impl ProcessingEngine {
                         .map(|(c, s)| (*c, *s))
                         .collect();
 
+                let tdcp_pos = state.predicted_position
+                    .map(|c| c.vector)
+                    .unwrap_or(state.position.vector);
                 if let Some((delta, cov)) = self.tdcp_solver.compute_delta(
                     &self.last_matched_obs,
                     &ref_sats,
-                    state.position.vector,
+                    tdcp_pos,
                     base_coord.vector,
                     &self.ephemerides,
                     rover_obs.time,
@@ -688,14 +706,16 @@ impl ProcessingEngine {
                     self.last_tdcp_delta = Some((delta, cov.clone()));
                 }
 
-                self.tdcp_solver.store_epoch(
-                    &self.last_matched_obs,
-                    &ref_sats,
-                    state.position.vector,
-                    base_coord.vector,
-                    &self.ephemerides,
-                    rover_obs.time,
-                );
+                if state.epoch_count >= 10 {
+                    self.tdcp_solver.store_epoch(
+                        &self.last_matched_obs,
+                        &ref_sats,
+                        state.position.vector,
+                        base_coord.vector,
+                        &self.ephemerides,
+                        rover_obs.time,
+                    );
+                }
             }
         }
 

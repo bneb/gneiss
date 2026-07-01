@@ -191,6 +191,14 @@ impl TdcpSolver {
             let geom_dd_base =
                 (base_pos - base_sat_pos).norm() - (base_pos - base_ref_pos).norm();
 
+            if data.len() < 3 {
+                tracing::info!(
+                    "TDCP store sat={:?} ref={:?}: dd_cp={:.3}m geom_rov={:.3}m geom_base={:.3}m cp_sat={:.3}cyc cp_ref={:.3}cyc lam_sat={:.4}m lam_ref={:.4}m",
+                    rov_obs.sat, ref_sat,
+                    dd_cp_l1_m, geom_dd_rov, geom_dd_base,
+                    rov_cp, ref_rov_cp, lam_sat, lam_ref
+                );
+            }
             data.push(PrevCpDd {
                 sat: rov_obs.sat,
                 ref_sat,
@@ -324,6 +332,15 @@ impl TdcpSolver {
             let delta_geom_base = geom_dd_base_curr - prev.geom_dd_base;
             let z = delta_dd_cp - (delta_geom_rov - delta_geom_base);
 
+            // Print all z values for diagnosis
+            let abs_z = z.abs();
+            if abs_z > 50.0 {
+                tracing::warn!(
+                    "TDCP LARGE z: sat={:?} ref={:?} z={:.1} delta_cp={:.1} d_geom_rov={:.1} d_geom_base={:.1} dd_curr={:.1} dd_prev={:.1}",
+                    prev.sat, prev.ref_sat, z, delta_dd_cp, delta_geom_rov, delta_geom_base, dd_cp_curr, prev.dd_cp_l1_m
+                );
+            }
+
             // Jacobian: H = (e_sat - e_ref)ᵀ at current epoch
             let los_sat_curr = (sat_pos_curr - rover_pos_curr).normalize();
             let los_ref_curr = (ref_sat_pos_curr - rover_pos_curr).normalize();
@@ -364,9 +381,24 @@ impl TdcpSolver {
         // Covariance: (HᵀH)⁻¹ · var_tdcp
         let cov = ht_h_inv * var_tdcp;
 
-        // Sanity check: reject implausible position changes
-        if delta_pos.norm() > 100.0 {
+        // Sanity check: reject implausible position changes.
+        // At 5Hz, max plausible single-epoch position change is ~10m
+        // (200 m/s² acceleration × 0.2s² / 2 = 4m for automotive).
+        let delta_norm = delta_pos.norm();
+        if delta_norm > 10.0 {
+            let z_rms = (z_vec.norm() / (n as f64).sqrt()).sqrt();
+            tracing::warn!(
+                "TDCP: implausible delta {:.1}m ({} pairs, z_rms={:.1}m)",
+                delta_norm, n, z_rms
+            );
             return None;
+        }
+        if delta_norm > 5.0 {
+            let z_rms = (z_vec.norm() / (n as f64).sqrt()).sqrt();
+            tracing::debug!(
+                "TDCP: large delta {:.1}m ({} pairs, z_rms={:.1}m)",
+                delta_norm, n, z_rms
+            );
         }
 
         Some((delta_pos, cov))
