@@ -1774,21 +1774,27 @@ fn execute_ekf_update<C: CouplingStrategy>(
     let pr_thresh = ctx.config.chi_square_pr_threshold;
     let type_stripped: Vec<_> = m.mt.iter().map(|&(s, t, _)| (s, t)).collect();
 
-    match crate::engine::updater::update::<C>(
-        state,
-        &m.z,
-        &m.h,
-        &m.r,
-        pr_thresh,
-        Some(&type_stripped),
-        &ctx.config.tuning,
+    let mut r_inflated;
+    let update_result = match crate::engine::updater::update::<C>(
+        state, &m.z, &m.h, &m.r,
+        pr_thresh, Some(&type_stripped), &ctx.config.tuning,
     ) {
+        Err(first_err) => {
+            if state.consecutive_rejections < 3 {
+                r_inflated = m.r.clone();
+                for i in 0..r_inflated.nrows() { r_inflated[(i, i)] *= 4.0; }
+                crate::engine::updater::update::<C>(
+                    state, &m.z, &m.h, &r_inflated,
+                    pr_thresh * 1.5, Some(&type_stripped), &ctx.config.tuning,
+                )
+            } else { Err(first_err) }
+        }
+        ok => ok,
+    };
+    match update_result {
         Err(_) => handle_ekf_rejection(
-            state,
-            ctx.config,
-            ctx.spp_pos,
-            ctx.spp_state_ref,
-            "failed chi-square",
+            state, ctx.config, ctx.spp_pos, ctx.spp_state_ref,
+            "failed chi-square (retry also failed)",
         ),
         Ok((valid_indices, dx)) => {
             export_gnn_dataset(state, ctx, m, &valid_indices, &dx);
