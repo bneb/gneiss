@@ -1248,15 +1248,9 @@ fn validate_factor_graph(
             // since the factor graph uses geometry diversity across epochs.
             let pos_jump = (result.pos_k - state.position.vector).norm();
             if result.converged && pos_jump < 5.0 {
-                // Weak position feedback: σ = 1.0m floor.
-                // Nudges the EKF toward the FG position without dominating
-                // the measurements. Over many epochs this improves the float
-                // solution and makes LAMBDA more likely to find correct integers.
                 let sigma = pos_jump.max(1.0);
                 let mut h = nalgebra::DMatrix::zeros(3, state.covariance.ncols());
-                h[(0, 0)] = 1.0;
-                h[(1, 1)] = 1.0;
-                h[(2, 2)] = 1.0;
+                h[(0, 0)] = 1.0; h[(1, 1)] = 1.0; h[(2, 2)] = 1.0;
                 let z = result.pos_k - state.position.vector;
                 let z_vec = nalgebra::DVector::from_vec(vec![z.x, z.y, z.z]);
                 let r = nalgebra::DMatrix::from_diagonal(&nalgebra::DVector::from_element(3, sigma * sigma));
