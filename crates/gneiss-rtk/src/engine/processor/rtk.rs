@@ -393,6 +393,20 @@ impl ProcessingEngine {
             }
         }
 
+        // --- TDCP complementary filter ---
+        // Propagate previous smoothed position with TDCP delta (mm-level),
+        // then blend with current EKF position for absolute reference.
+        // α=0.05 gives 20-epoch time constant.
+        if let Some(ref mut state) = self.current_state {
+            if let Some((tdcp_delta, _)) = &self.last_tdcp_delta {
+                let alpha = 0.05;
+                let prev_smooth = state.smoothed_position.unwrap_or(state.position.vector);
+                let tdcp_prop = prev_smooth + tdcp_delta;
+                let blended = state.position.vector * alpha + tdcp_prop * (1.0 - alpha);
+                state.smoothed_position = Some(blended);
+            }
+        }
+
         self.attempt_kinematic_alignment();
 
         // --- TDCP-based AR validation ---
@@ -716,6 +730,20 @@ impl ProcessingEngine {
                         rover_obs.time,
                     );
                 }
+            }
+        }
+
+        // --- TDCP complementary filter ---
+        // Propagate previous smoothed position with TDCP delta (mm-level),
+        // then blend with current EKF position for absolute reference.
+        // α=0.05 gives 20-epoch time constant.
+        if let Some(ref mut state) = self.current_state {
+            if let Some((tdcp_delta, _)) = &self.last_tdcp_delta {
+                let alpha = 0.05;
+                let prev_smooth = state.smoothed_position.unwrap_or(state.position.vector);
+                let tdcp_prop = prev_smooth + tdcp_delta;
+                let blended = state.position.vector * alpha + tdcp_prop * (1.0 - alpha);
+                state.smoothed_position = Some(blended);
             }
         }
 
