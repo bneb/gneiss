@@ -420,10 +420,12 @@ impl ProcessingEngine {
 
         // --- Raw PR anchor solver ---
         if let Some(ref mut state) = self.current_state {
-            populate_raw_pr_buffer(
-                state, &self.last_matched_obs, self.tdcp_position,
-                &self.ephemerides, 100, // smaller window for memory
-            );
+            if false { // anchor solver disabled pending memory optimization
+                populate_raw_pr_buffer(
+                    state, &self.last_matched_obs, self.tdcp_position,
+                    &self.ephemerides, 20,
+                );
+            }
             if state.epoch_count >= 200 && state.epoch_count % 100 == 0 {
                 if let (Some(ref bc), Some(bt)) =
                     (&self.last_base_coord, self.last_base_time)
@@ -795,10 +797,12 @@ impl ProcessingEngine {
 
         // --- Raw PR anchor solver ---
         if let Some(ref mut state) = self.current_state {
-            populate_raw_pr_buffer(
-                state, &self.last_matched_obs, self.tdcp_position,
-                &self.ephemerides, 100, // smaller window for memory
-            );
+            if false { // anchor solver disabled pending memory optimization
+                populate_raw_pr_buffer(
+                    state, &self.last_matched_obs, self.tdcp_position,
+                    &self.ephemerides, 20,
+                );
+            }
             if state.epoch_count >= 200 && state.epoch_count % 100 == 0 {
                 if let (Some(ref bc), Some(bt)) =
                     (&self.last_base_coord, self.last_base_time)
