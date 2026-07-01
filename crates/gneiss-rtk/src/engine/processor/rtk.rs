@@ -420,12 +420,6 @@ impl ProcessingEngine {
 
         // --- Raw PR anchor solver ---
         if let Some(ref mut state) = self.current_state {
-            if false { // anchor solver disabled pending memory optimization
-                populate_raw_pr_buffer(
-                    state, &self.last_matched_obs, self.tdcp_position,
-                    &self.ephemerides, 20,
-                );
-            }
             if state.epoch_count >= 200 && state.epoch_count % 100 == 0 {
                 if let (Some(ref bc), Some(bt)) =
                     (&self.last_base_coord, self.last_base_time)
@@ -797,12 +791,6 @@ impl ProcessingEngine {
 
         // --- Raw PR anchor solver ---
         if let Some(ref mut state) = self.current_state {
-            if false { // anchor solver disabled pending memory optimization
-                populate_raw_pr_buffer(
-                    state, &self.last_matched_obs, self.tdcp_position,
-                    &self.ephemerides, 20,
-                );
-            }
             if state.epoch_count >= 200 && state.epoch_count % 100 == 0 {
                 if let (Some(ref bc), Some(bt)) =
                     (&self.last_base_coord, self.last_base_time)
@@ -1147,71 +1135,6 @@ fn smooth_two_epoch_position(state: &RtkState) -> (Vector3<f64>, f64) {
 /// Long-arc PR averaging (200 epochs) reduces code noise by √200 ≈ 14×,
 /// and TDCP compensation removes the kinematic smear that previously
 /// caused 2.5km bias in the raw PR solver (commit 8d802d1).
-/// Populate the raw PR buffer with DD pseudorange computed directly
-/// from matched rover/base observations.  Unlike the EKF innovation
-/// buffer (pr_dd_window), this buffer stores raw measurements that are
-/// independent of EKF state — breaking the code-multipath circularity
-/// that limits all EKF-derived validation pathways.
-fn populate_raw_pr_buffer(
-    state: &mut RtkState,
-    matched_obs: &[(crate::filter::DdObservation, crate::filter::DdObservation)],
-    tdcp_pos: Option<nalgebra::Vector3<f64>>,
-    ephemerides: &[gneiss_core::ephemeris::Ephemeris],
-    window_size: usize,
-) {
-    if matched_obs.is_empty() { return; }
-
-    let obs_map: std::collections::HashMap<_, _> = matched_obs
-        .iter().map(|(r, b)| (r.sat, (r, b))).collect();
-
-    for (sat, (rov_obs, base_obs)) in &obs_map {
-        let ref_sat = state.current_ref_sat.get(&sat.constellation).copied()
-            .unwrap_or(*sat);
-        if *sat == ref_sat { continue; }
-
-        let (rov_ref, base_ref) = match obs_map.get(&ref_sat) {
-            Some((r, b)) => (*r, *b), None => continue,
-        };
-
-        // Raw DD PR: independent of any EKF state
-        let raw_dd_pr = (rov_obs.pr_l1 - rov_ref.pr_l1)
-            - (base_obs.pr_l1 - base_ref.pr_l1);
-
-        // Satellite positions at this epoch
-        let sat_pos = match crate::engine::measurement::geometry::find_ephemeris(
-            ephemerides, *sat, state.time.tow,
-        ) {
-            Some(eph) => {
-                let (pos, _) = crate::engine::measurement_math::get_sat_state(
-                    eph, 0.0, 0.0, state.time, state.position.vector,
-                );
-                pos
-            }
-            None => continue,
-        };
-        let ref_sat_pos = match crate::engine::measurement::geometry::find_ephemeris(
-            ephemerides, ref_sat, state.time.tow,
-        ) {
-            Some(eph) => {
-                let (pos, _) = crate::engine::measurement_math::get_sat_state(
-                    eph, 0.0, 0.0, state.time, state.position.vector,
-                );
-                pos
-            }
-            None => continue,
-        };
-
-        let key = (*sat, ref_sat);
-        let buf = state.raw_pr_buffer
-            .entry(key)
-            .or_insert_with(|| crate::filter::PrRingBuffer::new(window_size));
-        if let Some(tdcp) = tdcp_pos {
-            buf.push_with_tdcp(raw_dd_pr, ref_sat, state.position.vector, tdcp, sat_pos, ref_sat_pos);
-        } else {
-            buf.push(raw_dd_pr, ref_sat, state.position.vector, sat_pos, ref_sat_pos);
-        }
-    }
-}
 
 /// Solve for absolute position from the raw PR buffer using TDCP-
 /// compensated long-arc PR averaging.  Raw DD PR is free of EKF state
@@ -1227,7 +1150,7 @@ fn solve_raw_pr_anchor(
 ) -> Option<(Vector3<f64>, f64)> {
     struct PrObs { sat: SatelliteId, ref_sat: SatelliteId, dd_mean: f64, weight: f64 }
     let mut obs = Vec::new();
-    for ((sat, ref_sat), buf) in state.raw_pr_buffer.iter() {
+    for ((sat, ref_sat), buf) in state.pr_dd_window.iter() {
         let n = buf.count();
         if n < 20 { continue; }
         let comp_mean = buf.compensated_mean(state.position.vector, base_coord.vector)?;
@@ -1590,25 +1513,31 @@ fn save_prev_epoch_measurements(
 /// reconstruction uses the correct satellite location for each epoch.
 fn accumulate_pr_window(
     state: &mut RtkState,
-    m: &crate::engine::measurement::EkfMeasurementMatrices,
+    matched_obs: &[(crate::filter::DdObservation, crate::filter::DdObservation)],
     window_size: usize,
     tdcp_pos: Option<nalgebra::Vector3<f64>>,
     ephemerides: &[gneiss_core::ephemeris::Ephemeris],
     _base_coord: &Coordinate,
 ) {
-    if window_size == 0 {
-        return;
-    }
-    for i in 0..m.z.nrows() {
-        if m.mt[i].1 != 0 { continue; } // PR only (type 0)
-        let sat = m.mt[i].0;
-        let innovation = m.z[i];
+    if window_size == 0 || matched_obs.is_empty() { return; }
+
+    let obs_map: std::collections::HashMap<_, _> = matched_obs
+        .iter().map(|(r, b)| (r.sat, (r, b))).collect();
+
+    for (sat, (rov_obs, base_obs)) in &obs_map {
         let ref_sat = state.current_ref_sat.get(&sat.constellation).copied()
-            .unwrap_or(sat);
-        let key = (sat, ref_sat);
+            .unwrap_or(*sat);
+        if *sat == ref_sat { continue; }
+        let (rov_ref, base_ref) = match obs_map.get(&ref_sat) {
+            Some((r, b)) => (*r, *b), None => continue,
+        };
+
+        // Raw DD PR: independent of EKF state, breaks code multipath circularity
+        let raw_dd_pr = (rov_obs.pr_l1 - rov_ref.pr_l1)
+            - (base_obs.pr_l1 - base_ref.pr_l1);
 
         let sat_pos = match crate::engine::measurement::geometry::find_ephemeris(
-            ephemerides, sat, state.time.tow,
+            ephemerides, *sat, state.time.tow,
         ) {
             Some(eph) => {
                 let (pos, _) = crate::engine::measurement_math::get_sat_state(
@@ -1630,13 +1559,14 @@ fn accumulate_pr_window(
             None => continue,
         };
 
+        let key = (*sat, ref_sat);
         let buf = state.pr_dd_window
             .entry(key)
             .or_insert_with(|| crate::filter::PrRingBuffer::new(window_size));
         if let Some(tdcp) = tdcp_pos {
-            buf.push_with_tdcp(innovation, ref_sat, state.position.vector, tdcp, sat_pos, ref_sat_pos);
+            buf.push_with_tdcp(raw_dd_pr, ref_sat, state.position.vector, tdcp, sat_pos, ref_sat_pos);
         } else {
-            buf.push(innovation, ref_sat, state.position.vector, sat_pos, ref_sat_pos);
+            buf.push(raw_dd_pr, ref_sat, state.position.vector, sat_pos, ref_sat_pos);
         }
     }
 }
@@ -1988,8 +1918,8 @@ fn process_rtk_update<C: CouplingStrategy>(
         apply_adaptive_r_scaling(tracker, state, &m.z, &m.h, &mut m.r, &m.mt, ctx.matched_obs);
         execute_ekf_update::<C>(state, ctx, &m);
         accumulate_pr_window(
-            state, &m, ctx.config.pr_window_size, ctx.tdcp_pos,
-            ctx.ephemerides, ctx.base_coord,
+            state, ctx.matched_obs, ctx.config.pr_window_size,
+            ctx.tdcp_pos, ctx.ephemerides, ctx.base_coord,
         );
     } else {
         handle_ekf_rejection(
