@@ -190,14 +190,6 @@ impl TdcpSolver {
             let geom_dd_base =
                 (base_pos - sat_pos).norm() - (base_pos - ref_sat_pos).norm();
 
-            if data.len() < 3 {
-                tracing::info!(
-                    "TDCP store sat={:?} ref={:?}: dd_cp={:.3}m geom_rov={:.3}m geom_base={:.3}m cp_sat={:.3}cyc cp_ref={:.3}cyc lam_sat={:.4}m lam_ref={:.4}m",
-                    rov_obs.sat, ref_sat,
-                    dd_cp_l1_m, geom_dd_rov, geom_dd_base,
-                    rov_cp, ref_rov_cp, lam_sat, lam_ref
-                );
-            }
             data.push(PrevCpDd {
                 sat: rov_obs.sat,
                 ref_sat,
@@ -356,13 +348,6 @@ impl TdcpSolver {
             let z = delta_dd_cp - delta_geom_rov;
 
             // Debug: verify satellite motion cancellation
-            if h_rows.is_empty() {
-                let z_old_formula = delta_dd_cp - (delta_geom_rov - delta_geom_base);
-                tracing::info!(
-                    "TDCP z0: sat={:?} z={:.4} z_old={:.1} dc={:.4} dgr={:.4} dgb={:.4}",
-                    prev.sat, z, z_old_formula, delta_dd_cp, delta_geom_rov, delta_geom_base
-                );
-            }
 
             // Reject cycle-slipped pairs: genuine rover motion produces
             // |z| < 1.0m per epoch (0.2s × 30m/s × 0.1 LOS ≈ 0.6m max).

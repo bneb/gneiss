@@ -418,13 +418,47 @@ impl ProcessingEngine {
 
         }
 
+        // --- Raw PR anchor solver ---
+        if let Some(ref mut state) = self.current_state {
+            populate_raw_pr_buffer(
+                state, &self.last_matched_obs, self.tdcp_position,
+                &self.ephemerides, 100, // smaller window for memory
+            );
+            if state.epoch_count >= 200 && state.epoch_count % 100 == 0 {
+                if let (Some(ref bc), Some(bt)) =
+                    (&self.last_base_coord, self.last_base_time)
+                {
+                    if let Some((anchor, sigma)) = solve_raw_pr_anchor(
+                        state, &self.ephemerides, bc, bt,
+                    ) {
+                        let jump = (anchor - state.position.vector).norm();
+                        if jump < 5.0 {
+                            let s = jump.max(sigma).max(2.0);
+                            let mut h = nalgebra::DMatrix::zeros(
+                                3, state.covariance.ncols(),
+                            );
+                            h[(0, 0)] = 1.0; h[(1, 1)] = 1.0; h[(2, 2)] = 1.0;
+                            let z = nalgebra::DVector::from_vec(vec![
+                                anchor.x - state.position.vector.x,
+                                anchor.y - state.position.vector.y,
+                                anchor.z - state.position.vector.z,
+                            ]);
+                            let r = nalgebra::DMatrix::from_diagonal(
+                                &nalgebra::DVector::from_element(3, s * s),
+                            );
+                            let _ = crate::engine::updater::update::<
+                                crate::engine::updater_math::TightCoupling,
+                            >(state, &z, &h, &r, 9.0, None, &self.config.tuning);
+                            self.tdcp_position = Some(anchor);
+                        }
+                    }
+                }
+            }
+        }
+
         self.attempt_kinematic_alignment();
 
         // --- TDCP-based AR validation ---
-        // After TDCP computation, validate any AR fix by comparing the
-        // total position change since the last epoch against the TDCP delta.
-        // TDCP uses time-differenced CP (mm-level), so a wrong AR fix that
-        // introduces a position jump will disagree with the TDCP measurement.
         if let Some(ref mut state) = self.current_state {
             if state.is_fixed {
                 if let Some((tdcp_delta, _)) = &self.last_tdcp_delta {
@@ -759,13 +793,47 @@ impl ProcessingEngine {
 
         }
 
+        // --- Raw PR anchor solver ---
+        if let Some(ref mut state) = self.current_state {
+            populate_raw_pr_buffer(
+                state, &self.last_matched_obs, self.tdcp_position,
+                &self.ephemerides, 100, // smaller window for memory
+            );
+            if state.epoch_count >= 200 && state.epoch_count % 100 == 0 {
+                if let (Some(ref bc), Some(bt)) =
+                    (&self.last_base_coord, self.last_base_time)
+                {
+                    if let Some((anchor, sigma)) = solve_raw_pr_anchor(
+                        state, &self.ephemerides, bc, bt,
+                    ) {
+                        let jump = (anchor - state.position.vector).norm();
+                        if jump < 5.0 {
+                            let s = jump.max(sigma).max(2.0);
+                            let mut h = nalgebra::DMatrix::zeros(
+                                3, state.covariance.ncols(),
+                            );
+                            h[(0, 0)] = 1.0; h[(1, 1)] = 1.0; h[(2, 2)] = 1.0;
+                            let z = nalgebra::DVector::from_vec(vec![
+                                anchor.x - state.position.vector.x,
+                                anchor.y - state.position.vector.y,
+                                anchor.z - state.position.vector.z,
+                            ]);
+                            let r = nalgebra::DMatrix::from_diagonal(
+                                &nalgebra::DVector::from_element(3, s * s),
+                            );
+                            let _ = crate::engine::updater::update::<
+                                crate::engine::updater_math::TightCoupling,
+                            >(state, &z, &h, &r, 9.0, None, &self.config.tuning);
+                            self.tdcp_position = Some(anchor);
+                        }
+                    }
+                }
+            }
+        }
+
         self.attempt_kinematic_alignment();
 
         // --- TDCP-based AR validation ---
-        // After TDCP computation, validate any AR fix by comparing the
-        // total position change since the last epoch against the TDCP delta.
-        // TDCP uses time-differenced CP (mm-level), so a wrong AR fix that
-        // introduces a position jump will disagree with the TDCP measurement.
         if let Some(ref mut state) = self.current_state {
             if state.is_fixed {
                 if let Some((tdcp_delta, _)) = &self.last_tdcp_delta {
@@ -1075,6 +1143,124 @@ fn smooth_two_epoch_position(state: &RtkState) -> (Vector3<f64>, f64) {
 /// Long-arc PR averaging (200 epochs) reduces code noise by √200 ≈ 14×,
 /// and TDCP compensation removes the kinematic smear that previously
 /// caused 2.5km bias in the raw PR solver (commit 8d802d1).
+/// Populate the raw PR buffer with DD pseudorange computed directly
+/// from matched rover/base observations.  Unlike the EKF innovation
+/// buffer (pr_dd_window), this buffer stores raw measurements that are
+/// independent of EKF state — breaking the code-multipath circularity
+/// that limits all EKF-derived validation pathways.
+fn populate_raw_pr_buffer(
+    state: &mut RtkState,
+    matched_obs: &[(crate::filter::DdObservation, crate::filter::DdObservation)],
+    tdcp_pos: Option<nalgebra::Vector3<f64>>,
+    ephemerides: &[gneiss_core::ephemeris::Ephemeris],
+    window_size: usize,
+) {
+    if matched_obs.is_empty() { return; }
+
+    let obs_map: std::collections::HashMap<_, _> = matched_obs
+        .iter().map(|(r, b)| (r.sat, (r, b))).collect();
+
+    for (sat, (rov_obs, base_obs)) in &obs_map {
+        let ref_sat = state.current_ref_sat.get(&sat.constellation).copied()
+            .unwrap_or(*sat);
+        if *sat == ref_sat { continue; }
+
+        let (rov_ref, base_ref) = match obs_map.get(&ref_sat) {
+            Some((r, b)) => (*r, *b), None => continue,
+        };
+
+        // Raw DD PR: independent of any EKF state
+        let raw_dd_pr = (rov_obs.pr_l1 - rov_ref.pr_l1)
+            - (base_obs.pr_l1 - base_ref.pr_l1);
+
+        // Satellite positions at this epoch
+        let sat_pos = match crate::engine::measurement::geometry::find_ephemeris(
+            ephemerides, *sat, state.time.tow,
+        ) {
+            Some(eph) => {
+                let (pos, _) = crate::engine::measurement_math::get_sat_state(
+                    eph, 0.0, 0.0, state.time, state.position.vector,
+                );
+                pos
+            }
+            None => continue,
+        };
+        let ref_sat_pos = match crate::engine::measurement::geometry::find_ephemeris(
+            ephemerides, ref_sat, state.time.tow,
+        ) {
+            Some(eph) => {
+                let (pos, _) = crate::engine::measurement_math::get_sat_state(
+                    eph, 0.0, 0.0, state.time, state.position.vector,
+                );
+                pos
+            }
+            None => continue,
+        };
+
+        let key = (*sat, ref_sat);
+        let buf = state.raw_pr_buffer
+            .entry(key)
+            .or_insert_with(|| crate::filter::PrRingBuffer::new(window_size));
+        if let Some(tdcp) = tdcp_pos {
+            buf.push_with_tdcp(raw_dd_pr, ref_sat, state.position.vector, tdcp, sat_pos, ref_sat_pos);
+        } else {
+            buf.push(raw_dd_pr, ref_sat, state.position.vector, sat_pos, ref_sat_pos);
+        }
+    }
+}
+
+/// Solve for absolute position from the raw PR buffer using TDCP-
+/// compensated long-arc PR averaging.  Raw DD PR is free of EKF state
+/// bias, so time-averaging reduces code multipath by √N (unlike EKF
+/// innovation reconstruction which preserves systematic bias).
+///
+/// Returns (position_ecef, sigma_meters) or None if insufficient data.
+fn solve_raw_pr_anchor(
+    state: &RtkState,
+    ephemerides: &[gneiss_core::ephemeris::Ephemeris],
+    base_coord: &Coordinate,
+    base_time: gneiss_core::time::GpsTime,
+) -> Option<(Vector3<f64>, f64)> {
+    struct PrObs { sat: SatelliteId, ref_sat: SatelliteId, dd_mean: f64, weight: f64 }
+    let mut obs = Vec::new();
+    for ((sat, ref_sat), buf) in state.raw_pr_buffer.iter() {
+        let n = buf.count();
+        if n < 20 { continue; }
+        let comp_mean = buf.compensated_mean(state.position.vector, base_coord.vector)?;
+        let sigma_eff = 1.5_f64 / (n as f64).sqrt();
+        obs.push(PrObs { sat: *sat, ref_sat: *ref_sat, dd_mean: comp_mean, weight: 1.0 / (sigma_eff * sigma_eff) });
+    }
+    if obs.len() < 5 { return None; }
+
+    let mut pos = state.position.vector;
+    for _iter in 0..8 {
+        let mut h_sum = nalgebra::Matrix3::zeros();
+        let mut rhs = nalgebra::Vector3::zeros();
+        for o in &obs {
+            let eph_sat = match ephemerides.iter().find(|e| e.sat() == o.sat) { Some(e) => e, None => continue };
+            let eph_ref = match ephemerides.iter().find(|e| e.sat() == o.ref_sat) { Some(e) => e, None => continue };
+            let (sat_pos, _) = crate::engine::measurement_math::get_sat_state(eph_sat, 0.0, 0.0, state.time, pos);
+            let (ref_pos, _) = crate::engine::measurement_math::get_sat_state(eph_ref, 0.0, 0.0, state.time, pos);
+            let (bas_sat, _) = crate::engine::measurement_math::get_sat_state(eph_sat, 0.0, 0.0, base_time, base_coord.vector);
+            let (bas_ref, _) = crate::engine::measurement_math::get_sat_state(eph_ref, 0.0, 0.0, base_time, base_coord.vector);
+            let geom_dd = crate::engine::measurement_math::compute_geometric_dd(pos, base_coord.vector, sat_pos, ref_pos, bas_sat, bas_ref);
+            let resid = o.dd_mean - geom_dd;
+            let los = (ref_pos - pos).normalize() - (sat_pos - pos).normalize();
+            h_sum += los * los.transpose() * o.weight;
+            rhs += los * (resid * o.weight);
+        }
+        if let Some(h_inv) = h_sum.try_inverse() {
+            let dx = &h_inv * rhs;
+            let n = dx.norm();
+            pos += if n > 100.0 { dx * 100.0 / n } else { dx };
+            if n < 0.01 { break; }
+        } else { return None; }
+    }
+    let jump = (pos - state.position.vector).norm();
+    let sigma = jump.max(0.5);
+    Some((pos, sigma))
+}
+
 ///
 /// Returns (position_ecef, sigma_meters) or None if insufficient data.
 fn solve_tdcp_anchored_position(

@@ -266,6 +266,12 @@ pub struct RtkState {
     pub nl_sd_counts: std::collections::HashMap<SatelliteId, usize>,
     /// Sliding-window DD pseudorange accumulator: (rov_sat, ref_sat) → ring buffer
     pub pr_dd_window: std::collections::HashMap<(SatelliteId, SatelliteId), PrRingBuffer>,
+    /// Separate buffer for anchor solver: stores raw DD PR (computed from
+    /// matched rover/base observations, independent of EKF state) with
+    /// TDCP positions for unbiased geometry compensation.  Separate from
+    /// pr_dd_window (which stores EKF innovations for validation) to avoid
+    /// contaminating the validation pipeline.
+    pub raw_pr_buffer: std::collections::HashMap<(SatelliteId, SatelliteId), PrRingBuffer>,
     pub gf_prev: std::collections::HashMap<SatelliteId, f64>,
     pub mw_prev: std::collections::HashMap<SatelliteId, f64>,
     pub locktimes: std::collections::HashMap<(SatelliteId, u8), u16>,
@@ -376,6 +382,7 @@ impl RtkState {
             nl_sd_ema: std::collections::HashMap::new(),
             nl_sd_counts: std::collections::HashMap::new(),
             pr_dd_window: std::collections::HashMap::new(),
+            raw_pr_buffer: std::collections::HashMap::new(),
             gf_prev: std::collections::HashMap::new(),
             mw_prev: std::collections::HashMap::new(),
             locktimes: std::collections::HashMap::new(),
