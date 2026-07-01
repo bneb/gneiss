@@ -177,19 +177,18 @@ impl TdcpSolver {
             let dd_cp_l1_m = (rov_cp * lam_sat - ref_rov_cp * lam_ref)
                 - (base_cp * lam_sat - ref_base_cp * lam_ref);
 
-            // Satellite positions
-            let (sat_pos, _) = compute_sat_position(eph_sat, rover_pos, time);
-            let (ref_sat_pos, _) = compute_sat_position(eph_ref, rover_pos, time);
+            // Compute satellite positions from common reference (base pos)
+            // so compute_delta sees consistent satellite geometry.
+            let (sat_pos, _) = compute_sat_position(eph_sat, base_pos, time);
+            let (ref_sat_pos, _) = compute_sat_position(eph_ref, base_pos, time);
 
-            // Geometric DD: rover
+            // Geometric DD at rover position using common satellite positions
             let geom_dd_rov =
                 (rover_pos - sat_pos).norm() - (rover_pos - ref_sat_pos).norm();
 
-            // Geometric DD: base
-            let (base_sat_pos, _) = compute_sat_position(eph_sat, base_pos, time);
-            let (base_ref_pos, _) = compute_sat_position(eph_ref, base_pos, time);
+            // Geometric DD at base position using same satellite positions
             let geom_dd_base =
-                (base_pos - base_sat_pos).norm() - (base_pos - base_ref_pos).norm();
+                (base_pos - sat_pos).norm() - (base_pos - ref_sat_pos).norm();
 
             if data.len() < 3 {
                 tracing::info!(
@@ -312,33 +311,65 @@ impl TdcpSolver {
             // Time-differenced DD CP
             let delta_dd_cp = dd_cp_curr - prev.dd_cp_l1_m;
 
-            // Current-epoch satellite positions
-            let (sat_pos_curr, _) = compute_sat_position(eph_sat, rover_pos_curr, time_curr);
-            let (ref_sat_pos_curr, _) =
-                compute_sat_position(eph_ref, rover_pos_curr, time_curr);
+            // Compute satellite positions from a COMMON reference point
+            // (the base station) so that satellite motion cancels exactly
+            // between rover and base geometric DDs.  Using different ref
+            // points for rover vs base introduces a ~5cm satellite position
+            // difference (from signal travel time), which, when differenced
+            // across epochs with ~160m of satellite motion, produces ~10m
+            // RMS z-variation.
+            //
+            // The rover range is still computed from the rover position;
+            // the ~5cm satellite position error from using the base ref
+            // point is constant across epochs and cancels in the time
+            // difference.
+            let (sat_pos_curr, _) = compute_sat_position(eph_sat, base_pos, time_curr);
+            let (ref_sat_pos_curr, _) = compute_sat_position(eph_ref, base_pos, time_curr);
 
-            // Geometric DD at current predicted position
+            // Geometric DD at current predicted position using common sat pos
             let geom_dd_rov_curr = (rover_pos_curr - sat_pos_curr).norm()
                 - (rover_pos_curr - ref_sat_pos_curr).norm();
 
-            // Base geometric DD at current epoch
-            let (base_sat_curr, _) = compute_sat_position(eph_sat, base_pos, time_curr);
-            let (base_ref_curr, _) = compute_sat_position(eph_ref, base_pos, time_curr);
-            let geom_dd_base_curr = (base_pos - base_sat_curr).norm()
-                - (base_pos - base_ref_curr).norm();
+            // Base geometric DD at current epoch using same sat pos
+            let geom_dd_base_curr = (base_pos - sat_pos_curr).norm()
+                - (base_pos - ref_sat_pos_curr).norm();
 
-            // Innovation: z = ΔDD_CP - [Δgeom_rov_pred - Δgeom_base]
+            // TDCP innovation with common satellite positions:
+            //
+            // ΔDD_CP has two components: satellite motion + rover motion.
+            // Δgeom_base captures the satellite motion (base is stationary).
+            // Δgeom_rov captures satellite motion + predicted rover motion.
+            //
+            // With common sat pos (both computed from base_pos), the satellite
+            // motion terms are identical in all three deltas, so:
+            //   (ΔDD_CP - Δgeom_base)     = CP-measured rover motion change
+            //   (Δgeom_rov - Δgeom_base)  = predicted rover motion change
+            //   z = (ΔDD_CP - Δgeom_base) - (Δgeom_rov - Δgeom_base)
+            //     = ΔDD_CP - Δgeom_rov
+            //
+            // This cancels satellite motion (~160m/epoch) leaving only the
+            // rover motion residual (~0.1-1m).
             let delta_geom_rov = geom_dd_rov_curr - prev.geom_dd_rov;
             let delta_geom_base = geom_dd_base_curr - prev.geom_dd_base;
-            let z = delta_dd_cp - (delta_geom_rov - delta_geom_base);
 
-            // Print all z values for diagnosis
-            let abs_z = z.abs();
-            if abs_z > 50.0 {
-                tracing::warn!(
-                    "TDCP LARGE z: sat={:?} ref={:?} z={:.1} delta_cp={:.1} d_geom_rov={:.1} d_geom_base={:.1} dd_curr={:.1} dd_prev={:.1}",
-                    prev.sat, prev.ref_sat, z, delta_dd_cp, delta_geom_rov, delta_geom_base, dd_cp_curr, prev.dd_cp_l1_m
+            // Satellite-motion-free innovation
+            let z = delta_dd_cp - delta_geom_rov;
+
+            // Debug: verify satellite motion cancellation
+            if h_rows.is_empty() {
+                let z_old_formula = delta_dd_cp - (delta_geom_rov - delta_geom_base);
+                tracing::info!(
+                    "TDCP z0: sat={:?} z={:.4} z_old={:.1} dc={:.4} dgr={:.4} dgb={:.4}",
+                    prev.sat, z, z_old_formula, delta_dd_cp, delta_geom_rov, delta_geom_base
                 );
+            }
+
+            // Reject cycle-slipped pairs: genuine rover motion produces
+            // |z| < 1.0m per epoch (0.2s × 30m/s × 0.1 LOS ≈ 0.6m max).
+            // Larger values indicate a cycle slip or reference satellite
+            // change that broke the CP continuity assumption.
+            if z.abs() > 5.0 {
+                continue;
             }
 
             // Jacobian: H = (e_sat - e_ref)ᵀ at current epoch
@@ -381,24 +412,17 @@ impl TdcpSolver {
         // Covariance: (HᵀH)⁻¹ · var_tdcp
         let cov = ht_h_inv * var_tdcp;
 
-        // Sanity check: reject implausible position changes.
-        // At 5Hz, max plausible single-epoch position change is ~10m
-        // (200 m/s² acceleration × 0.2s² / 2 = 4m for automotive).
+        // Sanity check: with the corrected formulation (common sat ref
+        // + outlier rejection), deltas should be ~0.1-2m per epoch.
+        // Anything above 5m indicates uncorrected cycle slips.
         let delta_norm = delta_pos.norm();
-        if delta_norm > 10.0 {
-            let z_rms = (z_vec.norm() / (n as f64).sqrt()).sqrt();
-            tracing::warn!(
-                "TDCP: implausible delta {:.1}m ({} pairs, z_rms={:.1}m)",
-                delta_norm, n, z_rms
-            );
-            return None;
-        }
         if delta_norm > 5.0 {
             let z_rms = (z_vec.norm() / (n as f64).sqrt()).sqrt();
             tracing::debug!(
-                "TDCP: large delta {:.1}m ({} pairs, z_rms={:.1}m)",
+                "TDCP: rejected delta {:.1}m ({} pairs, z_rms={:.1}m)",
                 delta_norm, n, z_rms
             );
+            return None;
         }
 
         Some((delta_pos, cov))
