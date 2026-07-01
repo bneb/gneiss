@@ -405,6 +405,7 @@ impl ProcessingEngine {
                 let blended = state.position.vector * alpha + tdcp_prop * (1.0 - alpha);
                 state.smoothed_position = Some(blended);
             }
+
         }
 
         self.attempt_kinematic_alignment();
@@ -745,6 +746,7 @@ impl ProcessingEngine {
                 let blended = state.position.vector * alpha + tdcp_prop * (1.0 - alpha);
                 state.smoothed_position = Some(blended);
             }
+
         }
 
         self.attempt_kinematic_alignment();
