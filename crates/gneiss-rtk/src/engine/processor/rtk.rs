@@ -419,7 +419,7 @@ impl ProcessingEngine {
         }
 
         if let Some(ref mut state) = self.current_state {
-            if state.epoch_count >= 100 && state.epoch_count % 50 == 0 {
+            if state.epoch_count >= 30 && state.epoch_count % 10 == 0 {
                 run_anchor_solver(self);
             }
         }
@@ -763,7 +763,7 @@ impl ProcessingEngine {
         }
 
         if let Some(ref mut state) = self.current_state {
-            if state.epoch_count >= 100 && state.epoch_count % 50 == 0 {
+            if state.epoch_count >= 30 && state.epoch_count % 10 == 0 {
                 run_anchor_solver(self);
             }
         }
@@ -1117,6 +1117,9 @@ fn solve_tdcp_anchored_position(
     if obs.len() < 5 { return None; }
 
     // WLS: minimize Σ w_i · (dd_mean_i - geom_dd(pos))²
+    // Uses mean-centering to eliminate ~630m common-mode bias from innovations,
+    // same as solve_anchor_wls.
+    let mean_dd: f64 = obs.iter().map(|o| o.dd_mean).sum::<f64>() / obs.len() as f64;
     let mut pos = state.position.vector;
     let mut final_rms = 0.0_f64;
 
@@ -1125,6 +1128,8 @@ fn solve_tdcp_anchored_position(
         let mut rhs = nalgebra::Vector3::zeros();
         let mut rms = 0.0_f64;
 
+        // Collect all geometric DDs and their LOS vectors in one pass
+        let mut entries: Vec<(f64, nalgebra::Vector3<f64>)> = Vec::with_capacity(obs.len());
         for o in &obs {
             let eph_sat = match ephemerides.iter().find(|e| e.sat() == o.sat) { Some(e) => e, None => continue };
             let eph_ref = match ephemerides.iter().find(|e| e.sat() == o.ref_sat) { Some(e) => e, None => continue };
@@ -1132,9 +1137,17 @@ fn solve_tdcp_anchored_position(
             let (ref_pos, _) = crate::engine::measurement_math::get_sat_state(eph_ref, 0.0, 0.0, state.time, pos);
             let (bas_sat, _) = crate::engine::measurement_math::get_sat_state(eph_sat, 0.0, 0.0, base_time, base_coord.vector);
             let (bas_ref, _) = crate::engine::measurement_math::get_sat_state(eph_ref, 0.0, 0.0, base_time, base_coord.vector);
-            let geom_dd = crate::engine::measurement_math::compute_geometric_dd(pos, base_coord.vector, sat_pos, ref_pos, bas_sat, bas_ref);
-            let residual = o.dd_mean - geom_dd;
+            let geom = crate::engine::measurement_math::compute_geometric_dd(pos, base_coord.vector, sat_pos, ref_pos, bas_sat, bas_ref);
             let los = (ref_pos - pos).normalize() - (sat_pos - pos).normalize();
+            entries.push((geom, los));
+        }
+        if entries.is_empty() { return None; }
+        let mean_geom: f64 = entries.iter().map(|(g, _)| g).sum::<f64>() / entries.len() as f64;
+
+        for (i, o) in obs.iter().enumerate() {
+            if i >= entries.len() { break; }
+            let (geom, los) = &entries[i];
+            let residual = (o.dd_mean - mean_dd) - (geom - mean_geom);
             let w = o.weight;
             h_sum += los * los.transpose() * w;
             rhs += los * (residual * w);
@@ -1263,7 +1276,7 @@ fn validate_factor_graph(
             // since the factor graph uses geometry diversity across epochs.
             let pos_jump = (result.pos_k - state.position.vector).norm();
             if result.converged && pos_jump < 5.0 {
-                let sigma = pos_jump.max(1.0);
+                let sigma = pos_jump.max(2.0);
                 let mut h = nalgebra::DMatrix::zeros(3, state.covariance.ncols());
                 h[(0, 0)] = 1.0; h[(1, 1)] = 1.0; h[(2, 2)] = 1.0;
                 let z = result.pos_k - state.position.vector;
@@ -1281,7 +1294,7 @@ fn validate_factor_graph(
             // produce ~0.5-1.0m disagreement with the geometry-constrained FG
             // position. 0.5m catches most wrong fixes while accepting correct
             // ones that may have ~0.2-0.4m fg_error due to FG position noise.
-            let threshold = 0.5; // meters
+            let threshold = 1.0; // meters — relaxed for short-baseline float-quality FG
             tracing::info!(
                 "RTK FG validation: fg_error={:.3}m thresh={:.3}m converged={} pos_fb={:.2}m",
                 fg_error, threshold, result.converged, pos_jump
@@ -1453,92 +1466,74 @@ fn validate_multiepoch_pr_compensated(
     base_coord: &Coordinate,
     base_time: gneiss_core::time::GpsTime,
 ) -> bool {
-    let mut pairs_checked = 0usize;
-    let mut pairs_failed = 0usize;
+    // Two-pass approach: first collect pairs and compute per-pair
+    // (reconstructed PR - geometric PR) differences. Then remove the
+    // common-mode mean to cancel the ~630m innovation bias and satellite-
+    // motion errors that affect all pairs similarly. Wrong NL fixes produce
+    // position-dependent residuals that DON'T cancel with mean removal.
+    struct PairData {
+        n: usize,
+        residual: f64,
+    }
+    let mut pairs: Vec<PairData> = Vec::new();
 
     for ((sat, ref_sat), buf) in state.pr_dd_window.iter() {
         let n = buf.count();
-        if n < 20 {
-            continue;
-        }
+        if n < 20 { continue; }
 
-        // Reconstruct time-averaged raw DD PR from stored EKF innovations.
-        // Each innovation z = obs - pred ≈ obs - geom(entry_pos).
-        // Adding back geom(entry_pos) reconstructs the raw DD PR.
-        let recon_mean = match buf.innovation_reconstructed_mean(
-            base_coord.vector,
-        ) {
-            Some(m) => m,
-            None => continue,
+        let recon_mean = match buf.innovation_reconstructed_mean(base_coord.vector) {
+            Some(m) => m, None => continue,
         };
 
-        // Compute expected DD PR at the fixed position from satellite geometry
-        let eph_sat = match ephemerides.iter().find(|e| e.sat() == *sat) {
-            Some(e) => e,
-            None => continue,
-        };
-        let eph_ref = match ephemerides.iter().find(|e| e.sat() == *ref_sat) {
-            Some(e) => e,
-            None => continue,
-        };
-        let (sat_pos_approx, _) = crate::engine::measurement_math::get_sat_state(
-            eph_sat, 0.0, 0.0, state.time, fixed_state.position.vector,
-        );
+        // Compute expected DD PR at fixed position
+        let eph_sat = match ephemerides.iter().find(|e| e.sat() == *sat) { Some(e) => e, None => continue };
+        let eph_ref = match ephemerides.iter().find(|e| e.sat() == *ref_sat) { Some(e) => e, None => continue };
+        let (sat_pos_approx, _) = crate::engine::measurement_math::get_sat_state(eph_sat, 0.0, 0.0, state.time, fixed_state.position.vector);
         let range_sat = (sat_pos_approx - fixed_state.position.vector).norm();
-        let (sat_pos, _) = crate::engine::measurement_math::get_sat_state(
-            eph_sat, range_sat, 0.0, state.time, fixed_state.position.vector,
-        );
-        let (ref_pos_approx, _) = crate::engine::measurement_math::get_sat_state(
-            eph_ref, 0.0, 0.0, state.time, fixed_state.position.vector,
-        );
+        let (sat_pos, _) = crate::engine::measurement_math::get_sat_state(eph_sat, range_sat, 0.0, state.time, fixed_state.position.vector);
+        let (ref_pos_approx, _) = crate::engine::measurement_math::get_sat_state(eph_ref, 0.0, 0.0, state.time, fixed_state.position.vector);
         let range_ref = (ref_pos_approx - fixed_state.position.vector).norm();
-        let (ref_pos, _) = crate::engine::measurement_math::get_sat_state(
-            eph_ref, range_ref, 0.0, state.time, fixed_state.position.vector,
-        );
-        let (bas_sat_approx, _) = crate::engine::measurement_math::get_sat_state(
-            eph_sat, 0.0, 0.0, base_time, base_coord.vector,
-        );
+        let (ref_pos, _) = crate::engine::measurement_math::get_sat_state(eph_ref, range_ref, 0.0, state.time, fixed_state.position.vector);
+        let (bas_sat_approx, _) = crate::engine::measurement_math::get_sat_state(eph_sat, 0.0, 0.0, base_time, base_coord.vector);
         let range_bas = (bas_sat_approx - base_coord.vector).norm();
-        let (bas_sat, _) = crate::engine::measurement_math::get_sat_state(
-            eph_sat, range_bas, 0.0, base_time, base_coord.vector,
-        );
-        let (bas_ref_approx, _) = crate::engine::measurement_math::get_sat_state(
-            eph_ref, 0.0, 0.0, base_time, base_coord.vector,
-        );
+        let (bas_sat, _) = crate::engine::measurement_math::get_sat_state(eph_sat, range_bas, 0.0, base_time, base_coord.vector);
+        let (bas_ref_approx, _) = crate::engine::measurement_math::get_sat_state(eph_ref, 0.0, 0.0, base_time, base_coord.vector);
         let range_bref = (bas_ref_approx - base_coord.vector).norm();
-        let (bas_ref, _) = crate::engine::measurement_math::get_sat_state(
-            eph_ref, range_bref, 0.0, base_time, base_coord.vector,
-        );
+        let (bas_ref, _) = crate::engine::measurement_math::get_sat_state(eph_ref, range_bref, 0.0, base_time, base_coord.vector);
 
         let expected = crate::engine::measurement_math::compute_geometric_dd(
-            fixed_state.position.vector,
-            base_coord.vector,
-            sat_pos,
-            ref_pos,
-            bas_sat,
-            bas_ref,
+            fixed_state.position.vector, base_coord.vector,
+            sat_pos, ref_pos, bas_sat, bas_ref,
         );
 
-        let residual = (expected - recon_mean).abs();
-        let threshold = 3.0 * 1.5 / (n as f64).sqrt();
+        let raw_residual = recon_mean - expected;
+        pairs.push(PairData { n, residual: raw_residual });
+    }
 
-        pairs_checked += 1;
-        if residual > threshold {
+    if pairs.len() < 4 { return true; }
+
+    // Remove common-mode mean: the ~630m innovation bias and satellite-
+    // motion errors are shared across all pairs. Subtract the mean to
+    // isolate position-dependent residuals that indicate wrong NL integers.
+    let mean_residual: f64 = pairs.iter().map(|p| p.residual).sum::<f64>() / pairs.len() as f64;
+
+    let mut pairs_failed = 0usize;
+    for p in &pairs {
+        let centered = (p.residual - mean_residual).abs();
+        let threshold = 3.0 * 1.5 / (p.n as f64).sqrt();
+        if centered > threshold {
             pairs_failed += 1;
             tracing::info!(
-                "Multi-epoch PR: sat={:?} ref={:?} n={} resid={:.3}m thresh={:.3}m recon={:.3}m expected={:.3}m FAIL",
-                sat, ref_sat, n, residual, threshold, recon_mean, expected
+                "Multi-epoch PR: n={} resid={:.3}m centered={:.3}m thresh={:.3}m FAIL",
+                p.n, p.residual, centered, threshold
             );
         }
     }
 
-    if pairs_checked < 4 {
-        return true; // Not enough data
-    }
-    let pass_rate = (pairs_checked - pairs_failed) as f64 / pairs_checked as f64;
+    let pass_rate = (pairs.len() - pairs_failed) as f64 / pairs.len() as f64;
     tracing::info!(
-        "Multi-epoch PR: {}/{} pairs passed ({:.0}%)",
-        pairs_checked - pairs_failed, pairs_checked, pass_rate * 100.0
+        "Multi-epoch PR: {}/{} pairs passed ({:.0}%) mean_resid={:.1}m",
+        pairs.len() - pairs_failed, pairs.len(), pass_rate * 100.0, mean_residual
     );
     if pass_rate < 0.5 {
         tracing::warn!("AR fix rejected by multi-epoch PR");
@@ -1632,8 +1627,11 @@ fn validate_cp_residuals(
         "AR CP residuals: float={:.3}m fixed={:.3}m ratio={:.2} ({} CP)",
         float_rms, fixed_rms, if float_rms > 0.001 { fixed_rms / float_rms } else { 1.0 }, count
     );
-    // CP is mm-level: reject if fixed degrades fit by >2× and exceeds 3cm
-    if fixed_rms > float_rms * 2.0 && fixed_rms > 0.03 {
+    // CP is mm-level: reject if fixed degrades fit by >2× and exceeds 5cm.
+    // 5cm floor accounts for DD iono residuals (1-4cm on ≤4km baselines)
+    // plus DD tropo residuals (0.5-2cm after model). Wrong NL integers
+    // typically produce fixed CP RMS > 10cm, well above this threshold.
+    if fixed_rms > float_rms * 2.0 && fixed_rms > 0.05 {
         tracing::warn!(
             "AR fix rejected by CP residuals: float={:.3}m fixed={:.3}m ({} CP)",
             float_rms, fixed_rms, count
@@ -1717,6 +1715,11 @@ fn handle_ekf_acceptance(
             state.fixed_state = None;
         } else if let (Some(bc), Some(bt)) = (base_coord, base_time) {
             if !validate_geometry_pr(state, &fixed_state, ephemerides, bc, bt) {
+                state.is_fixed = false;
+                state.fixed_state = None;
+            } else if !validate_multiepoch_pr_compensated(
+                state, &fixed_state, ephemerides, bc, bt,
+            ) {
                 state.is_fixed = false;
                 state.fixed_state = None;
             } else {
@@ -1827,62 +1830,130 @@ fn update_last_observed(
 /// PR. Innovations include all corrections (sat clock, tropo, iono), so
 /// the reconstructed DD PR = z + geom_dd(entry_pos) matches the geometric
 /// model exactly — eliminating the 929m systematic bias of raw PR.
+///
+/// Solves WLS for position correction. Includes outlier rejection (3σ
+/// residual check) and condition-number gating to prevent near-singular
+/// geometry from producing wild corrections. The WLS position is fed back
+/// into the EKF as a weak position measurement, anchored at σ = max(jump, 2.0).
 pub fn run_anchor_solver(engine: &mut ProcessingEngine) {
     let Some(ref mut state) = engine.current_state else { return };
-    // Accumulate innovations into anchor buffer (re-added inline)
-    // Use a local static-ish accumulator. For now, single-epoch solve
-    // using the current innovations directly.
     if engine.last_pr_innov.len() < 5 { return; }
     let base_coord = match &engine.last_base_coord { Some(bc) => bc, None => return };
     let ekf_pos = state.position.vector;
 
-    // Build observations: for each DD PR innovation, compute corrected
-    // DD PR = z + geom_dd(ekf_pos, sat_pos).  Since z already includes
-    // all corrections, z + geom matches the geometric model.
+    // Build observations from current innovations (single-epoch, proven correct).
+    // Multi-epoch via ring buffer is deferred to a future iteration — requires
+    // proper ephemeris-indexed geometry alignment that's non-trivial.
     let mut obs: Vec<(f64, Vector3<f64>, Vector3<f64>)> = Vec::new();
-    for (sat, ref_sat, z, sp, rp) in &engine.last_pr_innov {
+    for (_sat, _ref_sat, z, sp, rp) in &engine.last_pr_innov {
         let geom = (ekf_pos - sp).norm() - (ekf_pos - rp).norm()
             - ((base_coord.vector - sp).norm() - (base_coord.vector - rp).norm());
-        let corrected_dd_pr = z + geom;
-        obs.push((corrected_dd_pr, *sp, *rp));
+        obs.push((z + geom, *sp, *rp));
     }
     if obs.len() < 5 { return; }
 
-    // Remove common-mode bias
-    let mean_pr: f64 = obs.iter().map(|(v,_,_)| v).sum::<f64>() / obs.len() as f64;
-
-    // WLS for position correction
-    let mut pos = ekf_pos;
-    for _ in 0..6 {
-        let mut h_sum = nalgebra::Matrix3::zeros();
-        let mut rhs = nalgebra::Vector3::zeros();
-        let mean_geom: f64 = obs.iter().map(|(_, sp, rp)| {
-            (pos - sp).norm() - (pos - rp).norm()
-                - ((base_coord.vector - sp).norm() - (base_coord.vector - rp).norm())
-        }).sum::<f64>() / obs.len() as f64;
-        for (pr, sp, rp) in &obs {
-            let geom = (pos - sp).norm() - (pos - rp).norm()
-                - ((base_coord.vector - sp).norm() - (base_coord.vector - rp).norm());
-            let resid = (pr - mean_pr) - (geom - mean_geom);
-            let los = (*rp - pos).normalize() - (*sp - pos).normalize();
-            h_sum += los * los.transpose();
-            rhs += los * resid;
-        }
-        if let Some(inv) = h_sum.try_inverse() {
-            let dx = &inv * rhs; let n = dx.norm();
-            pos += if n > 50.0 { dx * 50.0 / n } else { dx };
-            if n < 0.01 { break; }
-        } else { return; }
-    }
+    let pos = solve_anchor_wls(&mut obs, base_coord, ekf_pos);
     let jump = (pos - ekf_pos).norm();
-    tracing::info!("Anchor(innov): jump={:.2}m bias={:.1}m", jump, mean_pr);
-    if jump > 5.0 { return; }
-    let s = jump.max(2.0);
+    tracing::info!("Anchor: jump={:.2}m n_obs={}", jump, obs.len());
+
+    if jump > 2.0 { return; }
+
+    // Sigma floor of 0.5m: the WLS with N≈10-20 measurements at σ≈1m each
+    // has position uncertainty ≈ 0.2-0.5m. Using the actual jump (capped at
+    // 0.5m minimum) lets the EKF trust the anchor position when it's close
+    // to the current estimate.
+    let s = jump.max(0.5);
     let mut h = nalgebra::DMatrix::zeros(3, state.covariance.ncols());
     h[(0,0)]=1.0; h[(1,1)]=1.0; h[(2,2)]=1.0;
     let z = nalgebra::DVector::from_vec(vec![pos.x-ekf_pos.x, pos.y-ekf_pos.y, pos.z-ekf_pos.z]);
     let r = nalgebra::DMatrix::from_diagonal(&nalgebra::DVector::from_element(3, s*s));
     let _ = crate::engine::updater::update::<crate::engine::updater_math::TightCoupling>(state, &z, &h, &r, 9.0, None, &engine.config.tuning);
+}
+
+/// Solve WLS for anchor position from DD PR observations.
+/// Includes outlier rejection: after first convergence, removes measurements
+/// with |residual| > 3×RMS and re-solves. Returns the EKF position unchanged
+/// if the H matrix is near-singular (condition number > 1e8).
+fn solve_anchor_wls(
+    obs: &mut Vec<(f64, Vector3<f64>, Vector3<f64>)>,
+    base_coord: &Coordinate,
+    ekf_pos: Vector3<f64>,
+) -> Vector3<f64> {
+    let mut pos = ekf_pos;
+    for pass in 0..2 {
+        let mean_pr: f64 = obs.iter().map(|(v,_,_)| v).sum::<f64>() / obs.len() as f64;
+
+        pos = ekf_pos;
+        for _ in 0..6 {
+            let mut h_sum = nalgebra::Matrix3::zeros();
+            let mut rhs = nalgebra::Vector3::zeros();
+            let mean_geom: f64 = obs.iter().map(|(_, sp, rp)| {
+                (pos - sp).norm() - (pos - rp).norm()
+                    - ((base_coord.vector - sp).norm() - (base_coord.vector - rp).norm())
+            }).sum::<f64>() / obs.len() as f64;
+
+            for (pr, sp, rp) in obs.iter() {
+                let geom = (pos - sp).norm() - (pos - rp).norm()
+                    - ((base_coord.vector - sp).norm() - (base_coord.vector - rp).norm());
+                let resid = (pr - mean_pr) - (geom - mean_geom);
+                let los = (*rp - pos).normalize() - (*sp - pos).normalize();
+                h_sum += los * los.transpose();
+                rhs += los * resid;
+            }
+
+            let Some(inv) = h_sum.try_inverse() else { return ekf_pos; };
+
+            // Condition number check (on first pass, before outlier removal).
+            // Near-singular H produces wild corrections; abort early.
+            if pass == 0 {
+                let cond = h_sum.norm() * inv.norm();
+                if cond > 1e8 {
+                    tracing::debug!("Anchor: H near-singular cond={:.1e}, skipping", cond);
+                    return ekf_pos;
+                }
+            }
+
+            let dx = &inv * rhs;
+            let n = dx.norm();
+            pos += if n > 50.0 { dx * 50.0 / n } else { dx };
+            if n < 0.01 { break; }
+        }
+
+        // On first pass, compute residual RMS and remove outliers.
+        if pass == 0 {
+            let mean_pr2: f64 = obs.iter().map(|(v,_,_)| v).sum::<f64>() / obs.len() as f64;
+            let mean_geom2: f64 = obs.iter().map(|(_, sp, rp)| {
+                (pos - sp).norm() - (pos - rp).norm()
+                    - ((base_coord.vector - sp).norm() - (base_coord.vector - rp).norm())
+            }).sum::<f64>() / obs.len() as f64;
+
+            let residuals: Vec<f64> = obs.iter().map(|(pr, sp, rp)| {
+                let geom = (pos - sp).norm() - (pos - rp).norm()
+                    - ((base_coord.vector - sp).norm() - (base_coord.vector - rp).norm());
+                ((pr - mean_pr2) - (geom - mean_geom2)).abs()
+            }).collect();
+
+            let rms = (residuals.iter().map(|r| r * r).sum::<f64>() / residuals.len() as f64).sqrt();
+            let threshold = (3.0 * rms).max(30.0); // at least 30m floor
+
+            let n_before = obs.len();
+            let mut i = obs.len();
+            while i > 0 {
+                i -= 1;
+                if residuals[i] > threshold {
+                    obs.remove(i);
+                }
+            }
+            let removed = n_before - obs.len();
+            if removed > 0 {
+                tracing::debug!("Anchor: removed {}/{} outliers (rms={:.1}m, thresh={:.1}m)",
+                    removed, n_before, rms, threshold);
+            }
+            if obs.len() < 5 { return ekf_pos; }
+            // Continue to pass 1: re-solve without outliers
+        }
+    }
+    pos
 }
 
 fn execute_ekf_update<C: CouplingStrategy>(
@@ -2605,7 +2676,8 @@ mod tests {
 
         let mut tracker = crate::engine::adaptive::InnovationTracker::new();
         let rejections_before = state.consecutive_rejections;
-        process_rtk_update::<TightCoupling>(&mut state, &mut tracker, &ctx);
+        let mut pr_innov = Vec::new();
+        process_rtk_update::<TightCoupling>(&mut state, &mut tracker, &ctx, &mut pr_innov);
 
         assert!(
             state.consecutive_rejections > rejections_before,

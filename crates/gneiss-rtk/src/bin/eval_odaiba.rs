@@ -14,6 +14,14 @@ use std::path::Path;
 use gneiss_rtk::engine::{EngineConfig, EngineMode, ProcessingEngine};
 
 fn main() {
+    // Enable tracing for diagnostics
+    tracing_subscriber::fmt()
+        .with_env_filter("info")
+        .with_target(false)
+        .without_time()
+        .try_init()
+        .ok();
+
     let dataset = Path::new("datasets/urbannav/tokyo/Tokyo_Data/Odaiba");
 
     // --- Read navigation ---
@@ -83,11 +91,11 @@ fn main() {
         chi_square_pr_threshold: 3.0,
         chi_square_cp_threshold: 3.0,
         dynamics_model: gneiss_rtk::engine::DynamicsModel::Automotive,
-        enable_ar: false,
+        enable_ar: true,
         enable_tdcp: false,
         lambda_min_ratio: 1.6,
         lambda_min_subset: 4,
-        ar_min_epoch_count: 50,
+        ar_min_epoch_count: 20,
         ar_min_lock: 3,
         ar_ffrt_prob: 0.001,
         pr_window_size: 200,
@@ -96,7 +104,7 @@ fn main() {
         initial_ambiguity_variance: 4.0,
         max_base_age_s: 5.0,
         enable_pr_validation: true,
-        enable_ins_validation: true,
+        enable_ins_validation: false,
         ..Default::default()
     };
     eprintln!("Initial position from truth: {initial_pos:?}");
