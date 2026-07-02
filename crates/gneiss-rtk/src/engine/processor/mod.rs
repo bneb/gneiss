@@ -83,6 +83,12 @@ pub struct ProcessingEngine {
     >,
     /// Epochs since last anchor buffer clear.
     pub anchor_ticks: usize,
+    /// Raw rover L1 PR before Hatch filtering, keyed by sat. Populated
+    /// each epoch from rover_obs before Hatch filter runs. Used by
+    /// anchor solver for unbiased DD PR computation.
+    pub raw_rov_pr: std::collections::HashMap<
+        gneiss_core::sat::SatelliteId, f64,
+    >,
 }
 
 impl ProcessingEngine {
@@ -144,6 +150,7 @@ impl ProcessingEngine {
             last_tdcp_delta: None,
             anchor_buf: std::collections::HashMap::new(),
             anchor_ticks: 0,
+            raw_rov_pr: std::collections::HashMap::new(),
         }
     }
 
