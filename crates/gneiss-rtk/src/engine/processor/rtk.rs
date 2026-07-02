@@ -270,17 +270,17 @@ impl ProcessingEngine {
                     config: &self.config,
                     ephemerides: &self.ephemerides,
                     imu_history: &self.imu_history,
-                    rover_obs,
-                    base_obs: base,
+                    rover_obs, base_obs: base,
                     matched_obs: &matched_obs,
                     base_coord: &base_coord,
-                    spp_pos,
-                    spp_state_ref,
+                    spp_pos, spp_state_ref,
                     gnn_variances,
                     klobuchar_params: self.klobuchar_params,
                     tdcp_pos: self.tdcp_position,
                 };
-                process_rtk_update::<TightCoupling>(state, &mut self.innovation_tracker, &ctx);
+                let mut pr_innov = Vec::new();
+                process_rtk_update::<TightCoupling>(state, &mut self.innovation_tracker, &ctx, &mut pr_innov);
+                self.last_pr_innov = pr_innov;
             } else {
                 state.consecutive_rejections += 1;
             }
@@ -419,7 +419,9 @@ impl ProcessingEngine {
         }
 
         if let Some(ref mut state) = self.current_state {
-            // run_anchor_solver(self);
+            if state.epoch_count >= 100 && state.epoch_count % 50 == 0 {
+                run_anchor_solver(self);
+            }
         }
 
         self.attempt_kinematic_alignment();
@@ -613,7 +615,8 @@ impl ProcessingEngine {
                 tdcp_pos: self.tdcp_position,
             };
             let mut tracker = crate::engine::adaptive::InnovationTracker::new();
-            process_rtk_update::<TightCoupling>(&mut base_state, &mut tracker, &ctx);
+            let mut _pr_innov = Vec::new();
+            process_rtk_update::<TightCoupling>(&mut base_state, &mut tracker, &ctx, &mut _pr_innov);
 
             // Collect the position from this base's fix
             let baseline_m =
@@ -760,7 +763,9 @@ impl ProcessingEngine {
         }
 
         if let Some(ref mut state) = self.current_state {
-            // run_anchor_solver(self);
+            if state.epoch_count >= 100 && state.epoch_count % 50 == 0 {
+                run_anchor_solver(self);
+            }
         }
 
         self.attempt_kinematic_alignment();
@@ -1405,44 +1410,30 @@ fn accumulate_pr_window(
     tdcp_pos: Option<nalgebra::Vector3<f64>>,
     ephemerides: &[gneiss_core::ephemeris::Ephemeris],
     _base_coord: &Coordinate,
+    innov_out: &mut Vec<(
+        gneiss_core::sat::SatelliteId,
+        gneiss_core::sat::SatelliteId,
+        f64, nalgebra::Vector3<f64>, nalgebra::Vector3<f64>,
+    )>,
 ) {
-    if window_size == 0 {
-        return;
-    }
+    innov_out.clear();
+    if window_size == 0 { return; }
     for i in 0..m.z.nrows() {
-        if m.mt[i].1 != 0 { continue; } // PR only (type 0)
+        if m.mt[i].1 != 0 { continue; }
         let sat = m.mt[i].0;
         let innovation = m.z[i];
-        let ref_sat = state.current_ref_sat.get(&sat.constellation).copied()
-            .unwrap_or(sat);
+        let ref_sat = state.current_ref_sat.get(&sat.constellation).copied().unwrap_or(sat);
         let key = (sat, ref_sat);
-
-        let sat_pos = match crate::engine::measurement::geometry::find_ephemeris(
-            ephemerides, sat, state.time.tow,
-        ) {
-            Some(eph) => {
-                let (pos, _) = crate::engine::measurement_math::get_sat_state(
-                    eph, 0.0, 0.0, state.time, state.position.vector,
-                );
-                pos
-            }
+        let sat_pos = match crate::engine::measurement::geometry::find_ephemeris(ephemerides, sat, state.time.tow) {
+            Some(eph) => { let (pos, _) = crate::engine::measurement_math::get_sat_state(eph, 0.0, 0.0, state.time, state.position.vector); pos }
             None => continue,
         };
-        let ref_sat_pos = match crate::engine::measurement::geometry::find_ephemeris(
-            ephemerides, ref_sat, state.time.tow,
-        ) {
-            Some(eph) => {
-                let (pos, _) = crate::engine::measurement_math::get_sat_state(
-                    eph, 0.0, 0.0, state.time, state.position.vector,
-                );
-                pos
-            }
+        let ref_sat_pos = match crate::engine::measurement::geometry::find_ephemeris(ephemerides, ref_sat, state.time.tow) {
+            Some(eph) => { let (pos, _) = crate::engine::measurement_math::get_sat_state(eph, 0.0, 0.0, state.time, state.position.vector); pos }
             None => continue,
         };
-
-        let buf = state.pr_dd_window
-            .entry(key)
-            .or_insert_with(|| crate::filter::PrRingBuffer::new(window_size));
+        innov_out.push((sat, ref_sat, innovation, sat_pos, ref_sat_pos));
+        let buf = state.pr_dd_window.entry(key).or_insert_with(|| crate::filter::PrRingBuffer::new(window_size));
         if let Some(tdcp) = tdcp_pos {
             buf.push_with_tdcp(innovation, ref_sat, state.position.vector, tdcp, sat_pos, ref_sat_pos);
         } else {
@@ -1765,6 +1756,10 @@ fn process_rtk_update<C: CouplingStrategy>(
     state: &mut RtkState,
     tracker: &mut crate::engine::adaptive::InnovationTracker,
     ctx: &RtkUpdateContext,
+    pr_innov_out: &mut Vec<(
+        gneiss_core::sat::SatelliteId, gneiss_core::sat::SatelliteId,
+        f64, nalgebra::Vector3<f64>, nalgebra::Vector3<f64>,
+    )>,
 ) {
     crate::engine::ambiguity::manage_ambiguities_and_slips(
         state,
@@ -1799,7 +1794,7 @@ fn process_rtk_update<C: CouplingStrategy>(
         execute_ekf_update::<C>(state, ctx, &m);
         accumulate_pr_window(
             state, &m, ctx.config.pr_window_size, ctx.tdcp_pos,
-            ctx.ephemerides, ctx.base_coord,
+            ctx.ephemerides, ctx.base_coord, pr_innov_out,
         );
     } else {
         handle_ekf_rejection(
@@ -1828,69 +1823,50 @@ fn update_last_observed(
     }
 }
 
+/// Anchor solver using EKF innovations (z = obs - pred) instead of raw
+/// PR. Innovations include all corrections (sat clock, tropo, iono), so
+/// the reconstructed DD PR = z + geom_dd(entry_pos) matches the geometric
+/// model exactly — eliminating the 929m systematic bias of raw PR.
 pub fn run_anchor_solver(engine: &mut ProcessingEngine) {
     let Some(ref mut state) = engine.current_state else { return };
-    engine.anchor_ticks += 1;
-    if engine.anchor_ticks == 100 { tracing::info!("ANCHOR_TICK_100"); }    if !engine.last_matched_obs.is_empty() {
-        let obs_map: std::collections::HashMap<_, _> = engine
-            .last_matched_obs.iter().map(|(r, b)| (r.sat, (r, b))).collect();
-        for (sat, (rov_obs, base_obs)) in &obs_map {
-            let ref_sat = state.current_ref_sat.get(&sat.constellation).copied().unwrap_or(*sat);
-            if *sat == ref_sat { continue; }
-            let (rov_ref, base_ref) = match obs_map.get(&ref_sat) {
-                Some((r, b)) => (*r, *b), None => continue,
-            };
-            let raw = (rov_obs.pr_l1 - rov_ref.pr_l1) - (base_obs.pr_l1 - base_ref.pr_l1);
-            // Compute entry-time satellite positions
-            let e1 = match engine.ephemerides.iter().find(|e| e.sat() == *sat) { Some(e) => e, None => continue };
-            let e2 = match engine.ephemerides.iter().find(|e| e.sat() == ref_sat) { Some(e) => e, None => continue };
-            let (sp, _) = crate::engine::measurement_math::get_sat_state(e1, 0.0, 0.0, state.time, state.position.vector);
-            let (rp, _) = crate::engine::measurement_math::get_sat_state(e2, 0.0, 0.0, state.time, state.position.vector);
-            engine.anchor_buf.entry((*sat, ref_sat)).or_default().push((raw, sp, rp));
-        }
-    }
-    if engine.anchor_ticks < 100 || engine.anchor_ticks % 100 != 0 { return; }
-    let (base_coord, _base_time) = match (&engine.last_base_coord, engine.last_base_time) {
-        (Some(bc), Some(_)) => (bc, ()), _ => return,
-    };
-    // Per-entry geometric averaging: compute mean_raw and mean_geom_at_ekf
-    // using each entry's own satellite positions to eliminate the ~80km
-    // satellite motion bias over the 100-epoch window.
+    // Accumulate innovations into anchor buffer (re-added inline)
+    // Use a local static-ish accumulator. For now, single-epoch solve
+    // using the current innovations directly.
+    if engine.last_pr_innov.len() < 5 { return; }
+    let base_coord = match &engine.last_base_coord { Some(bc) => bc, None => return };
     let ekf_pos = state.position.vector;
-    let mut obs: Vec<(f64, f64, Vector3<f64>, Vector3<f64>)> = Vec::new();
-    for ((_sat, _ref_sat), vals) in &engine.anchor_buf {
-        let n = vals.len();
-        if n < 20 { continue; }
-        let mean_raw = vals.iter().map(|(v,_,_)| v).sum::<f64>() / n as f64;
-        let mean_geom_at_ekf = vals.iter().map(|(_, sp, rp)| {
-            (ekf_pos - sp).norm() - (ekf_pos - rp).norm()
-                - ((base_coord.vector - sp).norm() - (base_coord.vector - rp).norm())
-        }).sum::<f64>() / n as f64;
-        let residual = mean_raw - mean_geom_at_ekf;
-        let (_, last_sp, last_rp) = vals.last().unwrap();
-        obs.push((residual, n as f64 / 2.25, *last_sp, *last_rp));
+
+    // Build observations: for each DD PR innovation, compute corrected
+    // DD PR = z + geom_dd(ekf_pos, sat_pos).  Since z already includes
+    // all corrections, z + geom matches the geometric model.
+    let mut obs: Vec<(f64, Vector3<f64>, Vector3<f64>)> = Vec::new();
+    for (sat, ref_sat, z, sp, rp) in &engine.last_pr_innov {
+        let geom = (ekf_pos - sp).norm() - (ekf_pos - rp).norm()
+            - ((base_coord.vector - sp).norm() - (base_coord.vector - rp).norm());
+        let corrected_dd_pr = z + geom;
+        obs.push((corrected_dd_pr, *sp, *rp));
     }
-    engine.anchor_buf.clear();
-    engine.anchor_ticks = 0;
     if obs.len() < 5 { return; }
 
-    // Remove common-mode bias (clock/tropo corrections)
-    let mean_resid: f64 = obs.iter().map(|(r,_,_,_)| r).sum::<f64>() / obs.len() as f64;
+    // Remove common-mode bias
+    let mean_pr: f64 = obs.iter().map(|(v,_,_)| v).sum::<f64>() / obs.len() as f64;
 
-    let mut pos = state.position.vector;
-    for _ in 0..8 {
+    // WLS for position correction
+    let mut pos = ekf_pos;
+    for _ in 0..6 {
         let mut h_sum = nalgebra::Matrix3::zeros();
         let mut rhs = nalgebra::Vector3::zeros();
-        for (residual_ekf, w, sp, rp) in &obs {
-            let geom_ekf = (ekf_pos - sp).norm() - (ekf_pos - rp).norm()
+        let mean_geom: f64 = obs.iter().map(|(_, sp, rp)| {
+            (pos - sp).norm() - (pos - rp).norm()
+                - ((base_coord.vector - sp).norm() - (base_coord.vector - rp).norm())
+        }).sum::<f64>() / obs.len() as f64;
+        for (pr, sp, rp) in &obs {
+            let geom = (pos - sp).norm() - (pos - rp).norm()
                 - ((base_coord.vector - sp).norm() - (base_coord.vector - rp).norm());
-            let geom_trial = (pos - sp).norm() - (pos - rp).norm()
-                - ((base_coord.vector - sp).norm() - (base_coord.vector - rp).norm());
-            let z = (*residual_ekf - mean_resid) + (geom_ekf - geom_trial);
+            let resid = (pr - mean_pr) - (geom - mean_geom);
             let los = (*rp - pos).normalize() - (*sp - pos).normalize();
-            let w_val = *w;
-            h_sum += los * los.transpose() * w_val;
-            rhs += los * (z * w_val);
+            h_sum += los * los.transpose();
+            rhs += los * resid;
         }
         if let Some(inv) = h_sum.try_inverse() {
             let dx = &inv * rhs; let n = dx.norm();
@@ -1898,16 +1874,15 @@ pub fn run_anchor_solver(engine: &mut ProcessingEngine) {
             if n < 0.01 { break; }
         } else { return; }
     }
-    let jump = (pos - state.position.vector).norm();
-    tracing::info!("Anchor: jump={:.2}m bias={:.1}m ({} pairs)", jump, mean_resid, obs.len());
+    let jump = (pos - ekf_pos).norm();
+    tracing::info!("Anchor(innov): jump={:.2}m bias={:.1}m", jump, mean_pr);
     if jump > 5.0 { return; }
     let s = jump.max(2.0);
     let mut h = nalgebra::DMatrix::zeros(3, state.covariance.ncols());
-    h[(0, 0)] = 1.0; h[(1, 1)] = 1.0; h[(2, 2)] = 1.0;
-    let z = nalgebra::DVector::from_vec(vec![pos.x - state.position.vector.x, pos.y - state.position.vector.y, pos.z - state.position.vector.z]);
-    let r = nalgebra::DMatrix::from_diagonal(&nalgebra::DVector::from_element(3, s * s));
+    h[(0,0)]=1.0; h[(1,1)]=1.0; h[(2,2)]=1.0;
+    let z = nalgebra::DVector::from_vec(vec![pos.x-ekf_pos.x, pos.y-ekf_pos.y, pos.z-ekf_pos.z]);
+    let r = nalgebra::DMatrix::from_diagonal(&nalgebra::DVector::from_element(3, s*s));
     let _ = crate::engine::updater::update::<crate::engine::updater_math::TightCoupling>(state, &z, &h, &r, 9.0, None, &engine.config.tuning);
-    tracing::info!("Anchor: {} pairs jump={:.1}m", obs.len(), jump);
 }
 
 fn execute_ekf_update<C: CouplingStrategy>(

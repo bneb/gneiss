@@ -82,13 +82,14 @@ pub struct ProcessingEngine {
         Vec<(f64, nalgebra::Vector3<f64>, nalgebra::Vector3<f64>)>,
     >,
     /// Epochs since last anchor buffer clear.
-    pub anchor_ticks: usize,
-    /// Raw rover L1 PR before Hatch filtering, keyed by sat. Populated
-    /// each epoch from rover_obs before Hatch filter runs. Used by
-    /// anchor solver for unbiased DD PR computation.
-    pub raw_rov_pr: std::collections::HashMap<
-        gneiss_core::sat::SatelliteId, f64,
-    >,
+    /// EKF DD PR innovations from most recent epoch for anchor solver.
+    pub last_pr_innov: Vec<(
+        gneiss_core::sat::SatelliteId,
+        gneiss_core::sat::SatelliteId,
+        f64, // innovation z
+        nalgebra::Vector3<f64>, // sat pos at entry
+        nalgebra::Vector3<f64>, // ref sat pos at entry
+    )>,
 }
 
 impl ProcessingEngine {
@@ -149,8 +150,7 @@ impl ProcessingEngine {
             tdcp_position: None,
             last_tdcp_delta: None,
             anchor_buf: std::collections::HashMap::new(),
-            anchor_ticks: 0,
-            raw_rov_pr: std::collections::HashMap::new(),
+            last_pr_innov: Vec::new(),
         }
     }
 
