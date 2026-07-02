@@ -1850,52 +1850,33 @@ pub fn run_anchor_solver(engine: &mut ProcessingEngine) {
         }
     }
     if engine.anchor_ticks < 100 || engine.anchor_ticks % 100 != 0 { return; }
-    let (base_coord, base_time) = match (&engine.last_base_coord, engine.last_base_time) {
-        (Some(bc), Some(bt)) => (bc, *bt), _ => return,
+    let (base_coord, _base_time) = match (&engine.last_base_coord, engine.last_base_time) {
+        (Some(bc), Some(_)) => (bc, ()), _ => return,
     };
-    // Build observation vector: for each sat pair, compute mean raw DD PR
-    // and mean geometric DD at the current EKF position (using each entry's
-    // own satellite positions).  The residual = mean_raw - mean_geom is the
-    // position error signal that drives the WLS.
-    let ekf_pos = state.position.vector;
-    let mut obs: Vec<(f64, f64, Vector3<f64>, Vector3<f64>)> = Vec::new();
-    for ((_sat, _ref_sat), vals) in &engine.anchor_buf {
+    let mut obs: Vec<(SatelliteId, SatelliteId, f64, f64, Vector3<f64>, Vector3<f64>)> = Vec::new();
+    for ((sat, ref_sat), vals) in &engine.anchor_buf {
         let n = vals.len();
         if n < 20 { continue; }
-        let mean_raw = vals.iter().map(|(v,_,_)| v).sum::<f64>() / n as f64;
-        let mean_geom = vals.iter().map(|(_, sp, rp)| {
-            // Base sat positions at base_time (use rover sat pos as approx —
-            // base is stationary so only satellite motion matters, and the
-            // time difference is small)
-            (ekf_pos - sp).norm() - (ekf_pos - rp).norm()
-                - ((base_coord.vector - sp).norm() - (base_coord.vector - rp).norm())
-        }).sum::<f64>() / n as f64;
-        // Store residual at EKF position; WLS will adjust position to minimize it
-        let residual_at_ekf = mean_raw - mean_geom;
-        let (_, last_sp, last_rp) = vals.last().unwrap();
-    if obs.len() == 0 { tracing::info!("ANCHOR_DBG: n={} mean_raw={:.1f} mean_geom={:.1f} residual={:.1f}", n, mean_raw, mean_geom, residual_at_ekf); }        obs.push((residual_at_ekf, n as f64 / 2.25, *last_sp, *last_rp));
+        let mean = vals.iter().map(|(v,_,_)| v).sum::<f64>() / n as f64;
+        // Use the last entry's satellite positions (closest to current epoch)
+        let (_, sp, rp) = vals.last().unwrap();
+        obs.push((*sat, *ref_sat, mean, n as f64 / 2.25, *sp, *rp));
     }
     engine.anchor_buf.clear();
     engine.anchor_ticks = 0;
-    if obs.len() < 5 { return; }
+    tracing::info!("Anchor: {} obs", obs.len());    if obs.len() < 5 { return; }
     let mut pos = state.position.vector;
     for _ in 0..8 {
         let mut h_sum = nalgebra::Matrix3::zeros();
         let mut rhs = nalgebra::Vector3::zeros();
-        for (residual_ekf, w, sp, rp) in &obs {
-            // Geometric DD at trial position
-            let geom_trial = (pos - sp).norm() - (pos - rp).norm()
+        for (_sat, _ref_sat, mean, w, sp, rp) in &obs {
+            let geom = (pos - sp).norm() - (pos - rp).norm()
                 - ((base_coord.vector - sp).norm() - (base_coord.vector - rp).norm());
-            let geom_ekf = (ekf_pos - sp).norm() - (ekf_pos - rp).norm()
-                - ((base_coord.vector - sp).norm() - (base_coord.vector - rp).norm());
-            // Innovation: residual at EKF + (geom_ekf - geom_trial)
-            // = (mean_raw - mean_geom_ekf) + (geom_ekf - geom_trial)
-            // = mean_raw - geom_trial (since mean_geom ≈ geom at true pos)
-            let z = residual_ekf + (geom_ekf - geom_trial);
+            let resid = mean - geom;
             let los = (*rp - pos).normalize() - (*sp - pos).normalize();
             let w_val = *w;
             h_sum += los * los.transpose() * w_val;
-            rhs += los * (z * w_val);
+            rhs += los * (resid * w_val);
         }
         if let Some(inv) = h_sum.try_inverse() {
             let dx = &inv * rhs; let n = dx.norm();
