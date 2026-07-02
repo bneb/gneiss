@@ -419,7 +419,7 @@ impl ProcessingEngine {
         }
 
         if let Some(ref mut state) = self.current_state {
-            run_anchor_solver(self);
+            // run_anchor_solver(self);
         }
 
         self.attempt_kinematic_alignment();
@@ -760,7 +760,7 @@ impl ProcessingEngine {
         }
 
         if let Some(ref mut state) = self.current_state {
-            run_anchor_solver(self);
+            // run_anchor_solver(self);
         }
 
         self.attempt_kinematic_alignment();
@@ -1853,30 +1853,44 @@ pub fn run_anchor_solver(engine: &mut ProcessingEngine) {
     let (base_coord, _base_time) = match (&engine.last_base_coord, engine.last_base_time) {
         (Some(bc), Some(_)) => (bc, ()), _ => return,
     };
-    let mut obs: Vec<(SatelliteId, SatelliteId, f64, f64, Vector3<f64>, Vector3<f64>)> = Vec::new();
-    for ((sat, ref_sat), vals) in &engine.anchor_buf {
+    // Per-entry geometric averaging: compute mean_raw and mean_geom_at_ekf
+    // using each entry's own satellite positions to eliminate the ~80km
+    // satellite motion bias over the 100-epoch window.
+    let ekf_pos = state.position.vector;
+    let mut obs: Vec<(f64, f64, Vector3<f64>, Vector3<f64>)> = Vec::new();
+    for ((_sat, _ref_sat), vals) in &engine.anchor_buf {
         let n = vals.len();
         if n < 20 { continue; }
-        let mean = vals.iter().map(|(v,_,_)| v).sum::<f64>() / n as f64;
-        // Use the last entry's satellite positions (closest to current epoch)
-        let (_, sp, rp) = vals.last().unwrap();
-        obs.push((*sat, *ref_sat, mean, n as f64 / 2.25, *sp, *rp));
+        let mean_raw = vals.iter().map(|(v,_,_)| v).sum::<f64>() / n as f64;
+        let mean_geom_at_ekf = vals.iter().map(|(_, sp, rp)| {
+            (ekf_pos - sp).norm() - (ekf_pos - rp).norm()
+                - ((base_coord.vector - sp).norm() - (base_coord.vector - rp).norm())
+        }).sum::<f64>() / n as f64;
+        let residual = mean_raw - mean_geom_at_ekf;
+        let (_, last_sp, last_rp) = vals.last().unwrap();
+        obs.push((residual, n as f64 / 2.25, *last_sp, *last_rp));
     }
     engine.anchor_buf.clear();
     engine.anchor_ticks = 0;
-    tracing::info!("Anchor: {} obs", obs.len());    if obs.len() < 5 { return; }
+    if obs.len() < 5 { return; }
+
+    // Remove common-mode bias (clock/tropo corrections)
+    let mean_resid: f64 = obs.iter().map(|(r,_,_,_)| r).sum::<f64>() / obs.len() as f64;
+
     let mut pos = state.position.vector;
     for _ in 0..8 {
         let mut h_sum = nalgebra::Matrix3::zeros();
         let mut rhs = nalgebra::Vector3::zeros();
-        for (_sat, _ref_sat, mean, w, sp, rp) in &obs {
-            let geom = (pos - sp).norm() - (pos - rp).norm()
+        for (residual_ekf, w, sp, rp) in &obs {
+            let geom_ekf = (ekf_pos - sp).norm() - (ekf_pos - rp).norm()
                 - ((base_coord.vector - sp).norm() - (base_coord.vector - rp).norm());
-            let resid = mean - geom;
+            let geom_trial = (pos - sp).norm() - (pos - rp).norm()
+                - ((base_coord.vector - sp).norm() - (base_coord.vector - rp).norm());
+            let z = (*residual_ekf - mean_resid) + (geom_ekf - geom_trial);
             let los = (*rp - pos).normalize() - (*sp - pos).normalize();
             let w_val = *w;
             h_sum += los * los.transpose() * w_val;
-            rhs += los * (resid * w_val);
+            rhs += los * (z * w_val);
         }
         if let Some(inv) = h_sum.try_inverse() {
             let dx = &inv * rhs; let n = dx.norm();
@@ -1885,7 +1899,8 @@ pub fn run_anchor_solver(engine: &mut ProcessingEngine) {
         } else { return; }
     }
     let jump = (pos - state.position.vector).norm();
-    tracing::info!("Anchor pre-jump: {:.2}m", jump);    if jump > 5.0 { return; }
+    tracing::info!("Anchor: jump={:.2}m bias={:.1}m ({} pairs)", jump, mean_resid, obs.len());
+    if jump > 5.0 { return; }
     let s = jump.max(2.0);
     let mut h = nalgebra::DMatrix::zeros(3, state.covariance.ncols());
     h[(0, 0)] = 1.0; h[(1, 1)] = 1.0; h[(2, 2)] = 1.0;
