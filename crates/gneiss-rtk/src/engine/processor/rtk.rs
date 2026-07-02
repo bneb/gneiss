@@ -418,13 +418,13 @@ impl ProcessingEngine {
 
         }
 
+        if let Some(ref mut state) = self.current_state {
+            // run_anchor_solver(self);
+        }
+
         self.attempt_kinematic_alignment();
 
         // --- TDCP-based AR validation ---
-        // After TDCP computation, validate any AR fix by comparing the
-        // total position change since the last epoch against the TDCP delta.
-        // TDCP uses time-differenced CP (mm-level), so a wrong AR fix that
-        // introduces a position jump will disagree with the TDCP measurement.
         if let Some(ref mut state) = self.current_state {
             if state.is_fixed {
                 if let Some((tdcp_delta, _)) = &self.last_tdcp_delta {
@@ -759,13 +759,13 @@ impl ProcessingEngine {
 
         }
 
+        if let Some(ref mut state) = self.current_state {
+            // run_anchor_solver(self);
+        }
+
         self.attempt_kinematic_alignment();
 
         // --- TDCP-based AR validation ---
-        // After TDCP computation, validate any AR fix by comparing the
-        // total position change since the last epoch against the TDCP delta.
-        // TDCP uses time-differenced CP (mm-level), so a wrong AR fix that
-        // introduces a position jump will disagree with the TDCP measurement.
         if let Some(ref mut state) = self.current_state {
             if state.is_fixed {
                 if let Some((tdcp_delta, _)) = &self.last_tdcp_delta {
@@ -1826,6 +1826,75 @@ fn update_last_observed(
             state.last_observed.insert((r_obs.sat, 2), current_epoch);
         }
     }
+}
+
+pub fn run_anchor_solver(engine: &mut ProcessingEngine) {
+    let Some(ref mut state) = engine.current_state else { return };
+    engine.anchor_ticks += 1;
+    if engine.anchor_ticks == 100 { tracing::info!("Anchor tick 100"); }
+    if !engine.last_matched_obs.is_empty() {
+        let obs_map: std::collections::HashMap<_, _> = engine
+            .last_matched_obs.iter().map(|(r, b)| (r.sat, (r, b))).collect();
+        for (sat, (rov_obs, base_obs)) in &obs_map {
+            let ref_sat = state.current_ref_sat.get(&sat.constellation).copied().unwrap_or(*sat);
+            if *sat == ref_sat { continue; }
+            let (rov_ref, base_ref) = match obs_map.get(&ref_sat) {
+                Some((r, b)) => (*r, *b), None => continue,
+            };
+            let raw = (rov_obs.pr_l1 - rov_ref.pr_l1) - (base_obs.pr_l1 - base_ref.pr_l1);
+            engine.anchor_buf.entry((*sat, ref_sat)).or_default().push(raw);
+        }
+    }
+    if engine.anchor_ticks < 100 || engine.anchor_ticks % 100 != 0 { return; }
+    let (base_coord, base_time) = match (&engine.last_base_coord, engine.last_base_time) {
+        (Some(bc), Some(bt)) => (bc, bt), _ => return,
+    };
+    let eph = &engine.ephemerides;
+    let mut obs: Vec<(SatelliteId, SatelliteId, f64, f64)> = Vec::new();
+    for ((sat, ref_sat), vals) in &engine.anchor_buf {
+        let n = vals.len();
+        if n < 20 { continue; }
+        let mean = vals.iter().sum::<f64>() / n as f64;
+        obs.push((*sat, *ref_sat, mean, n as f64 / 2.25));
+    }
+    engine.anchor_buf.clear();
+    engine.anchor_ticks = 0;
+    tracing::info!("Anchor: {} sat pairs with data", obs.len());
+    if obs.len() < 5 { return; }
+    let mut pos = state.position.vector;
+    for _ in 0..8 {
+        let mut h_sum = nalgebra::Matrix3::zeros();
+        let mut rhs = nalgebra::Vector3::zeros();
+        for (sat, ref_sat, mean, w) in &obs {
+            let e1 = match eph.iter().find(|e| e.sat() == *sat) { Some(e) => e, None => continue };
+            let e2 = match eph.iter().find(|e| e.sat() == *ref_sat) { Some(e) => e, None => continue };
+            let (sp, _) = crate::engine::measurement_math::get_sat_state(e1, 0.0, 0.0, state.time, pos);
+            let (rp, _) = crate::engine::measurement_math::get_sat_state(e2, 0.0, 0.0, state.time, pos);
+            let (bs, _) = crate::engine::measurement_math::get_sat_state(e1, 0.0, 0.0, base_time, base_coord.vector);
+            let (br, _) = crate::engine::measurement_math::get_sat_state(e2, 0.0, 0.0, base_time, base_coord.vector);
+            let geom = (pos - sp).norm() - (pos - rp).norm()
+                - ((base_coord.vector - bs).norm() - (base_coord.vector - br).norm());
+            let resid = mean - geom;
+            let los = (rp - pos).normalize() - (sp - pos).normalize();
+            h_sum += los * los.transpose() * (*w);
+            rhs += los * (resid * (*w));
+        }
+        if let Some(inv) = h_sum.try_inverse() {
+            let dx = &inv * rhs; let n = dx.norm();
+            pos += if n > 50.0 { dx * 50.0 / n } else { dx };
+            if n < 0.01 { break; }
+        } else { return; }
+    }
+    let jump = (pos - state.position.vector).norm();
+    tracing::info!("Anchor solve: jump={:.2}m", jump);
+    if jump > 5.0 { return; }
+    let s = jump.max(2.0);
+    let mut h = nalgebra::DMatrix::zeros(3, state.covariance.ncols());
+    h[(0, 0)] = 1.0; h[(1, 1)] = 1.0; h[(2, 2)] = 1.0;
+    let z = nalgebra::DVector::from_vec(vec![pos.x - state.position.vector.x, pos.y - state.position.vector.y, pos.z - state.position.vector.z]);
+    let r = nalgebra::DMatrix::from_diagonal(&nalgebra::DVector::from_element(3, s * s));
+    let _ = crate::engine::updater::update::<crate::engine::updater_math::TightCoupling>(state, &z, &h, &r, 9.0, None, &engine.config.tuning);
+    tracing::info!("Anchor: {} pairs jump={:.1}m", obs.len(), jump);
 }
 
 fn execute_ekf_update<C: CouplingStrategy>(

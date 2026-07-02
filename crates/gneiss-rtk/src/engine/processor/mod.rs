@@ -74,6 +74,15 @@ pub struct ProcessingEngine {
         nalgebra::Vector3<f64>,
         nalgebra::DMatrix<f64>,
     )>,
+    /// Anchor solver: accumulated raw DD PR per satellite pair.
+    /// Key = (sat, ref_sat), Value = vec of raw DD PR values in meters.
+    /// Cleared after each anchor solve (every 100 epochs).
+    pub anchor_buf: std::collections::HashMap<
+        (gneiss_core::sat::SatelliteId, gneiss_core::sat::SatelliteId),
+        Vec<f64>,
+    >,
+    /// Epochs since last anchor buffer clear.
+    pub anchor_ticks: usize,
 }
 
 impl ProcessingEngine {
@@ -133,6 +142,8 @@ impl ProcessingEngine {
             last_base_time: None,
             tdcp_position: None,
             last_tdcp_delta: None,
+            anchor_buf: std::collections::HashMap::new(),
+            anchor_ticks: 0,
         }
     }
 
