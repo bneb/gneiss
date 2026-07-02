@@ -79,7 +79,7 @@ pub struct ProcessingEngine {
     /// Cleared after each anchor solve (every 100 epochs).
     pub anchor_buf: std::collections::HashMap<
         (gneiss_core::sat::SatelliteId, gneiss_core::sat::SatelliteId),
-        Vec<f64>,
+        Vec<(f64, nalgebra::Vector3<f64>, nalgebra::Vector3<f64>)>,
     >,
     /// Epochs since last anchor buffer clear.
     pub anchor_ticks: usize,

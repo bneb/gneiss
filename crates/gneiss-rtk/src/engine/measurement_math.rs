@@ -265,37 +265,88 @@ mod tests {
     }
 
     #[test]
-    fn test_compute_geometric_dd() {
-        let pos_apc = Vector3::new(10.0, 20.0, 30.0);
-        let base_coord_vec = Vector3::new(10.0, 20.0, 30.0);
-        let sat_vec_rov = Vector3::new(100.0, 200.0, 300.0);
-        let ref_sat_vec_rov = Vector3::new(-100.0, -200.0, -300.0);
-
-        let dd = compute_geometric_dd(
-            pos_apc,
-            base_coord_vec,
-            sat_vec_rov,
-            ref_sat_vec_rov,
-            sat_vec_rov,
-            ref_sat_vec_rov,
-        );
-        // Because rover and base are at the same position, DD should exactly cancel out to 0.
+    fn test_compute_geometric_dd_zero_baseline() {
+        // Same rover and base position → DD should be zero
+        let pos = Vector3::new(10.0, 20.0, 30.0);
+        let sat = Vector3::new(100.0, 200.0, 300.0);
+        let ref_sat = Vector3::new(-100.0, -200.0, -300.0);
+        let dd = compute_geometric_dd(pos, pos, sat, ref_sat, sat, ref_sat);
         assert!(dd.abs() < 1e-9);
+    }
 
-        let pos_apc2 = pos_apc + Vector3::new(1.0, 0.0, 0.0);
-        let dd2 = compute_geometric_dd(
-            pos_apc2,
-            base_coord_vec,
-            sat_vec_rov,
-            ref_sat_vec_rov,
-            sat_vec_rov,
-            ref_sat_vec_rov,
-        );
-        let d_rov_sat = (pos_apc2 - sat_vec_rov).norm();
-        let d_rov_ref = (pos_apc2 - ref_sat_vec_rov).norm();
-        let d_bas_sat = (base_coord_vec - sat_vec_rov).norm();
-        let d_bas_ref = (base_coord_vec - ref_sat_vec_rov).norm();
-        assert!((dd2 - ((d_rov_sat - d_rov_ref) - (d_bas_sat - d_bas_ref))).abs() < 1e-9);
+    #[test]
+    fn test_compute_geometric_dd_known_values() {
+        // Rover at origin, base at (1,0,0), sat at (0,0,100), ref at (0,100,0)
+        let rov = Vector3::new(0.0, 0.0, 0.0);
+        let base = Vector3::new(1.0, 0.0, 0.0);
+        let sat = Vector3::new(0.0, 0.0, 100.0);
+        let ref_sat = Vector3::new(0.0, 100.0, 0.0);
+        let dd = compute_geometric_dd(rov, base, sat, ref_sat, sat, ref_sat);
+        // Manual: rov_sat=100, rov_ref=100, base_sat=(1,0,-100).norm=~100.005, base_ref=(1,-100,0).norm=~100.005
+        // DD = (100 - 100) - (100.005 - 100.005) ≈ 0
+        let expected = ((rov - sat).norm() - (rov - ref_sat).norm())
+            - ((base - sat).norm() - (base - ref_sat).norm());
+        assert!((dd - expected).abs() < 1e-6,
+            "DD mismatch: computed={:.6} expected={:.6}", dd, expected);
+    }
+
+    #[test]
+    fn test_compute_geometric_dd_rover_offset() {
+        // Rover moves 1m toward sat (along z), base stays. DD should change.
+        let base = Vector3::new(0.0, 0.0, 0.0);
+        let sat = Vector3::new(0.0, 0.0, 100.0);
+        let ref_sat = Vector3::new(0.0, 100.0, 100.0); // different from sat
+        // At origin: rover-to-sat=100, rover-to-ref=141.42, DD_rov = -41.42
+        // Base same: DD_base = -41.42, total DD = 0
+        let dd0 = compute_geometric_dd(base, base, sat, ref_sat, sat, ref_sat);
+        assert!(dd0.abs() < 1e-9, "Zero-baseline DD should be 0, got {:.6}", dd0);
+        // Rover moves 1m in z toward sat
+        let rov = Vector3::new(0.0, 0.0, 1.0);
+        let dd1 = compute_geometric_dd(rov, base, sat, ref_sat, sat, ref_sat);
+        // rover-to-sat: 99m, rover-to-ref: sqrt(0+10000+99²)=140.73
+        // rov_dd = 99 - 140.73 = -41.73
+        // base_dd unchanged = -41.42
+        // total DD = -41.73 - (-41.42) = -0.31m
+        assert!((dd1 - dd0).abs() > 0.01, "DD change too small: {:.6}m", (dd1-dd0).abs());
+        assert!((dd1 - dd0).abs() < 2.0, "DD change implausibly large: {:.3}m", (dd1-dd0).abs());
+    }
+
+    #[test]
+    fn test_geometric_dd_different_sat_positions() {
+        // Rover and base see slightly different satellite positions
+        // due to signal travel time (~0.07s for GPS → ~280m position difference).
+        let rov = Vector3::new(-3963427.0, 3350882.0, 3694866.0);
+        let base = Vector3::new(-3961904.0, 3348994.0, 3698212.0);
+        let sat_rov = Vector3::new(-10000000.0, 15000000.0, 20000000.0);
+        let ref_rov = Vector3::new(-12000000.0, 13000000.0, 22000000.0);
+        // Base sees satellites ~280m away (signal travel time difference)
+        let sat_base = sat_rov + Vector3::new(100.0, 200.0, 50.0);
+        let ref_base = ref_rov + Vector3::new(100.0, 200.0, 50.0);
+        let dd = compute_geometric_dd(rov, base, sat_rov, ref_rov, sat_base, ref_base);
+        // Manual computation
+        let expected = ((rov - sat_rov).norm() - (rov - ref_rov).norm())
+            - ((base - sat_base).norm() - (base - ref_base).norm());
+        assert!((dd - expected).abs() < 1e-9,
+            "DD mismatch: computed={:.6} expected={:.6}", dd, expected);
+    }
+
+    #[test]
+    fn test_geometric_dd_sat_motion_effect() {
+        // Satellites move ~4 km/s. Over 5 seconds (max base age), they move ~20km.
+        // This test verifies the geometric DD changes by a plausible amount.
+        let rov = Vector3::new(-3963427.0, 3350882.0, 3694866.0);
+        let base = Vector3::new(-3961904.0, 3348994.0, 3698212.0);
+        let sat_t0 = Vector3::new(-10000000.0, 15000000.0, 20000000.0);
+        let ref_t0 = Vector3::new(-12000000.0, 13000000.0, 22000000.0);
+        // 5 seconds later, satellites move ~20km
+        let sat_t1 = sat_t0 + Vector3::new(10000.0, 15000.0, 5000.0);
+        let ref_t1 = ref_t0 + Vector3::new(10000.0, 15000.0, 5000.0);
+        let dd_t0 = compute_geometric_dd(rov, base, sat_t0, ref_t0, sat_t0, ref_t0);
+        let dd_t1 = compute_geometric_dd(rov, base, sat_t1, ref_t1, sat_t1, ref_t1);
+        let change = (dd_t1 - dd_t0).abs();
+        // Satellite motion effect should be detectable but not enormous (< 100m for 5s)
+        assert!(change > 0.001, "No change from sat motion");
+        assert!(change < 100.0, "Implausibly large change from sat motion: {:.1}m", change);
     }
 
     #[test]

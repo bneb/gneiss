@@ -419,7 +419,7 @@ impl ProcessingEngine {
         }
 
         if let Some(ref mut state) = self.current_state {
-            // run_anchor_solver(self);
+            run_anchor_solver(self);
         }
 
         self.attempt_kinematic_alignment();
@@ -760,7 +760,7 @@ impl ProcessingEngine {
         }
 
         if let Some(ref mut state) = self.current_state {
-            // run_anchor_solver(self);
+            run_anchor_solver(self);
         }
 
         self.attempt_kinematic_alignment();
@@ -1831,8 +1831,7 @@ fn update_last_observed(
 pub fn run_anchor_solver(engine: &mut ProcessingEngine) {
     let Some(ref mut state) = engine.current_state else { return };
     engine.anchor_ticks += 1;
-    if engine.anchor_ticks == 100 { tracing::info!("Anchor tick 100"); }
-    if !engine.last_matched_obs.is_empty() {
+    if engine.anchor_ticks == 100 { tracing::info!("ANCHOR_TICK_100"); }    if !engine.last_matched_obs.is_empty() {
         let obs_map: std::collections::HashMap<_, _> = engine
             .last_matched_obs.iter().map(|(r, b)| (r.sat, (r, b))).collect();
         for (sat, (rov_obs, base_obs)) in &obs_map {
@@ -1842,42 +1841,42 @@ pub fn run_anchor_solver(engine: &mut ProcessingEngine) {
                 Some((r, b)) => (*r, *b), None => continue,
             };
             let raw = (rov_obs.pr_l1 - rov_ref.pr_l1) - (base_obs.pr_l1 - base_ref.pr_l1);
-            engine.anchor_buf.entry((*sat, ref_sat)).or_default().push(raw);
+            // Compute entry-time satellite positions
+            let e1 = match engine.ephemerides.iter().find(|e| e.sat() == *sat) { Some(e) => e, None => continue };
+            let e2 = match engine.ephemerides.iter().find(|e| e.sat() == ref_sat) { Some(e) => e, None => continue };
+            let (sp, _) = crate::engine::measurement_math::get_sat_state(e1, 0.0, 0.0, state.time, state.position.vector);
+            let (rp, _) = crate::engine::measurement_math::get_sat_state(e2, 0.0, 0.0, state.time, state.position.vector);
+            engine.anchor_buf.entry((*sat, ref_sat)).or_default().push((raw, sp, rp));
         }
     }
     if engine.anchor_ticks < 100 || engine.anchor_ticks % 100 != 0 { return; }
-    let (base_coord, base_time) = match (&engine.last_base_coord, engine.last_base_time) {
-        (Some(bc), Some(bt)) => (bc, bt), _ => return,
+    let (base_coord, _base_time) = match (&engine.last_base_coord, engine.last_base_time) {
+        (Some(bc), Some(_)) => (bc, ()), _ => return,
     };
-    let eph = &engine.ephemerides;
-    let mut obs: Vec<(SatelliteId, SatelliteId, f64, f64)> = Vec::new();
+    let mut obs: Vec<(SatelliteId, SatelliteId, f64, f64, Vector3<f64>, Vector3<f64>)> = Vec::new();
     for ((sat, ref_sat), vals) in &engine.anchor_buf {
         let n = vals.len();
         if n < 20 { continue; }
-        let mean = vals.iter().sum::<f64>() / n as f64;
-        obs.push((*sat, *ref_sat, mean, n as f64 / 2.25));
+        let mean = vals.iter().map(|(v,_,_)| v).sum::<f64>() / n as f64;
+        // Use the last entry's satellite positions (closest to current epoch)
+        let (_, sp, rp) = vals.last().unwrap();
+        obs.push((*sat, *ref_sat, mean, n as f64 / 2.25, *sp, *rp));
     }
     engine.anchor_buf.clear();
     engine.anchor_ticks = 0;
-    tracing::info!("Anchor: {} sat pairs with data", obs.len());
-    if obs.len() < 5 { return; }
+    tracing::info!("Anchor: {} obs", obs.len());    if obs.len() < 5 { return; }
     let mut pos = state.position.vector;
     for _ in 0..8 {
         let mut h_sum = nalgebra::Matrix3::zeros();
         let mut rhs = nalgebra::Vector3::zeros();
-        for (sat, ref_sat, mean, w) in &obs {
-            let e1 = match eph.iter().find(|e| e.sat() == *sat) { Some(e) => e, None => continue };
-            let e2 = match eph.iter().find(|e| e.sat() == *ref_sat) { Some(e) => e, None => continue };
-            let (sp, _) = crate::engine::measurement_math::get_sat_state(e1, 0.0, 0.0, state.time, pos);
-            let (rp, _) = crate::engine::measurement_math::get_sat_state(e2, 0.0, 0.0, state.time, pos);
-            let (bs, _) = crate::engine::measurement_math::get_sat_state(e1, 0.0, 0.0, base_time, base_coord.vector);
-            let (br, _) = crate::engine::measurement_math::get_sat_state(e2, 0.0, 0.0, base_time, base_coord.vector);
+        for (_sat, _ref_sat, mean, w, sp, rp) in &obs {
             let geom = (pos - sp).norm() - (pos - rp).norm()
-                - ((base_coord.vector - bs).norm() - (base_coord.vector - br).norm());
+                - ((base_coord.vector - sp).norm() - (base_coord.vector - rp).norm());
             let resid = mean - geom;
-            let los = (rp - pos).normalize() - (sp - pos).normalize();
-            h_sum += los * los.transpose() * (*w);
-            rhs += los * (resid * (*w));
+            let los = (*rp - pos).normalize() - (*sp - pos).normalize();
+            let w_val = *w;
+            h_sum += los * los.transpose() * w_val;
+            rhs += los * (resid * w_val);
         }
         if let Some(inv) = h_sum.try_inverse() {
             let dx = &inv * rhs; let n = dx.norm();
@@ -1886,8 +1885,7 @@ pub fn run_anchor_solver(engine: &mut ProcessingEngine) {
         } else { return; }
     }
     let jump = (pos - state.position.vector).norm();
-    tracing::info!("Anchor solve: jump={:.2}m", jump);
-    if jump > 5.0 { return; }
+    tracing::info!("Anchor pre-jump: {:.2}m", jump);    if jump > 5.0 { return; }
     let s = jump.max(2.0);
     let mut h = nalgebra::DMatrix::zeros(3, state.covariance.ncols());
     h[(0, 0)] = 1.0; h[(1, 1)] = 1.0; h[(2, 2)] = 1.0;
@@ -3190,5 +3188,60 @@ mod tests {
         assert!(result.is_ok());
         assert_eq!(engine.obs_history.len(), 1);
         assert!(engine.obs_history[0].1.is_some());
+    }
+
+    /// Test that the geometric DD model used in the anchor solver is
+    /// self-consistent: given known rover/base positions and satellite
+    /// positions, the WLS solver should recover the correct position.
+    #[test]
+    fn test_anchor_solver_wls_consistency() {
+        use gneiss_core::coords::{Coordinate, Datum, Frame};
+        use gneiss_core::sat::{Constellation, SatelliteId};
+        let rov_true = Vector3::new(-3963427.0, 3350882.0, 3694866.0);
+        let base = Vector3::new(-3961904.0, 3348994.0, 3698212.0);
+        // Create 6 satellite pairs at various azimuths/elevations
+        let sats: Vec<Vector3<f64>> = vec![
+            Vector3::new(-10000000.0, 15000000.0, 20000000.0),
+            Vector3::new(-12000000.0, 13000000.0, 22000000.0),
+            Vector3::new(5000000.0, 20000000.0, 15000000.0),
+            Vector3::new(15000000.0, 10000000.0, 18000000.0),
+            Vector3::new(-5000000.0, -15000000.0, 21000000.0),
+            Vector3::new(20000000.0, -5000000.0, 19000000.0),
+            Vector3::new(0.0, 25000000.0, 10000000.0),
+        ];
+        let ref_sat = sats[0]; // use first sat as reference
+        // Compute synthetic raw DD PR at the TRUE rover position
+        let mut obs: Vec<(Vector3<f64>, Vector3<f64>, f64, f64)> = Vec::new();
+        for sat_pos in &sats[1..] {
+            let geom = crate::engine::measurement_math::compute_geometric_dd(rov_true, base, *sat_pos, ref_sat, *sat_pos, ref_sat);
+            // Add 0.5m noise to simulate code multipath
+            let noisy = geom + 0.5;
+            obs.push((*sat_pos, ref_sat, noisy, 1.0));
+        }
+        assert!(obs.len() >= 5, "Need >=5 sat pairs");
+        // WLS solver (same as in run_anchor_solver)
+        let mut pos = rov_true + Vector3::new(10.0, -5.0, 8.0); // start 13m away
+        let pos_init = pos;
+        for _ in 0..8 {
+            let mut h_sum = nalgebra::Matrix3::zeros();
+            let mut rhs = nalgebra::Vector3::zeros();
+            for (sp, rp, mean, w) in &obs {
+                let geom = crate::engine::measurement_math::compute_geometric_dd(pos, base, *sp, *rp, *sp, *rp);
+                let resid = mean - geom;
+                let los = (*rp - pos).normalize() - (*sp - pos).normalize();
+                let w_val = *w;
+                h_sum += los * los.transpose() * w_val;
+                rhs += los * (resid * w_val);
+            }
+            if let Some(inv) = h_sum.try_inverse() {
+                let dx = &inv * rhs;
+                pos += dx;
+                if dx.norm() < 0.001 { break; }
+            }
+        }
+        let err = (pos - rov_true).norm();
+        assert!(err < 3.0,
+            "WLS failed to converge: init_err={:.1}m final_err={:.1}m",
+            (pos_init - rov_true).norm(), err);
     }
 }
