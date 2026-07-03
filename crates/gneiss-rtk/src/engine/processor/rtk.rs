@@ -1842,8 +1842,6 @@ pub fn run_anchor_solver(engine: &mut ProcessingEngine) {
     let ekf_pos = state.position.vector;
 
     // Build observations from current innovations (single-epoch, proven correct).
-    // Multi-epoch via ring buffer is deferred to a future iteration — requires
-    // proper ephemeris-indexed geometry alignment that's non-trivial.
     let mut obs: Vec<(f64, Vector3<f64>, Vector3<f64>)> = Vec::new();
     for (_sat, _ref_sat, z, sp, rp) in &engine.last_pr_innov {
         let geom = (ekf_pos - sp).norm() - (ekf_pos - rp).norm()
@@ -1859,9 +1857,7 @@ pub fn run_anchor_solver(engine: &mut ProcessingEngine) {
     if jump > 2.0 { return; }
 
     // Sigma floor of 0.5m: the WLS with N≈10-20 measurements at σ≈1m each
-    // has position uncertainty ≈ 0.2-0.5m. Using the actual jump (capped at
-    // 0.5m minimum) lets the EKF trust the anchor position when it's close
-    // to the current estimate.
+    // has position uncertainty ≈ 0.2-0.5m.
     let s = jump.max(0.5);
     let mut h = nalgebra::DMatrix::zeros(3, state.covariance.ncols());
     h[(0,0)]=1.0; h[(1,1)]=1.0; h[(2,2)]=1.0;
