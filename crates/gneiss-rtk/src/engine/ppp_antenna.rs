@@ -153,7 +153,13 @@ pub(crate) fn process_single_sat<'a>(
     let tau_pr = p1.unwrap_or(0.0) / LIGHT_SPEED;
     let t_nom = gneiss_core::time::GpsTime::new(r_obs.time.week, r_obs.time.tow - tau_pr);
 
-    let (t_tx, dt_s, raw_pos, raw_vel) = compute_sat_state(engine, eph, sat_obs.sat, t_nom)?;
+    let (t_tx, dt_s, raw_pos, raw_vel) = crate::engine::ssr::compute_sat_state(
+        &engine.sp3_epochs,
+        engine.clk_data.as_ref(),
+        eph,
+        sat_obs.sat,
+        t_nom,
+    )?;
     let (sat_pos, sat_vel) =
         crate::engine::ppp_math::apply_earth_rotation(raw_pos, raw_vel, rcv_pos);
 
@@ -380,64 +386,6 @@ pub(crate) fn get_obs_and_corrections(
         }
     }
     (p1, p2, cp1, cp2, osb, is_if, actual_f2)
-}
-
-pub(crate) fn compute_sat_state(
-    engine: &ProcessingEngine,
-    eph: &gneiss_core::ephemeris::Ephemeris,
-    sat: gneiss_core::sat::SatelliteId,
-    t_nom: gneiss_core::time::GpsTime,
-) -> Option<(gneiss_core::time::GpsTime, f64, Vector3<f64>, Vector3<f64>)> {
-    let precise = !engine.sp3_epochs.is_empty() || engine.clk_data.is_some();
-    let mut dt_s = engine
-        .clk_data
-        .as_ref()
-        .and_then(|c| c.get_clock_bias(sat, t_nom))
-        .unwrap_or(0.0);
-    let brdc_clk = eph.position_iono_free(t_nom).2;
-
-    let mut clk_found = dt_s != 0.0;
-    if !precise {
-        dt_s = brdc_clk;
-        clk_found = true;
-    }
-
-    if precise && !clk_found {
-        if let Some((_, _, sp3_clk)) =
-            crate::engine::ssr::get_precise_orbit(&engine.sp3_epochs, sat, t_nom, 10)
-        {
-            if !sp3_clk.is_nan() && sp3_clk != 0.0 {
-                dt_s = sp3_clk;
-                clk_found = true;
-            }
-        }
-    }
-    if precise && !clk_found {
-        // No precise clock available — fall back to broadcast clock
-        // rather than dropping the satellite entirely.  SP3 orbit
-        // (if available) is still used below for position/velocity.
-        dt_s = brdc_clk;
-    }
-
-    let t_tx = gneiss_core::time::GpsTime::new(t_nom.week, t_nom.tow - dt_s);
-    let (brdc_pos, brdc_vel, _, _) = eph.position_iono_free(t_tx);
-    let mut sat_pos: Vector3<f64> = brdc_pos;
-    let mut sat_vel: Vector3<f64> = brdc_vel;
-
-    if precise {
-        let dt_rel = -2.0 * brdc_pos.dot(&brdc_vel) / (LIGHT_SPEED * LIGHT_SPEED);
-        dt_s += dt_rel;
-        if let Some((sp3_p, sp3_v, _)) =
-            crate::engine::ssr::get_precise_orbit(&engine.sp3_epochs, sat, t_tx, 10)
-        {
-            sat_pos = sp3_p;
-            sat_vel = sp3_v;
-        }
-        // If SP3 orbit is unavailable, keep broadcast orbit — don't
-        // drop the satellite.  Broadcast orbits are good to ~1-2m;
-        // precise clock on broadcast orbit still improves accuracy.
-    }
-    Some((t_tx, dt_s, sat_pos, sat_vel))
 }
 
 #[allow(clippy::too_many_arguments)]

@@ -1,5 +1,6 @@
 pub mod antex;
 pub mod ionex;
+pub mod lnav;
 pub mod rinex;
 pub mod rinex_clk;
 pub mod rtcm3;

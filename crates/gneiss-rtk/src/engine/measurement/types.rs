@@ -7,6 +7,8 @@ use nalgebra::Vector3;
 
 pub struct MeasurementEnvironment<'a> {
     pub ephemerides: &'a [Ephemeris],
+    pub sp3_epochs: &'a [gneiss_parsers::sp3::Sp3Epoch],
+    pub clk_data: Option<&'a gneiss_parsers::rinex_clk::RinexClock>,
     pub base_coord: &'a Coordinate,
     pub base_time: GpsTime,
     pub lever_arm: Vector3<f64>,

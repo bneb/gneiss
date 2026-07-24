@@ -1,5 +1,7 @@
 use gneiss_core::ephemeris::Ephemeris;
 use gneiss_core::time::GpsTime;
+use gneiss_parsers::rinex_clk::RinexClock;
+use gneiss_parsers::sp3::Sp3Epoch;
 use nalgebra::Vector3;
 
 pub struct WindupUpdates {
@@ -43,6 +45,60 @@ pub fn get_sat_state(
         );
     }
     (sat_pos, sat_vel)
+}
+
+/// Precise-aware satellite state computation.  Wraps `ssr::compute_sat_state`
+/// and applies Earth rotation (Sagnac) inline, matching the `get_sat_state`
+/// interface.  Falls back to broadcast-only when no precise products are
+/// available.
+pub fn get_sat_state_precise(
+    sp3_epochs: &[Sp3Epoch],
+    clk_data: Option<&RinexClock>,
+    eph: &Ephemeris,
+    pr: f64,
+    rcv_clk_bias_m: f64,
+    t_rx: GpsTime,
+    rx_pos: Vector3<f64>,
+) -> (Vector3<f64>, Vector3<f64>) {
+    let precise = !sp3_epochs.is_empty() || clk_data.is_some();
+    if !precise {
+        return get_sat_state(eph, pr, rcv_clk_bias_m, t_rx, rx_pos);
+    }
+
+    // Compute approximate transmission time (same as get_sat_state)
+    let tau_pr = (pr - rcv_clk_bias_m) / gneiss_core::constants::SPEED_OF_LIGHT_M_S;
+    assert!(tau_pr.abs() < 1000.0, "tau_pr must be < 1000.0s");
+    let t_nom = GpsTime::new(t_rx.week, t_rx.tow - tau_pr);
+
+    // Try precise satellite state (SP3 orbit + RINEX CLK / SP3 clock)
+    if let Some((_t_tx, _dt_s, raw_pos, raw_vel)) =
+        crate::engine::ssr::compute_sat_state(sp3_epochs, clk_data, eph, eph.sat(), t_nom)
+    {
+        // Apply Earth rotation (Sagnac), same 2-iteration loop as get_sat_state
+        let mut sat_pos = raw_pos;
+        let mut sat_vel = raw_vel;
+        for _ in 0..2 {
+            let geometric_range = (sat_pos - rx_pos).norm();
+            let true_tau = geometric_range / gneiss_core::constants::SPEED_OF_LIGHT_M_S;
+            let theta = gneiss_core::constants::EARTH_ROTATION_RATE_RAD_S * true_tau;
+            let cos_t = theta.cos();
+            let sin_t = theta.sin();
+            sat_pos = Vector3::new(
+                raw_pos.x * cos_t + raw_pos.y * sin_t,
+                -raw_pos.x * sin_t + raw_pos.y * cos_t,
+                raw_pos.z,
+            );
+            sat_vel = Vector3::new(
+                raw_vel.x * cos_t + raw_vel.y * sin_t,
+                -raw_vel.x * sin_t + raw_vel.y * cos_t,
+                raw_vel.z,
+            );
+        }
+        (sat_pos, sat_vel)
+    } else {
+        // Fallback to broadcast if precise computation fails
+        get_sat_state(eph, pr, rcv_clk_bias_m, t_rx, rx_pos)
+    }
 }
 
 #[allow(clippy::too_many_arguments)]

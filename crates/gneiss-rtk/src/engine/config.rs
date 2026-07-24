@@ -193,6 +193,18 @@ pub struct EngineConfig {
     /// Enable PR-only position validation for AR fixes.
     /// Requires strict epoch sync (max_base_age_s enforced to ≤0.5s).
     pub enable_pr_validation: bool,
+    /// Minimum samples required from each DD pair before AR validation.
+    pub pr_validation_min_samples: usize,
+    /// Minimum independently keyed DD pairs required to accept an AR fix.
+    pub pr_validation_min_pairs: usize,
+    /// Conservative inflation applied to account for temporal code correlation.
+    pub pr_validation_correlation_penalty: f64,
+    /// Maximum normalized weighted residual accepted for a DD pair.
+    pub pr_validation_normalized_residual_threshold: f64,
+    /// Maximum normalized individual residual before rejecting a candidate.
+    pub pr_validation_gross_outlier_sigma: f64,
+    /// Maximum gap between samples in a validation window.
+    pub pr_validation_max_epoch_gap_s: f64,
     /// Enable IMU-based validation for AR fixes.
     /// Compares AR position jump against IMU-predicted motion.
     pub enable_ins_validation: bool,
@@ -271,6 +283,12 @@ impl Default for EngineConfig {
             export_gnn_dataset_path: None,
             enable_multi_base_rtk: false,
             enable_pr_validation: false,
+            pr_validation_min_samples: 20,
+            pr_validation_min_pairs: 4,
+            pr_validation_correlation_penalty: 4.0,
+            pr_validation_normalized_residual_threshold: 3.0,
+            pr_validation_gross_outlier_sigma: 5.0,
+            pr_validation_max_epoch_gap_s: 2.0,
             enable_ins_validation: false,
             enable_tdcp: false,
             tdcp_window_size: 60,

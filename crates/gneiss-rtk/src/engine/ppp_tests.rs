@@ -1200,7 +1200,7 @@ mod ppp_tests {
         });
 
         let engine = ProcessingEngine::new(EngineConfig::default());
-        let result = compute_sat_state(&engine, &eph, sat, t);
+        let result = crate::engine::ssr::compute_sat_state(&engine.sp3_epochs, engine.clk_data.as_ref(), &eph, sat, t);
 
         assert!(result.is_some(), "Broadcast-only should succeed");
         let (t_tx, dt_s, sat_pos, sat_vel) = result.unwrap();
@@ -1242,7 +1242,7 @@ mod ppp_tests {
 
         // With the fix: precise clock from CLK + broadcast orbit = valid result
         // (no longer returns None just because SP3 orbit is missing)
-        let result = compute_sat_state(&engine, &eph, sat, t);
+        let result = crate::engine::ssr::compute_sat_state(&engine.sp3_epochs, engine.clk_data.as_ref(), &eph, sat, t);
         assert!(result.is_some(), "CLK clock + broadcast orbit should succeed");
     }
 
@@ -1279,7 +1279,7 @@ mod ppp_tests {
         clk.satellites.insert(sat_g01, vec![ClockRecord { time: t, bias: 2.0e-7 }]);
         engine.clk_data = Some(clk); // precise=true, G02 missing from CLK
 
-        let result = compute_sat_state(&engine, &eph, sat_g02, t);
+        let result = crate::engine::ssr::compute_sat_state(&engine.sp3_epochs, engine.clk_data.as_ref(), &eph, sat_g02, t);
 
         // FIX VERIFIED: G02 should succeed using broadcast clock fallback,
         // not return None just because it's missing from the CLK file.
@@ -1321,28 +1321,32 @@ mod ppp_tests {
         clk.satellites.insert(sat, vec![ClockRecord { time: t, bias: 2.0e-7 }]);
         engine.clk_data = Some(clk);
 
-        // 11 SP3 epochs for Lagrange interpolation (degree=10)
+        // Generate SP3 epochs from broadcast positions so the SP3 data is
+        // consistent with the broadcast ephemeris, avoiding the SP3/broadcast
+        // mismatch safety threshold (5,000 km).
         let mut epochs = Vec::new();
         for i in 0..11 {
             let t_epoch = GpsTime::new(2156, (i as f64) * 300.0);
-            let pos = Vector3::new(
-                10000000.0 + i as f64 * 100.0,
-                20000000.0 + i as f64 * 50.0,
-                15000000.0 + i as f64 * 75.0,
-            );
+            let (pos, _vel, _clk, _) = eph.position_iono_free(t_epoch);
             let mut records = HashMap::new();
             records.insert("G01".to_string(), Sp3Record { position: pos, clock_offset: 0.001 });
             epochs.push(Sp3Epoch { time: t_epoch, records });
         }
         engine.sp3_epochs = epochs;
 
-        let result = compute_sat_state(&engine, &eph, sat, t);
+        let result = crate::engine::ssr::compute_sat_state(&engine.sp3_epochs, engine.clk_data.as_ref(), &eph, sat, t);
         assert!(result.is_some(), "Precise with SP3 should succeed");
         let (t_tx, dt_s, sat_pos, sat_vel) = result.unwrap();
 
+        // Broadcast position at t_tx for reference
+        let (brdc_ref, _brdc_vel_ref, _, _) = eph.position_iono_free(t_tx);
+
         assert!(dt_s > 0.0, "Clock bias should be positive, got {}", dt_s);
-        assert!((sat_pos.x - 10000000.0).abs() < 1000.0,
-            "SP3 x near 10000000, got {}", sat_pos.x);
+        // SP3 position should be close to broadcast (within 1 km — the
+        // Lagrange interpolation of positions sampled from the same orbit
+        // should reproduce the orbit accurately)
+        assert!((sat_pos - brdc_ref).norm() < 1000.0,
+            "SP3 position should be near broadcast, diff={:.1}m", (sat_pos - brdc_ref).norm());
         assert!(sat_vel.norm() > 0.0, "Satellite velocity should be non-zero");
         // t_nom=0 minus positive dt_s wraps to previous week: tow = 604800 - dt_s
         let expected_tow = 604800.0 - dt_s;
@@ -1757,7 +1761,7 @@ mod ppp_tests {
 
         // FIX: When CLK is missing for this sat, fall back to broadcast
         // clock + broadcast orbit instead of returning None.
-        let result = compute_sat_state(&engine, &eph, sat, t);
+        let result = crate::engine::ssr::compute_sat_state(&engine.sp3_epochs, engine.clk_data.as_ref(), &eph, sat, t);
         assert!(result.is_some(),
             "Precise mode with no clock should fall back to broadcast, got None");
     }

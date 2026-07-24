@@ -200,6 +200,8 @@ fn test_measurement_model_against_rtklib_golden_data() {
     let config = crate::engine::EngineConfig::default();
     let env = MeasurementEnvironment {
         ephemerides: &ephemerides,
+            sp3_epochs: &[],
+            clk_data: None,
         base_coord: &base_coord,
         base_time: base_coord.epoch,
         lever_arm: Vector3::zeros(),
@@ -368,6 +370,8 @@ fn test_compute_innovations() {
     );
     let env = MeasurementEnvironment {
         ephemerides: &[eph_ref, eph_rov],
+            sp3_epochs: &[],
+            clk_data: None,
         base_coord: &base_coord,
         base_time: GpsTime::new(0, 0.0),
         lever_arm: Vector3::zeros(),

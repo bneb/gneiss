@@ -186,6 +186,8 @@ fn test_compute_dd_pseudorange() {
     );
     let env = MeasurementEnvironment {
         ephemerides: &[],
+            sp3_epochs: &[],
+            clk_data: None,
         base_coord: &base_coord,
         base_time: GpsTime::new(0, 0.0),
         lever_arm: Vector3::zeros(),
@@ -324,6 +326,8 @@ fn test_compute_dd_doppler() {
     );
     let env = MeasurementEnvironment {
         ephemerides: &[],
+            sp3_epochs: &[],
+            clk_data: None,
         base_coord: &base_coord,
         base_time: GpsTime::new(0, 0.0),
         lever_arm: Vector3::zeros(),

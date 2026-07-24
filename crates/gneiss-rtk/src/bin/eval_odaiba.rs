@@ -31,6 +31,30 @@ fn main() {
         .expect("parse nav");
     eprintln!("Loaded {} ephemerides", ephemerides.len());
 
+    // --- Read precise products (SP3 orbit + CLK clock) ---
+    let sp3_dir = Path::new("datasets/urbannav/tokyo");
+    let sp3_path = sp3_dir.join("COD0MGXFIN_20183530000_01D_05M_ORB.SP3");
+    let clk_path = sp3_dir.join("COD0MGXFIN_20183530000_01D_30S_CLK.CLK");
+    let sp3_epochs = if sp3_path.exists() {
+        let sp3_file = File::open(&sp3_path).expect("open SP3");
+        let sp3 = gneiss_parsers::sp3::parse_sp3(BufReader::new(sp3_file))
+            .expect("parse SP3");
+        eprintln!("Loaded {} SP3 epochs", sp3.len());
+        sp3
+    } else {
+        eprintln!("SP3 file not found: {}", sp3_path.display());
+        Vec::new()
+    };
+    let clk_data = if clk_path.exists() {
+        let clk_content = std::fs::read_to_string(&clk_path).expect("read CLK");
+        let clk = gneiss_parsers::rinex_clk::RinexClock::parse(&clk_content);
+        eprintln!("Loaded CLK data for {} satellites", clk.satellites.len());
+        Some(clk)
+    } else {
+        eprintln!("CLK file not found: {}", clk_path.display());
+        None
+    };
+
     // --- Read reference truth ---
     let ref_csv =
         std::fs::read_to_string(dataset.join("reference.csv")).expect("read reference.csv");
@@ -88,7 +112,7 @@ fn main() {
         initial_position: Some([initial_pos.0, initial_pos.1, initial_pos.2]),
         elevation_mask_deg: 15.0,
         min_snr_dbhz: 25.0,
-        chi_square_pr_threshold: 3.0,
+        chi_square_pr_threshold: 100.0,
         chi_square_cp_threshold: 3.0,
         dynamics_model: gneiss_rtk::engine::DynamicsModel::Automotive,
         enable_ar: true,
@@ -98,12 +122,12 @@ fn main() {
         ar_min_epoch_count: 20,
         ar_min_lock: 3,
         ar_ffrt_prob: 0.001,
-        pr_window_size: 200,
+        pr_window_size: 0,
         process_noise_cb: 1.0,
         process_noise_cd: 10.0,
         initial_ambiguity_variance: 4.0,
         max_base_age_s: 5.0,
-        enable_pr_validation: true,
+        enable_pr_validation: false,
         enable_ins_validation: false,
         ..Default::default()
     };
@@ -112,6 +136,52 @@ fn main() {
     let mut engine = ProcessingEngine::new(config);
     engine.ephemerides = ephemerides;
     engine.klobuchar_params = klobuchar_params;
+    engine.sp3_epochs = sp3_epochs;
+    engine.clk_data = clk_data;
+
+    // Diagnostic: compare SP3 interpolation vs broadcast at SAME t_tx
+    if !engine.sp3_epochs.is_empty() && !rover_epochs.is_empty() {
+        let t = rover_epochs[0].time;
+        let rx_pos = nalgebra::Vector3::new(initial_pos.0, initial_pos.1, initial_pos.2);
+        let gps_sats: Vec<_> = rover_epochs[0].satellites.iter().filter(|s| s.sat.constellation == gneiss_core::sat::Constellation::Gps).collect();
+        eprintln!("Diag: week={} tow={:.1} ngps={}", t.week, t.tow, gps_sats.len());
+        for sat_obs in gps_sats.iter().take(12) {
+            // Find nearest ephemeris by toe (matching find_ephemeris logic)
+            let eph = match engine.ephemerides.iter().filter(|e| e.sat() == sat_obs.sat).min_by(|a, b| {
+                let da = (a.toe().tow - t.tow).abs();
+                let db = (b.toe().tow - t.tow).abs();
+                da.partial_cmp(&db).unwrap_or(std::cmp::Ordering::Equal)
+            }) {
+                Some(e) => e,
+                None => { eprintln!("  {} NO EPH", sat_obs.sat); continue; }
+            };
+            let pr = sat_obs.get_observable(1).unwrap_or(20_000_000.0);
+
+            // Compute t_tx using broadcast clock (same as get_sat_state)
+            let tau_pr = pr / gneiss_core::constants::SPEED_OF_LIGHT_M_S;
+            let t_nom = gneiss_core::time::GpsTime::new(t.week, t.tow - tau_pr);
+            let (_, _, brdc_clk, _) = eph.position(t_nom);
+            let t_tx = gneiss_core::time::GpsTime::new(t.week, t.tow - tau_pr - brdc_clk);
+
+            // Broadcast position at t_tx
+            let (brdc_pos, _, _, _) = eph.position_iono_free(t_tx);
+
+            // SP3 position at t_tx (interpolated)
+            let sp3_pos = gneiss_rtk::engine::ssr::get_precise_orbit(&engine.sp3_epochs, sat_obs.sat, t_tx, 10)
+                .map(|(p, _, _)| p);
+
+            if let Some(sp3) = sp3_pos {
+                let d = (sp3 - brdc_pos).norm();
+                if d > 5.0 {
+                    eprintln!("  {} brdc=({:.0},{:.0},{:.0}) sp3=({:.0},{:.0},{:.0}) diff={:.3}m LARGE", sat_obs.sat, brdc_pos.x, brdc_pos.y, brdc_pos.z, sp3.x, sp3.y, sp3.z, d);
+                } else {
+                    eprintln!("  {} diff={:.3}m ok", sat_obs.sat, d);
+                }
+            } else {
+                eprintln!("  {} SP3 NOT FOUND", sat_obs.sat);
+            }
+        }
+    }
 
     // --- Process ---
     let mut results: Vec<(f64, f64, f64, f64, f64, f64, f64, bool)> = Vec::new();
@@ -212,6 +282,20 @@ fn main() {
     println!("  p68:  {:.3}m", p68);
     println!("  p95:  {:.3}m", p95);
     println!("  RMS:  {:.3}m", rms);
+
+    // Write per-epoch errors to CSV for analysis
+    let csv_path = "eval_odaiba_errors.csv";
+    if let Ok(mut f) = File::create(csv_path) {
+        use std::io::Write;
+        writeln!(f, "tow,h_err_m,fixed").ok();
+        for (tow, ex, ey, _ez, tx, ty, _tz, fixed) in &results {
+            let dx = ex - tx;
+            let dy = ey - ty;
+            let h_err = (dx * dx + dy * dy).sqrt();
+            writeln!(f, "{:.3},{:.3},{}", tow, h_err, fixed).ok();
+        }
+        eprintln!("Wrote per-epoch errors to {}", csv_path);
+    }
 
     if fix_rate > 0.0 {
         let mut fixed_errors: Vec<f64> = results

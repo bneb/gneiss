@@ -73,18 +73,21 @@ impl ProcessingEngine {
         }
 
         if self.current_state.is_none() {
-            if let Some(spp) = &spp_res {
-                self.current_state = Some(RtkState::new(rover_obs.time, spp.position, 100.0));
-            } else if let Some(init_pos) = self.config.initial_position {
+            // Prefer explicit initial_position over SPP when both are available,
+            // since SPP can have 10-50m error from code multipath/broadcast errors.
+            if let Some(init_pos) = self.config.initial_position {
                 let coord = Coordinate::new(
                     Vector3::new(init_pos[0], init_pos[1], init_pos[2]),
                     Datum::WGS84, Frame::ECEF, rover_obs.time,
                 );
                 tracing::info!(
-                    "SPP failed but initial_position provided — using as seed: {:?}",
-                    init_pos
+                    "Using initial_position as seed: {:?} (SPP={:?})",
+                    init_pos,
+                    spp_res.as_ref().map(|s| s.position.vector)
                 );
-                self.current_state = Some(RtkState::new(rover_obs.time, coord, 100.0));
+                self.current_state = Some(RtkState::new(rover_obs.time, coord, 1.0));
+            } else if let Some(spp) = &spp_res {
+                self.current_state = Some(RtkState::new(rover_obs.time, spp.position, 100.0));
             } else {
                 return Err(EngineError::InitialSppFailed);
             }
@@ -269,6 +272,8 @@ impl ProcessingEngine {
                 let ctx = RtkUpdateContext {
                     config: &self.config,
                     ephemerides: &self.ephemerides,
+                    sp3_epochs: &self.sp3_epochs,
+                    clk_data: self.clk_data.as_ref(),
                     imu_history: &self.imu_history,
                     rover_obs, base_obs: base,
                     matched_obs: &matched_obs,
@@ -603,6 +608,8 @@ impl ProcessingEngine {
             let ctx = RtkUpdateContext {
                 config: &self.config,
                 ephemerides: &self.ephemerides,
+                sp3_epochs: &self.sp3_epochs,
+                clk_data: self.clk_data.as_ref(),
                 imu_history: &self.imu_history,
                 rover_obs: &rover_smoothed,
                 base_obs,
@@ -848,6 +855,8 @@ fn build_measurement_environment<'a>(
     imu_history: &[Vec<gneiss_core::imu::ImuMeasurement>],
     state: &RtkState,
     ephemerides: &'a [gneiss_core::ephemeris::Ephemeris],
+    sp3_epochs: &'a [gneiss_parsers::sp3::Sp3Epoch],
+    clk_data: Option<&'a gneiss_parsers::rinex_clk::RinexClock>,
     base_coord: &'a Coordinate,
     base_time: gneiss_core::time::GpsTime,
     klobuchar_params: Option<gneiss_core::atmosphere::KlobucharParams>,
@@ -872,6 +881,8 @@ fn build_measurement_environment<'a>(
 
     crate::engine::measurement::MeasurementEnvironment {
         ephemerides,
+        sp3_epochs,
+        clk_data,
         base_coord,
         base_time,
         lever_arm,
@@ -948,6 +959,8 @@ fn handle_ekf_rejection(
 fn solve_pr_only_position(
     state: &RtkState,
     ephemerides: &[gneiss_core::ephemeris::Ephemeris],
+    sp3_epochs: &[gneiss_parsers::sp3::Sp3Epoch],
+    clk_data: Option<&gneiss_parsers::rinex_clk::RinexClock>,
     base_coord: &Coordinate,
     base_time: gneiss_core::time::GpsTime,
 ) -> Option<Vector3<f64>> {
@@ -977,10 +990,10 @@ fn solve_pr_only_position(
         for o in &obs {
             let eph_sat = match ephemerides.iter().find(|e| e.sat() == o.sat) { Some(e) => e, None => continue, };
             let eph_ref = match ephemerides.iter().find(|e| e.sat() == o.ref_sat) { Some(e) => e, None => continue, };
-            let (sat_pos, _) = crate::engine::measurement_math::get_sat_state(eph_sat, 0.0, 0.0, state.time, pos);
-            let (ref_pos, _) = crate::engine::measurement_math::get_sat_state(eph_ref, 0.0, 0.0, state.time, pos);
-            let (bas_sat, _) = crate::engine::measurement_math::get_sat_state(eph_sat, 0.0, 0.0, base_time, base_coord.vector);
-            let (bas_ref, _) = crate::engine::measurement_math::get_sat_state(eph_ref, 0.0, 0.0, base_time, base_coord.vector);
+            let (sat_pos, _) = crate::engine::measurement_math::get_sat_state_precise(sp3_epochs, clk_data, eph_sat, 0.0, 0.0, state.time, pos);
+            let (ref_pos, _) = crate::engine::measurement_math::get_sat_state_precise(sp3_epochs, clk_data, eph_ref, 0.0, 0.0, state.time, pos);
+            let (bas_sat, _) = crate::engine::measurement_math::get_sat_state_precise(sp3_epochs, clk_data, eph_sat, 0.0, 0.0, base_time, base_coord.vector);
+            let (bas_ref, _) = crate::engine::measurement_math::get_sat_state_precise(sp3_epochs, clk_data, eph_ref, 0.0, 0.0, base_time, base_coord.vector);
             let geom_dd = crate::engine::measurement_math::compute_geometric_dd(pos, base_coord.vector, sat_pos, ref_pos, bas_sat, bas_ref);
             let residual = o.dd_mean - geom_dd;
             let h = ((ref_pos - pos).normalize() - (sat_pos - pos).normalize()) * o.weight.sqrt();
@@ -1003,10 +1016,10 @@ fn solve_pr_only_position(
                 for o in &obs {
                     let eph_sat = match ephemerides.iter().find(|e| e.sat() == o.sat) { Some(e) => e, None => continue, };
                     let eph_ref = match ephemerides.iter().find(|e| e.sat() == o.ref_sat) { Some(e) => e, None => continue, };
-                    let (sp, _) = crate::engine::measurement_math::get_sat_state(eph_sat, 0.0, 0.0, state.time, pos_trial);
-                    let (rp, _) = crate::engine::measurement_math::get_sat_state(eph_ref, 0.0, 0.0, state.time, pos_trial);
-                    let (bsp, _) = crate::engine::measurement_math::get_sat_state(eph_sat, 0.0, 0.0, base_time, base_coord.vector);
-                    let (brp, _) = crate::engine::measurement_math::get_sat_state(eph_ref, 0.0, 0.0, base_time, base_coord.vector);
+                    let (sp, _) = crate::engine::measurement_math::get_sat_state_precise(sp3_epochs, clk_data, eph_sat, 0.0, 0.0, state.time, pos_trial);
+                    let (rp, _) = crate::engine::measurement_math::get_sat_state_precise(sp3_epochs, clk_data, eph_ref, 0.0, 0.0, state.time, pos_trial);
+                    let (bsp, _) = crate::engine::measurement_math::get_sat_state_precise(sp3_epochs, clk_data, eph_sat, 0.0, 0.0, base_time, base_coord.vector);
+                    let (brp, _) = crate::engine::measurement_math::get_sat_state_precise(sp3_epochs, clk_data, eph_ref, 0.0, 0.0, base_time, base_coord.vector);
                     let gdd = crate::engine::measurement_math::compute_geometric_dd(pos_trial, base_coord.vector, sp, rp, bsp, brp);
                     trial_rms += (o.dd_mean - gdd).powi(2);
                 }
@@ -1085,6 +1098,8 @@ fn smooth_two_epoch_position(state: &RtkState) -> (Vector3<f64>, f64) {
 fn solve_tdcp_anchored_position(
     state: &RtkState,
     ephemerides: &[gneiss_core::ephemeris::Ephemeris],
+    sp3_epochs: &[gneiss_parsers::sp3::Sp3Epoch],
+    clk_data: Option<&gneiss_parsers::rinex_clk::RinexClock>,
     base_coord: &Coordinate,
     base_time: gneiss_core::time::GpsTime,
 ) -> Option<(Vector3<f64>, f64)> {
@@ -1133,10 +1148,10 @@ fn solve_tdcp_anchored_position(
         for o in &obs {
             let eph_sat = match ephemerides.iter().find(|e| e.sat() == o.sat) { Some(e) => e, None => continue };
             let eph_ref = match ephemerides.iter().find(|e| e.sat() == o.ref_sat) { Some(e) => e, None => continue };
-            let (sat_pos, _) = crate::engine::measurement_math::get_sat_state(eph_sat, 0.0, 0.0, state.time, pos);
-            let (ref_pos, _) = crate::engine::measurement_math::get_sat_state(eph_ref, 0.0, 0.0, state.time, pos);
-            let (bas_sat, _) = crate::engine::measurement_math::get_sat_state(eph_sat, 0.0, 0.0, base_time, base_coord.vector);
-            let (bas_ref, _) = crate::engine::measurement_math::get_sat_state(eph_ref, 0.0, 0.0, base_time, base_coord.vector);
+            let (sat_pos, _) = crate::engine::measurement_math::get_sat_state_precise(sp3_epochs, clk_data, eph_sat, 0.0, 0.0, state.time, pos);
+            let (ref_pos, _) = crate::engine::measurement_math::get_sat_state_precise(sp3_epochs, clk_data, eph_ref, 0.0, 0.0, state.time, pos);
+            let (bas_sat, _) = crate::engine::measurement_math::get_sat_state_precise(sp3_epochs, clk_data, eph_sat, 0.0, 0.0, base_time, base_coord.vector);
+            let (bas_ref, _) = crate::engine::measurement_math::get_sat_state_precise(sp3_epochs, clk_data, eph_ref, 0.0, 0.0, base_time, base_coord.vector);
             let geom = crate::engine::measurement_math::compute_geometric_dd(pos, base_coord.vector, sat_pos, ref_pos, bas_sat, bas_ref);
             let los = (ref_pos - pos).normalize() - (sat_pos - pos).normalize();
             entries.push((geom, los));
@@ -1294,7 +1309,7 @@ fn validate_factor_graph(
             // produce ~0.5-1.0m disagreement with the geometry-constrained FG
             // position. 0.5m catches most wrong fixes while accepting correct
             // ones that may have ~0.2-0.4m fg_error due to FG position noise.
-            let threshold = 1.0; // meters — relaxed for short-baseline float-quality FG
+            let threshold = 4.0; // meters — needed for baselines with residual atmospheric errors
             tracing::info!(
                 "RTK FG validation: fg_error={:.3}m thresh={:.3}m converged={} pos_fb={:.2}m",
                 fg_error, threshold, result.converged, pos_jump
@@ -1422,7 +1437,10 @@ fn accumulate_pr_window(
     window_size: usize,
     tdcp_pos: Option<nalgebra::Vector3<f64>>,
     ephemerides: &[gneiss_core::ephemeris::Ephemeris],
-    _base_coord: &Coordinate,
+    sp3_epochs: &[gneiss_parsers::sp3::Sp3Epoch],
+    clk_data: Option<&gneiss_parsers::rinex_clk::RinexClock>,
+    base_coord: &Coordinate,
+    base_time: gneiss_core::time::GpsTime,
     innov_out: &mut Vec<(
         gneiss_core::sat::SatelliteId,
         gneiss_core::sat::SatelliteId,
@@ -1438,108 +1456,70 @@ fn accumulate_pr_window(
         let ref_sat = state.current_ref_sat.get(&sat.constellation).copied().unwrap_or(sat);
         let key = (sat, ref_sat);
         let sat_pos = match crate::engine::measurement::geometry::find_ephemeris(ephemerides, sat, state.time.tow) {
-            Some(eph) => { let (pos, _) = crate::engine::measurement_math::get_sat_state(eph, 0.0, 0.0, state.time, state.position.vector); pos }
+            Some(eph) => {
+                // Two-pass to get proper light-time correction (pr=0 gives
+                // sat position at receive time, ~260m wrong).  First pass
+                // with pr=0 for approximate range, second with real range.
+                let (pos_approx, _) = crate::engine::measurement_math::get_sat_state_precise(sp3_epochs, clk_data, eph, 0.0, 0.0, state.time, state.position.vector);
+                let range = (pos_approx - state.position.vector).norm();
+                let (pos, _) = crate::engine::measurement_math::get_sat_state_precise(sp3_epochs, clk_data, eph, range, state.rcv_clk_bias, state.time, state.position.vector);
+                pos
+            }
             None => continue,
         };
         let ref_sat_pos = match crate::engine::measurement::geometry::find_ephemeris(ephemerides, ref_sat, state.time.tow) {
-            Some(eph) => { let (pos, _) = crate::engine::measurement_math::get_sat_state(eph, 0.0, 0.0, state.time, state.position.vector); pos }
+            Some(eph) => {
+                let (pos_approx, _) = crate::engine::measurement_math::get_sat_state_precise(sp3_epochs, clk_data, eph, 0.0, 0.0, state.time, state.position.vector);
+                let range = (pos_approx - state.position.vector).norm();
+                let (pos, _) = crate::engine::measurement_math::get_sat_state_precise(sp3_epochs, clk_data, eph, range, state.rcv_clk_bias, state.time, state.position.vector);
+                pos
+            }
             None => continue,
         };
+        let base_sat_pos = match crate::engine::measurement::geometry::find_ephemeris(ephemerides, sat, base_time.tow) {
+            Some(eph) => satellite_position(eph, sp3_epochs, clk_data, base_time, base_coord.vector, 0.0),
+            None => continue,
+        };
+        let base_ref_sat_pos = match crate::engine::measurement::geometry::find_ephemeris(ephemerides, ref_sat, base_time.tow) {
+            Some(eph) => satellite_position(eph, sp3_epochs, clk_data, base_time, base_coord.vector, 0.0),
+            None => continue,
+        };
+        let variance_m2 = m.r[(i, i)];
+        let position_variance_m2: f64 = (0..3).map(|j| state.covariance[(j, j)]).sum();
+        if !variance_m2.is_finite() || variance_m2 <= 0.0 || !position_variance_m2.is_finite() {
+            continue;
+        }
         innov_out.push((sat, ref_sat, innovation, sat_pos, ref_sat_pos));
         let buf = state.pr_dd_window.entry(key).or_insert_with(|| crate::filter::PrRingBuffer::new(window_size));
         if let Some(tdcp) = tdcp_pos {
-            buf.push_with_tdcp(innovation, ref_sat, state.position.vector, tdcp, sat_pos, ref_sat_pos);
+            buf.push_with_tdcp(
+                state.time, innovation, ref_sat, state.position.vector, tdcp, sat_pos, ref_sat_pos,
+                base_coord.vector, base_sat_pos, base_ref_sat_pos, variance_m2, position_variance_m2,
+            );
         } else {
-            buf.push(innovation, ref_sat, state.position.vector, sat_pos, ref_sat_pos);
+            buf.push(
+                state.time, innovation, ref_sat, state.position.vector, sat_pos, ref_sat_pos,
+                base_coord.vector, base_sat_pos, base_ref_sat_pos, variance_m2, position_variance_m2,
+            );
         }
     }
 }
 
-/// Validate AR fix using time-averaged PR innovations compensated to the
-/// fixed position. The compensated mean reconstructs the raw DD PR at the
-/// reference position by accounting for rover motion between epochs.
-/// A wrong NL fix produces a position inconsistent with the PR average.
-fn validate_multiepoch_pr_compensated(
-    state: &RtkState,
-    fixed_state: &RtkState,
-    ephemerides: &[gneiss_core::ephemeris::Ephemeris],
-    base_coord: &Coordinate,
-    base_time: gneiss_core::time::GpsTime,
-) -> bool {
-    // Two-pass approach: first collect pairs and compute per-pair
-    // (reconstructed PR - geometric PR) differences. Then remove the
-    // common-mode mean to cancel the ~630m innovation bias and satellite-
-    // motion errors that affect all pairs similarly. Wrong NL fixes produce
-    // position-dependent residuals that DON'T cancel with mean removal.
-    struct PairData {
-        n: usize,
-        residual: f64,
-    }
-    let mut pairs: Vec<PairData> = Vec::new();
-
-    for ((sat, ref_sat), buf) in state.pr_dd_window.iter() {
-        let n = buf.count();
-        if n < 20 { continue; }
-
-        let recon_mean = match buf.innovation_reconstructed_mean(base_coord.vector) {
-            Some(m) => m, None => continue,
-        };
-
-        // Compute expected DD PR at fixed position
-        let eph_sat = match ephemerides.iter().find(|e| e.sat() == *sat) { Some(e) => e, None => continue };
-        let eph_ref = match ephemerides.iter().find(|e| e.sat() == *ref_sat) { Some(e) => e, None => continue };
-        let (sat_pos_approx, _) = crate::engine::measurement_math::get_sat_state(eph_sat, 0.0, 0.0, state.time, fixed_state.position.vector);
-        let range_sat = (sat_pos_approx - fixed_state.position.vector).norm();
-        let (sat_pos, _) = crate::engine::measurement_math::get_sat_state(eph_sat, range_sat, 0.0, state.time, fixed_state.position.vector);
-        let (ref_pos_approx, _) = crate::engine::measurement_math::get_sat_state(eph_ref, 0.0, 0.0, state.time, fixed_state.position.vector);
-        let range_ref = (ref_pos_approx - fixed_state.position.vector).norm();
-        let (ref_pos, _) = crate::engine::measurement_math::get_sat_state(eph_ref, range_ref, 0.0, state.time, fixed_state.position.vector);
-        let (bas_sat_approx, _) = crate::engine::measurement_math::get_sat_state(eph_sat, 0.0, 0.0, base_time, base_coord.vector);
-        let range_bas = (bas_sat_approx - base_coord.vector).norm();
-        let (bas_sat, _) = crate::engine::measurement_math::get_sat_state(eph_sat, range_bas, 0.0, base_time, base_coord.vector);
-        let (bas_ref_approx, _) = crate::engine::measurement_math::get_sat_state(eph_ref, 0.0, 0.0, base_time, base_coord.vector);
-        let range_bref = (bas_ref_approx - base_coord.vector).norm();
-        let (bas_ref, _) = crate::engine::measurement_math::get_sat_state(eph_ref, range_bref, 0.0, base_time, base_coord.vector);
-
-        let expected = crate::engine::measurement_math::compute_geometric_dd(
-            fixed_state.position.vector, base_coord.vector,
-            sat_pos, ref_pos, bas_sat, bas_ref,
-        );
-
-        let raw_residual = recon_mean - expected;
-        pairs.push(PairData { n, residual: raw_residual });
-    }
-
-    if pairs.len() < 4 { return true; }
-
-    // Remove common-mode mean: the ~630m innovation bias and satellite-
-    // motion errors are shared across all pairs. Subtract the mean to
-    // isolate position-dependent residuals that indicate wrong NL integers.
-    let mean_residual: f64 = pairs.iter().map(|p| p.residual).sum::<f64>() / pairs.len() as f64;
-
-    let mut pairs_failed = 0usize;
-    for p in &pairs {
-        let centered = (p.residual - mean_residual).abs();
-        let threshold = 3.0 * 1.5 / (p.n as f64).sqrt();
-        if centered > threshold {
-            pairs_failed += 1;
-            tracing::info!(
-                "Multi-epoch PR: n={} resid={:.3}m centered={:.3}m thresh={:.3}m FAIL",
-                p.n, p.residual, centered, threshold
-            );
-        }
-    }
-
-    let pass_rate = (pairs.len() - pairs_failed) as f64 / pairs.len() as f64;
-    tracing::info!(
-        "Multi-epoch PR: {}/{} pairs passed ({:.0}%) mean_resid={:.1}m",
-        pairs.len() - pairs_failed, pairs.len(), pass_rate * 100.0, mean_residual
+fn satellite_position(
+    eph: &gneiss_core::ephemeris::Ephemeris,
+    sp3_epochs: &[gneiss_parsers::sp3::Sp3Epoch],
+    clk_data: Option<&gneiss_parsers::rinex_clk::RinexClock>,
+    time: gneiss_core::time::GpsTime,
+    receiver_pos: Vector3<f64>,
+    receiver_clock: f64,
+) -> Vector3<f64> {
+    let (approximate, _) = crate::engine::measurement_math::get_sat_state_precise(
+        sp3_epochs, clk_data, eph, 0.0, receiver_clock, time, receiver_pos,
     );
-    if pass_rate < 0.5 {
-        tracing::warn!("AR fix rejected by multi-epoch PR");
-        return false;
-    }
-    true
+    let range = (approximate - receiver_pos).norm();
+    crate::engine::measurement_math::get_sat_state_precise(
+        sp3_epochs, clk_data, eph, range, receiver_clock, time, receiver_pos,
+    ).0
 }
 
 fn validate_pr_residuals(
@@ -1661,6 +1641,8 @@ fn handle_ekf_acceptance(
     state: &mut RtkState,
     config: &EngineConfig,
     ephemerides: &[gneiss_core::ephemeris::Ephemeris],
+    sp3_epochs: &[gneiss_parsers::sp3::Sp3Epoch],
+    clk_data: Option<&gneiss_parsers::rinex_clk::RinexClock>,
     spp_pos: Option<Coordinate>,
     spp_state_ref: Option<&crate::spp::SppState>,
     m: Option<&crate::engine::measurement::EkfMeasurementMatrices>,
@@ -1717,14 +1699,13 @@ fn handle_ekf_acceptance(
             if !validate_geometry_pr(state, &fixed_state, ephemerides, bc, bt) {
                 state.is_fixed = false;
                 state.fixed_state = None;
-            } else if !validate_multiepoch_pr_compensated(
-                state, &fixed_state, ephemerides, bc, bt,
-            ) {
-                state.is_fixed = false;
-                state.fixed_state = None;
             } else {
-                accept_ar_fix(state, fixed_state, pos_jump);
+                accept_validated_fix(state, fixed_state, pos_jump, config, bt);
             }
+        } else if config.enable_pr_validation {
+            tracing::warn!("AR fix rejected: no synchronized base epoch for PR validation");
+            state.is_fixed = false;
+            state.fixed_state = None;
         } else {
             accept_ar_fix(state, fixed_state, pos_jump);
         }
@@ -1739,9 +1720,38 @@ fn handle_ekf_acceptance(
     }
 }
 
+fn accept_validated_fix(
+    state: &mut RtkState,
+    fixed_state: RtkState,
+    pos_jump: f64,
+    config: &EngineConfig,
+    base_time: gneiss_core::time::GpsTime,
+) {
+    let base_age_s = state.time.tow - base_time.tow;
+    let outcome = crate::engine::pr_validation::validate_candidate_geometry(
+        state, &fixed_state, config, base_age_s,
+    );
+    tracing::info!(
+        decision = ?outcome.decision,
+        samples = outcome.sample_count,
+        effective_samples = outcome.effective_sample_count,
+        normalized_residual = ?outcome.normalized_residual,
+        reason = outcome.reason,
+        "RTK AR geometry validation",
+    );
+    if outcome.decision == crate::engine::pr_validation::GeometryValidationDecision::Accepted {
+        accept_ar_fix(state, fixed_state, pos_jump);
+    } else {
+        state.is_fixed = false;
+        state.fixed_state = None;
+    }
+}
+
 pub struct RtkUpdateContext<'a> {
     pub config: &'a EngineConfig,
     pub ephemerides: &'a [gneiss_core::ephemeris::Ephemeris],
+    pub sp3_epochs: &'a [gneiss_parsers::sp3::Sp3Epoch],
+    pub clk_data: Option<&'a gneiss_parsers::rinex_clk::RinexClock>,
     pub imu_history: &'a [Vec<gneiss_core::imu::ImuMeasurement>],
     pub rover_obs: &'a EpochObs,
     pub base_obs: &'a EpochObs,
@@ -1780,6 +1790,8 @@ fn process_rtk_update<C: CouplingStrategy>(
         ctx.imu_history,
         state,
         ctx.ephemerides,
+        ctx.sp3_epochs,
+        ctx.clk_data,
         ctx.base_coord,
         ctx.base_obs.time,
         ctx.klobuchar_params,
@@ -1797,7 +1809,8 @@ fn process_rtk_update<C: CouplingStrategy>(
         execute_ekf_update::<C>(state, ctx, &m);
         accumulate_pr_window(
             state, &m, ctx.config.pr_window_size, ctx.tdcp_pos,
-            ctx.ephemerides, ctx.base_coord, pr_innov_out,
+            ctx.ephemerides, ctx.sp3_epochs, ctx.clk_data, ctx.base_coord, ctx.base_obs.time,
+            pr_innov_out,
         );
     } else {
         handle_ekf_rejection(
@@ -1842,11 +1855,36 @@ pub fn run_anchor_solver(engine: &mut ProcessingEngine) {
     let ekf_pos = state.position.vector;
 
     // Build observations from current innovations (single-epoch, proven correct).
-    let mut obs: Vec<(f64, Vector3<f64>, Vector3<f64>)> = Vec::new();
-    for (_sat, _ref_sat, z, sp, rp) in &engine.last_pr_innov {
-        let geom = (ekf_pos - sp).norm() - (ekf_pos - rp).norm()
-            - ((base_coord.vector - sp).norm() - (base_coord.vector - rp).norm());
-        obs.push((z + geom, *sp, *rp));
+    let base_time = match &engine.last_base_time { Some(bt) => *bt, None => return };
+    let ephemerides = &engine.ephemerides;
+    let sp3_epochs = &engine.sp3_epochs;
+    let clk_data = engine.clk_data.as_ref();
+    let mut obs: Vec<AnchorObs> = Vec::new();
+    for (_sat, _ref_sat, z, sp_rov, rp_rov) in &engine.last_pr_innov {
+        // Compute base-time satellite positions for the base geometric term.
+        // Using rover-time positions for the base (as the stored sp/rp do)
+        // introduces km-level errors because satellites move ~4 km/s.
+        let sp_base = match crate::engine::measurement::geometry::find_ephemeris(ephemerides, *_sat, base_time.tow) {
+            Some(eph) => {
+                let (pos_approx, _) = crate::engine::measurement_math::get_sat_state_precise(sp3_epochs, clk_data, eph, 0.0, 0.0, base_time, base_coord.vector);
+                let range = (pos_approx - base_coord.vector).norm();
+                let (pos, _) = crate::engine::measurement_math::get_sat_state_precise(sp3_epochs, clk_data, eph, range, 0.0, base_time, base_coord.vector);
+                pos
+            }
+            None => continue,
+        };
+        let rp_base = match crate::engine::measurement::geometry::find_ephemeris(ephemerides, *_ref_sat, base_time.tow) {
+            Some(eph) => {
+                let (pos_approx, _) = crate::engine::measurement_math::get_sat_state_precise(sp3_epochs, clk_data, eph, 0.0, 0.0, base_time, base_coord.vector);
+                let range = (pos_approx - base_coord.vector).norm();
+                let (pos, _) = crate::engine::measurement_math::get_sat_state_precise(sp3_epochs, clk_data, eph, range, 0.0, base_time, base_coord.vector);
+                pos
+            }
+            None => continue,
+        };
+        let geom = (ekf_pos - sp_rov).norm() - (ekf_pos - rp_rov).norm()
+            - ((base_coord.vector - sp_base).norm() - (base_coord.vector - rp_base).norm());
+        obs.push(AnchorObs { pr: z + geom, sp_rov: *sp_rov, rp_rov: *rp_rov, sp_base, rp_base });
     }
     if obs.len() < 5 { return; }
 
@@ -1870,29 +1908,37 @@ pub fn run_anchor_solver(engine: &mut ProcessingEngine) {
 /// Includes outlier rejection: after first convergence, removes measurements
 /// with |residual| > 3×RMS and re-solves. Returns the EKF position unchanged
 /// if the H matrix is near-singular (condition number > 1e8).
+struct AnchorObs {
+    pr: f64,
+    sp_rov: Vector3<f64>,
+    rp_rov: Vector3<f64>,
+    sp_base: Vector3<f64>,
+    rp_base: Vector3<f64>,
+}
+
 fn solve_anchor_wls(
-    obs: &mut Vec<(f64, Vector3<f64>, Vector3<f64>)>,
+    obs: &mut Vec<AnchorObs>,
     base_coord: &Coordinate,
     ekf_pos: Vector3<f64>,
 ) -> Vector3<f64> {
     let mut pos = ekf_pos;
     for pass in 0..2 {
-        let mean_pr: f64 = obs.iter().map(|(v,_,_)| v).sum::<f64>() / obs.len() as f64;
+        let mean_pr: f64 = obs.iter().map(|o| o.pr).sum::<f64>() / obs.len() as f64;
 
         pos = ekf_pos;
         for _ in 0..6 {
             let mut h_sum = nalgebra::Matrix3::zeros();
             let mut rhs = nalgebra::Vector3::zeros();
-            let mean_geom: f64 = obs.iter().map(|(_, sp, rp)| {
-                (pos - sp).norm() - (pos - rp).norm()
-                    - ((base_coord.vector - sp).norm() - (base_coord.vector - rp).norm())
+            let mean_geom: f64 = obs.iter().map(|o| {
+                (pos - o.sp_rov).norm() - (pos - o.rp_rov).norm()
+                    - ((base_coord.vector - o.sp_base).norm() - (base_coord.vector - o.rp_base).norm())
             }).sum::<f64>() / obs.len() as f64;
 
-            for (pr, sp, rp) in obs.iter() {
-                let geom = (pos - sp).norm() - (pos - rp).norm()
-                    - ((base_coord.vector - sp).norm() - (base_coord.vector - rp).norm());
-                let resid = (pr - mean_pr) - (geom - mean_geom);
-                let los = (*rp - pos).normalize() - (*sp - pos).normalize();
+            for o in obs.iter() {
+                let geom = (pos - o.sp_rov).norm() - (pos - o.rp_rov).norm()
+                    - ((base_coord.vector - o.sp_base).norm() - (base_coord.vector - o.rp_base).norm());
+                let resid = (o.pr - mean_pr) - (geom - mean_geom);
+                let los = (o.rp_rov - pos).normalize() - (o.sp_rov - pos).normalize();
                 h_sum += los * los.transpose();
                 rhs += los * resid;
             }
@@ -1917,16 +1963,16 @@ fn solve_anchor_wls(
 
         // On first pass, compute residual RMS and remove outliers.
         if pass == 0 {
-            let mean_pr2: f64 = obs.iter().map(|(v,_,_)| v).sum::<f64>() / obs.len() as f64;
-            let mean_geom2: f64 = obs.iter().map(|(_, sp, rp)| {
-                (pos - sp).norm() - (pos - rp).norm()
-                    - ((base_coord.vector - sp).norm() - (base_coord.vector - rp).norm())
+            let mean_pr2: f64 = obs.iter().map(|o| o.pr).sum::<f64>() / obs.len() as f64;
+            let mean_geom2: f64 = obs.iter().map(|o| {
+                (pos - o.sp_rov).norm() - (pos - o.rp_rov).norm()
+                    - ((base_coord.vector - o.sp_base).norm() - (base_coord.vector - o.rp_base).norm())
             }).sum::<f64>() / obs.len() as f64;
 
-            let residuals: Vec<f64> = obs.iter().map(|(pr, sp, rp)| {
-                let geom = (pos - sp).norm() - (pos - rp).norm()
-                    - ((base_coord.vector - sp).norm() - (base_coord.vector - rp).norm());
-                ((pr - mean_pr2) - (geom - mean_geom2)).abs()
+            let residuals: Vec<f64> = obs.iter().map(|o| {
+                let geom = (pos - o.sp_rov).norm() - (pos - o.rp_rov).norm()
+                    - ((base_coord.vector - o.sp_base).norm() - (base_coord.vector - o.rp_base).norm());
+                ((o.pr - mean_pr2) - (geom - mean_geom2)).abs()
             }).collect();
 
             let rms = (residuals.iter().map(|r| r * r).sum::<f64>() / residuals.len() as f64).sqrt();
@@ -1988,6 +2034,8 @@ fn execute_ekf_update<C: CouplingStrategy>(
                 state,
                 ctx.config,
                 ctx.ephemerides,
+                ctx.sp3_epochs,
+                ctx.clk_data,
                 ctx.spp_pos,
                 ctx.spp_state_ref,
                 Some(m),
@@ -2358,7 +2406,7 @@ mod tests {
         let mut state = RtkState::new(time, pos, 1.0);
         state.consecutive_rejections = 5;
 
-        handle_ekf_acceptance(&mut state, &EngineConfig::default(), &[], None, None, None, None, None, None);
+        handle_ekf_acceptance(&mut state, &EngineConfig::default(), &[], &[], None, None, None, None, None, None, None);
         assert_eq!(state.consecutive_rejections, 0);
     }
 
@@ -2379,7 +2427,7 @@ mod tests {
             time,
         );
 
-        handle_ekf_acceptance(&mut state, &EngineConfig::default(), &[], Some(spp_pos), None, None, None, None, None);
+        handle_ekf_acceptance(&mut state, &EngineConfig::default(), &[], &[], None, Some(spp_pos), None, None, None, None, None);
         // Should be reset
         assert!((state.position.vector.x - 50.0).abs() < 1e-6);
         assert_eq!(state.consecutive_rejections, 0);
@@ -2403,11 +2451,12 @@ mod tests {
             &[],
             &state,
             &[],
+            &[],
+            None,
             &base_coord,
             time,
             None,
         );
-
         assert_eq!(env.base_coord.vector.x, 110.0);
         assert!(env.gnn_variances.is_empty());
     }
@@ -2658,6 +2707,8 @@ mod tests {
         let ctx = RtkUpdateContext {
             config: &config,
             ephemerides: &[],
+            sp3_epochs: &[],
+            clk_data: None,
             imu_history: &[],
             rover_obs: &EpochObs { time, satellites: vec![] },
             base_obs: &EpochObs { time, satellites: vec![] },
@@ -2697,6 +2748,8 @@ mod tests {
         let ctx = RtkUpdateContext {
             config: &config,
             ephemerides: &[],
+            sp3_epochs: &[],
+            clk_data: None,
             imu_history: &[],
             rover_obs: &EpochObs { time, satellites: vec![] },
             base_obs: &EpochObs { time, satellites: vec![] },
@@ -2745,6 +2798,8 @@ mod tests {
         let ctx = RtkUpdateContext {
             config: &config,
             ephemerides: &[],
+            sp3_epochs: &[],
+            clk_data: None,
             imu_history: &[],
             rover_obs: &EpochObs { time, satellites: vec![] },
             base_obs: &EpochObs { time, satellites: vec![] },
@@ -2807,6 +2862,8 @@ mod tests {
             &imu_history,
             &state,
             &[],
+            &[],
+            None,
             &base_coord,
             time,
             None,
@@ -2831,6 +2888,8 @@ mod tests {
         let ctx = RtkUpdateContext {
             config: &config,
             ephemerides: &[],
+            sp3_epochs: &[],
+            clk_data: None,
             imu_history: &[],
             rover_obs: &EpochObs { time, satellites: vec![] },
             base_obs: &EpochObs { time, satellites: vec![] },
@@ -2945,7 +3004,7 @@ mod tests {
         state.covariance[(0, 0)] = 20000.0;
         state.consecutive_rejections = 5;
 
-        handle_ekf_acceptance(&mut state, &config, &[], None, None, None, None, None, None);
+        handle_ekf_acceptance(&mut state, &config, &[], &[], None, None, None, None, None, None, None);
         assert_eq!(state.consecutive_rejections, 0);
         assert!((state.position.vector.x - 5.0).abs() < 1e-6);
     }

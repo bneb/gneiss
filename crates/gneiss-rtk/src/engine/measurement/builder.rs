@@ -232,6 +232,7 @@ pub fn build_measurement_model(
                 new_ref_sat,
             );
             state.current_ref_sat.insert(konst, new_ref_sat);
+            state.pr_dd_window.retain(|(sat, _), _| sat.constellation != konst);
         }
         let mut group_clone = group.clone();
         let (ref_rover, ref_base) = group_clone.remove(ref_idx);
@@ -347,6 +348,8 @@ mod tests {
     ) -> MeasurementEnvironment<'a> {
         MeasurementEnvironment {
             ephemerides: ephs,
+            sp3_epochs: &[],
+            clk_data: None,
             base_coord: base,
             base_time: time,
             lever_arm: Vector3::zeros(),

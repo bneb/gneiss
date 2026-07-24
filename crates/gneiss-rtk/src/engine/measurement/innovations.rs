@@ -16,10 +16,20 @@ fn compute_sat_state(
     geom: &EkfGeometryContext,
     base_time: gneiss_core::time::GpsTime,
     rcv_clk_bias_m: f64,
+    env: &MeasurementEnvironment,
 ) -> SatState {
-    let (rov_pos, rov_vel) =
-        measurement_math::get_sat_state(eph, rov_obs.pr_l1, rcv_clk_bias_m, time, geom.pos_apc);
-    let (bas_pos, bas_vel) = measurement_math::get_sat_state(
+    let (rov_pos, rov_vel) = measurement_math::get_sat_state_precise(
+        env.sp3_epochs,
+        env.clk_data,
+        eph,
+        rov_obs.pr_l1,
+        rcv_clk_bias_m,
+        time,
+        geom.pos_apc,
+    );
+    let (bas_pos, bas_vel) = measurement_math::get_sat_state_precise(
+        env.sp3_epochs,
+        env.clk_data,
         eph,
         bas_obs.pr_l1,
         0.0,
@@ -61,6 +71,7 @@ fn process_single_satellite_pair(
         geom,
         env.base_time,
         state.rcv_clk_bias,
+        env,
     );
 
     let e_ref_rov = (ref_state.rov_pos - geom.pos_apc).normalize();
@@ -120,6 +131,7 @@ pub fn compute_innovations(
         &geom,
         env.base_time,
         state.rcv_clk_bias,
+        env,
     );
 
     let ref_idx_l1 = state

@@ -10,6 +10,9 @@ pub const CORE_STATE_SIZE: usize = 21;
 /// A single entry in the PR ring buffer.
 #[derive(Clone, Debug)]
 pub struct PrBufferEntry {
+    /// Measurement epoch. Samples from non-contiguous epochs must not be
+    /// treated as independent evidence for ambiguity validation.
+    pub time: GpsTime,
     /// EKF pseudorange innovation (z = obs - pred), clock-corrected.
     pub z: f64,
     /// Reference satellite used for double-differencing at this epoch.
@@ -25,6 +28,15 @@ pub struct PrBufferEntry {
     pub sat_pos: nalgebra::Vector3<f64>,
     /// Reference satellite position at entry epoch (ECEF, meters).
     pub ref_sat_pos: nalgebra::Vector3<f64>,
+    /// Base-station position used when this DD innovation was formed.
+    pub base_pos: nalgebra::Vector3<f64>,
+    /// Satellite positions evaluated at the base observation epoch.
+    pub base_sat_pos: nalgebra::Vector3<f64>,
+    pub base_ref_sat_pos: nalgebra::Vector3<f64>,
+    /// Innovation variance after the measurement model and adaptive scaling.
+    pub variance_m2: f64,
+    /// Position uncertainty at the saved linearization point.
+    pub position_variance_m2: f64,
 }
 
 #[derive(Clone, Debug)]
@@ -41,17 +53,25 @@ impl PrRingBuffer {
 
     pub fn push(
         &mut self,
+        time: GpsTime,
         z: f64,
         ref_sat: SatelliteId,
         ekf_pos: nalgebra::Vector3<f64>,
         sat_pos: nalgebra::Vector3<f64>,
         ref_sat_pos: nalgebra::Vector3<f64>,
+        base_pos: nalgebra::Vector3<f64>,
+        base_sat_pos: nalgebra::Vector3<f64>,
+        base_ref_sat_pos: nalgebra::Vector3<f64>,
+        variance_m2: f64,
+        position_variance_m2: f64,
     ) {
         if self.buf.len() >= self.capacity {
             self.sum -= self.buf.pop_front().map(|e| e.z).unwrap_or(0.0);
         }
         self.buf.push_back(PrBufferEntry {
-            z, ref_sat, ekf_pos, tdcp_pos: None, sat_pos, ref_sat_pos,
+            time, z, ref_sat, ekf_pos, tdcp_pos: None, sat_pos, ref_sat_pos,
+            base_pos, base_sat_pos, base_ref_sat_pos, variance_m2,
+            position_variance_m2,
         });
         self.sum += z;
     }
@@ -59,18 +79,26 @@ impl PrRingBuffer {
     /// Push with TDCP-propagated position for unbiased geometry reconstruction.
     pub fn push_with_tdcp(
         &mut self,
+        time: GpsTime,
         z: f64,
         ref_sat: SatelliteId,
         ekf_pos: nalgebra::Vector3<f64>,
         tdcp_pos: nalgebra::Vector3<f64>,
         sat_pos: nalgebra::Vector3<f64>,
         ref_sat_pos: nalgebra::Vector3<f64>,
+        base_pos: nalgebra::Vector3<f64>,
+        base_sat_pos: nalgebra::Vector3<f64>,
+        base_ref_sat_pos: nalgebra::Vector3<f64>,
+        variance_m2: f64,
+        position_variance_m2: f64,
     ) {
         if self.buf.len() >= self.capacity {
             self.sum -= self.buf.pop_front().map(|e| e.z).unwrap_or(0.0);
         }
         self.buf.push_back(PrBufferEntry {
-            z, ref_sat, ekf_pos, tdcp_pos: Some(tdcp_pos), sat_pos, ref_sat_pos,
+            time, z, ref_sat, ekf_pos, tdcp_pos: Some(tdcp_pos), sat_pos, ref_sat_pos,
+            base_pos, base_sat_pos, base_ref_sat_pos, variance_m2,
+            position_variance_m2,
         });
         self.sum += z;
     }
@@ -135,6 +163,10 @@ impl PrRingBuffer {
     }
 
     pub fn count(&self) -> usize { self.buf.len() }
+
+    pub fn entries(&self) -> impl Iterator<Item = &PrBufferEntry> {
+        self.buf.iter()
+    }
 }
 
 /// Per-measurement data extracted from the EKF H matrix for one DD observation.
@@ -761,6 +793,8 @@ impl RtkState {
     }
 
     pub fn remove_ambiguity(&mut self, sat: SatelliteId, freq: u8) {
+        self.pr_dd_window
+            .retain(|(sample_sat, ref_sat), _| *sample_sat != sat && *ref_sat != sat);
         if let Some(idx) = self
             .ambiguity_keys
             .iter()
@@ -782,6 +816,7 @@ impl RtkState {
     }
 
     pub fn clear_ambiguities(&mut self) {
+        self.pr_dd_window.clear();
         let num_amb = self.ambiguities.len();
         self.ambiguities.clear();
         self.ambiguity_keys.clear();

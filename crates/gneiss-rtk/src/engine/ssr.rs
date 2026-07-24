@@ -1,6 +1,11 @@
+use gneiss_core::ephemeris::Ephemeris;
 use gneiss_core::sat::SatelliteId;
 use gneiss_core::time::GpsTime;
+use gneiss_parsers::rinex_clk::RinexClock;
+use gneiss_parsers::sp3::Sp3Epoch;
 use nalgebra::Vector3;
+
+const LIGHT_SPEED: f64 = gneiss_core::constants::SPEED_OF_LIGHT_M_S;
 
 pub fn format_sp3_id(sat: SatelliteId) -> String {
     let c = match sat.constellation {
@@ -12,6 +17,100 @@ pub fn format_sp3_id(sat: SatelliteId) -> String {
         _ => '?',
     };
     format!("{}{:02}", c, sat.prn)
+}
+
+/// Compute satellite state (position, velocity, clock) blending precise
+/// orbit/clock products (SP3, RINEX CLK) with broadcast ephemeris.
+///
+/// Clock priority: RINEX CLK → SP3 clock → broadcast clock
+/// Orbit priority:  SP3 Lagrange interpolation → broadcast Keplerian
+///
+/// Returns `(t_tx, dt_s, sat_pos_inertial, sat_vel_inertial)`.
+/// The returned position/velocity are in the inertial (non-rotating) ECEF frame;
+/// callers must apply Earth rotation (Sagnac) correction separately.
+pub fn compute_sat_state(
+    sp3_epochs: &[Sp3Epoch],
+    clk_data: Option<&RinexClock>,
+    eph: &Ephemeris,
+    sat: SatelliteId,
+    t_nom: GpsTime,
+) -> Option<(GpsTime, f64, Vector3<f64>, Vector3<f64>)> {
+    let precise = !sp3_epochs.is_empty() || clk_data.is_some();
+    let brdc_clk = eph.position_iono_free(t_nom).2;
+
+    // Determine satellite clock bias.  Precise clocks (CLK, SP3) do NOT
+    // include the relativistic correction, so we add it separately below.
+    // Broadcast clock already includes it, so we must not double-count.
+    let mut dt_s;
+    let mut clk_is_precise = false;
+
+    if !precise {
+        dt_s = brdc_clk;
+    } else {
+        // Try RINEX CLK first
+        dt_s = clk_data
+            .and_then(|c| c.get_clock_bias(sat, t_nom))
+            .unwrap_or(0.0);
+        clk_is_precise = dt_s != 0.0;
+
+        // Try SP3 clock if CLK didn't provide one
+        if !clk_is_precise {
+            if let Some((_, _, sp3_clk)) = get_precise_orbit(sp3_epochs, sat, t_nom, 10) {
+                if !sp3_clk.is_nan() && sp3_clk != 0.0 {
+                    dt_s = sp3_clk;
+                    clk_is_precise = true;
+                }
+            }
+        }
+
+        // Fall back to broadcast clock
+        if !clk_is_precise {
+            dt_s = brdc_clk;
+        }
+    }
+
+    // Apply relativistic correction for precise clocks (broadcast
+    // clock already includes it via the Keplerian model).
+    if precise && clk_is_precise {
+        // Use approximate position/velocity at t_tx for the correction
+        let t_tx_approx = GpsTime::new(t_nom.week, t_nom.tow - dt_s);
+        let (brdc_pos, brdc_vel, _, _) = eph.position_iono_free(t_tx_approx);
+        let dt_rel = -2.0 * brdc_pos.dot(&brdc_vel) / (LIGHT_SPEED * LIGHT_SPEED);
+        dt_s += dt_rel;
+    }
+
+    let t_tx = GpsTime::new(t_nom.week, t_nom.tow - dt_s);
+    let (brdc_pos, brdc_vel, _, _) = eph.position_iono_free(t_tx);
+    let mut sat_pos: Vector3<f64> = brdc_pos;
+    let mut sat_vel: Vector3<f64> = brdc_vel;
+
+    if precise {
+        if let Some((sp3_p, sp3_v, _)) = get_precise_orbit(sp3_epochs, sat, t_tx, 10) {
+            // Safety check: if the SP3 position is implausibly far from
+            // broadcast (> 5 km), the SP3 satellite ID likely maps to a
+            // different physical satellite than the broadcast ephemeris
+            // (e.g. GLONASS slot vs spacecraft numbering mismatch).
+            // Fall back to broadcast orbit rather than corrupting the solution.
+            let diff = (sp3_p - brdc_pos).norm();
+            // Threshold: 5,000 km catches PRN/numbering mismatches
+            // (e.g. GLONASS slot vs spacecraft number — ~30,000 km) while
+            // allowing any legitimate orbit error (broadcast error is at
+            // most ~100 m even for aged ephemeris).
+            if diff < 5_000_000.0 {
+                sat_pos = sp3_p;
+                sat_vel = sp3_v;
+            } else {
+                tracing::debug!(
+                    "SP3 position {:.0} km from broadcast for {} — falling back to broadcast orbit",
+                    diff / 1000.0, sat
+                );
+            }
+        }
+        // If SP3 orbit is unavailable, keep broadcast orbit — don't
+        // drop the satellite.  Broadcast orbits are good to ~1-2m;
+        // precise clock on broadcast orbit still improves accuracy.
+    }
+    Some((t_tx, dt_s, sat_pos, sat_vel))
 }
 
 /// Interpolates precise orbit using an N-point Lagrange polynomial.
