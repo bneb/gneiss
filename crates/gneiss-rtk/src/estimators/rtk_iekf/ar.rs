@@ -53,6 +53,10 @@ pub fn resolve_ambiguities(state: &RtkState, min_ambiguities: usize, target_pf: 
     build_float_result(float_pos, float_cov, 0.0, n_amb)
 }
 
+pub(crate) fn float_result(state: &RtkState) -> ArResult {
+    build_float_result(state.pos_ecef, state.extract_pos_cov(), 0.0, state.ambiguities.len())
+}
+
 fn build_float_result(pos: Vector3<f64>, cov: Matrix3<f64>, ratio: f64, n_amb: usize) -> ArResult {
     ArResult {
         position_ecef: pos,
@@ -128,7 +132,7 @@ fn extract_subset(
     (sub_a, sub_q)
 }
 
-fn project_subset_fixed(
+pub(crate) fn project_subset_fixed(
     state: &RtkState,
     sub_a_float: &DVector<f64>,
     sub_a_fixed: &DVector<f64>,
@@ -138,10 +142,11 @@ fn project_subset_fixed(
     let q_inv = sub_q_amb.clone().try_inverse()?;
     let k = indices.len();
 
+    let off = state.amb_offset();
     let mut p_xa = DMatrix::zeros(3, k);
     for r in 0..3 {
         for (c, &idx) in indices.iter().enumerate() {
-            p_xa[(r, c)] = state.cov[(r, 6 + idx)];
+            p_xa[(r, c)] = state.cov[(r, off + idx)];
         }
     }
 

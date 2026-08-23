@@ -2,10 +2,12 @@
 
 pub mod ar;
 pub mod iono_free;
+pub mod mw;
 pub mod predict;
 pub mod smoother;
 pub mod state;
 pub mod update;
+pub mod widelane;
 
 use std::collections::HashMap;
 use nalgebra::Vector3;
@@ -39,7 +41,18 @@ pub struct GnssRtkIekf {
     pub min_elevation_rad: f64,
     pub target_pf: f64,
     pub slip_detector: crate::post_process::screening::CycleSlipDetector,
+    /// Same detector run over the BASE stream: base-side slips are invisible
+    /// to rover-only checks yet shift every DD ambiguity identically once
+    /// states accumulate across epochs.
+    pub base_slip_detector: crate::post_process::screening::CycleSlipDetector,
     pub prev_arcs: HashMap<DoubleDiffKey, u32>,
+    /// Opt-in Melbourne–Wübbena wide-lane cascade AR (long baselines).
+    /// Default off; enabling changes only epochs the joint FAR/PAR left float.
+    pub widelane_ar: bool,
+    /// Rover ZWD residual (m of zenith wet delay) on top of the Saastamoinen
+    /// model, tracked as a scalar random walk. Long-baseline mode only.
+
+    pub wl_tracker: mw::WidelaneTracker,
 }
 
 impl GnssRtkIekf {
@@ -53,7 +66,11 @@ impl GnssRtkIekf {
             min_elevation_rad: 0.1745, // 10 degrees
             target_pf: 0.001,
             slip_detector: crate::post_process::screening::CycleSlipDetector::new(),
+            base_slip_detector: crate::post_process::screening::CycleSlipDetector::new(),
             prev_arcs: HashMap::new(),
+            widelane_ar: false,
+
+            wl_tracker: mw::WidelaneTracker::default(),
         }
     }
 
@@ -66,32 +83,89 @@ impl GnssRtkIekf {
         ephems: &[Ephemeris],
     ) -> Result<FilteredEpoch, String> {
         self.slip_detector.check_epoch(rover);
+        // Base-side slip tracking is part of the accumulating-ambiguity
+        // machinery; the legacy path must stay untouched.
+        if self.widelane_ar {
+            self.base_slip_detector.check_epoch(base);
+        }
         let dd_meas = self.build_dd_measurements(rover, base, base_pos, ephems)?;
         if dd_meas.dd.is_empty() {
             return Err("No valid double-difference measurements formed".to_string());
         }
 
         self.state.retain_active_ambiguities(&dd_meas.active_keys);
+        if self.widelane_ar {
+            self.wl_tracker.retain_active(&dd_meas.active_keys);
+        }
 
-        let f_mat = predict::predict_state(&mut self.state, rover.time, self.q_accel);
+        // Reverse-safe covariance growth on the opt-in long-baseline path:
+        // the legacy signed-dt Q poisons the backward pass over long arcs.
+        let f_mat = if self.widelane_ar {
+            predict::predict_state_gated(&mut self.state, rover.time, self.q_accel, true)
+        } else {
+            predict::predict_state(&mut self.state, rover.time, self.q_accel)
+        };
         let (x_pred, p_pred) = (self.state.to_dvector(), self.state.cov.clone());
 
-        update::iekf_update(&mut self.state, &dd_meas.dd)?;
+        // Innovation gating: an undetected cycle slip (e.g. a base receiver
+        // counter reset invisible to rover-side GF checks) enters the update
+        // as a huge innovation against tight priors and destroys the state.
+        // Re-seed offending pairs and drop their phase data for this epoch.
+        let mut meas = dd_meas.dd.clone();
+        if self.widelane_ar {
+            let outliers = update::phase_innovation_outliers(
+                &self.state, &meas, update::PHASE_INNOVATION_GATE_CYCLES,
+            );
+            for key in outliers {
+                if let Some(m) = dd_meas.dd.iter().find(|m| m.key == key) {
+                    if let Some(cp) = m.dd_cp_cycles {
+                        let seed = cp - m.dd_pr_m / m.lambda;
+                        self.state.reset_ambiguity(&key, seed, 100.0);
+                    }
+                }
+                self.wl_tracker.reset_pair(&DoubleDiffKey { freq_band: 1, ..key });
+                for m in meas.iter_mut() {
+                    if m.key == key {
+                        m.dd_cp_cycles = None;
+                    }
+                }
+                tracing::debug!("slip-gate: tow={:.0} re-seeded sat={} band={}",
+                    rover.time.tow, key.sat, key.freq_band);
+            }
+        }
+
+        update::iekf_update(&mut self.state, &meas)?;
         let (x_post, p_post) = (self.state.to_dvector(), self.state.cov.clone());
 
-        let ar_res = ar::resolve_ambiguities(&self.state, 3, self.target_pf);
-        let q_flag = if ar_res.is_fixed { 1 } else { 2 };
+
+
+        let mut ar_res = ar::resolve_ambiguities(&self.state, 3, self.target_pf);
+        if self.widelane_ar {
+            // A FAR fix contradicting a converged MW wide lane is a
+            // confidently-wrong fix (slow iono drift dragged the per-band
+            // floats past half-cycle; the ratio test cannot see it). Reject
+            // it and let the iono-immune cascade try instead.
+            let far_vetoed = ar_res.is_fixed
+                && !widelane::far_matches_widelanes(&self.wl_tracker, &ar_res);
+            if !ar_res.is_fixed || far_vetoed {
+                ar_res = ar::float_result(&self.state);
+                if let Some(cascade) = widelane::resolve_cascade(&self.state, &self.wl_tracker) {
+                    ar_res = cascade;
+                }
+            }
+        }
 
         // When fixed, re-estimate the position from iono-free phase to
         // remove the DD ionosphere bias that grows with baseline length.
         let (pos_ecef, cov_pos) = if ar_res.is_fixed {
             match iono_free::apply_fixed_iono_free(&self.state, &dd_meas.iono_free, &ar_res) {
-                Some((pos, cov)) => (pos, cov),
-                None => (ar_res.position_ecef, ar_res.cov_position),
+                iono_free::IonoFreeOutcome::Solution(pos, cov) => (pos, cov),
+                _ => (ar_res.position_ecef, ar_res.cov_position),
             }
         } else {
             (ar_res.position_ecef, ar_res.cov_position)
         };
+        let q_flag = if ar_res.is_fixed { 1 } else { 2 };
 
         self.history.push(IekfSnapshot {
             time: rover.time,
@@ -179,6 +253,11 @@ impl GnssRtkIekf {
                 let rov_s = rover.satellites.iter().find(|s| s.sat == *sat_id);
                 let bas_s = base.satellites.iter().find(|s| s.sat == *sat_id);
                 if let (Some(rs), Some(bs)) = (rov_s, bas_s) {
+                    if self.widelane_ar {
+                        mw::update_tracker_from_obs(
+                            &mut self.wl_tracker, *sat_id, ref_sat_id, rs, bs, r_rov, r_bas,
+                        );
+                    }
                     for freq_band in [1, 2, 5, 7] {
                         if let Some(m) = self.build_single_dd_pair(
                             *sat_id, ref_sat_id, *sat_pos, ref_pos, base_pos, rs, bs, r_rov, r_bas, freq_band,
@@ -242,11 +321,26 @@ impl GnssRtkIekf {
         };
 
         let (pr_var, cp_var) = self.compute_dd_variances(sat_pos, ref_pos, lambda);
+        // Wet-mapping difference at the rover: sensitivity of this DD to the
+        // rover ZWD residual state (long-baseline mode).
+        let dm_wet_rov = {
+            let llh = gneiss_core::coords::ecef_to_llh(self.state.pos_ecef);
+            let el_sat = gneiss_core::coords::az_el(llh, self.state.pos_ecef, sat_pos).1;
+            let el_ref = gneiss_core::coords::az_el(llh, self.state.pos_ecef, ref_pos).1;
+            let (_, w_sat) = gneiss_core::atmosphere::AtmosphereModel::nmf_mapping_functions(llh, el_sat, self.state.time);
+            let (_, w_ref) = gneiss_core::atmosphere::AtmosphereModel::nmf_mapping_functions(llh, el_ref, self.state.time);
+            w_sat - w_ref
+        };
         let ref_sat_struct = gneiss_core::sat::SatelliteId {
             constellation: sat_id.constellation,
             prn: ref_sat_id as u8,
         };
-        let cur_arc = self.slip_detector.get_arc(sat_id) + self.slip_detector.get_arc(ref_sat_struct);
+        let mut cur_arc = self.slip_detector.get_arc(sat_id)
+            + self.slip_detector.get_arc(ref_sat_struct);
+        if self.widelane_ar {
+            cur_arc += self.base_slip_detector.get_arc(sat_id)
+                + self.base_slip_detector.get_arc(ref_sat_struct);
+        }
         let arc_changed = match self.prev_arcs.get(&key) {
             Some(&prev) => prev != cur_arc,
             None => false,
@@ -269,6 +363,7 @@ impl GnssRtkIekf {
             lambda,
             pr_var_m2: pr_var,
             cp_var_cycles2: cp_var,
+            dm_wet_rov,
         })
     }
 
@@ -289,6 +384,9 @@ impl GnssRtkIekf {
 
     fn update_dd_ambiguity(&mut self, key: DoubleDiffKey, dd_cp: Option<f64>, dd_pr: f64, lambda: f64, lli_slip: bool) {
         let init_amb = dd_cp.map_or(0.0, |cp| cp - dd_pr / lambda);
+        if std::env::var("WL_TRACE").is_ok() && init_amb.abs() > 1e5 {
+            eprintln!("BAD-SEED tow-file key={:?} init_amb={:.3e}", key, init_amb);
+        }
         if self.state.get_amb_idx(&key).is_some() {
             if lli_slip {
                 self.state.reset_ambiguity(&key, init_amb, 100.0);
@@ -321,8 +419,7 @@ fn extract_sat_positions(
     ephems: &[Ephemeris],
     rx_pos: Vector3<f64>,
     min_el: f64,
-) -> Vec<(gneiss_core::sat::SatelliteId, Vector3<f64>)> {
-    let mut out = Vec::new();
+) -> Vec<(gneiss_core::sat::SatelliteId, Vector3<f64>)> {    let mut out = Vec::new();
     let rx_llh = gneiss_core::coords::ecef_to_llh(rx_pos);
 
     for s in &rover.satellites {

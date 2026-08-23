@@ -59,6 +59,7 @@ fn test_tier1_geodetic_cors_baseline_sub_centimeter() {
         klobuchar_alpha: klob.as_ref().map(|k| k.alpha),
         klobuchar_beta: klob.as_ref().map(|k| k.beta),
         q_accel: None,
+        widelane_ar: false,
     };
 
     let result = execute_post_process(&config, &ephems, selected_rover, Some(&base_epochs), None, &options)
@@ -106,6 +107,7 @@ fn test_tier2_high_dynamic_circular_kinematic_sub_centimeter() {
         klobuchar_alpha: None,
         klobuchar_beta: None,
         q_accel: None,
+        widelane_ar: false,
     };
 
     let result = execute_post_process(

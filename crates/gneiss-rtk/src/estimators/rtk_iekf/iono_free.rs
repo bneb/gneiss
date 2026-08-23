@@ -85,6 +85,19 @@ pub fn form_iono_free_dd(
     })
 }
 
+/// Outcome of the fixed iono-free re-estimation.
+#[derive(Debug, Clone)]
+pub enum IonoFreeOutcome {
+    /// Fewer than six both-band fixed pairs: stage not applicable.
+    NotEngaged,
+    /// Engaged but the post-fit residual / displacement gates rejected the
+    /// integers — strong evidence the fixed set is wrong (e.g. a common-mode
+    /// dual-band slip, which widelane consistency cannot see).
+    Rejected,
+    /// Iono-free position solution.
+    Solution(Vector3<f64>, Matrix3<f64>),
+}
+
 /// Re-estimate the rover position from iono-free phase with known integers.
 ///
 /// Returns the position and covariance only if a residual gate and a loose
@@ -94,7 +107,7 @@ pub fn apply_fixed_iono_free(
     state: &RtkState,
     meas: &[IonoFreeMeasurement],
     ar: &ArResult,
-) -> Option<(Vector3<f64>, Matrix3<f64>)> {
+) -> IonoFreeOutcome {
     let n1: HashMap<DoubleDiffKey, f64> = ar.fixed_ambiguities.iter()
         .filter(|(k, _)| k.freq_band == 1)
         .map(|(k, v)| (*k, *v))
@@ -131,9 +144,12 @@ pub fn apply_fixed_iono_free(
     // strong conditional per-band fix. Activates once the AR fixes both
     // bands on most pairs (better float ambiguity quality).
     if h_rows.len() < 6 {
-        return None;
+        return IonoFreeOutcome::NotEngaged;
     }
-    solve_position_lsq(cur_pos, &h_rows, &y_vals, &r_diag, &state.extract_pos_cov())
+    match solve_position_lsq(cur_pos, &h_rows, &y_vals, &r_diag, &state.extract_pos_cov()) {
+        Some((pos, cov)) => IonoFreeOutcome::Solution(pos, cov),
+        None => IonoFreeOutcome::Rejected,
+    }
 }
 
 /// Solve the fixed iono-free position as a MAP estimate: the float position
@@ -263,8 +279,69 @@ mod tests {
             fixed_ambiguities: fixed,
         };
 
-        let (pos, _) = apply_fixed_iono_free(&state, &meas, &ar).expect("IF fix should succeed");
+        let (pos, _) = match apply_fixed_iono_free(&state, &meas, &ar) {
+            IonoFreeOutcome::Solution(p, c) => (p, c),
+            _ => panic!("IF stage should produce a solution"),
+        };
         let err = (pos - true_pos).norm();
         assert!(err < 0.01, "IF fixed position should recover truth under iono, got {:.4}m", err);
+    }
+
+    #[test]
+    fn test_rejected_when_integers_shifted_by_common_mode_slip() {
+        // Same fixture as above but every N1 and N2 shifted +1: the common
+        // mode cancels in N1-N2 (widelane-blind) yet biases the iono-free
+        // combination by a full cycle, which the residual gate must reject.
+        let true_pos = Vector3::new(100.0, 200.0, 300.0);
+        let base_pos = Vector3::new(0.0, 0.0, 0.0);
+        let state = RtkState::new(true_pos, GpsTime::new(2000, 100.0));
+
+        let sats: [(Vector3<f64>, f64, f64); 6] = [
+            (Vector3::new(10_000.0, 20_000.0, 20_000.0), 1.0, 2.0),
+            (Vector3::new(25_000.0, 5_000.0, 18_000.0), 3.0, -1.0),
+            (Vector3::new(8_000.0, 30_000.0, 12_000.0), -2.0, 4.0),
+            (Vector3::new(20_000.0, 12_000.0, 25_000.0), 2.0, 0.0),
+            (Vector3::new(15_000.0, 22_000.0, 15_000.0), 0.0, -2.0),
+            (Vector3::new(22_000.0, 18_000.0, 22_000.0), 4.0, 1.0),
+        ];
+        let ref_pos = Vector3::new(30_000.0, 5_000.0, 10_000.0);
+        let lambda1 = SPEED_OF_LIGHT_M_S / F1;
+        let lambda2 = SPEED_OF_LIGHT_M_S / F2;
+
+        let mut meas = Vec::new();
+        for (i, (sat_pos, n1, n2)) in sats.iter().enumerate() {
+            let geom = (*sat_pos - true_pos).norm() - (ref_pos - true_pos).norm();
+            let dd1 = geom / lambda1; // integer-free phases: truth-consistent
+            let dd2 = geom / lambda2;
+            meas.push((make_key(2 + i as u16), *sat_pos, combine_iono_free(F1, F2, dd1, dd2), *n1 + 1.0, *n2 + 1.0));
+        }
+        let if_meas: Vec<IonoFreeMeasurement> = meas.iter().map(|(k, sat_pos, phase_if, _, _)| {
+            IonoFreeMeasurement {
+                key: *k,
+                sat_pos: *sat_pos,
+                ref_pos,
+                base_pos,
+                lambda_if: lambda_iono_free(F1, F2),
+                f1_hz: F1,
+                f2_hz: F2,
+                dd_phase_if_cycles: *phase_if,
+                variance_cycles2: 1e-4,
+            }
+        }).collect();
+        let fixed: Vec<(DoubleDiffKey, f64)> = meas.iter()
+            .flat_map(|(k, _, _, n1, n2)| vec![(*k, *n1), (DoubleDiffKey { freq_band: 2, ..*k }, *n2)])
+            .collect();
+        let ar = ArResult {
+            position_ecef: true_pos,
+            cov_position: Matrix3::identity(),
+            ratio: 3.0,
+            is_fixed: true,
+            num_ambiguities: 12,
+            fixed_ambiguities: fixed,
+        };
+        assert!(matches!(
+            apply_fixed_iono_free(&state, &if_meas, &ar),
+            IonoFreeOutcome::Rejected
+        ));
     }
 }

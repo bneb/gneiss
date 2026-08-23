@@ -28,13 +28,14 @@ pub fn run_backward_pass(
     imu_samples: Option<&[ImuSample]>,
     initial_rover_pos: Option<Vector3<f64>>,
     q_accel: Option<f64>,
+    widelane_ar: bool,
 ) -> BTreeMap<u64, FilteredEpoch> {
     if imu_samples.is_none() && base_pos.is_some() && base_epochs.is_some() {
         if let Some(bp) = base_pos {
             let init_p = initial_rover_pos.unwrap_or_else(|| {
                 compute_initial_position(rover_epochs, ephemerides, bp)
             });
-            return run_backward_iekf(ephemerides, rover_epochs, base_epochs.unwrap_or(&[]), bp, init_p, q_accel.unwrap_or(1.0));
+            return run_backward_iekf(ephemerides, rover_epochs, base_epochs.unwrap_or(&[]), bp, init_p, q_accel.unwrap_or(1.0), widelane_ar);
         }
     }
 
@@ -69,6 +70,7 @@ fn run_backward_iekf(
     base_pos: Vector3<f64>,
     initial_rover_pos: Vector3<f64>,
     q_accel: f64,
+    widelane_ar: bool,
 ) -> BTreeMap<u64, FilteredEpoch> {
     let mut results = BTreeMap::new();
     if rover_epochs.is_empty() {
@@ -79,6 +81,16 @@ fn run_backward_iekf(
     rev_epochs.reverse();
 
     let mut iekf = GnssRtkIekf::new(initial_rover_pos, rev_epochs[0].time, q_accel);
+    iekf.widelane_ar = widelane_ar;
+
+    // Opt-in only: keep the legacy path byte-exact (see forward pass).
+    let cadence = if widelane_ar {
+        crate::post_process::screening::infer_cadence_hint(rover_epochs)
+    } else {
+        None
+    };
+    iekf.slip_detector.cadence_hint_s = cadence;
+    iekf.base_slip_detector.cadence_hint_s = cadence;
 
     for epoch in &rev_epochs {
         let tow_ms = (epoch.time.tow * 1000.0).round() as u64;
@@ -245,7 +257,7 @@ mod tests {
     #[test]
     fn test_empty_backward_pass_runs() {
         let config = EngineConfig::Spp(Default::default());
-        let results = run_backward_pass(&config, &[], None, &[], None, None, None, None, None);
+        let results = run_backward_pass(&config, &[], None, &[], None, None, None, None, None, false);
         assert!(results.is_empty());
     }
 }

@@ -9,6 +9,7 @@
 pub mod backward;
 pub mod combiner;
 pub mod forward;
+pub mod network;
 pub mod quality;
 pub mod screening;
 
@@ -49,6 +50,11 @@ pub struct PostProcessOptions {
     /// re-randomizes position ~55 m per epoch and prevents the float
     /// solution from converging.
     pub q_accel: Option<f64>,
+    /// Opt-in Melbourne–Wübbena wide-lane cascade AR for long baselines.
+    /// Default off (bit-identical legacy path); when on, it only affects
+    /// epochs the joint FAR/PAR left float, and requires six confidently
+    /// fixed wide-lane pairs before claiming a fix.
+    pub widelane_ar: bool,
 }
 
 /// Execute the complete offline post-processing pipeline.
@@ -75,14 +81,14 @@ pub fn execute_post_process(
 
     // Pass 2: Forward Pass
     let forward_traj = forward::run_forward_pass(
-        config, ephemerides, klob, rover_epochs, base_epochs, base_pos, imu_samples, options.initial_rover_position, options.q_accel,
+        config, ephemerides, klob, rover_epochs, base_epochs, base_pos, imu_samples, options.initial_rover_position, options.q_accel, options.widelane_ar,
     );
 
     // Pass 3: Backward Pass (if enabled)
     let backward_map = if options.enable_bidirectional {
         let initial_rover_pos = forward_traj.last().map(|e| e.position_ecef);
         backward::run_backward_pass(
-            config, ephemerides, klob, rover_epochs, base_epochs, base_pos, imu_samples, initial_rover_pos, options.q_accel,
+            config, ephemerides, klob, rover_epochs, base_epochs, base_pos, imu_samples, initial_rover_pos, options.q_accel, options.widelane_ar,
         )
     } else {
         std::collections::BTreeMap::new()

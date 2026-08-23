@@ -51,6 +51,7 @@ pub async fn run_process(
             klobuchar_alpha: klobuchar.as_ref().map(|k| k.alpha),
             klobuchar_beta: klobuchar.as_ref().map(|k| k.beta),
             q_accel: None,
+            widelane_ar: false,
         };
         let post_res = gneiss_rtk::post_process::execute_post_process(
             &swfg_config,

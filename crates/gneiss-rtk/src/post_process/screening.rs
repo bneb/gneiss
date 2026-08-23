@@ -31,6 +31,11 @@ pub struct CycleSlipDetector {
     prev_gf_m: HashMap<SatelliteId, f64>,
     prev_cp_tow: HashMap<SatelliteId, (f64, f64)>,
     slip_counts: HashMap<SatelliteId, u32>,
+    /// Nominal epoch spacing in seconds. None (default) keeps the exact
+    /// legacy fixed 2 s gap rule; slow-cadence streams (e.g. 30 s CORS)
+    /// need a hint, otherwise EVERY epoch trips the gap test and ambiguity
+    /// states are re-seeded each epoch, preventing float convergence.
+    pub cadence_hint_s: Option<f64>,
 }
 
 impl CycleSlipDetector {
@@ -76,7 +81,12 @@ impl CycleSlipDetector {
     fn check_time_gap(&mut self, sat: SatelliteId, cp1: Option<f64>, tow: f64) -> bool {
         if cp1.is_none() { return false; }
         let is_slip = if let Some(&(prev_cp, prev_tow)) = self.prev_cp_tow.get(&sat) {
-            (tow - prev_tow).abs() > 2.0 || (cp1.unwrap_or(0.0) - prev_cp).abs() > 1e7
+            let dt = (tow - prev_tow).abs();
+            // A data gap is an interval far beyond the stream's nominal
+            // epoch spacing. With no cadence hint this is the exact legacy
+            // rule (dt > 2 s); with a hint, the floor scales with spacing.
+            let gap_threshold = self.cadence_hint_s.map_or(2.0, |c| (2.0 * c).max(2.0));
+            dt > gap_threshold || (cp1.unwrap_or(0.0) - prev_cp).abs() > 1e7
         } else {
             false
         };
@@ -157,6 +167,23 @@ impl StationaryDetector {
     }
 }
 
+/// Infer a stream's nominal epoch spacing from consecutive TOWs.
+///
+/// Returns Some(median) only when the spacing exceeds the legacy 2 s gap
+/// threshold — fast streams get None and keep byte-exact legacy behavior.
+pub fn infer_cadence_hint(epochs: &[EpochObs]) -> Option<f64> {
+    let mut diffs: Vec<f64> = epochs.windows(2)
+        .map(|w| w[1].time.tow - w[0].time.tow)
+        .filter(|d| *d > 0.01)
+        .collect();
+    if diffs.len() < 5 {
+        return None;
+    }
+    diffs.sort_by(|a, b| a.total_cmp(b));
+    let median = diffs[diffs.len() / 2];
+    (median > 2.0).then_some(median)
+}
+
 /// Screen rover and base observation datasets prior to filtering.
 pub fn screen_dataset(
     rover_epochs: &[EpochObs],
@@ -219,6 +246,40 @@ mod tests {
         assert!(!detector.check_time_gap(sat, Some(100.0), 10.0));
         assert!(!detector.check_time_gap(sat, Some(101.0), 11.0));
         assert!(detector.check_time_gap(sat, Some(102.0), 15.0)); // 4-second gap
+    }
+
+    #[test]
+    fn test_slow_cadence_stream_does_not_flag_every_epoch() {
+        let mut detector = CycleSlipDetector::new();
+        detector.cadence_hint_s = Some(30.0);
+        let sat = SatelliteId { constellation: Constellation::Gps, prn: 1 };
+        // With a 30 s cadence hint, regular epochs never trip the gap test
+        // (the legacy fixed 2 s threshold flagged all of them, re-seeding
+        // ambiguities forever), while genuine outages still do.
+        assert!(!detector.check_time_gap(sat, Some(5e6), 0.0));
+        for k in 1..10 {
+            assert!(!detector.check_time_gap(sat, Some(5e6), 30.0 * k as f64));
+        }
+        assert!(detector.check_time_gap(sat, Some(5e6), 30.0 * 12.0)); // dt=90 s
+        // And an unhinted detector keeps the exact legacy rule.
+        let mut legacy = CycleSlipDetector::new();
+        let fast = SatelliteId { constellation: Constellation::Gps, prn: 2 };
+        assert!(!legacy.check_time_gap(fast, Some(1.0), 100.0));
+        assert!(!legacy.check_time_gap(fast, Some(1.1), 101.0));
+        assert!(legacy.check_time_gap(fast, Some(1.2), 103.5)); // 2.5 s gap
+    }
+
+    #[test]
+    fn test_infer_cadence_hint_only_for_slow_streams() {
+        let mk = |tows: &[f64]| tows.iter()
+            .map(|&t| EpochObs { time: GpsTime::new(2000, t), satellites: Vec::new() })
+            .collect::<Vec<_>>();
+        let fast = mk(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+        assert_eq!(infer_cadence_hint(&fast), None);
+        let slow = mk(&[0.0, 30.0, 60.0, 90.0, 120.0, 150.0, 180.0]);
+        assert_eq!(infer_cadence_hint(&slow), Some(30.0));
+        let short = mk(&[0.0, 30.0]);
+        assert_eq!(infer_cadence_hint(&short), None);
     }
 
     #[test]

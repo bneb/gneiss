@@ -29,7 +29,7 @@ use nalgebra::Vector3;
 use gneiss_core::ephemeris::Ephemeris;
 use gneiss_core::obs::EpochObs;
 use gneiss_core::time::GpsTime;
-use gneiss_rtk::post_process::{execute_post_process, PostProcessOptions, SmoothedEpoch};
+use gneiss_rtk::post_process::{execute_post_process, network, PostProcessOptions, SmoothedEpoch};
 use gneiss_rtk::swfg::config::EngineConfig;
 
 const ROVER_FILE: &str = "p2241350.20o";
@@ -90,20 +90,39 @@ fn horizontal_error(pos: Vector3<f64>, truth: Vector3<f64>) -> f64 {
     (ned.x * ned.x + ned.y * ned.y).sqrt()
 }
 
-fn print_stats(name: &str, mut h_errs: Vec<f64>, mut d3_errs: Vec<f64>, fix_count: usize, total_count: usize) -> [f64; 4] {
+/// Signed up-axis error (m): positive = solution above truth. The vertical
+/// axis is where residual troposphere shows up first in RTK.
+fn vertical_error(pos: Vector3<f64>, truth: Vector3<f64>) -> f64 {
+    let llh = gneiss_core::coords::ecef_to_llh(truth);
+    let ned = gneiss_core::coords::ecef_to_ned_matrix(llh) * (pos - truth);
+    -ned.z
+}
+
+fn print_stats(
+    name: &str,
+    mut h_errs: Vec<f64>,
+    mut d3_errs: Vec<f64>,
+    mut up_errs: Vec<f64>,
+    fix_count: usize,
+    total_count: usize,
+) -> [f64; 4] {
     if h_errs.is_empty() {
         return [0.0; 4];
     }
     h_errs.sort_by(|a, b| a.total_cmp(b));
     d3_errs.sort_by(|a, b| a.total_cmp(b));
+    up_errs.sort_by(|a, b| a.total_cmp(b));
     let n = h_errs.len();
     let p50 = h_errs[n / 2];
     let p68 = h_errs[(n as f64 * 0.68) as usize];
     let p95 = h_errs[(n as f64 * 0.95) as usize];
     let rms = (h_errs.iter().map(|e| e * e).sum::<f64>() / n as f64).sqrt();
+    let up_p50 = up_errs[n / 2];
+    let up_rms = (up_errs.iter().map(|e| e * e).sum::<f64>() / n as f64).sqrt();
     let fix_pct = (fix_count as f64 / total_count.max(1) as f64) * 100.0;
     println!("=== {} (N={}, Fixed={}/{} [{:.1}%]) ===", name, n, fix_count, total_count, fix_pct);
     println!("Horizontal Error:  p50={:.3}m,  p68={:.3}m,  p95={:.3}m,  RMS={:.3}m", p50, p68, p95, rms);
+    println!("Vertical Error:    p50={:+.3}m,  RMS={:.3}m", up_p50, up_rms);
     println!("3D Position Error: p50={:.3}m,  p95={:.3}m", d3_errs[n / 2], d3_errs[(n as f64 * 0.95) as usize]);
     [p50, p68, p95, rms]
 }
@@ -118,9 +137,10 @@ fn print_fixed_stats(name: &str, mut h_errs: Vec<f64>) -> f64 {
     p50
 }
 
-fn collect_errors(traj: &[SmoothedEpoch], truth: &Truth) -> (Vec<f64>, Vec<f64>, usize, Vec<f64>) {
+fn collect_errors(traj: &[SmoothedEpoch], truth: &Truth) -> (Vec<f64>, Vec<f64>, Vec<f64>, usize, Vec<f64>) {
     let mut h_errs = Vec::new();
     let mut d3_errs = Vec::new();
+    let mut up_errs = Vec::new();
     let mut fixed_errs = Vec::new();
     let mut fix = 0;
     for ep in traj {
@@ -133,13 +153,14 @@ fn collect_errors(traj: &[SmoothedEpoch], truth: &Truth) -> (Vec<f64>, Vec<f64>,
             if h < 100.0 {
                 h_errs.push(h);
                 d3_errs.push((ep.position_ecef - t).norm());
+                up_errs.push(vertical_error(ep.position_ecef, t));
                 if ep.quality == 1 {
                     fixed_errs.push(h);
                 }
             }
         }
     }
-    (h_errs, d3_errs, fix, fixed_errs)
+    (h_errs, d3_errs, up_errs, fix, fixed_errs)
 }
 
 struct RunContext<'a> {
@@ -157,7 +178,7 @@ fn run_pass(
     base: &NetworkBase,
     label: &str,
     bidir: bool,
-) -> [f64; 4] {
+) -> ([f64; 4], Vec<SmoothedEpoch>) {
     let options = PostProcessOptions {
         enable_bidirectional: bidir,
         base_position: Some(base.base_pos),
@@ -168,42 +189,69 @@ fn run_pass(
         // epoch and keeps the float solution from converging (ambiguity
         // floats sit 0.4+ cycles off, blocking AR). 1e-6 allows slow drift.
         q_accel: Some(1e-6),
+        // Long baselines need iono-immune fixing: MW wide-lane cascade AR
+        // unlocks the iono-free stage beyond ~20 km.
+        widelane_ar: std::env::var("WL_DISABLE").is_err(),
     };
     let res = match execute_post_process(config, ctx.ephemerides, rover, Some(base_epochs), None, &options) {
         Ok(r) => r,
         Err(e) => {
             eprintln!("{} pass failed for {}: {}", label, base.id, e);
-            return [0.0; 4];
+            return ([0.0; 4], Vec::new());
         }
     };
-    let (h, d3, fix, fixed_errs) = collect_errors(&res.trajectory, ctx.truth);
-    let stats = print_stats(&format!("{} RTK [{}] ({:.1} km)", label, base.id, base.baseline_km), h, d3, fix, res.trajectory.len());
+    // Honesty gating on the fused bidirectional product: an excursion that
+    // jumps beyond what a static monument can do is reported as float, both
+    // in these stats and downstream in network consensus.
+    let mut traj = res.trajectory;
+    if bidir && options.widelane_ar {
+        traj = gneiss_rtk::post_process::network::apply_continuity_gate(
+            traj,
+            gneiss_rtk::post_process::network::CONTINUITY_JUMP_M,
+            gneiss_rtk::post_process::network::CONTINUITY_MAX_DT_S,
+        );
+    }
+    let (h, d3, up_errs, fix, fixed_errs) = collect_errors(&traj, ctx.truth);
+    if std::env::var("WL_OUTLIERS").is_ok() {
+        for ep in &traj {
+            if let Some(&t) = ctx.truth.get(&(ep.time.tow.round() as u32)) {
+                let herr = horizontal_error(ep.position_ecef, t);
+                if herr > 1.0 {
+                    eprintln!(
+                        "OUTLIER {} {} tow={:.0} h={:.2} q={} sep={:.1} nsat={}",
+                        label, base.id, ep.time.tow, herr, ep.quality, ep.separation_3d, ep.n_satellites,
+                    );
+                }
+            }
+        }
+    }
+    let stats = print_stats(&format!("{} RTK [{}] ({:.1} km)", label, base.id, base.baseline_km), h, d3, up_errs, fix, traj.len());
     print_fixed_stats(label, fixed_errs);
-    stats
+    (stats, traj)
 }
 
-fn run_base(base: &NetworkBase, dir: &Path, ctx: &RunContext, rover: &[EpochObs]) -> [f64; 8] {
+fn run_base(base: &NetworkBase, dir: &Path, ctx: &RunContext, rover: &[EpochObs]) -> ([f64; 8], Vec<SmoothedEpoch>) {
     let base_f = match File::open(dir.join(base.base_file)) {
         Ok(f) => f,
         Err(e) => {
             eprintln!("Failed to open {}: {}", base.base_file, e);
-            return [0.0; 8];
+            return ([0.0; 8], Vec::new());
         }
     };
     let Ok((base_epochs, _)) = gneiss_parsers::rinex::parse_rinex_obs(BufReader::new(base_f)) else {
         eprintln!("Failed to parse {}", base.base_file);
-        return [0.0; 8];
+        return ([0.0; 8], Vec::new());
     };
     let config = EngineConfig::Rtk(gneiss_rtk::swfg::config::RtkConfig {
         initial_position: Some([base.base_pos.x, base.base_pos.y, base.base_pos.z]),
         ..Default::default()
     });
-    let fwd = run_pass(&config, ctx, rover, &base_epochs, base, "Forward", false);
-    let smooth = run_pass(&config, ctx, rover, &base_epochs, base, "Smoothed", true);
+    let (fwd, _fwd_traj) = run_pass(&config, ctx, rover, &base_epochs, base, "Forward", false);
+    let (smooth, smooth_traj) = run_pass(&config, ctx, rover, &base_epochs, base, "Smoothed", true);
     let mut out = [0.0; 8];
     out[..4].copy_from_slice(&fwd);
     out[4..].copy_from_slice(&smooth);
-    out
+    (out, smooth_traj)
 }
 
 fn print_summary(results: &[(&NetworkBase, [f64; 8])], n_epochs: usize) {
@@ -253,7 +301,7 @@ fn load_dataset(dir: &Path) -> Result<Dataset, String> {
 
 fn main() {
     tracing_subscriber::fmt()
-        .with_env_filter("warn")
+        .with_env_filter(std::env::var("RUST_LOG").unwrap_or_else(|_| "warn".to_string()))
         .with_target(false)
         .without_time()
         .try_init()
@@ -273,11 +321,29 @@ fn main() {
     let ctx = RunContext { ephemerides: &data.ephemerides, truth: &data.truth, rover_init: None, klob: data.klob };
     let selected_rover = select_rover_epochs(&data.rover_epochs);
     let mut results = Vec::new();
+    let mut base_trajs: Vec<Vec<SmoothedEpoch>> = Vec::new();
+    let only = std::env::var("WL_ONLY_BASE").ok();
     for base in BASES {
-        let stats = run_base(base, dir, &ctx, selected_rover);
+        if let Some(want) = &only { if base.id != want.as_str() { continue; } }
+        let (stats, traj) = run_base(base, dir, &ctx, selected_rover);
         if stats.iter().any(|s| *s > 0.0) {
             results.push((base, stats));
         }
+        if !traj.is_empty() {
+            base_trajs.push(traj);
+        }
     }
     print_summary(&results, selected_rover.len());
+
+    // Multi-base network consensus: combine all per-base smoothed
+    // solutions into a single network product and report it.
+    if base_trajs.len() >= 2 {
+        let fused = network::fuse_network_solutions(
+            &base_trajs, &network::NetworkConsensusConfig::default(),
+        );
+        let gated = network::apply_continuity_gate(fused, 0.20, 90.0);
+        let (h, d3, up_errs, fix, fixed_errs) = collect_errors(&gated, ctx.truth);
+        print_stats(&format!("NETWORK FUSED [{} bases]", base_trajs.len()), h, d3, up_errs, fix, gated.len());
+        print_fixed_stats("Network", fixed_errs);
+    }
 }

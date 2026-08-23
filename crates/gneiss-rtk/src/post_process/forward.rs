@@ -39,10 +39,11 @@ pub fn run_forward_pass(
     imu_samples: Option<&[ImuSample]>,
     initial_rover_pos: Option<Vector3<f64>>,
     q_accel: Option<f64>,
+    widelane_ar: bool,
 ) -> Vec<FilteredEpoch> {
     if imu_samples.is_none() && base_pos.is_some() && base_epochs.is_some() {
         if let Some(bp) = base_pos {
-            return run_forward_iekf(ephemerides, rover_epochs, base_epochs.unwrap_or(&[]), bp, initial_rover_pos, q_accel.unwrap_or(1.0));
+            return run_forward_iekf(ephemerides, rover_epochs, base_epochs.unwrap_or(&[]), bp, initial_rover_pos, q_accel.unwrap_or(1.0), widelane_ar);
         }
     }
 
@@ -56,6 +57,7 @@ fn run_forward_iekf(
     base_pos: Vector3<f64>,
     initial_rover_pos: Option<Vector3<f64>>,
     q_accel: f64,
+    widelane_ar: bool,
 ) -> Vec<FilteredEpoch> {
     if rover_epochs.is_empty() {
         return Vec::new();
@@ -64,6 +66,17 @@ fn run_forward_iekf(
         compute_initial_position(rover_epochs, ephemerides, base_pos)
     });
     let mut iekf = GnssRtkIekf::new(init_pos, rover_epochs[0].time, q_accel);
+    iekf.widelane_ar = widelane_ar;
+
+    // The cadence hint changes slip-gating behavior, so it applies only on
+    // the opt-in long-baseline path; the legacy path stays byte-exact.
+    let cadence = if widelane_ar {
+        crate::post_process::screening::infer_cadence_hint(rover_epochs)
+    } else {
+        None
+    };
+    iekf.slip_detector.cadence_hint_s = cadence;
+    iekf.base_slip_detector.cadence_hint_s = cadence;
     let mut results = Vec::with_capacity(rover_epochs.len());
 
     for epoch in rover_epochs {

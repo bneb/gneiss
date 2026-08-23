@@ -18,12 +18,16 @@ pub struct DoubleDiffKey {
 ///   x[0..3] — Position ECEF (m)
 ///   x[3..6] — Velocity ECEF (m/s)
 ///   x[6..]  — Double-difference carrier phase ambiguities (cycles)
+///   x[last] — Rover ZWD residual (m), only when enabled (long-baseline
+///     mode): non-dispersive wet-delay mis-modelling, random walk.
 #[derive(Debug, Clone)]
 pub struct RtkState {
     pub time: GpsTime,
     pub pos_ecef: Vector3<f64>,
     pub vel_ecef: Vector3<f64>,
     pub ambiguities: Vec<(DoubleDiffKey, f64)>,
+    pub zwd_enabled: bool,
+    pub zwd_m: f64,
     pub cov: DMatrix<f64>,
 }
 
@@ -43,18 +47,48 @@ impl RtkState {
             pos_ecef: initial_pos,
             vel_ecef: Vector3::zeros(),
             ambiguities: Vec::new(),
+            zwd_enabled: false,
+            zwd_m: 0.0,
             cov,
         }
     }
 
     /// Total dimension of the state vector.
     pub fn dim(&self) -> usize {
-        6 + self.ambiguities.len()
+        6 + self.ambiguities.len() + self.zwd_enabled as usize
+    }
+
+    /// Column offset applied to ambiguity indices (1 when ZWD present).
+    /// Layout with ZWD: [pos, vel, zwd@6, ambs@7..]; without: legacy layout.
+    pub fn amb_offset(&self) -> usize {
+        6 + self.zwd_enabled as usize
+    }
+
+    /// Column index of the ZWD state, when present.
+    pub fn zwd_idx(&self) -> Option<usize> {
+        self.zwd_enabled.then_some(6)
+    }
+
+    /// Enable the rover ZWD residual state. Must be called before any
+    /// ambiguities exist (i.e., at engine construction): the column is
+    /// reserved at index 6 and every ambiguity shifts behind it.
+    pub fn enable_zwd(&mut self, init_var: f64) {
+        if self.zwd_enabled || !self.ambiguities.is_empty() {
+            return;
+        }
+        self.zwd_enabled = true;
+        let old_dim = self.cov.nrows();
+        let new_dim = old_dim + 1;
+        let mut new_cov = DMatrix::zeros(new_dim, new_dim);
+        new_cov.view_range_mut(0..old_dim, 0..old_dim).copy_from(&self.cov);
+        new_cov[(old_dim, old_dim)] = init_var.max(1e-6);
+        self.cov = new_cov;
     }
 
     /// Find index of ambiguity in the state vector.
     pub fn get_amb_idx(&self, key: &DoubleDiffKey) -> Option<usize> {
-        self.ambiguities.iter().position(|(k, _)| k == key).map(|idx| 6 + idx)
+        self.ambiguities.iter().position(|(k, _)| k == key)
+            .map(|idx| self.amb_offset() + idx)
     }
 
     /// Pack current state into a flat DVector.
@@ -66,8 +100,12 @@ impl RtkState {
         vec[3] = self.vel_ecef.x;
         vec[4] = self.vel_ecef.y;
         vec[5] = self.vel_ecef.z;
+        let off = self.amb_offset();
         for (i, (_, val)) in self.ambiguities.iter().enumerate() {
-            vec[6 + i] = *val;
+            vec[off + i] = *val;
+        }
+        if let Some(i) = self.zwd_idx() {
+            vec[i] = self.zwd_m;
         }
         vec
     }
@@ -76,8 +114,12 @@ impl RtkState {
     pub fn update_from_dvector(&mut self, vec: &DVector<f64>) {
         self.pos_ecef = Vector3::new(vec[0], vec[1], vec[2]);
         self.vel_ecef = Vector3::new(vec[3], vec[4], vec[5]);
+        let off = self.amb_offset();
         for (i, (_, val)) in self.ambiguities.iter_mut().enumerate() {
-            *val = vec[6 + i];
+            *val = vec[off + i];
+        }
+        if let Some(i) = self.zwd_idx() {
+            self.zwd_m = vec[i];
         }
     }
 
@@ -98,7 +140,8 @@ impl RtkState {
     /// Reset an ambiguity variance (e.g. after detected cycle slip).
     pub fn reset_ambiguity(&mut self, key: &DoubleDiffKey, initial_val: f64, initial_var: f64) {
         if let Some(idx) = self.get_amb_idx(key) {
-            self.ambiguities[idx - 6].1 = initial_val;
+            let rel = idx - self.amb_offset();
+            self.ambiguities[rel].1 = initial_val;
             // Clear cross-covariances for this ambiguity
             for r in 0..self.cov.nrows() {
                 self.cov[(r, idx)] = 0.0;
@@ -111,14 +154,14 @@ impl RtkState {
     /// Remove stale ambiguities not in the active set.
     pub fn retain_active_ambiguities(&mut self, active_keys: &[DoubleDiffKey]) {
         let mut keep_indices = Vec::with_capacity(6 + active_keys.len());
-        for i in 0..6 {
+        for i in 0..self.amb_offset() {
             keep_indices.push(i);
         }
 
         let mut new_ambs = Vec::new();
         for (i, (key, val)) in self.ambiguities.iter().enumerate() {
             if active_keys.contains(key) {
-                keep_indices.push(6 + i);
+                keep_indices.push(self.amb_offset() + i);
                 new_ambs.push((*key, *val));
             }
         }
@@ -151,13 +194,14 @@ impl RtkState {
 
     /// Extract float ambiguity vector and its covariance submatrix for LAMBDA.
     pub fn extract_amb_block(&self) -> (DVector<f64>, DMatrix<f64>) {
+        let off = self.amb_offset();
         let n_amb = self.ambiguities.len();
         let mut a = DVector::zeros(n_amb);
         let mut q = DMatrix::zeros(n_amb, n_amb);
         for i in 0..n_amb {
             a[i] = self.ambiguities[i].1;
             for j in 0..n_amb {
-                q[(i, j)] = self.cov[(6 + i, 6 + j)];
+                q[(i, j)] = self.cov[(off + i, off + j)];
             }
         }
         (a, q)
