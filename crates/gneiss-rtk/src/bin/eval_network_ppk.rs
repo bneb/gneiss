@@ -164,6 +164,10 @@ fn run_pass(
         initial_rover_position: ctx.rover_init,
         klobuchar_alpha: ctx.klob.map(|k| k.0),
         klobuchar_beta: ctx.klob.map(|k| k.1),
+        // Static monuments: q=1.0 re-randomizes position ~55 m per 30 s
+        // epoch and keeps the float solution from converging (ambiguity
+        // floats sit 0.4+ cycles off, blocking AR). 1e-6 allows slow drift.
+        q_accel: Some(1e-6),
     };
     let res = match execute_post_process(config, ctx.ephemerides, rover, Some(base_epochs), None, &options) {
         Ok(r) => r,

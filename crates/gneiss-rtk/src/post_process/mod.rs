@@ -43,6 +43,12 @@ pub struct PostProcessOptions {
     pub initial_rover_position: Option<Vector3<f64>>,
     pub klobuchar_alpha: Option<[f64; 4]>,
     pub klobuchar_beta: Option<[f64; 4]>,
+    /// Acceleration random-walk process noise (m/s^2). Defaults to 1.0
+    /// (kinematic). Static datasets must pass a small value (e.g. 1e-6):
+    /// at 30 s epochs the position Q scales as dt^3/3 * q, so 1.0
+    /// re-randomizes position ~55 m per epoch and prevents the float
+    /// solution from converging.
+    pub q_accel: Option<f64>,
 }
 
 /// Execute the complete offline post-processing pipeline.
@@ -69,14 +75,14 @@ pub fn execute_post_process(
 
     // Pass 2: Forward Pass
     let forward_traj = forward::run_forward_pass(
-        config, ephemerides, klob, rover_epochs, base_epochs, base_pos, imu_samples, options.initial_rover_position,
+        config, ephemerides, klob, rover_epochs, base_epochs, base_pos, imu_samples, options.initial_rover_position, options.q_accel,
     );
 
     // Pass 3: Backward Pass (if enabled)
     let backward_map = if options.enable_bidirectional {
         let initial_rover_pos = forward_traj.last().map(|e| e.position_ecef);
         backward::run_backward_pass(
-            config, ephemerides, klob, rover_epochs, base_epochs, base_pos, imu_samples, initial_rover_pos,
+            config, ephemerides, klob, rover_epochs, base_epochs, base_pos, imu_samples, initial_rover_pos, options.q_accel,
         )
     } else {
         std::collections::BTreeMap::new()

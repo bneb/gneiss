@@ -27,13 +27,14 @@ pub fn run_backward_pass(
     base_pos: Option<Vector3<f64>>,
     imu_samples: Option<&[ImuSample]>,
     initial_rover_pos: Option<Vector3<f64>>,
+    q_accel: Option<f64>,
 ) -> BTreeMap<u64, FilteredEpoch> {
     if imu_samples.is_none() && base_pos.is_some() && base_epochs.is_some() {
         if let Some(bp) = base_pos {
             let init_p = initial_rover_pos.unwrap_or_else(|| {
                 compute_initial_position(rover_epochs, ephemerides, bp)
             });
-            return run_backward_iekf(ephemerides, rover_epochs, base_epochs.unwrap_or(&[]), bp, init_p);
+            return run_backward_iekf(ephemerides, rover_epochs, base_epochs.unwrap_or(&[]), bp, init_p, q_accel.unwrap_or(1.0));
         }
     }
 
@@ -67,6 +68,7 @@ fn run_backward_iekf(
     base_epochs: &[EpochObs],
     base_pos: Vector3<f64>,
     initial_rover_pos: Vector3<f64>,
+    q_accel: f64,
 ) -> BTreeMap<u64, FilteredEpoch> {
     let mut results = BTreeMap::new();
     if rover_epochs.is_empty() {
@@ -76,7 +78,7 @@ fn run_backward_iekf(
     let mut rev_epochs = rover_epochs.to_vec();
     rev_epochs.reverse();
 
-    let mut iekf = GnssRtkIekf::new(initial_rover_pos, rev_epochs[0].time, 1.0);
+    let mut iekf = GnssRtkIekf::new(initial_rover_pos, rev_epochs[0].time, q_accel);
 
     for epoch in &rev_epochs {
         let tow_ms = (epoch.time.tow * 1000.0).round() as u64;
@@ -243,7 +245,7 @@ mod tests {
     #[test]
     fn test_empty_backward_pass_runs() {
         let config = EngineConfig::Spp(Default::default());
-        let results = run_backward_pass(&config, &[], None, &[], None, None, None, None);
+        let results = run_backward_pass(&config, &[], None, &[], None, None, None, None, None);
         assert!(results.is_empty());
     }
 }

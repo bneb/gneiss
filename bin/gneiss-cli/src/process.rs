@@ -50,6 +50,7 @@ pub async fn run_process(
             initial_rover_position: _rover_approx_pos.map(|p| nalgebra::Vector3::new(p[0], p[1], p[2])),
             klobuchar_alpha: klobuchar.as_ref().map(|k| k.alpha),
             klobuchar_beta: klobuchar.as_ref().map(|k| k.beta),
+            q_accel: None,
         };
         let post_res = gneiss_rtk::post_process::execute_post_process(
             &swfg_config,
