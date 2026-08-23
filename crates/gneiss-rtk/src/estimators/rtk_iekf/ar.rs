@@ -2,7 +2,7 @@
 
 use nalgebra::{DMatrix, DVector, Matrix3, Vector3};
 use crate::ambiguity::{ffrt, lambda};
-use super::state::RtkState;
+use super::state::{DoubleDiffKey, RtkState};
 
 /// Result of ambiguity resolution attempt for an epoch.
 #[derive(Debug, Clone)]
@@ -12,9 +12,17 @@ pub struct ArResult {
     pub ratio: f64,
     pub is_fixed: bool,
     pub num_ambiguities: usize,
+    /// Integer values of the fixed ambiguity subset, keyed by DD pair.
+    pub fixed_ambiguities: Vec<(DoubleDiffKey, f64)>,
 }
 
 /// Attempt integer ambiguity resolution (FAR + PAR) on the current float state.
+///
+/// Resolution runs jointly over all bands: per-band LAMBDA with the looser
+/// FFRT thresholds accepts integer vectors whose elements sit 0.4-2+ cycles
+/// off their float values (the float DD ambiguities carry unmodeled bias),
+/// which biases the conditional position by decimetres. The joint threshold
+/// is conservative but only ever fixes near-integer subsets.
 pub fn resolve_ambiguities(state: &RtkState, min_ambiguities: usize, target_pf: f64) -> ArResult {
     let (a_float, q_amb) = state.extract_amb_block();
     let n_amb = a_float.len();
@@ -30,8 +38,9 @@ pub fn resolve_ambiguities(state: &RtkState, min_ambiguities: usize, target_pf: 
         let thresh = ffrt::calculate_threshold(n_amb, target_pf);
         if l_res.ratio >= thresh {
             let full_idx: Vec<usize> = (0..n_amb).collect();
+            let fixed = fixed_subset_ambiguities(state, &full_idx, &l_res.best_integers);
             if let Some((pos, cov)) = project_subset_fixed(state, &a_float, &l_res.best_integers, &q_amb, &full_idx) {
-                return ArResult { position_ecef: pos, cov_position: cov, ratio: l_res.ratio, is_fixed: true, num_ambiguities: n_amb };
+                return ArResult { position_ecef: pos, cov_position: cov, ratio: l_res.ratio, is_fixed: true, num_ambiguities: n_amb, fixed_ambiguities: fixed };
             }
         }
     }
@@ -51,7 +60,14 @@ fn build_float_result(pos: Vector3<f64>, cov: Matrix3<f64>, ratio: f64, n_amb: u
         ratio,
         is_fixed: false,
         num_ambiguities: n_amb,
+        fixed_ambiguities: Vec::new(),
     }
+}
+
+fn fixed_subset_ambiguities(state: &RtkState, indices: &[usize], integers: &DVector<f64>) -> Vec<(DoubleDiffKey, f64)> {
+    indices.iter().enumerate()
+        .map(|(i, &idx)| (state.ambiguities[idx].0, integers[i]))
+        .collect()
 }
 
 fn try_partial_ar(
@@ -78,12 +94,14 @@ fn try_partial_ar(
             let thresh = ffrt::calculate_threshold(k, target_pf);
             if l_res.ratio >= thresh {
                 if let Some((pos, cov)) = project_subset_fixed(state, &sub_a, &l_res.best_integers, &sub_q, subset_idx) {
+                    let fixed = fixed_subset_ambiguities(state, subset_idx, &l_res.best_integers);
                     return Some(ArResult {
                         position_ecef: pos,
                         cov_position: cov,
                         ratio: l_res.ratio,
                         is_fixed: true,
                         num_ambiguities: k,
+                        fixed_ambiguities: fixed,
                     });
                 }
             }

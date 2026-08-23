@@ -102,6 +102,23 @@ fn build_measurement_system(
     assemble_matrices(h_rows, y_vals, r_diag, state_dim)
 }
 
+/// Double-difference troposphere delay (Saastamoinen, RTKLIB coefficients).
+pub(crate) fn compute_tropo_dd(
+    sat_pos: Vector3<f64>,
+    ref_pos: Vector3<f64>,
+    base_pos: Vector3<f64>,
+    rx_pos: Vector3<f64>,
+) -> f64 {
+    let rx_llh = gneiss_core::coords::ecef_to_llh(rx_pos);
+    let bs_llh = gneiss_core::coords::ecef_to_llh(base_pos);
+    let params = gneiss_core::atmosphere::TropoParams::default();
+    let t_rs = gneiss_core::atmosphere::AtmosphereModel::tropo_rtklib_saastamoinen(&params, rx_llh, gneiss_core::coords::az_el(rx_llh, rx_pos, sat_pos).1);
+    let t_rr = gneiss_core::atmosphere::AtmosphereModel::tropo_rtklib_saastamoinen(&params, rx_llh, gneiss_core::coords::az_el(rx_llh, rx_pos, ref_pos).1);
+    let t_bs = gneiss_core::atmosphere::AtmosphereModel::tropo_rtklib_saastamoinen(&params, bs_llh, gneiss_core::coords::az_el(bs_llh, base_pos, sat_pos).1);
+    let t_br = gneiss_core::atmosphere::AtmosphereModel::tropo_rtklib_saastamoinen(&params, bs_llh, gneiss_core::coords::az_el(bs_llh, base_pos, ref_pos).1);
+    (t_rs - t_rr) - (t_bs - t_br)
+}
+
 #[allow(clippy::too_many_arguments)]
 fn append_dd_meas_rows(
     m: &DoubleDiffMeasurement,
@@ -116,20 +133,7 @@ fn append_dd_meas_rows(
     let base_dd = (m.sat_pos - m.base_pos).norm() - (m.ref_pos - m.base_pos).norm();
     let r_sat = (m.sat_pos - cur_pos).norm();
     let r_ref = (m.ref_pos - cur_pos).norm();
-
-    let rx_llh = gneiss_core::coords::ecef_to_llh(cur_pos);
-    let bs_llh = gneiss_core::coords::ecef_to_llh(m.base_pos);
-    let (_az_rs, el_rs) = gneiss_core::coords::az_el(rx_llh, cur_pos, m.sat_pos);
-    let (_az_rr, el_rr) = gneiss_core::coords::az_el(rx_llh, cur_pos, m.ref_pos);
-    let (_az_bs, el_bs) = gneiss_core::coords::az_el(bs_llh, m.base_pos, m.sat_pos);
-    let (_az_br, el_br) = gneiss_core::coords::az_el(bs_llh, m.base_pos, m.ref_pos);
-
-    let params = gneiss_core::atmosphere::TropoParams::default();
-    let t_rs = gneiss_core::atmosphere::AtmosphereModel::tropo_rtklib_saastamoinen(&params, rx_llh, el_rs);
-    let t_rr = gneiss_core::atmosphere::AtmosphereModel::tropo_rtklib_saastamoinen(&params, rx_llh, el_rr);
-    let t_bs = gneiss_core::atmosphere::AtmosphereModel::tropo_rtklib_saastamoinen(&params, bs_llh, el_bs);
-    let t_br = gneiss_core::atmosphere::AtmosphereModel::tropo_rtklib_saastamoinen(&params, bs_llh, el_br);
-    let trop_dd = (t_rs - t_rr) - (t_bs - t_br);
+    let trop_dd = compute_tropo_dd(m.sat_pos, m.ref_pos, m.base_pos, cur_pos);
 
     let geom_dd = (r_sat - r_ref) - base_dd + trop_dd;
 

@@ -1,6 +1,7 @@
 //! Double-Difference Iterated Extended Kalman Filter (DD-IEKF) and RTS Smoother Engine.
 
 pub mod ar;
+pub mod iono_free;
 pub mod predict;
 pub mod smoother;
 pub mod state;
@@ -21,6 +22,13 @@ pub use ar::{resolve_ambiguities, ArResult};
 pub use smoother::{run_rts_smoother, IekfSnapshot};
 pub use state::{DoubleDiffKey, RtkState};
 pub use update::{iekf_update, DoubleDiffMeasurement};
+
+/// Per-epoch double-difference measurement set (per-band + iono-free).
+struct DdMeasurements {
+    pub dd: Vec<DoubleDiffMeasurement>,
+    pub iono_free: Vec<iono_free::IonoFreeMeasurement>,
+    pub active_keys: Vec<DoubleDiffKey>,
+}
 
 /// Double-Difference IEKF and RTS Smoother engine for RTK/PPK.
 pub struct GnssRtkIekf {
@@ -58,21 +66,32 @@ impl GnssRtkIekf {
         ephems: &[Ephemeris],
     ) -> Result<FilteredEpoch, String> {
         self.slip_detector.check_epoch(rover);
-        let (meas, active_keys) = self.build_dd_measurements(rover, base, base_pos, ephems)?;
-        if meas.is_empty() {
+        let dd_meas = self.build_dd_measurements(rover, base, base_pos, ephems)?;
+        if dd_meas.dd.is_empty() {
             return Err("No valid double-difference measurements formed".to_string());
         }
 
-        self.state.retain_active_ambiguities(&active_keys);
+        self.state.retain_active_ambiguities(&dd_meas.active_keys);
 
         let f_mat = predict::predict_state(&mut self.state, rover.time, self.q_accel);
         let (x_pred, p_pred) = (self.state.to_dvector(), self.state.cov.clone());
 
-        update::iekf_update(&mut self.state, &meas)?;
+        update::iekf_update(&mut self.state, &dd_meas.dd)?;
         let (x_post, p_post) = (self.state.to_dvector(), self.state.cov.clone());
 
         let ar_res = ar::resolve_ambiguities(&self.state, 3, self.target_pf);
         let q_flag = if ar_res.is_fixed { 1 } else { 2 };
+
+        // When fixed, re-estimate the position from iono-free phase to
+        // remove the DD ionosphere bias that grows with baseline length.
+        let (pos_ecef, cov_pos) = if ar_res.is_fixed {
+            match iono_free::apply_fixed_iono_free(&self.state, &dd_meas.iono_free, &ar_res) {
+                Some((pos, cov)) => (pos, cov),
+                None => (ar_res.position_ecef, ar_res.cov_position),
+            }
+        } else {
+            (ar_res.position_ecef, ar_res.cov_position)
+        };
 
         self.history.push(IekfSnapshot {
             time: rover.time,
@@ -88,10 +107,10 @@ impl GnssRtkIekf {
 
         Ok(FilteredEpoch {
             time: rover.time,
-            position_ecef: ar_res.position_ecef,
+            position_ecef: pos_ecef,
             velocity_ecef: Some(self.state.vel_ecef),
             attitude: None,
-            cov_position: ar_res.cov_position,
+            cov_position: cov_pos,
             n_satellites: rover.satellites.len(),
             quality: q_flag,
             is_fixed: ar_res.is_fixed,
@@ -110,9 +129,10 @@ impl GnssRtkIekf {
         base: &EpochObs,
         base_pos: Vector3<f64>,
         ephems: &[Ephemeris],
-    ) -> Result<(Vec<DoubleDiffMeasurement>, Vec<DoubleDiffKey>), String> {
+    ) -> Result<DdMeasurements, String> {
         let sat_info = extract_sat_positions(rover, ephems, self.state.pos_ecef, self.min_elevation_rad);
         let mut meas_list = Vec::new();
+        let mut if_meas = Vec::new();
         let mut active_keys = Vec::new();
 
         let mut constellations: Vec<u8> = sat_info.iter().map(|(s, _)| s.constellation as u8).collect();
@@ -167,11 +187,17 @@ impl GnssRtkIekf {
                             meas_list.push(m);
                         }
                     }
+                    if let Some(m) = iono_free::form_iono_free_dd(
+                        *sat_id, rs, bs, r_rov, r_bas, *sat_pos, ref_pos, base_pos,
+                        DoubleDiffKey { constellation_id: sat_id.constellation as u8, sat: sat_id.prn as u16, ref_sat: ref_sat_id, freq_band: 1 },
+                    ) {
+                        if_meas.push(m);
+                    }
                 }
             }
         }
 
-        Ok((meas_list, active_keys))
+        Ok(DdMeasurements { dd: meas_list, iono_free: if_meas, active_keys })
     }
 
     #[allow(clippy::too_many_arguments)]
