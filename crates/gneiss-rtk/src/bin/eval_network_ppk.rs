@@ -108,9 +108,20 @@ fn print_stats(name: &str, mut h_errs: Vec<f64>, mut d3_errs: Vec<f64>, fix_coun
     [p50, p68, p95, rms]
 }
 
-fn collect_errors(traj: &[SmoothedEpoch], truth: &Truth) -> (Vec<f64>, Vec<f64>, usize) {
+fn print_fixed_stats(name: &str, mut h_errs: Vec<f64>) -> f64 {
+    if h_errs.is_empty() {
+        return 0.0;
+    }
+    h_errs.sort_by(|a, b| a.total_cmp(b));
+    let p50 = h_errs[h_errs.len() / 2];
+    println!("  [{} fixed-only horizontal p50: {:.3}m, N={}]", name, p50, h_errs.len());
+    p50
+}
+
+fn collect_errors(traj: &[SmoothedEpoch], truth: &Truth) -> (Vec<f64>, Vec<f64>, usize, Vec<f64>) {
     let mut h_errs = Vec::new();
     let mut d3_errs = Vec::new();
+    let mut fixed_errs = Vec::new();
     let mut fix = 0;
     for ep in traj {
         let tow = ep.time.tow.round() as u32;
@@ -122,10 +133,13 @@ fn collect_errors(traj: &[SmoothedEpoch], truth: &Truth) -> (Vec<f64>, Vec<f64>,
             if h < 100.0 {
                 h_errs.push(h);
                 d3_errs.push((ep.position_ecef - t).norm());
+                if ep.quality == 1 {
+                    fixed_errs.push(h);
+                }
             }
         }
     }
-    (h_errs, d3_errs, fix)
+    (h_errs, d3_errs, fix, fixed_errs)
 }
 
 struct RunContext<'a> {
@@ -158,8 +172,10 @@ fn run_pass(
             return [0.0; 4];
         }
     };
-    let (h, d3, fix) = collect_errors(&res.trajectory, ctx.truth);
-    print_stats(&format!("{} RTK [{}] ({:.1} km)", label, base.id, base.baseline_km), h, d3, fix, res.trajectory.len())
+    let (h, d3, fix, fixed_errs) = collect_errors(&res.trajectory, ctx.truth);
+    let stats = print_stats(&format!("{} RTK [{}] ({:.1} km)", label, base.id, base.baseline_km), h, d3, fix, res.trajectory.len());
+    print_fixed_stats(label, fixed_errs);
+    stats
 }
 
 fn run_base(base: &NetworkBase, dir: &Path, ctx: &RunContext, rover: &[EpochObs]) -> [f64; 8] {
