@@ -4,8 +4,18 @@ import sys
 import urllib.request
 import gzip
 import shutil
+import ssl
 import subprocess
 from datetime import datetime
+
+try:
+    import certifi
+    _SSL_CTX = ssl.create_default_context(cafile=certifi.where())
+    urllib.request.install_opener(
+        urllib.request.build_opener(urllib.request.HTTPSHandler(context=_SSL_CTX))
+    )
+except ImportError:
+    pass  # fall back to system CA bundle
 
 class HighFidelityDatasetFetcher:
     def __init__(self, target_dir: str):
@@ -57,15 +67,15 @@ class HighFidelityDatasetFetcher:
 
         return o_file
 
-    def fetch_broadcast_nav(self, year: int, doy: int) -> str:
+    def fetch_broadcast_nav(self, year: int, doy: int, suffix: str = "n") -> str:
         yy = year % 100
-        nav_file = os.path.join(self.target_dir, f"brdc{doy:03d}0.{yy:02d}n")
+        nav_file = os.path.join(self.target_dir, f"brdc{doy:03d}0.{yy:02d}{suffix}")
         if os.path.exists(nav_file):
             return nav_file
 
         urls = [
-            f"https://geodesy.noaa.gov/corsdata/rinex/{year}/{doy:03d}/brdc{doy:03d}0.{yy:02d}n.gz",
-            f"https://igs.bkg.bund.de/root_ftp/IGS/BRDC/{year}/{doy:03d}/brdc{doy:03d}0.{yy:02d}n.gz",
+            f"https://geodesy.noaa.gov/corsdata/rinex/{year}/{doy:03d}/brdc{doy:03d}0.{yy:02d}{suffix}.gz",
+            f"https://igs.bkg.bund.de/root_ftp/IGS/BRDC/{year}/{doy:03d}/brdc{doy:03d}0.{yy:02d}{suffix}.gz",
         ]
 
         for url in urls:
@@ -82,14 +92,24 @@ class HighFidelityDatasetFetcher:
             except Exception as e:
                 print(f"Failed to download from {url}: {e}")
 
-        # Fallback: check if rover.nav exists in gsdc or rtkexplorer
-        fallback = os.path.join(os.path.dirname(self.target_dir), "gsdc", "rover.nav")
-        if os.path.exists(fallback):
-            print(f"Using local fallback nav file: {fallback}")
-            shutil.copyfile(fallback, nav_file)
-            return nav_file
+        # Fallback: check if rover.nav exists in gsdc or rtkexplorer (GPS only)
+        if suffix == "n":
+            fallback = os.path.join(os.path.dirname(self.target_dir), "gsdc", "rover.nav")
+            if os.path.exists(fallback):
+                print(f"Using local fallback nav file: {fallback}")
+                shutil.copyfile(fallback, nav_file)
+                return nav_file
 
-        raise RuntimeError(f"Could not retrieve broadcast navigation for Year {year}, DOY {doy}")
+        raise RuntimeError(f"Could not retrieve broadcast navigation for Year {year}, DOY {doy} ({suffix})")
+
+    def fetch_station_coordinate(self, station: str) -> str:
+        coord_file = os.path.join(self.target_dir, f"{station.lower()}_14.coord.txt")
+        if os.path.exists(coord_file):
+            return coord_file
+        url = f"https://geodesy.noaa.gov/corsdata/coord/coord_14/{station.lower()}_14.coord.txt"
+        print(f"Downloading surveyed coordinates from {url}...")
+        urllib.request.urlretrieve(url, coord_file)
+        return coord_file
 
 def main():
     root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -106,11 +126,30 @@ def main():
     base_obs = fetcher.fetch_station("p222", year, doy)
     rover_obs = fetcher.fetch_station("p224", year, doy)
     nav_file = fetcher.fetch_broadcast_nav(year, doy)
+    glo_nav_file = fetcher.fetch_broadcast_nav(year, doy, suffix="g")
+
+    print("==================================================")
+    print("Fetching Network RTK Base Stations (multi-base)")
+    print("==================================================")
+    # Bay Area bases around rover P224 for multi-base network RTK (baselines 15-50 km)
+    network_bases = ["p222", "slac", "p181", "ohln", "capo", "p225"]
+    network_files = []
+    for st in network_bases:
+        try:
+            obs = fetcher.fetch_station(st, year, doy)
+            coord = fetcher.fetch_station_coordinate(st)
+            network_files.append((st, obs, coord))
+        except Exception as e:
+            print(f"[WARN] Failed to fetch station {st}: {e}")
 
     print(f"\n[SUCCESS] Datasets staged successfully:")
     print(f"Base Station (P222):  {base_obs}")
     print(f"Rover Station (P224): {rover_obs}")
-    print(f"Broadcast Nav:        {nav_file}")
+    print(f"Broadcast Nav (GPS):  {nav_file}")
+    print(f"Broadcast Nav (GLO):  {glo_nav_file}")
+    print(f"Network Bases ({len(network_files)}):")
+    for st, obs, coord in network_files:
+        print(f"  {st.upper():6s} obs={os.path.basename(obs)} coord={os.path.basename(coord)}")
 
 if __name__ == "__main__":
     main()
