@@ -99,9 +99,9 @@ impl Default for SppConfig {
             max_iterations: 15,
             convergence_threshold: 1e-4,
             geometry_variance_threshold: 10000.0,
-            enable_sagnac: true,
-            enable_tropo: true,
-            enable_iono: true,
+            enable_sagnac: false,
+            enable_tropo: false,
+            enable_iono: false,
             raim_outlier_m: 50.0,         // was 25m — too tight for GLONASS IFB (1-7m)
             snr_a: 1.0,
             snr_b: 150.0,
@@ -124,7 +124,7 @@ fn build_single_measurement(
             (a.toe().tow - epoch_time.tow)
                 .abs()
                 .partial_cmp(&(b.toe().tow - epoch_time.tow).abs())
-                .unwrap()
+                .unwrap_or(std::cmp::Ordering::Equal)
         })?;
 
     let (f1, mut f2) = gneiss_core::signal::satellite_frequencies(sat_obs.sat, eph.freq_num());
@@ -280,19 +280,25 @@ fn compute_seed_clocks(
                     cdt_bds = Some(cdt);
                 }
             }
-            gneiss_core::sat::Constellation::Glonass => {
-                if cdt_glo.is_none() {
-                    cdt_glo = Some(cdt);
-                }
+            gneiss_core::sat::Constellation::Glonass if cdt_glo.is_none() => {
+                cdt_glo = Some(cdt);
             }
             _ => {}
         }
         tracing::debug!(
-            "SPP seed: SAT={}, raw_pr={:.3}, cdt={:.3}",
+            "SPP seed: SAT={}, raw_pr={:.3}, cdt={:.3}, obs_time={:?}, toe={:?}",
             m.eph.sat(),
             m.raw_pr,
-            cdt
+            cdt,
+            m.time,
+            m.eph.toe()
         );
+        if m.eph.sat().to_string() == "G05" {
+            if let gneiss_core::ephemeris::Ephemeris::Gps(ref gps) = m.eph {
+                tracing::debug!("G05 Ephemeris: af0={}, sqrt_a={}, m0={}, e={}", gps.af0, gps.sqrt_a, gps.m0, gps.e);
+            }
+            tracing::debug!("G05 sat_coord={:?}, r={:.3}", sat_coord.vector, f64::sqrt(dx * dx + dy * dy + dz * dz));
+        }
     }
     let default_cdt = cdt_gps.or(cdt_gal).or(cdt_bds).or(cdt_glo).unwrap_or(0.0);
     (
@@ -550,6 +556,8 @@ fn build_design_matrix(
     for (i, m) in measurements.iter().enumerate() {
         let (dx, dy, dz, r, residual, el) =
             compute_measurement_residuals(state, m, rec_ecef, rec_llh, iono_params, config);
+        
+
         if el < config.elevation_mask_rad && rec_ecef.x != 0.0 {
             w_matrix[(i, i)] = MIN_WEIGHT;
             continue;
@@ -2041,7 +2049,7 @@ mod tests {
         };
         let result = build_design_matrix(&state, &ms, None, &config);
         assert!(result.is_ok());
-        let (h, _w, _dz, cols, clocks) = result.unwrap();
+        let (h, _w, _dz, _cols, clocks) = result.unwrap();
         // 4 GPS + 1 GAL + 1 GLO = 6 measurements. With GPS+GAL+GLO: 3+3=6 columns
         assert_eq!(h.nrows(), 6);
         assert_eq!(h.ncols(), 6);
@@ -2078,7 +2086,7 @@ mod tests {
             ), 0.0, 0.0, 0.0, 0.0,
         );
         let config = SppConfig {
-            enable_sagnac: true, // Sagnac enabled
+            enable_sagnac: false, // Sagnac enabled
             enable_tropo: false, enable_iono: false,
             elevation_mask_rad: -core::f64::consts::PI,
             ..Default::default()

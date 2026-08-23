@@ -1,67 +1,18 @@
 #[cfg(test)]
-mod integration {
-    use gneiss_core::time::GpsTime;
-    use gneiss_rtk::engine::{EngineConfig, ProcessingEngine};
+pub mod benchmark_matrix;
+pub mod post_process_simulation;
 
-    use gneiss_core::obs::{EpochObs, ObsCode, ObsType, Observation, SatObs, SignalCode};
-    use gneiss_core::sat::{Constellation, SatelliteId};
+#[cfg(test)]
+mod integration {
+    use gneiss_rtk::swfg::config::EngineConfig;
+    use gneiss_rtk::swfg::engine::SwfgEngine;
 
     #[test]
-    fn test_cross_crate_fusion_initialization() {
-        // This test proves that the core crates (core, rtk, parsers)
-        // integrate seamlessly to instantiate the tightly-coupled engine.
-        // It reflects the "Coasting Valedictorian" philosophy:
-        // We write tests to confirm the obvious, not because we doubt it.
-
-        let config = EngineConfig {
-            mode: gneiss_rtk::engine::EngineMode::RtkIns,
-            enable_nhc: true,
-            base_position: Some([6378137.0, 0.0, 0.0]),
-            imu_to_antenna_lever_arm: [0.1, 0.0, -0.2],
-            ..Default::default()
-        };
-
-        let mut engine = ProcessingEngine::new(config);
-
-        // Synthesize an epoch to trigger initialization
-        let time = GpsTime::new(2000, 0.0);
-
-        let rover_obs = EpochObs {
-            time,
-            satellites: vec![SatObs {
-                sat: SatelliteId {
-                    constellation: Constellation::Gps,
-                    prn: 1,
-                },
-                observations: vec![Observation {
-                    code: ObsCode {
-                        obs_type: ObsType::Pseudorange,
-                        signal: SignalCode {
-                            freq_band: 1,
-                            attribute: 'C',
-                        },
-                    },
-                    value: 20000000.0,
-                    lock_time: Some(100),
-                    lli: None,
-                }],
-            }],
-        };
-
-        // Engine should initialize SPP fallback smoothly given our config
-        // (Even if it fails SPP due to only 1 satellite, the object interactions are validated)
-        let _ = engine.process_epoch(&rover_obs, None);
-
-        // Verify the engine properly absorbed the configuration
-        assert_eq!(engine.config.mode, gneiss_rtk::engine::EngineMode::RtkIns);
-        assert_eq!(engine.config.imu_to_antenna_lever_arm[0], 0.1);
-
-        // At this point, the cross-crate dependency graph is fully exercised.
+    fn test_swfg_engine_creation() {
+        let config = EngineConfig::Spp(Default::default());
+        let engine = SwfgEngine::new(&config, vec![]);
+        let pos = engine.get_current_position();
+        // Default position is on the equator at prime meridian
+        assert!(pos.norm() > 1e6);
     }
 }
-
-#[cfg(test)]
-mod urbannav_integration;
-
-#[cfg(test)]
-mod ppp_integration;

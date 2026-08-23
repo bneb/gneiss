@@ -66,7 +66,7 @@ impl RinexClock {
 
         // Sort records by time just in case
         for records in clk.satellites.values_mut() {
-            records.sort_by(|a, b| a.time.partial_cmp(&b.time).unwrap());
+            records.sort_by(|a, b| a.time.partial_cmp(&b.time).expect("RINEX clock time is never NaN"));
         }
 
         clk
@@ -79,7 +79,7 @@ impl RinexClock {
         }
 
         // Binary search for nearest or bounding interval
-        let idx = match records.binary_search_by(|r| r.time.partial_cmp(&t).unwrap()) {
+        let idx = match records.binary_search_by(|r| r.time.partial_cmp(&t).expect("RINEX clock time is never NaN")) {
             Ok(i) => return Some(records[i].bias),
             Err(i) => i,
         };

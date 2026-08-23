@@ -102,7 +102,7 @@ impl AntexDatabase {
                 }
                 in_antenna = false;
             } else if in_antenna {
-                let ant = current_antenna.as_mut().unwrap();
+                let ant = current_antenna.as_mut().expect("antenna block preceded by START OF ANTENNA");
                 match label {
                     "TYPE / SERIAL NO" => {
                         ant.antenna_type = line[0..20].trim().to_string();

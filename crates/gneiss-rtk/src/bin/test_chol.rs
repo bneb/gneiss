@@ -5,7 +5,7 @@ fn main() {
     m[(0, 1)] = 1.0;
     m[(1, 0)] = 1.0;
     m[(1, 1)] = 2.0;
-    let chol = m.clone().cholesky().unwrap();
+    let chol = m.clone().cholesky().expect("Cholesky decomposition must succeed for positive-definite matrix");
     let inv = chol.inverse();
     println!("Inverse:\n{}", inv);
 }

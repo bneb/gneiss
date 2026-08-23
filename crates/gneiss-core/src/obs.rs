@@ -126,6 +126,15 @@ impl SatObs {
             .map(|o| o.value)
     }
 
+    pub fn get_observable_phase_lli(&self, freq_band: u8) -> Option<(f64, Option<u8>)> {
+        self.observations
+            .iter()
+            .find(|o| {
+                o.code.obs_type == ObsType::CarrierPhase && o.code.signal.freq_band == freq_band
+            })
+            .map(|o| (o.value, o.lli))
+    }
+
     pub fn get_doppler(&self, freq_band: u8) -> Option<f64> {
         self.observations
             .iter()

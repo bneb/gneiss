@@ -192,6 +192,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
+    #[ignore = "Requires live NOAA CORS network connection"]
     async fn test_fetch_station_coordinate() {
         let provider = NoaaCorsProvider;
         let coord = provider.fetch_station_coordinate("P222").await.unwrap();

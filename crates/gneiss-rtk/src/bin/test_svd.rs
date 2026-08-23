@@ -5,6 +5,6 @@ fn main() {
     cov[(1, 1)] = 1e6; // Clock bias
     let svd = cov.svd(true, true);
     println!("Singular values: {:?}", svd.singular_values);
-    let inv = svd.pseudo_inverse(1e-6).unwrap();
+    let inv = svd.pseudo_inverse(1e-6).expect("pseudo_inverse must succeed");
     println!("PriorInfo pos: {}", inv[(0, 0)]);
 }

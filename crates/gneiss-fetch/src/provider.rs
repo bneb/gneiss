@@ -47,4 +47,31 @@ pub trait DataSource {
         time: GpsTime,
         out_dir: &std::path::Path,
     ) -> Result<PathBuf, FetchError>;
+
+    /// Fetches precise orbit (.sp3) file for a specific time
+    async fn fetch_sp3(
+        &self,
+        _time: GpsTime,
+        _out_dir: &std::path::Path,
+    ) -> Result<PathBuf, FetchError> {
+        Err(FetchError::NotFound("SP3 fetch not implemented".into()))
+    }
+
+    /// Fetches precise clock (.clk) file for a specific time
+    async fn fetch_clk(
+        &self,
+        _time: GpsTime,
+        _out_dir: &std::path::Path,
+    ) -> Result<PathBuf, FetchError> {
+        Err(FetchError::NotFound("CLK fetch not implemented".into()))
+    }
+
+    /// Fetches bias SINEX (.BIA) file for a specific time
+    async fn fetch_bias(
+        &self,
+        _time: GpsTime,
+        _out_dir: &std::path::Path,
+    ) -> Result<PathBuf, FetchError> {
+        Err(FetchError::NotFound("BIA fetch not implemented".into()))
+    }
 }

@@ -8,7 +8,7 @@ use gneiss_core::ephemeris::{Ephemeris, GpsEphemeris};
 use gneiss_core::sat::{Constellation, SatelliteId};
 use gneiss_core::time::GpsTime;
 
-const GPS_PI: f64 = 3.1415926535898;
+use std::f64::consts::PI as GPS_PI;
 
 /// Scale factor for signed 2's complement values from GPS LNAV.
 fn sign_scale(raw: u32, bits: u32, scale: f64) -> f64 {
@@ -47,7 +47,7 @@ fn parse_how(word2: u32) -> (u32, u8) {
     // Bits 17-18: flag bits
     // Bits 19-21: subframe ID (3 bits)
     // Bits 22-27: parity (6 bits)
-    let tow = (word2 >> 0) & 0x1FFFF; // 17 bits
+    let tow = word2 & 0x1FFFF; // 17 bits
     let sf_id = ((word2 >> 19) & 0x7) as u8;
     (tow, sf_id)
 }
@@ -111,7 +111,7 @@ pub fn build_ephemeris_from_sfrbx(
         if msg.gnss_id != 0 { continue; } // GPS only
         if msg.words.len() < 10 { continue; } // Need complete subframe
 
-        let (tow, sf_id) = parse_how(msg.words[1]);
+        let (_tow, sf_id) = parse_how(msg.words[1]);
         let key = (msg.sv_id, sf_id);
 
         // Only keep the latest version of each subframe
@@ -148,7 +148,7 @@ pub fn build_ephemeris_from_sfrbx(
         decode_sf3(&w3, &mut eph);
 
         // Fix toe/toc GPS week (SF1 provides it)
-        let toe_week = if eph.toe.tow < 86400.0 * 7.0 { week } else { week };
+        let toe_week = week;
         eph.toe = GpsTime::new(toe_week, eph.toe.tow);
         eph.toc = GpsTime::new(week, eph.toc.tow);
 

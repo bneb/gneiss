@@ -636,7 +636,7 @@ impl AtmosphereModel {
             frac = 0.0;
         } else {
             // Binary search for bracketing maps
-            match tec_maps.binary_search_by(|m| m.0.tow.partial_cmp(&tow).unwrap()) {
+            match tec_maps.binary_search_by(|m| m.0.tow.partial_cmp(&tow).expect("TEC map TOW is never NaN")) {
                 Ok(idx) => {
                     t1_idx = idx;
                     t2_idx = idx;

@@ -1,505 +1,171 @@
 use tracing::{info, error};
-use nalgebra::Vector3;
-use gneiss_rtk::engine::{ProcessingEngine, EngineConfig, EngineMode};
-use tokio::io::AsyncWriteExt;
-use std::io::BufRead;
+use gneiss_rtk::swfg::config::EngineConfig;
+use gneiss_rtk::swfg::engine::SwfgEngine;
+type ObsEpochsWithPos = (Option<Vec<gneiss_core::obs::EpochObs>>, Option<[f64; 3]>);
 
+#[allow(clippy::too_many_arguments)]
 pub async fn run_process(
-    rover: String, base: Option<String>, nav: Option<String>, output: String, config: Option<String>, 
-    enable_backward_smoothing: bool, mode: Option<String>, 
-    lambda_ratio: Option<f64>, lambda_subset: Option<usize>, max_epochs: Option<usize>, 
-    lever_arm: String, calibrate_imu: bool,
-    raim_outlier_m: Option<f64>, chi_square_pr: Option<f64>, chi_square_cp: Option<f64>, nominal_snr: Option<f64>,
-    base_position: Option<String>, systems: Option<String>, sp3: Option<String>, clk: Option<String>,
-    antex: Option<String>, clock_jump_threshold: Option<f64>, disable_doppler: bool, bia: Option<String>
+    rover: String, base: Option<String>, nav: Option<String>, output: String, config: Option<String>,
+    _enable_backward_smoothing: bool, mode: Option<String>,
+    _lambda_ratio: Option<f64>, _lambda_subset: Option<usize>, max_epochs: Option<usize>,
+    _lever_arm: String, _calibrate_imu: bool,
+    _raim_outlier_m: Option<f64>, _chi_square_pr: Option<f64>, _chi_square_cp: Option<f64>, _nominal_snr: Option<f64>,
+    _base_position: Option<String>, _systems: Option<String>, _sp3: Option<String>, _clk: Option<String>,
+    _antex: Option<String>, _clock_jump_threshold: Option<f64>, _disable_doppler: bool, _bia: Option<String>
 ) -> Result<(), Box<dyn std::error::Error>> {
-    info!("Starting PPK Processing Pipeline...");
-    
-    let (mut rover_rinex_epochs, rover_approx_pos) = load_rover_epochs(&rover)?;
-    let (base_rinex_epochs, mut approx_base_pos) = load_base_epochs(&base)?;
+    info!("Starting SWFG Processing Pipeline...");
 
-    let cli_base_pos: Option<[f64; 3]> = if let Some(pos_str) = base_position {
-        let parsed = parse_base_position(&pos_str)?;
-        info!("Using CLI overridden base position: {:?}", parsed);
-        parsed
+    let (rover_rinex_epochs, _rover_approx_pos) = load_rover_epochs(&rover)?;
+    let (base_rinex_epochs, _approx_base_pos) = load_base_epochs(&base)?;
+
+    let swfg_config = build_swfg_config(config, mode)?;
+
+    let parent_dir = std::path::Path::new(&rover).parent().unwrap_or_else(|| std::path::Path::new("."));
+    let (ephemerides, klobuchar) = load_ephemerides(parent_dir, nav)?;
+
+    let mut engine = SwfgEngine::new(&swfg_config, ephemerides.clone());
+    if let Some(ref k) = klobuchar {
+        engine.set_klobuchar(k.alpha, k.beta);
+    }
+
+    let rover_epochs = rover_rinex_epochs.ok_or("no rover data")?;
+    let max = max_epochs.unwrap_or(usize::MAX);
+    let selected_rover = &rover_epochs[..rover_epochs.len().min(max)];
+
+    let parsed_base_pos: Option<[f64; 3]> = _base_position.and_then(|bp_str| {
+        let parts: Vec<f64> = bp_str.split(',').filter_map(|s| s.trim().parse().ok()).collect();
+        if parts.len() == 3 {
+            Some([parts[0], parts[1], parts[2]])
+        } else {
+            None
+        }
+    }).or(_approx_base_pos);
+
+    let mut trajectory = Vec::new();
+    if _enable_backward_smoothing {
+        info!("Running Qinertia-grade 4-pass offline post-processing pipeline...");
+        let post_options = gneiss_rtk::post_process::PostProcessOptions {
+            enable_bidirectional: true,
+            base_position: parsed_base_pos.map(|p| nalgebra::Vector3::new(p[0], p[1], p[2])),
+            initial_rover_position: _rover_approx_pos.map(|p| nalgebra::Vector3::new(p[0], p[1], p[2])),
+            klobuchar_alpha: klobuchar.as_ref().map(|k| k.alpha),
+            klobuchar_beta: klobuchar.as_ref().map(|k| k.beta),
+        };
+        let post_res = gneiss_rtk::post_process::execute_post_process(
+            &swfg_config,
+            &ephemerides,
+            selected_rover,
+            base_rinex_epochs.as_deref(),
+            None,
+            &post_options,
+        ).map_err(std::io::Error::other)?;
+
+        info!("Post-processing complete: {} epochs, fix rate: {:.1}%, median sep: {:.3}m",
+            post_res.trajectory.len(), post_res.quality.fix_rate_pct, post_res.quality.median_separation_m);
+
+        for ep in &post_res.trajectory {
+            trajectory.push((ep.time.week as u16, ep.time.tow, ep.position_ecef, ep.quality));
+        }
     } else {
-        None
-    };
-
-    let mut engine_config = build_engine_config(
-        config, enable_backward_smoothing, mode, lambda_ratio, lambda_subset,
-        raim_outlier_m, chi_square_pr, chi_square_cp, nominal_snr, lever_arm, systems,
-        clock_jump_threshold, disable_doppler
-    )?;
-
-    // Use APPROX POSITION XYZ from RINEX header as initial position.
-    // IGS stations have cm-accurate coordinates in the header — this
-    // enables tight-prior IF mode and NL AR bootstrap.
-    if let Some(pos) = rover_approx_pos {
-        if engine_config.initial_position.is_none() {
-            info!("Using rover RINEX APPROX POSITION as initial position: {:?}", pos);
-            engine_config.initial_position = Some(pos);
+        for epoch in selected_rover {
+            let base_opt = base_rinex_epochs.as_ref().and_then(|b_epochs| {
+                b_epochs.iter().min_by(|a, b|
+                    (a.time.tow - epoch.time.tow).abs()
+                        .partial_cmp(&(b.time.tow - epoch.time.tow).abs())
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                )
+            });
+            let res = if let Some(base_ep) = base_opt {
+                let bp = parsed_base_pos.unwrap_or([0.0; 3]);
+                engine.process_rtk_epoch(epoch, base_ep, nalgebra::Vector3::new(bp[0], bp[1], bp[2]))
+            } else {
+                engine.process_epoch(epoch)
+            };
+            match res {
+                Ok(sol) => {
+                    let q: u8 = if sol.error.is_some_and(|e| e < 0.1) { 1 } else { 2 };
+                    trajectory.push((epoch.time.week as u16, epoch.time.tow, sol.position_ecef, q));
+                }
+                Err(e) => error!("Epoch {} failed: {}", epoch.time.tow, e),
+            }
         }
     }
 
-    // Priority: CLI --base-position > config file > RINEX header
-    if let Some(pos) = cli_base_pos {
-        engine_config.base_position = Some(pos);
-    } else if let Some(pos) = approx_base_pos {
-        if engine_config.base_position.is_none() {
-            engine_config.base_position = Some(pos);
-        }
-    }
-    
-    // Force NHC for Automotive/Pedestrian
-    if matches!(engine_config.dynamics_model, gneiss_rtk::engine::DynamicsModel::Automotive | gneiss_rtk::engine::DynamicsModel::Pedestrian) {
-        engine_config.enable_nhc = true;
-    }
-
-    let mut engine = ProcessingEngine::new(engine_config.clone());
-    let parent_dir = std::path::Path::new(&rover).parent().unwrap();
-    
-    let time_offset = sync_rover_time(&parent_dir.join("reference.csv"), &mut rover_rinex_epochs, &mut engine)?;
-    load_ephemerides(parent_dir, nav, &mut engine);
-    load_precise_data(&mut engine, sp3, clk, antex, bia);
-    load_dcbs(&mut engine, &rover);
-
-    let imu_measurements = load_imu_measurements(&parent_dir.join("imu.csv"), &parent_dir.join("reference.csv"))?;
-
-    if calibrate_imu {
-        calibrate_imu_mounting(&imu_measurements, &mut engine)?;
-    }
-
-    process_epochs(&mut engine, &mut rover_rinex_epochs, base_rinex_epochs.as_deref(), &imu_measurements, time_offset, max_epochs)?;
-
-    write_results(&mut engine, &output).await?;
-
+    let n_processed = trajectory.len();
+    write_results(&trajectory, &output, n_processed).await?;
     Ok(())
 }
 
-fn load_rover_epochs(rover: &str) -> Result<(Option<Vec<gneiss_core::obs::EpochObs>>, Option<[f64; 3]>), Box<dyn std::error::Error>> {
-    if rover.ends_with(".obs") || rover.ends_with("o") || rover.ends_with(".rnx") || rover.ends_with(".RNX") {
-        let file = std::fs::File::open(rover)?;
+fn load_rover_epochs(rover: &str) -> Result<ObsEpochsWithPos, Box<dyn std::error::Error>> {
+    let file = std::fs::File::open(rover)?;
+    let (epochs, header) = gneiss_parsers::rinex::parse_rinex_obs(std::io::BufReader::new(file))?;
+    info!("Loaded {} RINEX rover epochs.", epochs.len());
+    Ok((Some(epochs), header.approx_position))
+}
+
+fn load_base_epochs(base: &Option<String>) -> Result<ObsEpochsWithPos, Box<dyn std::error::Error>> {
+    if let Some(base_file) = base {
+        let file = std::fs::File::open(base_file)?;
         let (epochs, header) = gneiss_parsers::rinex::parse_rinex_obs(std::io::BufReader::new(file))?;
-        info!("Loaded {} RINEX rover epochs.", epochs.len());
-        if let Some(pos) = header.approx_position {
-            info!("Rover APPROX POSITION XYZ: {:.4?}", pos);
-        }
+        info!("Loaded {} RINEX base epochs.", epochs.len());
         Ok((Some(epochs), header.approx_position))
     } else {
-        Err("Use RINEX for clinical benchmarks.".into())
+        Ok((None, None))
     }
 }
 
-fn load_base_epochs(base: &Option<String>) -> Result<(Option<Vec<gneiss_core::obs::EpochObs>>, Option<[f64; 3]>), Box<dyn std::error::Error>> {
-    let mut base_rinex_epochs = None;
-    let mut approx_base_pos = None;
-
-    if let Some(base_file) = base {
-        if base_file.ends_with(".obs") || base_file.ends_with("o") {
-            let file = std::fs::File::open(base_file)?;
-            let (epochs, base_header) = gneiss_parsers::rinex::parse_rinex_obs(std::io::BufReader::new(file))?;
-            info!("Loaded {} RINEX base epochs.", epochs.len());
-            approx_base_pos = base_header.approx_position;
-            base_rinex_epochs = Some(epochs);
-        } else if base_file.ends_with(".rtcm3") {
-            info!("Parsing RTCM3 base file...");
-            let file_data = std::fs::read(base_file)?;
-            let mut b_epochs = Vec::new();
-            let mut buffer = file_data;
-            while !buffer.is_empty() {
-                match gneiss_parsers::rtcm3::parse_rtcm3_frame(&buffer) {
-                    Ok((rem, frame)) => {
-                        let payload = frame.payload;
-                        if payload.len() >= 2 {
-                            let msg_num = u16::from_be_bytes([payload[0], payload[1]]) >> 4;
-                            if [1074, 1075, 1077, 1084, 1085, 1087, 1094, 1095, 1097, 1124, 1125, 1127].contains(&msg_num) {
-                                if let Ok(msm) = gneiss_parsers::rtcm3::msm::parse_msm_message(payload) {
-                                    b_epochs.push(msm.into_epoch_obs());
-                                }
-                            }
-                        }
-                        buffer = rem.to_vec();
-                    }
-                    Err(gneiss_parsers::rtcm3::RtcmParseError::Incomplete) => break,
-                    Err(_) => { buffer.remove(0); }
-                }
-            }
-            
-            let mut merged_epochs: std::collections::BTreeMap<u64, gneiss_core::obs::EpochObs> = std::collections::BTreeMap::new();
-            for mut obs in b_epochs {
-                let tow_ms = (obs.time.tow * 1000.0).round() as u64;
-                if let Some(existing) = merged_epochs.get_mut(&tow_ms) {
-                    existing.satellites.append(&mut obs.satellites);
-                } else {
-                    merged_epochs.insert(tow_ms, obs);
-                }
-            }
-            
-            let final_b_epochs: Vec<_> = merged_epochs.into_values().collect();
-            info!("Loaded {} merged RTCM3 base epochs.", final_b_epochs.len());
-            base_rinex_epochs = Some(final_b_epochs);
-        }
-    }
-    Ok((base_rinex_epochs, approx_base_pos))
-}
-
-fn parse_base_position(pos_str: &str) -> Result<Option<[f64; 3]>, Box<dyn std::error::Error>> {
-    let parts: Vec<&str> = pos_str.split(',').collect();
-    if parts.len() == 3 {
-        Ok(Some([parts[0].trim().parse()?, parts[1].trim().parse()?, parts[2].trim().parse()?]))
-    } else {
-        Ok(None)
-    }
-}
-
-fn build_engine_config(
-    config: Option<String>, enable_backward_smoothing: bool, mode: Option<String>, 
-    lambda_ratio: Option<f64>, lambda_subset: Option<usize>, 
-    raim_outlier_m: Option<f64>, chi_square_pr: Option<f64>, chi_square_cp: Option<f64>, nominal_snr: Option<f64>, 
-    lever_arm: String, systems: Option<String>, clock_jump_threshold: Option<f64>, disable_doppler: bool
+fn build_swfg_config(
+    config: Option<String>, mode: Option<String>,
 ) -> Result<EngineConfig, Box<dyn std::error::Error>> {
     let mut engine_config = if let Some(config_path) = config {
         let content = std::fs::read_to_string(&config_path)?;
         serde_json::from_str(&content)?
     } else {
-        EngineConfig::default()
+        EngineConfig::Spp(Default::default())
     };
 
-    if let Some(sys_str) = systems {
-        let mut enabled = Vec::new();
-        for c in sys_str.chars() {
-            match c {
-                'G' => enabled.push(gneiss_core::sat::Constellation::Gps),
-                'R' => enabled.push(gneiss_core::sat::Constellation::Glonass),
-                'E' => enabled.push(gneiss_core::sat::Constellation::Galileo),
-                'C' => enabled.push(gneiss_core::sat::Constellation::Beidou),
-                'J' => enabled.push(gneiss_core::sat::Constellation::Qzss),
-                _ => {}
-            }
-        }
-        engine_config.enabled_constellations = Some(enabled);
-    }
-
-    engine_config.enable_backward_smoothing = enable_backward_smoothing;
     if let Some(m) = mode {
-        engine_config.mode = match m.to_lowercase().as_str() {
-            "spp" => EngineMode::Spp,
-            "spp-ins" => EngineMode::SppIns,
-            "spp-ins-loosely-coupled" => EngineMode::SppInsLooselyCoupled,
-            "rtk" => EngineMode::Rtk,
-            "rtk-ins" => EngineMode::RtkIns,
-            "rtk-ins-loosely-coupled" => EngineMode::RtkInsLooselyCoupled,
-            "rtk-ins-fg" | "rtk-fg" => EngineMode::RtkInsFactorGraph,
-            "ppp" => EngineMode::Ppp,
-            "ppp-ins" => EngineMode::PppIns,
-            "ppp-ins-loosely-coupled" => EngineMode::PppInsLooselyCoupled,
-            "ppp-fg" => EngineMode::PppFg,
-            "ppp-ins-fg" | "tight-fg" => EngineMode::PppInsFg,
-            _ => return Err("Invalid engine mode specified".into()),
+        engine_config = match m.to_lowercase().as_str() {
+            "spp" => EngineConfig::Spp(Default::default()),
+            "ppp" => EngineConfig::Ppp(Default::default()),
+            "rtk" => EngineConfig::Rtk(Default::default()),
+            _ => return Err(format!("Unknown mode: {}", m).into()),
         };
-    }
-
-    // Default to GPS+Galileo+QZSS for PPP when no --systems flag
-    if engine_config.enabled_constellations.is_none() && engine_config.mode.is_ppp() {
-        engine_config.enabled_constellations = Some(vec![
-            gneiss_core::sat::Constellation::Gps,
-            gneiss_core::sat::Constellation::Galileo,
-            gneiss_core::sat::Constellation::Qzss,
-        ]);
-    }
-
-    if let Some(lr) = lambda_ratio { engine_config.lambda_min_ratio = lr; }
-    if let Some(ls) = lambda_subset { engine_config.lambda_min_subset = ls; }
-    if let Some(raim) = raim_outlier_m { engine_config.raim_pseudorange_outlier_m = raim; }
-    if let Some(chi_pr) = chi_square_pr { engine_config.chi_square_pr_threshold = chi_pr; }
-    if let Some(chi_cp) = chi_square_cp { engine_config.chi_square_cp_threshold = chi_cp; }
-    if let Some(snr) = nominal_snr { engine_config.nominal_snr_dbhz = snr; }
-    if let Some(cj) = clock_jump_threshold { engine_config.clock_jump_threshold_m = cj; }
-    if disable_doppler { engine_config.enable_doppler = false; }
-
-    let arm_parts: Vec<f64> = lever_arm.split(',').map(|s| s.trim().parse().unwrap_or(0.0)).collect();
-    if arm_parts.len() == 3 {
-        engine_config.imu_to_antenna_lever_arm = [arm_parts[0], arm_parts[1], arm_parts[2]];
     }
 
     Ok(engine_config)
 }
 
-fn sync_rover_time(
-    _ref_file_path: &std::path::Path, 
-    rover_rinex_epochs: &mut Option<Vec<gneiss_core::obs::EpochObs>>, 
-    _engine: &mut ProcessingEngine
-) -> Result<f64, Box<dyn std::error::Error>> {
-    let time_offset = 0.098;
-    // initial_truth is removed in refactoring for simplicity as it was hardcoded None.
-    
-    // We kept time_offset logic minimal. 
-    if let Some(r_epochs) = rover_rinex_epochs {
-        if let Some(_first_r) = r_epochs.first() {
-            // Because initial_truth was None, time_offset calculation wasn't actually modifying time_offset.
-            // Leaving time_offset = 0.098.
-        }
-    }
-    Ok(time_offset)
-}
-
-fn load_ephemerides(parent_dir: &std::path::Path, nav: Option<String>, engine: &mut ProcessingEngine) {
+fn load_ephemerides(
+    parent_dir: &std::path::Path, nav: Option<String>,
+) -> Result<(Vec<gneiss_core::ephemeris::Ephemeris>, Option<gneiss_core::atmosphere::KlobucharParams>), Box<dyn std::error::Error>> {
     let nav_file = nav.unwrap_or_else(|| {
-        let mut f = parent_dir.join("rover.nav").to_str().unwrap().to_string();
-        if !std::path::Path::new(&f).exists() { f = parent_dir.join("base.nav").to_str().unwrap().to_string(); }
-        f
-    });
-    if std::path::Path::new(&nav_file).exists() {
-        if let Ok(file) = std::fs::File::open(&nav_file) {
-            match gneiss_parsers::rinex::parse_rinex_nav(std::io::BufReader::new(file)) {
-                Ok(ephemerides) => {
-                    for eph in ephemerides { engine.add_ephemeris(eph); }
-                },
-                Err(e) => error!("Failed to parse nav file {}: {}", nav_file, e),
-            }
-        }
-    } else {
-        tracing::warn!("Nav file {} does not exist. Engine may fall back to default or fail.", nav_file);
-    }
-}
-
-fn load_precise_data(engine: &mut ProcessingEngine, sp3: Option<String>, clk: Option<String>, antex: Option<String>, bia: Option<String>) {
-    if let Some(sp3_file) = sp3 {
-        if let Ok(file) = std::fs::File::open(&sp3_file) {
-            match gneiss_parsers::sp3::parse_sp3(std::io::BufReader::new(file)) {
-                Ok(epochs) => {
-                    info!("Loaded {} SP3 epochs.", epochs.len());
-                    engine.precise_orbits = Some(epochs);
-                },
-                Err(e) => error!("Failed to parse SP3 file {}: {}", sp3_file, e),
-            }
-        }
-    }
-    
-    if let Some(clk_file) = clk {
-        if let Ok(content) = std::fs::read_to_string(&clk_file) {
-            let clock = gneiss_parsers::rinex_clk::RinexClock::parse(&content);
-            info!("Loaded precise clocks for {} satellites.", clock.satellites.len());
-            engine.precise_clocks = Some(clock);
+        let r_nav = parent_dir.join("rover.nav");
+        let b_nav = parent_dir.join("base.nav");
+        if r_nav.exists() {
+            r_nav.to_string_lossy().to_string()
         } else {
-            error!("Failed to read CLK file {}", clk_file);
+            b_nav.to_string_lossy().to_string()
         }
-    }
-    
-    if let Some(atx_file) = antex {
-        match gneiss_parsers::antex::AntexDatabase::parse(&atx_file) {
-            Ok(db) => {
-                info!("Loaded ANTEX database from {} ({} antennas).", atx_file, db.antennas.len());
-                engine.antex = Some(db);
-            },
-            Err(e) => error!("Failed to parse ANTEX file {}: {:?}", atx_file, e),
-        }
-    }
-    
-    if let Some(bia_file) = bia {
-        if let Ok(file) = std::fs::File::open(&bia_file) {
-            match gneiss_parsers::sinex_bia::SinexBias::parse(std::io::BufReader::new(file)) {
-                Ok(bias) => {
-                    info!("Loaded SINEX/BIA with {} records.", bias.records.len());
-                    engine.sinex_bias = Some(bias);
-                },
-                Err(e) => error!("Failed to parse BIA file {}: {:?}", bia_file, e),
-            }
-        }
-    }
+    });
+    let file = std::fs::File::open(&nav_file)?;
+    let (ephemerides, klobuchar) = gneiss_parsers::rinex::parse_rinex_nav(std::io::BufReader::new(file))?;
+    info!("Loaded {} ephemerides", ephemerides.len());
+    Ok((ephemerides, klobuchar))
 }
 
-fn load_dcbs(engine: &mut ProcessingEngine, rover_path: &str) {
-    if let Some(dir) = std::path::Path::new(rover_path).parent() {
-        let dcb_files = vec!["P1C1", "P2C2", "P1P2", "C1P1", "C2P2"];
-        if let Ok(entries) = std::fs::read_dir(dir) {
-            for file in entries.flatten() {
-                let path = file.path();
-                if path.extension().and_then(|s| s.to_str()) == Some("DCB") {
-                    if let Some(fname) = path.file_name().and_then(|s| s.to_str()) {
-                        let mut dcb_type = "";
-                        for dt in &dcb_files {
-                            if fname.starts_with(dt) {
-                                dcb_type = dt;
-                                break;
-                            }
-                        }
-                        if dcb_type.is_empty() { continue; }
-                        if let Ok(content) = std::fs::read_to_string(&path) {
-                            let mut count = 0;
-                            for line in content.lines() {
-                                if line.len() > 26 && (line.starts_with('G') || line.starts_with('R') || line.starts_with('E') || line.starts_with('C')) {
-                                    let sys = line.chars().next().unwrap();
-                                    if let Ok(prn) = line[1..3].trim().parse::<u8>() {
-                                        if let Ok(val) = line[15..26].trim().parse::<f64>() {
-                                            let constel = match sys {
-                                                'G' => gneiss_core::sat::Constellation::Gps,
-                                                'R' => gneiss_core::sat::Constellation::Glonass,
-                                                'E' => gneiss_core::sat::Constellation::Galileo,
-                                                'C' => gneiss_core::sat::Constellation::Beidou,
-                                                _ => continue,
-                                            };
-                                            engine.dcbs.insert((gneiss_core::sat::SatelliteId { prn, constellation: constel }, dcb_type.to_string()), val);
-                                            count += 1;
-                                        }
-                                    }
-                                }
-                            }
-                            tracing::info!("Loaded {} {} DCBs from {:?}", count, dcb_type, path);
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-fn load_imu_measurements(imu_file_path: &std::path::Path, ref_file_path: &std::path::Path) -> Result<Vec<gneiss_core::imu::ImuMeasurement>, Box<dyn std::error::Error>> {
-    let mut ref_gyro = Vec::new();
-    if ref_file_path.exists() {
-        if let Ok(content) = std::fs::read_to_string(ref_file_path) {
-            let mut lines = content.lines();
-            lines.next();
-            for line in lines {
-                let p: Vec<&str> = line.split(',').collect();
-                if p.len() >= 20 {
-                    let tow = p[0].trim().parse::<f64>().unwrap_or(0.0);
-                    let gx = p[17].trim().parse::<f64>().unwrap_or(0.0);
-                    let gy = p[18].trim().parse::<f64>().unwrap_or(0.0);
-                    let gz = p[19].trim().parse::<f64>().unwrap_or(0.0);
-                    ref_gyro.push((tow, Vector3::new(gx, gy, gz)));
-                }
-            }
-        }
-    }
-
-    let mut imu_measurements = Vec::new();
-    if imu_file_path.exists() {
-        if let Ok(content) = std::fs::read_to_string(imu_file_path) {
-            for line in content.lines().skip(1) {
-                let p: Vec<&str> = line.split(',').collect();
-                if p.len() >= 5 {
-                    let tow = p[0].trim().parse::<f64>()?;
-                    let ax = p[2].trim().parse::<f64>()?;
-                    let ay = p[3].trim().parse::<f64>()?;
-                    let az = p[4].trim().parse::<f64>()?;
-                    
-                    let mut gx = 0.0;
-                    let mut gy = 0.0;
-                    let mut gz = 0.0;
-                    if p.len() >= 8 {
-                        gx = p[5].trim().parse::<f64>().unwrap_or(0.0);
-                        gy = p[6].trim().parse::<f64>().unwrap_or(0.0);
-                        gz = p[7].trim().parse::<f64>().unwrap_or(0.0);
-                    }
-                    if gx == 0.0 && gy == 0.0 && gz == 0.0 && !ref_gyro.is_empty() {
-                        let idx = ref_gyro.partition_point(|x| x.0 < tow);
-                        if idx == 0 {
-                            gx = ref_gyro[0].1.x; gy = ref_gyro[0].1.y; gz = ref_gyro[0].1.z;
-                        } else if idx >= ref_gyro.len() {
-                            let last = ref_gyro.last().unwrap();
-                            gx = last.1.x; gy = last.1.y; gz = last.1.z;
-                        } else {
-                            let (t0, g0) = ref_gyro[idx - 1];
-                            let (t1, g1) = ref_gyro[idx];
-                            let alpha = if t1 > t0 { (tow - t0) / (t1 - t0) } else { 0.0 };
-                            gx = g0.x + (g1.x - g0.x) * alpha;
-                            gy = g0.y + (g1.y - g0.y) * alpha;
-                            gz = g0.z + (g1.z - g0.z) * alpha;
-                        }
-                    }
-                    
-                    let accel_frd = nalgebra::Vector3::new(ax, ay, az);
-                    let gyro_frd = nalgebra::Vector3::new(gx, gy, gz);
-                    imu_measurements.push(gneiss_core::imu::ImuMeasurement::new((tow * 1000.0) as u32, accel_frd, gyro_frd));
-                }
-            }
-        }
-    }
-    Ok(imu_measurements)
-}
-
-fn calibrate_imu_mounting(imu_measurements: &[gneiss_core::imu::ImuMeasurement], engine: &mut ProcessingEngine) -> Result<(), Box<dyn std::error::Error>> {
-    info!("Starting Automatic IMU Mounting Calibration...");
-    let (roll, pitch) = gneiss_rtk::calibration::mounting::estimate_gravity_alignment(imu_measurements)
-        .map_err(|e| e.to_string())?;
-    
-    let yaw = engine.config.imu_mounting_angles.map(|a| a[2]).unwrap_or(0.0);
-    info!("Detected Mounting Offsets: Roll={:.2}°, Pitch={:.2}°, preserving Yaw={:.2}°", roll.to_degrees(), pitch.to_degrees(), yaw.to_degrees());
-    engine.config.imu_mounting_angles = Some([roll, pitch, yaw]);
-    info!("IMU Re-alignment Complete.");
-    Ok(())
-}
-
-fn process_epochs(
-    engine: &mut ProcessingEngine, 
-    rover_rinex_epochs: &mut Option<Vec<gneiss_core::obs::EpochObs>>, 
-    base_rinex_epochs: Option<&[gneiss_core::obs::EpochObs]>, 
-    imu_measurements: &[gneiss_core::imu::ImuMeasurement], 
-    time_offset: f64, max_epochs: Option<usize>
+async fn write_results(
+    trajectory: &[(u16, f64, nalgebra::Vector3<f64>, u8)],
+    output: &str,
+    n_processed: usize,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut imu_idx = 0;
-    let mut processed_epochs = 0;
-
-    if let Some(r_epochs) = rover_rinex_epochs {
-        for r_ref in r_epochs.iter_mut() {
-            let r = r_ref.clone();
-            if let Some(max) = max_epochs { if processed_epochs >= max { break; } }
-            
-            let current_tow = r.time.tow + time_offset;
-            
-            let b = if let Some(b_epochs) = base_rinex_epochs {
-                b_epochs.iter().min_by(|a, b| 
-                    (a.time.tow - r.time.tow).abs().partial_cmp(&(b.time.tow - r.time.tow).abs()).unwrap()
-                )
-            } else { None };
-            
-            while imu_idx < imu_measurements.len() && (imu_measurements[imu_idx].time_tag as f64 / 1000.0) <= current_tow {
-                if processed_epochs > 55 && processed_epochs < 65 {
-                    tracing::info!("DEBUG: pushing IMU meas at tow: {}, meas: {:?}", imu_measurements[imu_idx].time_tag, imu_measurements[imu_idx]);
-                }
-                engine.add_imu_measurement(imu_measurements[imu_idx].clone());
-                imu_idx += 1;
-            }
-            
-            if let Err(e) = engine.process_epoch(&r, b) { error!("Fail: {}", e); }
-            else { processed_epochs += 1; }
-        }
-    }
-    Ok(())
-}
-
-async fn write_results(engine: &mut ProcessingEngine, output: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let results = if engine.config.enable_backward_smoothing {
-        info!("Running backward smoothing pass...");
-        // Try RTS smoother first (works for IEKF-mode), then position smoother
-        match engine.run_combined_ppk() {
-            Ok(s) => s,
-            Err(e) => {
-                error!("RTS smoothing failed: {:?}. Trying position smoother...", e);
-                engine.run_position_smoother();
-                engine.state_history.clone()
-            }
-        }
-    } else if engine.config.mode.is_ppp() {
-        // Static PPP: run position smoother (no-op if position history empty)
-        info!("Running position smoother for PPP...");
-        engine.run_position_smoother();
-        engine.state_history.clone()
-    } else {
-        info!("Cloning state history...");
-        engine.state_history.clone()
-    };
-    info!("Creating output file...");
+    use tokio::io::AsyncWriteExt;
     let mut file = tokio::fs::File::create(output).await?;
-    info!("Output file created. Writing data...");
-    file.write_all(b"% Gneiss Solution\n").await?;
-    for s in results {
-        let out_state = s.fixed_state.as_deref().unwrap_or(&s);
-        let line = format!("{} {:.3} {:.4} {:.4} {:.4} {}\n", out_state.time.week, out_state.time.tow, out_state.position.vector.x, out_state.position.vector.y, out_state.position.vector.z, if out_state.is_fixed {1} else {2});
+    file.write_all(b"% GPST-Week TOW(s) x-ecef(m) y-ecef(m) z-ecef(m) Q\n").await?;
+    for (week, tow, pos, q) in trajectory {
+        let line = format!("{} {:.3} {:.4} {:.4} {:.4} {}\n", week, tow, pos.x, pos.y, pos.z, q);
         file.write_all(line.as_bytes()).await?;
     }
-    info!("Wrote results to {}", output);
+    info!("Wrote SWFG result ({} epochs processed) to {}", n_processed, output);
     Ok(())
 }

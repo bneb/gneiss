@@ -20,7 +20,7 @@ fn parse_rinex_f14(s: &str) -> Option<f64> {
     let s = s.trim();
     if s.is_empty() { return None; }
     // RINEX uses D for exponent, not E
-    s.replace('D', "e").replace('d', "e").parse::<f64>().ok()
+    s.replace(['D', 'd'], "e").parse::<f64>().ok()
 }
 
 fn parse_rinex_2_header<I: Iterator<Item = String>>(
@@ -494,6 +494,7 @@ fn build_ephemeris(
         Constellation::Galileo => build_galileo_ephemeris(sat, toc, af0, af1, af2, vals),
         Constellation::Beidou => build_beidou_ephemeris(sat, toc, af0, af1, af2, vals),
         Constellation::Qzss => build_qzss_ephemeris(sat, toc, af0, af1, af2, vals),
+        Constellation::Navic => build_gps_ephemeris(sat, toc, af0, af1, af2, vals),
         _ => None,
     }
 }
@@ -724,14 +725,14 @@ pub fn parse_rinex_nav<R: BufRead>(
 
         if is_new_epoch {
             current_constellation = if is_rinex_3 {
-                match line.chars().next().unwrap() {
+                match line.chars().next().expect("RINEX line is non-empty") {
                     'G' => Constellation::Gps,
                     'R' => Constellation::Glonass,
                     'E' => Constellation::Galileo,
                     'C' => Constellation::Beidou,
                     'J' => Constellation::Qzss,
                     'S' => Constellation::Sbas,
-                    'I' => Constellation::Gps,
+                    'I' => Constellation::Navic,
                     _ => Constellation::Gps,
                 }
             } else {
@@ -1930,7 +1931,7 @@ I 1 2020 06 15 01 30  0 -.271548051387D-03 -.682121026330D-11  .000000000000D+00
         let mut reader = BufReader::new(data.as_bytes());
         let (ephemerides, _klob) = parse_rinex_nav(&mut reader).unwrap();
         assert_eq!(ephemerides.len(), 1);
-        assert_eq!(ephemerides[0].sat().constellation, Constellation::Gps);
+        assert_eq!(ephemerides[0].sat().constellation, Constellation::Navic);
         assert_eq!(ephemerides[0].sat().prn, 1);
     }
 

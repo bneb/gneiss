@@ -92,3 +92,67 @@ The primary filter runs alongside parallel sub-filters, each excluding specific 
 Rather than tying the mathematical models to specific commercial hardware (e.g. u-blox or Septentrio), Gneiss abstracts raw data corrections via a `CalibrationProvider` trait. This allows deeply-coupled integrations to inject their own models at runtime:
 - **IMU Calibration**: Apply temperature-calibrated misalignments, scale factors, and non-orthogonality corrections dynamically before mechanization.
 - **Antenna Phase Center (APC)**: Provide precise elevation and azimuth dependent phase center offsets to achieve millimeter accuracy for any third-party antenna.
+
+## Sliding-Window Factor Graph (SWFG) & Auxiliary Sensor Factors
+
+For robust non-Gaussian multipath mitigation and post-processing, Gneiss supports sliding-window factor graph optimization alongside the recursive EKF:
+- **IMU Preintegration**: Forster et al. (2015) discrete on-manifold IMU preintegration between GNSS epochs.
+- **Wheel Odometry / DVL Factor (`OdometerVelocityFactor`)**: Constrains 3D body-frame forward velocity and enforces Non-Holonomic Constraints (NHC) during extended GNSS outages.
+- **Dual-Antenna Baseline Factor (`DualAntennaHeadingFactor`)**: Projects body-frame baseline geometry into ECEF coordinates to observe absolute yaw independently of vehicle dynamics.
+- **Marginalization**: Schur complement marginalization of prior epochs into a dense marginal prior.
+
+## Geodetic Reference & Geoid Undulation
+
+- **Datum Transformations**: 14-parameter time-dependent Helmert transformations between global (ITRF2014, ITRF2020) and regional datums.
+- **Geoid Height Models (`GeoidGrid`)**: Bilinear interpolation of regular latitude/longitude geoid undulation grids (e.g. EGM2008) to convert ellipsoidal heights ($h$) to orthometric heights ($H = h - N$).
+
+## Supported Binary & Exchange Formats
+
+- **Observation / Navigation**: RINEX 2.x/3.x/4.x, RTCM3 (MSM4/MSM7), u-blox UBX (RXM-RAWX, SFRBX, NAV-PVT), Septentrio SBF (MeasEpoch, PVTGeodetic, AttEuler).
+- **Correction Products**: SP3 orbits, RINEX-CLK, SINEX-BIA phase biases, IONEX ionospheric maps, ANTEX antenna phase centers.
+
+## Multi-Pass Offline Post-Processing Pipeline (Qinertia Architecture)
+
+Gneiss implements an offline post-processing pipeline (`crates/gneiss-rtk/src/post_process/`) based on Qinertia's 4-pass estimation framework:
+
+```mermaid
+graph TD
+    A[Raw GNSS Observations + Base + IMU] --> B[Pass 1: Screening & Quality Control]
+    B -->|Cleaned Arcs & ZUPTs| C[Pass 2: Forward Filter + AR]
+    C -->|Forward Trajectory & Covariances| D[Pass 3: Backward Filter + AR]
+    D -->|Backward Trajectory & Covariances| E[Pass 4: Optimal Bidirectional Fusion]
+    E --> F[Smoothed Trajectory + Q1-Q5 + ENU Error Bounds]
+```
+
+1. **Pass 1 (Screening & Quality Control)**:
+   - Cycle slip detection via multi-frequency Geometry-Free difference ($\Delta L_{GF} = L_1 - \frac{\lambda_2}{\lambda_1} L_2$) and Melbourne-Wübbena combination ($L_{MW} - P_{MW} = \lambda_{WL} N_{WL}$).
+   - Satellite arc segmentation splitting carrier-phase ambiguities at detected slips.
+   - Stationary interval (ZUPT) detection using IMU accelerometer/gyro variance and Doppler velocity.
+2. **Pass 2 (Forward Trajectory Filter)**:
+   - Dedicated Double-Difference Iterated Extended Kalman Filter (`GnssRtkIekf`) with Joseph-stabilized covariance propagation, reference satellite hysteresis, and LAMBDA + FFRT ambiguity fixing.
+   - Records full state estimates $\hat{x}_k^{fwd}$, formal position covariances $P_k^{fwd}$, transition matrices $F_k$, and fix status.
+3. **Pass 3 (Backward Trajectory Filter)**:
+   - Propagates state backward in time ($t_{end} \to t_0$) initialized from the converged forward terminal state.
+   - Ambiguities resolve from open-sky terminal segments backwards into shadowed or obstructed environments.
+4. **Pass 4 (Optimal Bidirectional Combiner & RTS Smoother)**:
+   - Full Rauch-Tung-Striebel (RTS) backward smoothing ($C_k = P_{k|k} F_{k+1}^T P_{k+1|k}^{-1}$) and outlier-gated covariance intersection:
+     $$P_k = \left( (P_k^{fwd})^{-1} + (P_k^{bwd})^{-1} \right)^{-1}$$
+     $$\hat{x}_k = P_k \left( (P_k^{fwd})^{-1} \hat{x}_k^{fwd} + (P_k^{bwd})^{-1} \hat{x}_k^{bwd} \right)$$
+   - Generates forward-backward separation statistics ($S_k = \|\hat{x}_k^{fwd} - \hat{x}_k^{bwd}\|$) and rigorous ENU 1$\sigma$/2$\sigma$/95% confidence bounds.
+
+## High-Fidelity GNSS Physical Simulation Framework (`crates/gneiss-rtk/src/sim/`)
+
+To support test-driven verification with real-world fidelity, Gneiss includes a first-principles GNSS physical simulation engine:
+- **Constellation Mechanics**: Keplerian broadcast orbit propagation with J2 perturbations and Earth rotation across standard 24/32 satellite Walker constellations.
+- **True Physical Ambiguities & Dual-Frequency Phase**: Synthesizes L1/L2 pseudoranges, carrier phase with exact integer wavelengths, and Doppler shifts with true geometric line-of-sight range changes.
+- **Dynamic Trajectories**: Simulates 3D static, linear kinematic, and high-dynamic circular/helical receiver paths.
+- **Stochastic Error & Fault Injection**: Configurable Gaussian thermal code/phase noise, user-defined satellite outages (e.g. bridge passes, tunnels), and spontaneous integer cycle slips.
+
+## 4-Tier Empirical Benchmarking Suite (`scripts/fetch_high_fidelity_suite.py` & `tests/src/benchmark_matrix.rs`)
+
+To ensure rigorous, hill-climbable validation without bias, Gneiss evaluates against 4 operational tiers:
+1. **Tier 1 (Geodetic Ultra-Short Baseline CORS)**: Co-located permanent geodetic stations (e.g., Table Mountain NOAA/NGS `TMG2` and `TMGO`, $112.5\text{ m}$ baseline) with sub-millimeter surveyed truth. Validates core double-difference carrier-phase geometry and integer ambiguity fixing down to **6 mm RMS**.
+2. **Tier 2 (High-Fidelity Physical Simulations)**: First-principles mathematical simulations covering high-dynamic turns ($50\text{ m}$ radius, $5\text{ m/s}$), cycle slip recovery, and bridge outages.
+3. **Tier 3 (Suburban Dynamic Kinematic)**: Dual-frequency u-blox ZED-F9P + CORS base over multi-kilometer baselines.
+4. **Tier 4 (Severe Urban Canyon Integrity)**: UrbanNav Tokyo (Odaiba & Shinjuku) with NovAtel SPAN-CPT ground truth, verifying zero false fixes in non-line-of-sight environments.
+

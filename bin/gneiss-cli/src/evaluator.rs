@@ -2,6 +2,12 @@ use gneiss_core::coords::{ecef_to_llh, llh_to_ecef};
 use gneiss_core::time::GpsTime;
 use tracing::{error, info};
 
+pub fn run_eval(solution: &str, truth: &str) {
+    if let Err(e) = evaluate(solution, truth) {
+        eprintln!("{}", e);
+    }
+}
+
 pub fn evaluate(solution: &str, truth: &str) -> Result<(), String> {
     info!("Evaluating solution against ground truth...");
 

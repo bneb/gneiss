@@ -141,7 +141,7 @@ pub fn parse_ionex<R: BufRead>(reader: R) -> Result<IonexGrid, String> {
             "END OF TEC MAP" | "END OF RMS MAP" => {
                 if in_tec && current_time.is_some() {
                     grid.tec_maps.push(TecMap {
-                        time: current_time.take().unwrap(),
+                        time: current_time.take().expect("IONEX TEC map has a preceding EPOCH header"),
                         tec: std::mem::take(&mut current_tec),
                     });
                 }

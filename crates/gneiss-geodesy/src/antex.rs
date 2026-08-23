@@ -34,10 +34,10 @@ impl AntennaModel {
             // If outside the defined range, use the edge value or None.
             // Often antennas are only defined up to 90 deg.
             if zenith_deg > self.zenith_stop && zenith_deg <= 90.0 && freq.noazi.last().is_some() {
-                return Some(*freq.noazi.last().unwrap());
+                return Some(*freq.noazi.last().expect("ANTEX frequency has at least one NOAZI value"));
             }
             if zenith_deg < self.zenith_start && !freq.noazi.is_empty() {
-                return Some(*freq.noazi.first().unwrap());
+                return Some(*freq.noazi.first().expect("ANTEX frequency has at least one NOAZI value"));
             }
             return None;
         }
