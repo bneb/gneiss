@@ -181,7 +181,13 @@ fn append_dd_meas_rows(
 /// Seed variance of the rover ZWD residual state (m^2): ~15 cm zenith.
 pub const ZWD_INIT_VAR_M2: f64 = 0.0225;
 /// Random-walk variance rate of the rover ZWD residual (m^2/s).
-pub const ZWD_RW_M2_PER_S: f64 = 2.8e-6;
+pub const ZWD_RW_M2_PER_S: f64 = 3e-7;
+// TUNING NOTE (CORS day set, full-day sweep): rates 3e-7..2.8e-6 monotonically
+// improve SLAC vertical with tighter values, but even at 3e-7 SLAC smoothed
+// vertical RMS stays ~2.2 m vs 0.78 m WITHOUT the state. A single rover-side
+// ZWD cannot represent DD wet-delay error that includes a BASE-side residual
+// (long baselines): both station residuals are needed, or none. State left
+// dormant until two-station estimation is implemented.
 
 /// Phase-innovation cycle-slip gate (cycles). A genuine DD phase residual
 /// beyond this cannot come from orbit/model error; it means the arc's
