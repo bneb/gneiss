@@ -86,11 +86,12 @@ fn run_backward_iekf(
     let mut iekf = GnssRtkIekf::new(initial_rover_pos, rev_epochs[0].time, q_accel);
     iekf.widelane_ar = widelane_ar;
     if widelane_ar {
-        // Long-baseline mode: estimate rover wet zenith residual as a
-        // random-walk state inside the filter.
-        // NOTE: ZWD state disabled pending two-station model. Enabling it
-        // without base-side constraint degrades long-baseline fix rates.
-        iekf.state.enable_zwd(0.0225);
+        // Rover-side ZWD random walk: gate by baseline length (same as
+        // forward pass) so only correlated-atmosphere short baselines get it.
+        let baseline_m = (initial_rover_pos - base_pos).norm();
+        if baseline_m < super::forward::ZWD_BASELINE_GATE_M {
+            iekf.state.enable_zwd(0.0225);
+        }
         let cadence_hint =
             crate::post_process::screening::infer_cadence_hint(rover_epochs);
         iekf.slip_detector.cadence_hint_s = cadence_hint;

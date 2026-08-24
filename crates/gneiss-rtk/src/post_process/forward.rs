@@ -14,6 +14,12 @@ use crate::swfg::config::EngineConfig;
 use crate::swfg::engine::SwfgEngine;
 use crate::swfg::imu_preintegration::{ImuPreintegration, ImuSample};
 
+/// Baselines shorter than this have correlated wet delay between stations,
+/// so a single rover-side ZWD state captures the residual. Above it, the
+/// rover/base wet delay decouples and the extra state degrades fix rates
+/// (measured: SLAC 49.7 km dropped 68% -> 47.5% when ungated).
+pub(crate) const ZWD_BASELINE_GATE_M: f64 = 25_000.0;
+
 /// Filtered epoch output from a single directional pass.
 #[derive(Debug, Clone)]
 pub struct FilteredEpoch {
@@ -75,13 +81,14 @@ fn run_forward_iekf(
     });
     let mut iekf = GnssRtkIekf::new(init_pos, rover_epochs[0].time, q_accel);
     iekf.widelane_ar = widelane_ar;
-    if widelane_ar {
+    // Rover-side ZWD random walk helps short baselines (atmosphere correlated)
+    // but hurts long baselines (>25 km) where rover/base wet delay decouples.
+    // Gate by baseline length so only correlated-atmosphere cases get the state.
+    let baseline_m = (init_pos - base_pos).norm();
+    if widelane_ar && baseline_m < ZWD_BASELINE_GATE_M {
         iekf.state.enable_zwd(0.0225); // ~15 cm zenith wet init uncertainty
     }
     if widelane_ar {
-        // NOTE: ZWD state estimation disabled pending two-station model.
-        // Enabling it without base-side constraint degrades long-baseline
-        // fix rates (SLAC: 82% -> 48%).
         let cadence_hint =
             crate::post_process::screening::infer_cadence_hint(rover_epochs);
         iekf.slip_detector.cadence_hint_s = cadence_hint;
