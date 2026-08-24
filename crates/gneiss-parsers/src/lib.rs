@@ -7,4 +7,5 @@ pub mod rtcm3;
 pub mod sbf;
 pub mod sinex_bia;
 pub mod sp3;
+pub mod precise_orbit;
 pub mod ubx;
