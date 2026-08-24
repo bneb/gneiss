@@ -353,7 +353,6 @@ mod tests {
             });
         }
 
-        let n = meas.len();
         for k in 0..40 {
             let zwd_true = 0.0025 * k as f64; // ramps 0 -> ~10 cm
             for (i, m) in meas.iter_mut().enumerate() {

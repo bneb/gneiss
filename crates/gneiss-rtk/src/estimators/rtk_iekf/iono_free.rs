@@ -296,6 +296,7 @@ mod tests {
                 f2_hz: F2,
                 dd_phase_if_cycles: combine_iono_free(F1, F2, dd1, dd2),
                 variance_cycles2: 1e-4,
+                baseline_m: (base_pos - true_pos).norm() + 1000.0,
             });
         }
         let fixed: Vec<(DoubleDiffKey, f64)> = sats.iter().enumerate()
@@ -357,6 +358,7 @@ mod tests {
                 f2_hz: F2,
                 dd_phase_if_cycles: *phase_if,
                 variance_cycles2: 1e-4,
+                baseline_m: 1000.0,
             }
         }).collect();
         let fixed: Vec<(DoubleDiffKey, f64)> = meas.iter()
