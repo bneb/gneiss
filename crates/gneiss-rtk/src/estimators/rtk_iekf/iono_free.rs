@@ -42,6 +42,9 @@ pub struct IonoFreeMeasurement {
     pub f2_hz: f64,
     pub dd_phase_if_cycles: f64,
     pub variance_cycles2: f64,
+    /// Approximate rover-base distance (m): scales the atmospheric
+    /// residual variance of this observation.
+    pub baseline_m: f64,
 }
 
 /// Form the iono-free DD phase for a pair when both L1 and L2 are observed.
@@ -55,6 +58,7 @@ pub fn form_iono_free_dd(
     sat_pos: Vector3<f64>,
     ref_pos: Vector3<f64>,
     base_pos: Vector3<f64>,
+    rover_pos: Vector3<f64>,
     key: DoubleDiffKey,
 ) -> Option<IonoFreeMeasurement> {
     let f1 = gneiss_core::signal::get_frequency(sat_id, 1, 0);
@@ -80,8 +84,16 @@ pub fn form_iono_free_dd(
         f1_hz: f1,
         f2_hz: f2,
         dd_phase_if_cycles: dd_if,
-        // IF noise is ~3x single-band; the smaller lambda already scales it up.
-        variance_cycles2: 2.0 * (0.003 / lambda_if).powi(2),
+        // IF noise: a 3 mm floor plus a wet-delay residual term growing
+        // with baseline (0.15 mm/km class). Without the length term the
+        // acceptance gate assumes short-baseline noise everywhere and
+        // rejects nearly every long-baseline solution.
+        variance_cycles2: {
+            let baseline_km = (base_pos - rover_pos).norm() / 1000.0;
+            let sigma_m = 0.003 + 0.00015 * baseline_km;
+            2.0 * (sigma_m / lambda_if).powi(2)
+        },
+        baseline_m: (base_pos - rover_pos).norm(),
     })
 }
 
@@ -147,13 +159,20 @@ pub fn apply_fixed_iono_free(
         tracing::debug!("if-outcome: pairs={} NOT_ENGAGED", h_rows.len());
         return IonoFreeOutcome::NotEngaged;
     }
+    // Expose the raw residual scale so the acceptance gate can be
+    // calibrated against measured noise rather than assumptions.
+    let mut sq = 0.0_f64;
+    for &y in &y_vals {
+        sq += y * y;
+    }
+    let prefit_rms = (sq / y_vals.len().max(1) as f64).sqrt();
     match solve_position_lsq(cur_pos, &h_rows, &y_vals, &r_diag, &state.extract_pos_cov()) {
         Some((pos, cov)) => {
-            tracing::debug!("if-outcome: SOLUTION pairs={}", h_rows.len());
+            tracing::debug!("if-outcome: SOLUTION pairs={} prefit_rms={:.3}", h_rows.len(), prefit_rms);
             IonoFreeOutcome::Solution(pos, cov)
         }
         None => {
-            tracing::debug!("if-outcome: REJECTED pairs={} (gates)", h_rows.len());
+            tracing::debug!("if-outcome: REJECTED pairs={} prefit_rms={:.3}", h_rows.len(), prefit_rms);
             IonoFreeOutcome::Rejected
         }
     }
@@ -193,10 +212,15 @@ fn solve_position_lsq(
     let n_inv = n_plus.try_inverse()?;
     let dx = n_inv * (h.transpose() * &r_inv * &z);
 
-    // Reject wrong fixes: post-fit residual RMS must stay near measurement noise.
+    // Reject wrong fixes: post-fit residual RMS must stay near measurement
+    // noise. Log both sides so the gate stays calibrated against reality.
     let v = &z - &h * dx;
     let rms = (v.iter().map(|e| e * e).sum::<f64>() / n as f64).sqrt();
     let exp_rms = (r_diag.iter().sum::<f64>() / n as f64).sqrt();
+    tracing::debug!(
+        "if-gate: postfit_rms={rms:.3} exp={exp_rms:.3} dx_norm={:.3}",
+        dx.norm()
+    );
     if rms > 4.0 * exp_rms || dx.norm() > 1.5 {
         return None;
     }

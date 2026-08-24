@@ -311,6 +311,7 @@ impl GnssRtkIekf {
                     }
                     if let Some(m) = iono_free::form_iono_free_dd(
                         *sat_id, rs, bs, r_rov, r_bas, *sat_pos, ref_pos, base_pos,
+                        self.state.pos_ecef,
                         DoubleDiffKey { constellation_id: sat_id.constellation as u8, sat: sat_id.prn as u16, ref_sat: ref_sat_id, freq_band: 1 },
                     ) {
                         if_meas.push(m);
