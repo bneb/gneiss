@@ -108,3 +108,21 @@ observed) rather than by the estimator.
 - OHLN vertical: 93 episodic excursions (|v| > 30 cm, RMS 1.4 m over
   them) with unbiased p50 — wet-tropo/multipath activity specific to
   that baseline; diluted by fusion. Environmental, not a defect.
+
+## Measured null result: satellite PCO in DD RTK (do not re-attempt casually)
+
+Implemented end-to-end (orbital-fixed body frame from sun ephemeris,
+igs14.atx L1 PCOs for all 32 GPS PRNs, phase-centre translation applied
+at satellite-position extraction) and A/B measured: fix rates identical
+to 0.1%, all p50s unchanged, per-base vertical biases unchanged
+(CAPO -53 mm persists with corrections on). Physics: satellite PCO is a
+satellite-side error entering both stations' single differences, so it
+cancels in the double difference to |d| * baseline/range ~ sub-mm at
+these baselines. Code removed; this note is the durable record.
+
+What WOULD move systematics: receiver-side antenna PCO/PCV. The set
+spans three antenna families (TRM59800 rover+P181/P222/SLAC, ASH701945B
+OHLN, LEIAR20 CAPO, TRM29659 P225); cross-family differential PCO/PCV
+does NOT cancel between stations and plausibly explains CAPO's -53 mm
+vertical bias. Requires matching RINEX antenna types to ANTEX receiver
+entries AND base coordinates consistent with ARP conventions.
