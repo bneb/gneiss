@@ -47,6 +47,10 @@ pub struct GnssRtkIekf {
     /// states accumulate across epochs.
     pub base_slip_detector: crate::post_process::screening::CycleSlipDetector,
     pub prev_arcs: HashMap<DoubleDiffKey, u32>,
+    /// When set, IekfSnapshot.amb_keys records the DD key list at each
+    /// epoch, enabling offline ambiguity-trajectory analysis. Zero-cost
+    /// when off (empty Vec).
+    pub track_ambiguity_keys: bool,
     /// Opt-in FDMA GLONASS phase participation (own reference satellite and
     /// per-satellite ambiguities absorb phase inter-channel biases). MW
     /// wide-lane stays GPS/Galileo-only: code inter-channel biases do not
@@ -94,6 +98,7 @@ impl GnssRtkIekf {
             slip_detector: crate::post_process::screening::CycleSlipDetector::new(),
             base_slip_detector: crate::post_process::screening::CycleSlipDetector::new(),
             prev_arcs: HashMap::new(),
+            track_ambiguity_keys: false,
             enable_glonass: false,
             widelane_ar: false,
             start_tow: start_time.tow,
@@ -264,6 +269,11 @@ impl GnssRtkIekf {
             is_fixed: ar_res.is_fixed,
             n_sats: rover.satellites.len(),
             quality: q_flag,
+            amb_keys: if self.track_ambiguity_keys {
+                self.state.ambiguities.iter().map(|(k, _)| *k).collect()
+            } else {
+                Vec::new()
+            },
         });
 
         Ok(FilteredEpoch {

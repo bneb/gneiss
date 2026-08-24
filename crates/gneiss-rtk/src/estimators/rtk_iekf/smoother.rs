@@ -16,6 +16,10 @@ pub struct IekfSnapshot {
     pub is_fixed: bool,
     pub n_sats: usize,
     pub quality: u8,
+    /// DoubleDiffKey list matching the ambiguity columns of x_post
+    /// (starting at amb_offset). Empty when the state has no ambiguities;
+    /// only populated when `GnssRtkIekf.track_ambiguity_keys` is set.
+    pub amb_keys: Vec<crate::estimators::rtk_iekf::state::DoubleDiffKey>,
 }
 
 /// Run full RTS backward smoothing over all stored snapshots.

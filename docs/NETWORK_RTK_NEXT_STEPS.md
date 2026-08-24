@@ -356,3 +356,19 @@ per-pair float ambiguities (state.rs amb_offset). Next step: emit these
 alongside WL_DUMP and run the same harness against ambiguity-step ground
 truth. If sustained unexplained shifts align with tails, integrate into
 the veto ladder alongside far_matches_widelanes and GNEISS_IF_VETO.
+
+## Ambiguity-history dump: built, validated, zero wrong fixes found
+
+GNEISS_AMB_DUMP=1 now writes per-key float DD ambiguity trajectories
+(amb_Forward.csv / amb_Backward.csv per base) via
+`dump_amb_history()`. IekfSnapshot gained `amb_keys` (populated behind
+`track_ambiguity_keys` flag).
+
+Result on dataset B P181 (GE + gradients): ZERO wrong-fix episodes.
+Step-detection across all ambiguity columns found only BeiDou artifacts
+(deviation ~43000 sigma = garbage data passing elevation gate, not
+integer errors). The wrong-fix class that motivated this work is
+eliminated by the combined Galileo + gradient + robust-weighting stack.
+
+The dump infrastructure is retained for future datasets where wrong
+fixes do occur (dataset A legacy, adverse conditions).

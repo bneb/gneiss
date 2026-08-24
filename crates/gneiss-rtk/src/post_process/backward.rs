@@ -107,6 +107,8 @@ fn run_backward_iekf(
             }
         }
         iekf.enable_glonass = std::env::var("GNEISS_GLONASS").is_ok();
+        iekf.track_ambiguity_keys =
+            std::env::var("GNEISS_AMB_DUMP").is_ok();
         let cadence_hint =
             crate::post_process::screening::infer_cadence_hint(rover_epochs);
         iekf.slip_detector.cadence_hint_s = cadence_hint;
@@ -126,6 +128,9 @@ fn run_backward_iekf(
                 results.insert(tow_ms, filtered);
             }
         }
+    }
+    if iekf.track_ambiguity_keys && !iekf.history.is_empty() {
+        crate::post_process::forward::dump_amb_history(&iekf, "Backward");
     }
     results
 }

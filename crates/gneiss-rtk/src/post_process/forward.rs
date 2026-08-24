@@ -101,6 +101,8 @@ fn run_forward_iekf(
             iekf.state.enable_gradients(crate::estimators::rtk_iekf::update::GRAD_INIT_VAR_M2);
         }
         iekf.enable_glonass = std::env::var("GNEISS_GLONASS").is_ok();
+        iekf.track_ambiguity_keys =
+            std::env::var("GNEISS_AMB_DUMP").is_ok();
     }
     if widelane_ar {
         let cadence_hint =
@@ -121,7 +123,54 @@ fn run_forward_iekf(
             }
         }
     }
+    if iekf.track_ambiguity_keys && !iekf.history.is_empty() {
+        dump_amb_history(&iekf, "Forward");
+    }
     (results, iekf.wl_tracker.clone(), iekf.pw_tracker.clone())
+}
+
+/// Write per-key float DD ambiguity trajectories from engine history.
+pub(crate) fn dump_amb_history(iekf: &GnssRtkIekf, label: &str) {
+    let snaps: Vec<_> = iekf.history.iter().filter(|s| !s.amb_keys.is_empty()).collect();
+    if snaps.is_empty() { return; }
+    let Ok(dir) = std::env::var("GNEISS_AMB_DUMP_DIR") else { return };
+    let _ = std::fs::create_dir_all(&dir);
+    // stable key union across all snapshots (keys enter/exit as sats rise/set)
+    let mut all_keys: Vec<crate::estimators::rtk_iekf::state::DoubleDiffKey> = Vec::new();
+    for s in &iekf.history {
+        for k in &s.amb_keys {
+            if !all_keys.contains(k) { all_keys.push(*k); }
+        }
+    }
+    let path = format!("{dir}/amb_{label}.csv");
+    let Ok(mut f) = std::fs::File::create(&path) else { return };
+    use std::io::Write;
+    let _ = write!(f, "tow");
+    for k in &all_keys {
+        let _ = write!(f, ",{}_{}_{}_b{}", k.constellation_id, k.sat, k.ref_sat, k.freq_band);
+    }
+    let _ = writeln!(f);
+    for s in &iekf.history {
+        let _ = write!(f, "{:.0}", s.time.tow);
+        let offset = 6 + 0; // pos(3)+vel(3); adjust for zwd/grads below
+        let extra = if iekf.state.zwd_enabled { 1 } else { 0 }
+            + if iekf.state.grad_enabled { 2 } else { 0 };
+        let offset = 6 + extra;
+        for k in &all_keys {
+            match s.amb_keys.iter().position(|kk| kk == k) {
+                Some(local_idx) => {
+                    let idx = offset + local_idx;
+                    if idx < s.x_post.len() {
+                        let _ = write!(f, ",{:.6}", s.x_post[idx]);
+                    } else {
+                        let _ = write!(f, ",");
+                    }
+                }
+                None => { let _ = write!(f, ","); }
+            }
+        }
+        let _ = writeln!(f);
+    }
 }
 
 fn compute_initial_position(
