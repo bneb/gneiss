@@ -216,10 +216,12 @@ fn run_pass(
         for ep in &traj {
             if let Some(&t) = ctx.truth.get(&(ep.time.tow.round() as u32)) {
                 let herr = horizontal_error(ep.position_ecef, t);
-                if herr > 1.0 {
+                let verr = vertical_error(ep.position_ecef, t);
+                if herr > 1.0 || verr.abs() > 0.30 {
                     eprintln!(
-                        "OUTLIER {} {} tow={:.0} h={:.2} q={} sep={:.1} nsat={}",
-                        label, base.id, ep.time.tow, herr, ep.quality, ep.separation_3d, ep.n_satellites,
+                        "OUTLIER {} {} tow={:.0} h={:.2} v={:+.3} q={} sep={:.1} nsat={}",
+                        label, base.id, ep.time.tow, herr, verr, ep.quality,
+                        ep.separation_3d, ep.n_satellites,
                     );
                 }
             }
