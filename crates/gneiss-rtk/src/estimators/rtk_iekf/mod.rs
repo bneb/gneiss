@@ -472,6 +472,18 @@ impl GnssRtkIekf {
         // Wet-mapping difference at the rover: sensitivity of this DD to the
         // rover ZWD residual state (long-baseline mode), plus the cot(el)
         // gradient mapping differences [north, east] for the same pair.
+        // Solid Earth tide correction for this pair (DD of LOS projections).
+        let tide_dd_m = {
+            let tide_rov = gneiss_core::tides::solid_earth_tides_ecef(self.state.time, self.state.pos_ecef);
+            let tide_base = gneiss_core::tides::solid_earth_tides_ecef(self.state.time, base_pos);
+            let los_rs = (sat_pos - self.state.pos_ecef).normalize();
+            let los_rr = (ref_pos - self.state.pos_ecef).normalize();
+            let los_bs = (sat_pos - base_pos).normalize();
+            let los_br = (ref_pos - base_pos).normalize();
+            let proj = |tide: Vector3<f64>, los: Vector3<f64>| tide.dot(&los);
+            (proj(tide_rov, los_rs) - proj(tide_rov, los_rr))
+                - (proj(tide_base, los_bs) - proj(tide_base, los_br))
+        };
         let (dm_wet_rov, dgrad_n_rov, dgrad_e_rov) = {
             let llh = gneiss_core::coords::ecef_to_llh(self.state.pos_ecef);
             let (az_sat, el_sat) = gneiss_core::coords::az_el(llh, self.state.pos_ecef, sat_pos);
@@ -522,6 +534,7 @@ impl GnssRtkIekf {
             dm_wet_rov,
             dgrad_n_rov,
             dgrad_e_rov,
+            tide_dd_m,
         })
     }
 

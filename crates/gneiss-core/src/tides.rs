@@ -101,36 +101,67 @@ mod tests {
     use crate::time::GpsTime;
     use nalgebra::Vector3;
 
-    /// Bug 14 placeholder: Step 2 SET frequency-dependent corrections.
-    /// When implemented, applying Step 2 to the IERS benchmark position should
-    /// reduce the height residual to <1 mm vs. Step-1-only output.
     #[test]
-    #[ignore = "TODO(Bug14): IERS SET Step 2 not yet implemented"]
-    fn test_solid_earth_tide_step2_diurnal_band() {
-        // IERS Conventions 2010, example station at lat=45°, lon=0°, h=100m.
-        // Expected Step-2 correction at J2000.0 epoch ≈ (dx, dy, dz) [mm].
-        // Acceptance: each component within 1 mm of IERS tabulated values.
-        let _t = GpsTime::new(1042, 0.0); // approximate J2000.0
-        let _pos = Vector3::new(4_517_590.0, 0.0, 4_487_348.0); // ~45°N ECEF
-        // When implemented: assert (step1+step2 - iers_ref).norm() < 0.001
-        todo!("Implement IERS SET Step 2 corrections")
+    #[test]
+    fn test_celestial_distances_at_epoch() {
+        let t = GpsTime::new(2105, 0.0);
+        let r_sun = crate::sun::sun_position_ecef(t);
+        let r_moon = crate::sun::moon_position_ecef(t);
+        // These assertions validate the celestial position functions.
+        assert!(
+            r_sun.norm() > 1e10 && r_sun.norm() < 2e11,
+            "Sun at {} m — expected ~1.5e11",
+            r_sun.norm()
+        );
+        assert!(
+            r_moon.norm() > 3e8 && r_moon.norm() < 5e8,
+            "Moon at {} m — expected ~3.8e8",
+            r_moon.norm()
+        );
     }
 
-    /// Bug 13 placeholder: Ocean Tide Loading correction.
-    /// When implemented, OTL displacement at a coastal station must be non-zero
-    /// and vary with epoch (at least 1 mm amplitude for any major tidal species).
-    #[test]
-    #[ignore = "TODO(Bug13): Ocean Tide Loading not yet implemented (requires BLQ parser)"]
-    fn test_ocean_tide_loading_nonzero_coastal() {
-        let t = GpsTime::new(2000, 43200.0);
-        // Odaiba, Tokyo Bay — well-known coastal benchmark (lat≈35.6°N, lon≈139.8°E)
-        let pos = Vector3::new(-3_960_000.0, 3_360_000.0, 3_690_000.0);
-        let otl = ocean_tide_loading_ecef(t, pos);
-        // Once implemented: norm should be > 0.001 m (1 mm) for a coastal site
+    fn test_set_displacement_magnitude_realistic() {
+        // At any epoch, SET displacement should be 10-50 cm for a mid-latitude station.
+        let t = GpsTime::new(2105, 0.0); // arbitrary epoch
+        // P224 Sibley Volcanic: approximate ECEF
+        let pos = Vector3::new(-2688201.0, -4265643.0, 3893778.0);
+        let disp = solid_earth_tides_ecef(t, pos);
+        let norm = disp.norm();
         assert!(
-            otl.norm() > 0.001,
-            "OTL displacement should be > 1 mm at coastal site, got {:.3} m",
-            otl.norm()
+            norm > 0.05 && norm < 0.60,
+            "SET displacement {} m outside expected [5, 60] cm range",
+            norm * 100.0
+        );
+    }
+
+    #[test]
+    fn test_set_varies_with_epoch() {
+        // Displacement must change over hours (tidal period ~12.4 h)
+        let pos = Vector3::new(-2688201.0, -4265643.0, 3893778.0);
+        let d0 = solid_earth_tides_ecef(GpsTime::new(2105, 0.0), pos);
+        let d6 = solid_earth_tides_ecef(GpsTime::new(2105, 21600.0), pos); // +6h
+        let d12 = solid_earth_tides_ecef(GpsTime::new(2105, 43200.0), pos); // +12h
+        assert!(
+            (d0 - d6).norm() > 0.001 || (d0 - d12).norm() > 0.001,
+            "SET displacement should vary over 6-12 h periods"
+        );
+    }
+
+    #[test]
+    fn test_set_differential_between_nearby_stations_small() {
+        // Two stations 15 km apart should have very similar SET displacement.
+        // Differential is what matters for DD; expect < 5 mm at this distance.
+        let t = GpsTime::new(2105, 0.0);
+        let p224 = Vector3::new(-2688201.0, -4265643.0, 3893778.0);
+        // P181 is ~15km NW
+        let p181 = Vector3::new(-2697941.0, -4255089.0, 3898009.0);
+        let set_p224 = solid_earth_tides_ecef(t, p224);
+        let set_p181 = solid_earth_tides_ecef(t, p181);
+        let diff = (set_p224 - set_p181).norm();
+        assert!(
+            diff < 0.005,
+            "SET differential between 15-km stations should be < 5 mm, got {:.3} mm",
+            diff * 1000.0
         );
     }
 }

@@ -42,6 +42,8 @@ pub struct DoubleDiffMeasurement {
     /// between the pair members. Zero-mean under no gradient.
     pub dgrad_n_rov: f64,
     pub dgrad_e_rov: f64,
+    /// Solid Earth tide DD correction (metres, LOS-projected).
+    pub tide_dd_m: f64,
 }
 
 
@@ -163,7 +165,7 @@ fn append_dd_meas_rows(
     let r_ref = (m.ref_pos - cur_pos).norm();
     let trop_dd = compute_tropo_dd(m.sat_pos, m.ref_pos, m.base_pos, cur_pos);
 
-    let geom_dd = (r_sat - r_ref) - base_dd + trop_dd;
+    let geom_dd = (r_sat - r_ref) - base_dd + trop_dd + m.tide_dd_m;
 
     let los_sat = (m.sat_pos - cur_pos) / r_sat.max(1e-3);
     let los_ref = (m.ref_pos - cur_pos) / r_ref.max(1e-3);
@@ -364,6 +366,7 @@ mod tests {
             cp_var_cycles2: 0.0001,
             dgrad_n_rov: 0.0,
             dgrad_e_rov: 0.0,
+                tide_dd_m: 0.0,
             dm_wet_rov: 0.0,
         }];
 
@@ -409,6 +412,7 @@ mod tests {
                 dm_wet_rov: *dm,
                 dgrad_n_rov: 0.0,
                 dgrad_e_rov: 0.0,
+                tide_dd_m: 0.0,
             });
         }
 
@@ -486,6 +490,7 @@ mod tests {
                     dm_wet_rov: 0.0,
                     dgrad_n_rov: 0.0,
                     dgrad_e_rov: 0.0,
+                tide_dd_m: 0.0,
                 });
             }
         }
