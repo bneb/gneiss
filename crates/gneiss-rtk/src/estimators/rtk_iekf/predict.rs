@@ -78,6 +78,10 @@ fn build_process_noise(state: &RtkState, dim: usize, dt: f64, q_accel: f64, reve
     if let Some(zi) = state.zwd_idx() {
         q[(zi, zi)] = super::update::ZWD_RW_M2_PER_S * dt_abs;
     }
+    if let Some((gn, ge)) = state.grad_idx() {
+        q[(gn, gn)] = super::update::GRAD_RW_M2_PER_S * dt_abs;
+        q[(ge, ge)] = super::update::GRAD_RW_M2_PER_S * dt_abs;
+    }
 
     q
 }

@@ -45,6 +45,11 @@ pub struct IonoFreeMeasurement {
     /// Approximate rover-base distance (m): scales the atmospheric
     /// residual variance of this observation.
     pub baseline_m: f64,
+    /// Gradient mapping differences (satellite − reference) at the rover:
+    /// [north, east], cot(el)·{cos az, sin az} form. Consumed as a known
+    /// correction when the fixed position is re-estimated.
+    pub dgrad_n_rov: f64,
+    pub dgrad_e_rov: f64,
 }
 
 /// Form the iono-free DD phase for a pair when both L1 and L2 are observed.
@@ -75,6 +80,18 @@ pub fn form_iono_free_dd(
         - (combine_iono_free(f1, f2, p1_bs, p2_bs) - combine_iono_free(f1, f2, p1_br, p2_br));
 
     let lambda_if = lambda_iono_free(f1, f2);
+    // Gradient mapping differences at the rover for this pair.
+    let rx_llh = gneiss_core::coords::ecef_to_llh(rover_pos);
+    let (az_s, el_s) = gneiss_core::coords::az_el(rx_llh, rover_pos, sat_pos);
+    let (az_r, el_r) = gneiss_core::coords::az_el(rx_llh, rover_pos, ref_pos);
+    let gterm = |az: f64, el: f64| -> (f64, f64) {
+        let se = el.sin().max(0.17);
+        let m = el.cos().max(0.0) / se;
+        (m * az.cos(), m * az.sin())
+    };
+    let (gn_s, ge_s) = gterm(az_s, el_s);
+    let (gn_r, ge_r) = gterm(az_r, el_r);
+
     Some(IonoFreeMeasurement {
         key,
         sat_pos,
@@ -94,6 +111,8 @@ pub fn form_iono_free_dd(
             2.0 * (sigma_m / lambda_if).powi(2)
         },
         baseline_m: (base_pos - rover_pos).norm(),
+        dgrad_n_rov: gn_s - gn_r,
+        dgrad_e_rov: ge_s - ge_r,
     })
 }
 
@@ -128,6 +147,13 @@ pub fn apply_fixed_iono_free(
         .filter(|(k, _)| k.freq_band == 2)
         .map(|(k, v)| (*k, *v))
         .collect();
+    // Current gradient estimates act as a known correction here (like the
+    // troposphere model): the LSQ re-estimates position only.
+    let (grad_n, grad_e) = if state.grad_enabled {
+        (state.grad_n_m, state.grad_e_m)
+    } else {
+        (0.0, 0.0)
+    };
 
     let mut h_rows = Vec::new();
     let mut y_vals = Vec::new();
@@ -143,12 +169,14 @@ pub fn apply_fixed_iono_free(
         let r_sat = (m.sat_pos - cur_pos).norm();
         let r_ref = (m.ref_pos - cur_pos).norm();
         let geom_dd = (r_sat - r_ref) - base_dd + compute_tropo_dd(m.sat_pos, m.ref_pos, m.base_pos, cur_pos);
+        let grad_slant_m = m.dgrad_n_rov * grad_n + m.dgrad_e_rov * grad_e;
 
         let los_sat = (m.sat_pos - cur_pos) / r_sat.max(1e-3);
         let los_ref = (m.ref_pos - cur_pos) / r_ref.max(1e-3);
         let d = (los_ref - los_sat) / m.lambda_if;
         h_rows.push(d);
-        y_vals.push(m.dd_phase_if_cycles - geom_dd / m.lambda_if - n_if);
+        y_vals.push(m.dd_phase_if_cycles - geom_dd / m.lambda_if - n_if
+                    - grad_slant_m / m.lambda_if);
         r_diag.push(m.variance_cycles2.max(1e-4));
     }
     // Require a well-conditioned geometry: with fewer pairs the prior pulls
@@ -297,6 +325,8 @@ mod tests {
                 dd_phase_if_cycles: combine_iono_free(F1, F2, dd1, dd2),
                 variance_cycles2: 1e-4,
                 baseline_m: (base_pos - true_pos).norm() + 1000.0,
+                dgrad_n_rov: 0.0,
+                dgrad_e_rov: 0.0,
             });
         }
         let fixed: Vec<(DoubleDiffKey, f64)> = sats.iter().enumerate()
@@ -358,6 +388,8 @@ mod tests {
                 f2_hz: F2,
                 dd_phase_if_cycles: *phase_if,
                 variance_cycles2: 1e-4,
+                dgrad_n_rov: 0.0,
+                dgrad_e_rov: 0.0,
                 baseline_m: 1000.0,
             }
         }).collect();

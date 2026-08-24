@@ -10,6 +10,16 @@ use super::state::{DoubleDiffKey, RtkState};
 /// information loss of hard exclusion.
 pub const ROBUST_INNOVATION_THRESHOLD: f64 = 9.0;
 
+/// Gradient state seed variance (m^2): ~2 mm of horizon slant delay each.
+pub const GRAD_INIT_VAR_M2: f64 = 4.0e-6;
+/// Gradient random-walk rate (m^2/s): the field is mm-scale and drifts
+/// slowly; this keeps session-long sigma near the seed so gradients track
+/// weather, never noise.
+pub const GRAD_RW_M2_PER_S: f64 = 5.0e-11;
+/// Elevation floor (rad) inside the cot(el) gradient mapping, bounding
+/// low-elevation leverage like the variance model's sin floor does.
+pub(crate) const GRAD_MIN_SIN_EL: f64 = 0.17;
+
 /// Double-difference observation for a satellite pair on a single frequency band.
 #[derive(Debug, Clone)]
 pub struct DoubleDiffMeasurement {
@@ -25,6 +35,11 @@ pub struct DoubleDiffMeasurement {
     /// Wet-mapping difference (satellite − reference) at the rover:
     /// sensitivity of this DD to the rover ZWD residual state.
     pub dm_wet_rov: f64,
+    /// Gradient mapping differences (satellite − reference) at the rover:
+    /// [north, east] sensitivities cot(el)·{cos az, sin az} differenced
+    /// between the pair members. Zero-mean under no gradient.
+    pub dgrad_n_rov: f64,
+    pub dgrad_e_rov: f64,
 }
 
 
@@ -156,6 +171,10 @@ fn append_dd_meas_rows(
     // phase, mapped by the satellite/reference elevation difference.
     let zwd_idx = state.zwd_idx();
     let zwd_val = zwd_idx.map(|i| x_current[i]).unwrap_or(0.0);
+    let (grad_idx, grad_n_val, grad_e_val) = match state.grad_idx() {
+        Some((gn, ge)) => (Some((gn, ge)), x_current[gn], x_current[ge]),
+        None => (None, 0.0, 0.0),
+    };
 
     let mut pr_h = DVector::zeros(state_dim);
     pr_h[0] = d_geom_dpos.x;
@@ -164,15 +183,23 @@ fn append_dd_meas_rows(
     if let Some(zi) = zwd_idx {
         pr_h[zi] = m.dm_wet_rov;
     }
+    if let Some((gn, ge)) = grad_idx {
+        // Slant delay = cot(el) * (gN cos az + gE sin az), differenced
+        // satellite-minus-reference like the zenith mapping.
+        pr_h[gn] = m.dgrad_n_rov;
+        pr_h[ge] = m.dgrad_e_rov;
+    }
     h_rows.push(pr_h);
-    let pr_y = m.dd_pr_m - geom_dd - m.dm_wet_rov * zwd_val;
+    let grad_pr = m.dgrad_n_rov * grad_n_val + m.dgrad_e_rov * grad_e_val;
+    let pr_y = m.dd_pr_m - geom_dd - m.dm_wet_rov * zwd_val - grad_pr;
     let pr_r = m.pr_var_m2.max(0.01);
     y_vals.push(pr_y);
     r_diag.push(robust_inflate(pr_y, pr_r));
 
     if let (Some(cp_obs), Some(amb_idx)) = (m.dd_cp_cycles, state.get_amb_idx(&m.key)) {
         let amb_val = x_current[amb_idx];
-        let pred_cp = geom_dd / m.lambda + amb_val + m.dm_wet_rov * zwd_val / m.lambda;
+        let pred_cp = geom_dd / m.lambda + amb_val
+            + (m.dm_wet_rov * zwd_val + grad_pr) / m.lambda;
         let mut cp_h = DVector::zeros(state_dim);
         cp_h[0] = d_geom_dpos.x / m.lambda;
         cp_h[1] = d_geom_dpos.y / m.lambda;
@@ -180,6 +207,10 @@ fn append_dd_meas_rows(
         cp_h[amb_idx] = 1.0;
         if let Some(zi) = zwd_idx {
             cp_h[zi] = m.dm_wet_rov / m.lambda;
+        }
+        if let Some((gn, ge)) = grad_idx {
+            cp_h[gn] = m.dgrad_n_rov / m.lambda;
+            cp_h[ge] = m.dgrad_e_rov / m.lambda;
         }
         h_rows.push(cp_h);
         let cp_y = cp_obs - pred_cp;
@@ -329,6 +360,8 @@ mod tests {
             lambda: 0.190,
             pr_var_m2: 0.04,
             cp_var_cycles2: 0.0001,
+            dgrad_n_rov: 0.0,
+            dgrad_e_rov: 0.0,
             dm_wet_rov: 0.0,
         }];
 
@@ -372,6 +405,8 @@ mod tests {
                 pr_var_m2: 0.04,
                 cp_var_cycles2: 1e-4,
                 dm_wet_rov: *dm,
+                dgrad_n_rov: 0.0,
+                dgrad_e_rov: 0.0,
             });
         }
 

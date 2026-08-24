@@ -120,11 +120,14 @@ fn print_stats(
     let p95 = h_errs[(n as f64 * 0.95) as usize];
     let rms = (h_errs.iter().map(|e| e * e).sum::<f64>() / n as f64).sqrt();
     let up_p50 = up_errs[n / 2];
+    let up_p95 = up_errs[(n as f64 * 0.95) as usize];
     let up_rms = (up_errs.iter().map(|e| e * e).sum::<f64>() / n as f64).sqrt();
     let fix_pct = (fix_count as f64 / total_count.max(1) as f64) * 100.0;
     println!("=== {} (N={}, Fixed={}/{} [{:.1}%]) ===", name, n, fix_count, total_count, fix_pct);
     println!("Horizontal Error:  p50={:.3}m,  p68={:.3}m,  p95={:.3}m,  RMS={:.3}m", p50, p68, p95, rms);
-    println!("Vertical Error:    p50={:+.3}m,  RMS={:.3}m", up_p50, up_rms);
+    // Guard scripts parse floats positionally off this line; new stats go
+    // at the END only so existing indices stay valid.
+    println!("Vertical Error:    p50={:+.3}m,  RMS={:.3}m,  p95={:.3}m", up_p50, up_rms, up_p95);
     println!("3D Position Error: p50={:.3}m,  p95={:.3}m", d3_errs[n / 2], d3_errs[(n as f64 * 0.95) as usize]);
     [p50, p68, p95, rms]
 }

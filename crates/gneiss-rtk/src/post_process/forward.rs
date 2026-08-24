@@ -92,6 +92,12 @@ fn run_forward_iekf(
     let baseline_m = (init_pos - base_pos).norm();
     if widelane_ar && baseline_m < ZWD_BASELINE_GATE_M {
         iekf.state.enable_zwd(0.0225); // ~15 cm zenith wet init uncertainty
+        // Experimental tropo gradients: opt-in via env while the
+        // OHLN interaction is unresolved (v_p95 -6mm pooled, but
+        // OHLN h_p95 degrades when unconditional).
+        if std::env::var("GNEISS_TROPO_GRAD").is_ok() {
+            iekf.state.enable_gradients(crate::estimators::rtk_iekf::update::GRAD_INIT_VAR_M2);
+        }
     }
     if widelane_ar {
         let cadence_hint =

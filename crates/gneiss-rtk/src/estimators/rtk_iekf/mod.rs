@@ -24,6 +24,7 @@ pub use ar::{resolve_ambiguities, ArResult};
 pub use smoother::{run_rts_smoother, IekfSnapshot};
 pub use state::{DoubleDiffKey, RtkState};
 pub use update::{iekf_update, DoubleDiffMeasurement};
+use update::GRAD_MIN_SIN_EL;
 
 /// Per-epoch double-difference measurement set (per-band + iono-free).
 struct DdMeasurements {
@@ -398,14 +399,22 @@ impl GnssRtkIekf {
 
         let (pr_var, cp_var) = self.compute_dd_variances(sat_pos, ref_pos, lambda);
         // Wet-mapping difference at the rover: sensitivity of this DD to the
-        // rover ZWD residual state (long-baseline mode).
-        let dm_wet_rov = {
+        // rover ZWD residual state (long-baseline mode), plus the cot(el)
+        // gradient mapping differences [north, east] for the same pair.
+        let (dm_wet_rov, dgrad_n_rov, dgrad_e_rov) = {
             let llh = gneiss_core::coords::ecef_to_llh(self.state.pos_ecef);
-            let el_sat = gneiss_core::coords::az_el(llh, self.state.pos_ecef, sat_pos).1;
-            let el_ref = gneiss_core::coords::az_el(llh, self.state.pos_ecef, ref_pos).1;
+            let (az_sat, el_sat) = gneiss_core::coords::az_el(llh, self.state.pos_ecef, sat_pos);
+            let (az_ref, el_ref) = gneiss_core::coords::az_el(llh, self.state.pos_ecef, ref_pos);
             let (_, w_sat) = gneiss_core::atmosphere::AtmosphereModel::nmf_mapping_functions(llh, el_sat, self.state.time);
             let (_, w_ref) = gneiss_core::atmosphere::AtmosphereModel::nmf_mapping_functions(llh, el_ref, self.state.time);
-            w_sat - w_ref
+            let grad_term = |az: f64, el: f64| -> (f64, f64) {
+                let se = el.sin().max(GRAD_MIN_SIN_EL);
+                let m = el.cos().max(0.0) / se;
+                (m * az.cos(), m * az.sin())
+            };
+            let (gn_s, ge_s) = grad_term(az_sat, el_sat);
+            let (gn_r, ge_r) = grad_term(az_ref, el_ref);
+            (w_sat - w_ref, gn_s - gn_r, ge_s - ge_r)
         };
         let ref_sat_struct = gneiss_core::sat::SatelliteId {
             constellation: sat_id.constellation,
@@ -440,6 +449,8 @@ impl GnssRtkIekf {
             pr_var_m2: pr_var,
             cp_var_cycles2: cp_var,
             dm_wet_rov,
+            dgrad_n_rov,
+            dgrad_e_rov,
         })
     }
 

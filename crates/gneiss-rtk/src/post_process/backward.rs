@@ -97,6 +97,12 @@ fn run_backward_iekf(
         let baseline_m = (initial_rover_pos - base_pos).norm();
         if baseline_m < super::forward::ZWD_BASELINE_GATE_M {
             iekf.state.enable_zwd(0.0225);
+        // Experimental tropo gradients: opt-in via env while the
+        // OHLN interaction is unresolved (v_p95 -6mm pooled, but
+        // OHLN h_p95 degrades when unconditional).
+        if std::env::var("GNEISS_TROPO_GRAD").is_ok() {
+            iekf.state.enable_gradients(crate::estimators::rtk_iekf::update::GRAD_INIT_VAR_M2);
+        }
         }
         let cadence_hint =
             crate::post_process::screening::infer_cadence_hint(rover_epochs);

@@ -28,6 +28,12 @@ pub struct RtkState {
     pub ambiguities: Vec<(DoubleDiffKey, f64)>,
     pub zwd_enabled: bool,
     pub zwd_m: f64,
+    /// Horizontal wet-delay gradients [north, east] (metres of slant delay
+    /// at m_grad(el)=cot(el)). Enabled together as a pair; captures
+    /// azimuth-dependent atmospheric systematics a scalar zenith cannot.
+    pub grad_enabled: bool,
+    pub grad_n_m: f64,
+    pub grad_e_m: f64,
     pub cov: DMatrix<f64>,
 }
 
@@ -49,24 +55,39 @@ impl RtkState {
             ambiguities: Vec::new(),
             zwd_enabled: false,
             zwd_m: 0.0,
+            grad_enabled: false,
+            grad_n_m: 0.0,
+            grad_e_m: 0.0,
             cov,
         }
     }
 
     /// Total dimension of the state vector.
     pub fn dim(&self) -> usize {
-        6 + self.ambiguities.len() + self.zwd_enabled as usize
+        6 + self.ambiguities.len()
+            + self.zwd_enabled as usize
+            + 2 * self.grad_enabled as usize
     }
 
-    /// Column offset applied to ambiguity indices (1 when ZWD present).
-    /// Layout with ZWD: [pos, vel, zwd@6, ambs@7..]; without: legacy layout.
+    /// Column offset applied to ambiguity indices.
+    /// Layouts: legacy [pos,vel,ambs]; +ZWD [.., zwd@6, ambs@7..];
+    /// +grad [.., zwd@6, gN@7, gE@8, ambs@9..].
     pub fn amb_offset(&self) -> usize {
-        6 + self.zwd_enabled as usize
+        6 + self.zwd_enabled as usize + 2 * self.grad_enabled as usize
     }
 
     /// Column index of the ZWD state, when present.
     pub fn zwd_idx(&self) -> Option<usize> {
         self.zwd_enabled.then_some(6)
+    }
+
+    /// Column indices of the gradient states (north, east), when present.
+    pub fn grad_idx(&self) -> Option<(usize, usize)> {
+        if !self.grad_enabled {
+            return None;
+        }
+        let base = 6 + self.zwd_enabled as usize;
+        Some((base, base + 1))
     }
 
     /// Enable the rover ZWD residual state. Must be called before any
@@ -82,6 +103,25 @@ impl RtkState {
         let mut new_cov = DMatrix::zeros(new_dim, new_dim);
         new_cov.view_range_mut(0..old_dim, 0..old_dim).copy_from(&self.cov);
         new_cov[(old_dim, old_dim)] = init_var.max(1e-6);
+        self.cov = new_cov;
+    }
+
+    /// Enable the horizontal tropospheric gradient states [north, east].
+    /// Same construction-time constraint as [`enable_zwd`]: call before
+    /// ambiguities exist. Reserves two columns immediately after ZWD (or at
+    /// index 6 if ZWD is absent).
+    pub fn enable_gradients(&mut self, init_var_each: f64) {
+        if self.grad_enabled || !self.ambiguities.is_empty() {
+            return;
+        }
+        self.grad_enabled = true;
+        let old_dim = self.cov.nrows();
+        let new_dim = old_dim + 2;
+        let mut new_cov = DMatrix::zeros(new_dim, new_dim);
+        new_cov.view_range_mut(0..old_dim, 0..old_dim).copy_from(&self.cov);
+        for k in old_dim..new_dim {
+            new_cov[(k, k)] = init_var_each.max(1e-8);
+        }
         self.cov = new_cov;
     }
 
@@ -107,6 +147,10 @@ impl RtkState {
         if let Some(i) = self.zwd_idx() {
             vec[i] = self.zwd_m;
         }
+        if let Some((gn, ge)) = self.grad_idx() {
+            vec[gn] = self.grad_n_m;
+            vec[ge] = self.grad_e_m;
+        }
         vec
     }
 
@@ -120,6 +164,10 @@ impl RtkState {
         }
         if let Some(i) = self.zwd_idx() {
             self.zwd_m = vec[i];
+        }
+        if let Some((gn, ge)) = self.grad_idx() {
+            self.grad_n_m = vec[gn];
+            self.grad_e_m = vec[ge];
         }
     }
 
@@ -211,6 +259,45 @@ impl RtkState {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_gradient_layout_and_roundtrip() {
+        let mut state = RtkState::new(Vector3::zeros(), GpsTime::new(2000, 0.0));
+        assert_eq!(state.dim(), 6);
+        state.enable_zwd(0.0225);
+        assert_eq!(state.dim(), 7);
+        assert_eq!(state.amb_offset(), 7);
+        state.enable_gradients(4e-6);
+        // Layout: pos(3) vel(3) zwd@6 gN@7 gE@8 ambs@9..
+        assert_eq!(state.dim(), 9);
+        assert_eq!(state.amb_offset(), 9);
+        assert_eq!(state.grad_idx(), Some((7, 8)));
+
+        let k = DoubleDiffKey { constellation_id: 0, sat: 2, ref_sat: 1, freq_band: 1 };
+        state.ensure_ambiguity(k, 5.5, 100.0);
+        assert_eq!(state.get_amb_idx(&k), Some(9));
+
+        state.grad_n_m = 0.002;
+        state.grad_e_m = -0.001;
+        let v = state.to_dvector();
+        assert!((v[6] - state.zwd_m).abs() < 1e-15);
+        assert!((v[7] - 0.002).abs() < 1e-15 && (v[8] + 0.001).abs() < 1e-15);
+        assert!((v[9] - 5.5).abs() < 1e-15);
+
+        state.grad_n_m = 0.0;
+        state.update_from_dvector(&v);
+        assert!((state.grad_n_m - 0.002).abs() < 1e-15);
+        assert!((state.grad_e_m + 0.001).abs() < 1e-15);
+    }
+
+    #[test]
+    fn test_gradients_disabled_keeps_legacy_layout() {
+        let mut state = RtkState::new(Vector3::zeros(), GpsTime::new(2000, 0.0));
+        state.enable_gradients(4e-6); // without ZWD: columns at 6,7
+        assert_eq!(state.dim(), 8);
+        assert_eq!(state.amb_offset(), 8);
+        assert_eq!(state.grad_idx(), Some((6, 7)));
+    }
 
     #[test]
     fn test_rtk_state_lifecycle() {

@@ -155,3 +155,28 @@ gated behind widelane_ar like the ZWD state). Predicted effect: removes
 the afternoon-signed vertical systematics on the four southern bases and
 improves their float quality / fix rates. This replaces vague
 "two-station tropo" as the concrete Phase-5 design.
+
+## Tropo gradient states: implemented, gated, measured (opt-in)
+
+Two-state [north, east] horizontal wet-delay gradient (cot(el) mapping,
+satellite-minus-reference at the rover, random walk 5e-11 m^2/s, seed
+sigma 2 mm), wired through float filter H AND the iono-free re-estimation
+(as known correction). Enabled with `GNEISS_TROPO_GRAD=1`; default off.
+
+Measured A/B (p95 lens, outliers >2 m excluded from shape):
+
+- Pooled v_p95: -6.2 mm all six (163.7 -> 157.5); -7.5 mm excluding OHLN.
+  P225 v_p95 alone: 249 -> 228 mm.
+- Horizontal p95: P181/CAPO/P225 improve; OHLN regresses badly
+  (h_p95 112 -> 181 mm, h_p50 +9 mm) — its marine-layer environment
+  interacts poorly with gradient-driven float shifts.
+- Long baselines (P222/SLAC): only ~7 of 2875 epochs change (rare AR
+  decision flips in the tails) — corrections are sub-rounding there.
+
+Verdict: mechanism partially validated; kept opt-in until OHLN is either
+absorbed by a two-station model or conditioned per-base. Candidate next
+tuning: tighter GRAD_RW or az-binned robustness for OHLN-class data.
+
+Tooling added: scripts/compare_dumps.py (A/B quantile comparator over
+WL_DUMP CSVs); eval Vertical Error line now carries p95 (appended after
+RMS to preserve guard's positional parsing).
