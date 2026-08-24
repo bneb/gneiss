@@ -76,6 +76,18 @@ fixes ~14 m apart from truth. Per-base continuity gating (eval-level)
 mitigates the product; moving the gate into combiner semantics would
 make every consumer honest. Must stay gated to avoid walkthrough drift.
 
+### Measured blocker: iono-free engagement starvation at long baselines
+Instrumented outcome counts (full day, RUST_LOG=debug):
+- P181 (15 km): 1,480 Solutions / 3,285 NotEngaged+Rejected.
+- SLAC (49.7 km): **7** Solutions / 292 NotEngaged+Rejected.
+The >=6-both-band-pairs floor plus gate failures starve the stage exactly
+where it matters most: at 49.7 km the fixed set rarely carries six
+both-band pairs simultaneously (partial per-band fixing). Until this is
+addressed (lower floor with stricter per-pair validation, or partial-set
+IF solving using whichever both-band pairs exist), long-baseline products
+ride per-band projected positions and inherit their atmospheric error —
+the dominant term in SLAC/P222 vertical and horizontal tails.
+
 ### Known benign anomalies
 - OHLN vertical: 93 episodic excursions (|v| > 30 cm, RMS 1.4 m over
   them) with unbiased p50 — wet-tropo/multipath activity specific to

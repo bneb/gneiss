@@ -144,11 +144,18 @@ pub fn apply_fixed_iono_free(
     // strong conditional per-band fix. Activates once the AR fixes both
     // bands on most pairs (better float ambiguity quality).
     if h_rows.len() < 6 {
+        tracing::debug!("if-outcome: pairs={} NOT_ENGAGED", h_rows.len());
         return IonoFreeOutcome::NotEngaged;
     }
     match solve_position_lsq(cur_pos, &h_rows, &y_vals, &r_diag, &state.extract_pos_cov()) {
-        Some((pos, cov)) => IonoFreeOutcome::Solution(pos, cov),
-        None => IonoFreeOutcome::Rejected,
+        Some((pos, cov)) => {
+            tracing::debug!("if-outcome: SOLUTION pairs={}", h_rows.len());
+            IonoFreeOutcome::Solution(pos, cov)
+        }
+        None => {
+            tracing::debug!("if-outcome: REJECTED pairs={} (gates)", h_rows.len());
+            IonoFreeOutcome::Rejected
+        }
     }
 }
 
