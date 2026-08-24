@@ -20,10 +20,14 @@ use super::state::{DoubleDiffKey, RtkState};
 const NL_MAX_DEVIATION_CYCLES: f64 = 0.25;
 /// Maximum distance of the bias-corrected MW average from its integer.
 const WL_ROUND_MAX_DEV_CYCLES: f64 = 0.25;
-/// Minimum number of wide-lane-fixed pairs before claiming a fix. At six
-/// both-band pairs the iono-free stage can always refine the position, so a
-/// cascade "fixed" epoch is never carried by per-band data alone.
-const MIN_FIXED_PAIRS: usize = 6;
+/// Minimum number of wide-lane-fixed pairs before claiming a fix. Matches
+/// the PAR per-band floor: below six both-band pairs the iono-free stage
+/// will not engage and project_subset_fixed carries the position from
+/// per-band data, but those integers are still MW-wide-lane-conditioned
+/// and therefore strictly better-informed than PAR's unconditioned ones.
+/// (Was 6 to mirror iono-free; that made the cascade unreachable — it
+/// fixed on zero epochs across every benchmark base.)
+const MIN_FIXED_PAIRS: usize = 4;
 
 /// Cascade AR: wide-lane integers from the MW arcs, then narrow lanes.
 ///
@@ -352,13 +356,33 @@ mod tests {
     }
 
     #[test]
-    fn test_cascade_requires_six_pairs() {
+    fn test_cascade_fixes_with_five_pairs_below_iono_free_floor() {
         let truth = Vector3::new(100.0, 200.0, 300.0);
         let err = Vector3::new(0.010, -0.008, 0.005);
         let (mut state, mut tracker) = biased_state(truth, err);
-        // Drop two pairs below the six-pair floor via retain_active.
+        // Drop two pairs: five both-band pairs remain. That is below the
+        // iono-free stage's own six-pair appetite but at or above the PAR
+        // per-band floor, so the MW-conditioned subset must claim a fix
+        // instead of being discarded.
         let keep: Vec<DoubleDiffKey> = state.ambiguities.iter()
             .filter(|(k, _)| !(k.freq_band == 1 && k.sat >= 6))
+            .map(|(k, _)| *k).collect();
+        state.retain_active_ambiguities(&keep);
+        tracker.retain_active(&keep);
+        let res = resolve_cascade(&state, &tracker)
+            .expect("five clean pairs must cascade-fix");
+        assert!(res.is_fixed);
+        assert!(res.num_ambiguities >= 4);
+    }
+
+    #[test]
+    fn test_cascade_still_refuses_below_four_pairs() {
+        let truth = Vector3::new(100.0, 200.0, 300.0);
+        let err = Vector3::new(0.010, -0.008, 0.005);
+        let (mut state, mut tracker) = biased_state(truth, err);
+        // Two band-1 pairs remain: below even the PAR floor, no claim.
+        let keep: Vec<DoubleDiffKey> = state.ambiguities.iter()
+            .filter(|(k, _)| !(k.freq_band == 1 && k.sat >= 4))
             .map(|(k, _)| *k).collect();
         state.retain_active_ambiguities(&keep);
         tracker.retain_active(&keep);
