@@ -162,6 +162,12 @@ pub fn far_matches_widelanes(tracker: &WidelaneTracker, ar: &ArResult) -> bool {
     }
     // Tolerate a minority of contradictions (a single stale pair must not
     // kill a seven-pair fix); majority contradiction condemns the fix.
+    // GNEISS_STRICT_VETO=1 demands zero contradictions among >=2 judged
+    // pairs: confidently-wrong fixes agreeing with a stale arc minority
+    // get rejected too (P181-style shared-bias wrong fixes).
+    if std::env::var("GNEISS_STRICT_VETO").is_ok() {
+        return judged == 0 || (judged >= 2 && contradictions == 0);
+    }
     judged == 0 || contradictions * 2 <= judged
 }
 

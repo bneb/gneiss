@@ -277,3 +277,28 @@ seeding and code rows. Kept opt-in until per-receiver code ICB handling
 Also fixed en route: Galileo secondary-band fallback (L2 absent ->
 E5a band 5) now reaches the MW tracker and iono-free stage — metric-
 neutral on the benign-day dataset, hardening for degraded conditions.
+
+## Dataset B tail anatomy + strict-veto negative result
+
+Per-epoch dump analysis of the GE run separates two tail mechanisms:
+- P181 (best base): 95% of tail epochs are q=1 confidently-fixed, zero
+  fwd/bwd disagreement, spread all day -> both passes agree on wrong
+  integers (shared short-baseline bias).
+- P225/P222: only ~30% q=1; half show fwd/bwd separation >0.5 m ->
+  float-divergence episodes where the combiner picks a wandering side.
+
+Strict-veto experiment (zero contradictions demanded instead of the
+50%-minority tolerance): fix rates collapse -6.7/-10.3/-8.0 points for
+~1-11 mm p95 movement; network fused 96.5 -> 95.0%. The tolerated
+"contradictions" are mostly stale arcs, not wrong fixes — the minority
+tolerance is load-bearing. Reverted.
+
+Sharper finding: P181's wrong fixes survive even zero-tolerance veto,
+i.e. they carry NO wide-lane contradiction signal. Their bias lives in
+narrow-lane/iono-free space. Candidate counters: post-fix IF residual
+validation against MW-independent predictions, or two-station
+information. Queued behind guard promotion.
+
+Guard promoted: scripts/check_multignss_benchmark.py locks dataset-B GE
+budgets (fix floors 96/68/84%, h_p95 <=150/260/300 mm, v_p95 caps,
+network >=94%). Both guards green simultaneously.
