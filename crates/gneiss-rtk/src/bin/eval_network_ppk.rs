@@ -38,6 +38,22 @@ const ROVER_FILE: &str = "p2241350.20o";
 const TRUTH_FILE: &str = "p224_truth.pos";
 const NAV_FILE: &str = "brdc1350.20n";
 
+// --- 2025 multi-GNSS profile (GNEISS_DATASET=multi2025) -----------------
+// Rover P224 + bases P181/P225/P222, all upgraded to multi-GNSS receivers;
+// 20-observable mixed RINEX 2.11 exports (GPS+GLONASS+Galileo). Truth and
+// coordinates from UNR IGS20 medians for 2025-06 (see
+// scripts/gen_multignss_truth.py). Nav: RINEX 3.04 mixed broadcast from the
+// BKG IGS mirror (decompress station_mixed_nav.rnx.gz first).
+const M25_DIR: &str = "datasets/multignss_2025d160";
+const M25_ROVER: &str = "p2241600.25o";
+const M25_TRUTH: &str = "p224_truth.pos";
+const M25_NAV: &str = "station_mixed_nav.rnx";
+const M25_BASES: &[NetworkBase] = &[
+    NetworkBase { id: "P181", base_file: "p1811600.25o", base_pos: Vector3::new(-2697941.1641, -4255089.2918, 3898009.6542), baseline_km: 14.97 },
+    NetworkBase { id: "P225", base_file: "p2251600.25o", base_pos: Vector3::new(-2681518.9776, -4281621.6523, 3880440.4195), baseline_km: 21.86 },
+    NetworkBase { id: "P222", base_file: "p2221600.25o", base_pos: Vector3::new(-2689640.4153, -4290437.2046, 3865050.9752), baseline_km: 37.97 },
+];
+
 struct NetworkBase {
     id: &'static str,
     base_file: &'static str,
@@ -416,17 +432,47 @@ struct Dataset {
     rover_epochs: Vec<EpochObs>,
 }
 
-fn load_dataset(dir: &Path) -> Result<Dataset, String> {
-    if !dir.join(ROVER_FILE).exists() {
-        return Err("Dataset missing: run scripts/fetch_high_fidelity_suite.py first".to_string());
+fn load_dataset(dir: &Path, rover_file: &str, truth_file: &str, nav_file: &str) -> Result<Dataset, String> {
+    if !dir.join(rover_file).exists() {
+        return Err(format!(
+            "Dataset missing {} in {} (fetch/decompress first)",
+            rover_file,
+            dir.display()
+        ));
     }
-    let nav_f = File::open(dir.join(NAV_FILE)).map_err(|e| format!("Failed to open nav: {}", e))?;
+    let nav_f = File::open(dir.join(nav_file)).map_err(|e| format!("Failed to open nav: {}", e))?;
     let (ephemerides, klobuchar) = gneiss_parsers::rinex::parse_rinex_nav(BufReader::new(nav_f))
         .map_err(|e| format!("Failed to parse nav: {}", e))?;
-    let rov_f = File::open(dir.join(ROVER_FILE)).map_err(|e| format!("Failed to open rover obs: {}", e))?;
+    let rov_f = File::open(dir.join(rover_file)).map_err(|e| format!("Failed to open rover obs: {}", e))?;
     let (rover_epochs, _) = gneiss_parsers::rinex::parse_rinex_obs(BufReader::new(rov_f))
         .map_err(|e| format!("Failed to parse rover obs: {}", e))?;
-    let truth = parse_truth(&dir.join(TRUTH_FILE));
+    // System filter for controlled experiments: GNEISS_SYSTEMS is a set of
+    // constellation letters (e.g. "G" or "GE"). Default G preserves the
+    // historical GPS-only behaviour on every dataset.
+    let allowed: Vec<char> = std::env::var("GNEISS_SYSTEMS")
+        .unwrap_or_else(|_| "G".into())
+        .chars()
+        .collect();
+    let keep = |c: gneiss_core::sat::Constellation| match c {
+        gneiss_core::sat::Constellation::Gps => allowed.contains(&'G'),
+        gneiss_core::sat::Constellation::Glonass => allowed.contains(&'R'),
+        gneiss_core::sat::Constellation::Galileo => allowed.contains(&'E'),
+        gneiss_core::sat::Constellation::Beidou => allowed.contains(&'C'),
+        _ => false,
+    };
+    let n_before: usize = rover_epochs.iter().map(|e| e.satellites.len()).sum();
+    let rover_epochs: Vec<EpochObs> = rover_epochs
+        .into_iter()
+        .map(|mut e| {
+            e.satellites.retain(|s| keep(s.sat.constellation));
+            e
+        })
+        .collect();
+    let n_after: usize = rover_epochs.iter().map(|e| e.satellites.len()).sum();
+    if n_before != n_after {
+        println!("SYSTEM FILTER: {}/{} rover satellites kept ({})", n_after, n_before, allowed.iter().collect::<String>());
+    }
+    let truth = parse_truth(&dir.join(truth_file));
     Ok(Dataset {
         ephemerides,
         klob: klobuchar.map(|k| (k.alpha, k.beta)),
@@ -443,8 +489,14 @@ fn main() {
         .try_init()
         .ok();
 
-    let dir = Path::new("datasets/cors_short_baseline");
-    let data = match load_dataset(dir) {
+    let multi2025 = std::env::var("GNEISS_DATASET").as_deref() == Ok("multi2025");
+    let (dir, rover_file, truth_file, nav_file, bases): (&Path, &str, &str, &str, &[NetworkBase]) =
+        if multi2025 {
+            (Path::new(M25_DIR), M25_ROVER, M25_TRUTH, M25_NAV, M25_BASES)
+        } else {
+            (Path::new("datasets/cors_short_baseline"), ROVER_FILE, TRUTH_FILE, NAV_FILE, BASES)
+        };
+    let data = match load_dataset(dir, rover_file, truth_file, nav_file) {
         Ok(d) => d,
         Err(e) => {
             eprintln!("{}", e);
@@ -469,7 +521,7 @@ fn main() {
     let mut network_upd: Option<HashMap<u16, f64>> = None;
     if std::env::var("WL_NO_UPD").is_err() {
         let mut per_base: Vec<HashMap<DoubleDiffKey, f64>> = Vec::new();
-        for base in BASES {
+        for base in bases {
             if let Some(want) = &only { if base.id != want.as_str() { continue; } }
             let Ok(f) = File::open(dir.join(base.base_file)) else { continue };
             let Ok((base_epochs, _)) = gneiss_parsers::rinex::parse_rinex_obs(BufReader::new(f)) else { continue };
@@ -498,7 +550,7 @@ fn main() {
         network_upd = Some(sol.sat_upd);
     }
 
-    for base in BASES {
+    for base in bases {
         if let Some(want) = &only { if base.id != want.as_str() { continue; } }
         let (stats, traj) = run_base(base, dir, &ctx, selected_rover, network_upd.clone());
         if stats.iter().any(|s| *s > 0.0) {

@@ -232,3 +232,28 @@ Next-round engineering queue (in order):
    GPS-only vs GPS+Galileo DD. Prediction: dual-freq pair count roughly
    doubles -> geometry/redundancy gains should move fix rates toward the
    >=90% Tier-1 band and shrink h_p95 tails via outlier voting.
+
+## Controlled experiment: GPS vs GPS+Galileo on identical day (2025 DOY 160)
+
+Eval rewired: `GNEISS_DATASET=multi2025` selects the new profile;
+`GNEISS_SYSTEMS` (default "G") filters rover/base constellations for
+controlled comparisons. Same day, same stations, same filter — only the
+constellation set differs:
+
+| base | fix% G -> G+E | h_p95 | v_p95 |
+|------|--------------|-------|-------|
+| P181 (15 km)  | 79.0 -> **98.6** | 223 -> **133 mm** | 401 -> 281 |
+| P225 (21.9 km)| 60.2 -> **71.8** | 470 -> **226 mm** | 552 -> 358 |
+| P222 (38 km)  | 63.2 -> **88.4** | 705 -> **267 mm** | 200 -> 115 |
+| NETWORK fused | 78.9 -> **96.5%** |                   |
+
+Galileo roughly halves p95 tails and lifts fix rates 10-25 points.
+P181 meets the Tier-1 >=97% band; network fused at 96.5%. The engine
+consumed Galileo end-to-end with zero estimator changes — DD keys,
+frequencies, MW narrow-lane scales and iono-free combination were
+already constellation-generic.
+
+Caveats: truth is UNR-IGS20-derived (sigma_h 3.7-10.3 mm), so absolute
+biases are not yet calibrated like dataset A; GLONASS/BeiDou still
+excluded by the filter. Next: add R to the mix, then tune against the
+new dataset with the old one kept as regression/stress set.
