@@ -88,6 +88,22 @@ IF solving using whichever both-band pairs exist), long-baseline products
 ride per-band projected positions and inherit their atmospheric error —
 the dominant term in SLAC/P222 vertical and horizontal tails.
 
+### Post-calibration measurement & DD separability limit
+After baseline-aware variance calibration, iono-free engagement improved
+13x at SLAC (7 -> 92 Solutions full-day) - the calibrated gate works.
+However SLAC smoothed vertical RMS did NOT improve correspondingly,
+which surfaces a hard architectural limit: **DD observations cannot
+separate rover-ZWD from base-ZWD.** Their mapping-function coefficients
+are nearly collinear (stations 40 km apart share satellite elevations
+within ~0.3 deg), so only a linear combination is observable, and
+round-8 evidence shows even that combination does not improve vertical
+at long baselines when absorbed by a single state. Breaking the
+degeneracy requires non-DD information: absolute tropo products (VMF1
+grids), PPP solutions at reference stations, or a network-side
+interpolation model. Until one of those exists, vertical accuracy at
+40+ km baselines is bounded by the Saastamoinen model (~0.7 m RMS
+observed) rather than by the estimator.
+
 ### Known benign anomalies
 - OHLN vertical: 93 episodic excursions (|v| > 30 cm, RMS 1.4 m over
   them) with unbiased p50 — wet-tropo/multipath activity specific to
