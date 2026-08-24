@@ -69,6 +69,7 @@ fn run_forward_iekf(
     iekf.widelane_ar = widelane_ar;
 
 
+
     // The cadence hint changes slip-gating behavior, so it applies only on
     // the opt-in long-baseline path; the legacy path stays byte-exact.
     let cadence = if widelane_ar {

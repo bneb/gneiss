@@ -49,6 +49,10 @@ pub struct GnssRtkIekf {
     /// Opt-in Melbourne–Wübbena wide-lane cascade AR (long baselines).
     /// Default off; enabling changes only epochs the joint FAR/PAR left float.
     pub widelane_ar: bool,
+    /// Rover ZWD residual (m zenith wet) scalar random-walk estimate.
+    pub zwd_est_m: f64,
+    pub zwd_var_m2: f64,
+    prev_zwd_tow: f64,
     /// Rover ZWD residual (m of zenith wet delay) on top of the Saastamoinen
     /// model, tracked as a scalar random walk. Long-baseline mode only.
 
@@ -69,6 +73,9 @@ impl GnssRtkIekf {
             base_slip_detector: crate::post_process::screening::CycleSlipDetector::new(),
             prev_arcs: HashMap::new(),
             widelane_ar: false,
+            zwd_est_m: 0.0,
+            zwd_var_m2: update::ZWD_INIT_VAR_M2,
+            prev_zwd_tow: start_time.tow,
 
             wl_tracker: mw::WidelaneTracker::default(),
         }
@@ -136,6 +143,20 @@ impl GnssRtkIekf {
 
         update::iekf_update(&mut self.state, &meas)?;
         let (x_post, p_post) = (self.state.to_dvector(), self.state.cov.clone());
+
+        // Long-baseline mode: track the rover ZWD residual from post-update
+        // phase innovations with per-epoch step saturation.
+        if self.widelane_ar {
+            let dt = rover.time.tow - self.prev_zwd_tow;
+            let pairs = self.zwd_innovation_pairs(&dd_meas.dd);
+            let (z, v) = update::update_zwd_scalar(
+                self.zwd_est_m, self.zwd_var_m2,
+                update::ZWD_RW_M2_PER_S, dt, &pairs,
+            );
+            self.zwd_est_m = z;
+            self.zwd_var_m2 = v;
+            self.prev_zwd_tow = rover.time.tow;
+        }
 
 
 
@@ -365,6 +386,30 @@ impl GnssRtkIekf {
             cp_var_cycles2: cp_var,
             dm_wet_rov,
         })
+    }
+
+    /// Phase innovations with sensitivity to the rover ZWD residual.
+    fn zwd_innovation_pairs(
+        &self,
+        meas: &[update::DoubleDiffMeasurement],
+    ) -> Vec<(f64, f64, f64)> {
+        let dv = self.state.to_dvector();
+        let cur = self.state.pos_ecef;
+        let mut out = Vec::new();
+        for m in meas {
+            let Some(cp) = m.dd_cp_cycles else { continue };
+            let Some(ai) = self.state.get_amb_idx(&m.key) else { continue };
+            let rs = (m.sat_pos - cur).norm();
+            let rr = (m.ref_pos - cur).norm();
+            let base_dd =
+                (m.sat_pos - m.base_pos).norm() - (m.ref_pos - m.base_pos).norm();
+            let tropo = update::compute_tropo_dd(m.sat_pos, m.ref_pos, m.base_pos, cur);
+            let Some(zi) = self.state.zwd_idx() else { continue };
+            let geom = (rs - rr) - base_dd + tropo;
+            let pred = (geom + m.dm_wet_rov * dv[zi]) / m.lambda + dv[ai];
+            out.push((m.dm_wet_rov / m.lambda, cp - pred, m.cp_var_cycles2.max(1e-4)));
+        }
+        out
     }
 
     fn compute_dd_variances(&self, sat_pos: Vector3<f64>, ref_pos: Vector3<f64>, lambda: f64) -> (f64, f64) {

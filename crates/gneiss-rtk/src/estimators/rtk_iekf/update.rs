@@ -182,6 +182,42 @@ fn append_dd_meas_rows(
 pub const ZWD_INIT_VAR_M2: f64 = 0.0225;
 /// Random-walk variance rate of the rover ZWD residual (m^2/s).
 pub const ZWD_RW_M2_PER_S: f64 = 3e-7;
+/// Per-epoch saturation bound on the ZWD correction (m). Wet zenith delay
+/// moves at millimetres per second; an unconstrained step means the
+/// innovation carried some other model error (slip, multipath burst).
+pub const MAX_ZWD_STEP_M: f64 = 0.05;
+// MEASURED OUTCOME (CORS day set): unbounded steps diverge (SLAC vertical
+// RMS 15 m); with 0.05 m/epoch saturation vertical is STILL net-negative
+// everywhere (P222 sm 0.75->1.43 m, SLAC sm 0.78->2.19 m) while horizontal
+// improves marginally. The innovations carry non-tropo model error that a
+// single rover-side state faithfully absorbs into the wrong bucket.
+// Dormant until two-station tropo estimation exists.
+
+/// Scalar random-walk Kalman update for the rover ZWD residual with a
+/// per-epoch step saturation. `pairs` are `(h, y, r)` per phase
+/// observation, where `h = dm_wet/lambda` is the sensitivity of predicted
+/// phase (cycles) to zenith wet delay and `y` the innovation.
+pub fn update_zwd_scalar(
+    zwd: f64,
+    var: f64,
+    rw_m2_per_s: f64,
+    dt_s: f64,
+    pairs: &[(f64, f64, f64)],
+) -> (f64, f64) {
+    let prior_var = var + rw_m2_per_s * dt_s.abs().max(1e-3);
+    let mut denom = 1.0 / prior_var;
+    let mut num = 0.0;
+    for &(h, y, r) in pairs {
+        if r <= 0.0 {
+            continue;
+        }
+        denom += h * h / r;
+        num += h * y / r;
+    }
+    let post_var = 1.0 / denom;
+    let delta = (post_var * num).clamp(-MAX_ZWD_STEP_M, MAX_ZWD_STEP_M);
+    (zwd + delta, post_var)
+}
 // TUNING NOTE (CORS day set, full-day sweep): rates 3e-7..2.8e-6 monotonically
 // improve SLAC vertical with tighter values, but even at 3e-7 SLAC smoothed
 // vertical RMS stays ~2.2 m vs 0.78 m WITHOUT the state. A single rover-side
