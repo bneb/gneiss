@@ -341,3 +341,18 @@ product already exploits the three-baseline redundancy; per-base fix
 rates below Tier-1 targets during regional events reflect information
 limits of single-baseline processing under degraded conditions, not
 tunable parameters.
+
+## Cross-epoch detection: CSV-proxy negative result + validated forward path
+
+scripts/analyze_steps.py (TDD'd, 6 selftests): CUSUM level-shift detector
+over sep/cross-pass-disagreement/fix-quality-transition channels.
+Result: epoch-level AUC vs wrong-fix ground truth 0.45-0.73 (uninformative)
+on every base; operating curve flat across thresholds; detection latencies
+NEGATIVE (-47..-80 epochs), i.e. the proxy detects atmospheric/geometry
+degradation regimes that precede wrong fixes — a precursor, not a detector.
+
+Validated forward path: GnssRtkIekf.history already retains x_post with
+per-pair float ambiguities (state.rs amb_offset). Next step: emit these
+alongside WL_DUMP and run the same harness against ambiguity-step ground
+truth. If sustained unexplained shifts align with tails, integrate into
+the veto ladder alongside far_matches_widelanes and GNEISS_IF_VETO.
