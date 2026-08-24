@@ -283,12 +283,16 @@ pub fn update_tracker_from_obs(
         ref_sat: ref_sat_id,
         freq_band: 1,
     };
+    // Secondary band: GPS/GLONASS L2 (2); Galileo exports carry E5a on
+    // band 5 instead of L2. Fall back so Galileo pairs reach the tracker.
+    let b2 = if rov_s.get_observable_phase(2).is_some() { 2 } else { 5 };
     let f1 = gneiss_core::signal::get_frequency(sat_id, 1, 0);
-    let f2 = gneiss_core::signal::get_frequency(sat_id, 2, 0);
+    let f2 = gneiss_core::signal::get_frequency(sat_id, b2, 0);
     let band1 = band_quad(rov_s, rov_ref, bas_s, bas_ref, 1);
-    let band2 = band_quad(rov_s, rov_ref, bas_s, bas_ref, 2);
+    let band2 = band_quad(rov_s, rov_ref, bas_s, bas_ref, b2);
     let slip = [rov_s, rov_ref, bas_s, bas_ref].iter().any(|o| {
-        o.get_lli(1).is_some_and(|l| l & 1 != 0) || o.get_lli(2).is_some_and(|l| l & 1 != 0)
+        o.get_lli(1).is_some_and(|l| l & 1 != 0)
+            || o.get_lli(b2).is_some_and(|l| l & 1 != 0)
     });
     if let (Some((phi1, code1)), Some((phi2, code2))) = (band1, band2) {
         if let Some((mw_cycles, nl_scale)) = mw_dd_cycles(f1, f2, phi1, phi2, code1, code2) {

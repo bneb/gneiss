@@ -333,12 +333,20 @@ impl GnssRtkIekf {
                         // Phase-only wide-lane arc mean (no code term):
                         // converges to N_W + satellite UPD difference with
                         // millimetre-level noise once geometry is removed.
+                        // Secondary band: L2 for GPS/GLONASS; E5a
+                        // (band 5) for Galileo exports lacking L2.
+                        let b2 = match (rov_s, bas_s) {
+                            (Some(r), Some(b)) if
+                                r.get_observable_phase(2).is_some()
+                                && b.get_observable_phase(2).is_some() => 2,
+                            _ => 5,
+                        };
                         if let (Some(cp1), Some(cp2)) =
-                            (pair_cp.get(&1), pair_cp.get(&2))
+                            (pair_cp.get(&1), pair_cp.get(&b2))
                         {
                             self.update_phase_wl(
                                 *sat_id, *sat_pos, ref_sat_id, ref_pos,
-                                base_pos, *cp1, *cp2,
+                                base_pos, *cp1, *cp2, b2,
                             );
                         }
                     }
@@ -493,6 +501,7 @@ impl GnssRtkIekf {
         base_pos: Vector3<f64>,
         dd_cp1: f64,
         dd_cp2: f64,
+        b2: u8,
     ) {
         let key = DoubleDiffKey {
             constellation_id: sat_id.constellation as u8,
@@ -507,7 +516,7 @@ impl GnssRtkIekf {
             (sat_pos - base_pos).norm() - (ref_pos - base_pos).norm();
         let tropo = update::compute_tropo_dd(sat_pos, ref_pos, base_pos, cur);
         let f1 = gneiss_core::signal::get_frequency(sat_id, 1, 0);
-        let f2 = gneiss_core::signal::get_frequency(sat_id, 2, 0);
+        let f2 = gneiss_core::signal::get_frequency(sat_id, b2, 0);
         let lambda_wl = SPEED_OF_LIGHT_M_S / (f1 - f2);
         let pwl_cycles = dd_cp1 - dd_cp2;
         let pw = pwl_cycles - ((rs - rr) - base_dd + tropo) / lambda_wl;

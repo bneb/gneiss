@@ -67,14 +67,26 @@ pub fn form_iono_free_dd(
     key: DoubleDiffKey,
 ) -> Option<IonoFreeMeasurement> {
     let f1 = gneiss_core::signal::get_frequency(sat_id, 1, 0);
-    let f2 = gneiss_core::signal::get_frequency(sat_id, 2, 0);
+    // Secondary band: L2 for GPS/GLONASS; E5a (band 5) for Galileo
+    // exports that carry no L2 slot. All four stations must have it.
+    let b2 = if rov_s.get_observable_phase(2).is_some()
+        && bas_s.get_observable_phase(2).is_some()
+        && rov_ref.get_observable_phase(2).is_some()
+        && bas_ref.get_observable_phase(2).is_some()
+    {
+        2
+    } else {
+        5
+    };
+    let f2 = gneiss_core::signal::get_frequency(sat_id, b2, 0);
+
     if f1 <= 0.0 || f2 <= 0.0 || (f1 - f2).abs() < 1e6 {
         return None;
     }
-    let (p1_rs, p2_rs) = (rov_s.get_observable_phase(1)?, rov_s.get_observable_phase(2)?);
-    let (p1_rr, p2_rr) = (rov_ref.get_observable_phase(1)?, rov_ref.get_observable_phase(2)?);
-    let (p1_bs, p2_bs) = (bas_s.get_observable_phase(1)?, bas_s.get_observable_phase(2)?);
-    let (p1_br, p2_br) = (bas_ref.get_observable_phase(1)?, bas_ref.get_observable_phase(2)?);
+    let (p1_rs, p2_rs) = (rov_s.get_observable_phase(1)?, rov_s.get_observable_phase(b2)?);
+    let (p1_rr, p2_rr) = (rov_ref.get_observable_phase(1)?, rov_ref.get_observable_phase(b2)?);
+    let (p1_bs, p2_bs) = (bas_s.get_observable_phase(1)?, bas_s.get_observable_phase(b2)?);
+    let (p1_br, p2_br) = (bas_ref.get_observable_phase(1)?, bas_ref.get_observable_phase(b2)?);
 
     let dd_if = (combine_iono_free(f1, f2, p1_rs, p2_rs) - combine_iono_free(f1, f2, p1_rr, p2_rr))
         - (combine_iono_free(f1, f2, p1_bs, p2_bs) - combine_iono_free(f1, f2, p1_br, p2_br));
