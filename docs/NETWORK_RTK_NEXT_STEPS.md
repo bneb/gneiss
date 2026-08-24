@@ -180,3 +180,22 @@ tuning: tighter GRAD_RW or az-binned robustness for OHLN-class data.
 Tooling added: scripts/compare_dumps.py (A/B quantile comparator over
 WL_DUMP CSVs); eval Vertical Error line now carries p95 (appended after
 RMS to preserve guard's positional parsing).
+
+## Receiver PCO (differential datum form): CAPO vertical bias fixed
+
+Two fixes landed together:
+1. q_accel regression repaired: a lock-Q sweep had silently rewritten the
+   eval's convergence phase to 1e-9, disabling the two-phase design's
+   loose phase since it landed. Restored to 1e-6 -> lock 1e-8 after
+   15 min. OHLN h_p50 recovers 32 -> 23 mm; P181/CAPO pay ~1-2 mm.
+2. `GNEISS_RECV_PCO=1` applies the DIFFERENTIAL receiver L1 PCO
+   (base minus rover antenna, both ARP-referenced) to the base position.
+   Same-family baselines shift <=5 mm; CAPO's Leica LEIAR20 is +39.7 mm
+   Up vs the rover Trimble family.
+
+Measured: CAPO v_p50 -54 -> -14 mm (74% of the daily bias removed);
+all other bases unchanged within noise. CAPO v_p95 rises 117 -> 156 mm —
+the elevation-dependent PCV residual that PCO cannot address; that plus
+receiver PCV generally is the next antenna-modeling step. Multi-GNSS
+scoping closed: no Galileo in any base file (GLONASS partial), so DD
+multi-constellation is data-blocked, not code-blocked.

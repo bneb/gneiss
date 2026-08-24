@@ -202,17 +202,19 @@ fn run_pass(
     label: &str,
     bidir: bool,
     network_upd: Option<HashMap<u16, f64>>,
+    base_pos_eff: Vector3<f64>,
 ) -> ([f64; 4], Vec<SmoothedEpoch>) {
     let options = PostProcessOptions {
         enable_bidirectional: bidir,
-        base_position: Some(base.base_pos),
+        base_position: Some(base_pos_eff),
         initial_rover_position: ctx.rover_init,
         klobuchar_alpha: ctx.klob.map(|k| k.0),
         klobuchar_beta: ctx.klob.map(|k| k.1),
         // Static monuments: q=1.0 re-randomizes position ~55 m per 30 s
-        // epoch and keeps the float solution from converging (ambiguity
-        // floats sit 0.4+ cycles off, blocking AR). 1e-6 allows slow drift.
-        q_accel: Some(1e-9),
+        // epoch and keeps the float solution from converging. Loose phase
+        // (1e-6) lets float ambiguities converge; the engine's two-phase
+        // lock tightens to 1e-8 after 15 min so wrong fixes cannot hide.
+        q_accel: Some(1e-6),
         network_sat_upd: network_upd.clone(),
         // Long baselines need iono-immune fixing: MW wide-lane cascade AR
         // unlocks the iono-free stage beyond ~20 km.
@@ -277,6 +279,51 @@ fn run_pass(
 }
 
 #[allow(clippy::too_many_arguments)]
+/// Receiver L1 PCO (ECEF, m) for a base station: RINEX header antenna
+/// type/radome looked up in an ANTEX file. Opt-in via GNEISS_RECV_PCO=1
+/// (file via GNEISS_ANTEX, default datasets/igs14.atx).
+fn base_recv_pco_ecef(rinex_path: &Path, antex_path: &str, arp: Vector3<f64>) -> Option<Vector3<f64>> {
+    use gneiss_parsers::antex::AntexDatabase;
+    use std::io::BufRead;
+
+    // 1. antenna type + radome from the RINEX2 header
+    let f = File::open(rinex_path).ok()?;
+    let mut fam_radome: Option<(String, String)> = None;
+    for line in BufReader::new(f).lines().take(80).flatten() {
+        if line.len() >= 60 && line[60..].trim() == "ANT # / TYPE" {
+            let fields: Vec<&str> = line[20..40].split_whitespace().collect();
+            let fam = fields.first()?.to_string();
+            let rad = fields.get(1).copied().unwrap_or("NONE").to_string();
+            fam_radome = Some((fam, rad));
+            break;
+        }
+    }
+    let (fam, rad) = fam_radome?;
+
+    // 2. ANTEX receiver entry: type field may hold "FAM RADOME" or "FAM"
+    let db = AntexDatabase::parse(antex_path).ok()?;
+    let ant = db.antennas.iter().find(|a| {
+        let parts: Vec<&str> = a.antenna_type.split_whitespace().collect();
+        match parts.as_slice() {
+            [t, r] => *t == fam && *r == rad,
+            [t] => *t == fam && rad == "NONE",
+            _ => false,
+        }
+    })?;
+    let pco_mm = &ant.frequencies.get("G01")?.pco;
+
+    // 3. ENU -> ECEF at the ARP
+    let llh = gneiss_core::coords::ecef_to_llh(arp);
+    let (lat, lon) = (llh.x, llh.y);
+    let (slat, clat) = (lat.sin(), lat.cos());
+    let (slon, clon) = (lon.sin(), lon.cos());
+    let east = Vector3::new(-slon, clon, 0.0);
+    let north = Vector3::new(-slat * clon, -slat * slon, clat);
+    let up = Vector3::new(clat * clon, clat * slon, slat);
+    let m = 1e-3;
+    Some(north * (pco_mm.x * m) + east * (pco_mm.y * m) + up * (pco_mm.z * m))
+}
+
 fn run_base(
     base: &NetworkBase,
     dir: &Path,
@@ -284,6 +331,42 @@ fn run_base(
     rover: &[EpochObs],
     network_upd: Option<HashMap<u16, f64>>,
 ) -> ([f64; 8], Vec<SmoothedEpoch>) {
+    // Receiver-side PCO: shift the base reference point from ARP to its L1
+    // phase centre so DD geometry references real antenna positions. The
+    // rover stays ARP-referenced (truth datum), so this corrects the
+    // cross-family differential without introducing an evaluation offset.
+    let recv_pco_on = std::env::var("GNEISS_RECV_PCO").is_ok();
+    let base_pos_eff = if recv_pco_on {
+        // Differential datum correction: subtract the rover antenna's own
+        // PCO so same-family baselines stay put and only cross-family
+        // mismatches (e.g. CAPO's Leica +39.7 mm Up) move. Rover ARP
+        // anchor = first truth epoch.
+        let rover_arp = ctx.truth.values().next().copied();
+        let antex = std::env::var("GNEISS_ANTEX")
+            .unwrap_or_else(|_| "datasets/igs14.atx".into());
+        match (
+            base_recv_pco_ecef(&dir.join(base.base_file), &antex, base.base_pos),
+            rover_arp.and_then(|arp| {
+                base_recv_pco_ecef(Path::new("datasets/cors_short_baseline/p2241350.20o"), &antex, arp)
+            }),
+        ) {
+            (Some(d_base), Some(d_rover)) => {
+                let diff = d_base - d_rover;
+                println!(
+                    "RECV-PCO [{}]: differential |d|={:.1} mm",
+                    base.id,
+                    diff.norm() * 1000.0
+                );
+                base.base_pos + diff
+            }
+            _ => {
+                eprintln!("RECV-PCO [{}]: lookup failed; using ARP", base.id);
+                base.base_pos
+            }
+        }
+    } else {
+        base.base_pos
+    };
     let base_f = match File::open(dir.join(base.base_file)) {
         Ok(f) => f,
         Err(e) => {
@@ -296,11 +379,11 @@ fn run_base(
         return ([0.0; 8], Vec::new());
     };
     let config = EngineConfig::Rtk(gneiss_rtk::swfg::config::RtkConfig {
-        initial_position: Some([base.base_pos.x, base.base_pos.y, base.base_pos.z]),
+        initial_position: Some([base_pos_eff.x, base_pos_eff.y, base_pos_eff.z]),
         ..Default::default()
     });
-    let (fwd, _fwd_traj) = run_pass(&config, ctx, rover, &base_epochs, base, "Forward", false, network_upd.clone());
-    let (smooth, smooth_traj) = run_pass(&config, ctx, rover, &base_epochs, base, "Smoothed", true, network_upd.clone());
+    let (fwd, _fwd_traj) = run_pass(&config, ctx, rover, &base_epochs, base, "Forward", false, network_upd.clone(), base_pos_eff);
+    let (smooth, smooth_traj) = run_pass(&config, ctx, rover, &base_epochs, base, "Smoothed", true, network_upd.clone(), base_pos_eff);
     let mut out = [0.0; 8];
     out[..4].copy_from_slice(&fwd);
     out[4..].copy_from_slice(&smooth);
