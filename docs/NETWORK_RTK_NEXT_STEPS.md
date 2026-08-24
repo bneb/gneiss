@@ -372,3 +372,31 @@ eliminated by the combined Galileo + gradient + robust-weighting stack.
 
 The dump infrastructure is retained for future datasets where wrong
 fixes do occur (dataset A legacy, adverse conditions).
+
+## Peer comparison: Gneiss vs RTKLIB on identical data (2020 DOY 135)
+
+Built RTKLIB 2.4.3 b34 (rnx2rtkp) from source; ran on identical P181
+15 km baseline data (P224 rover + P181 base, GPS-only, broadcast eph).
+Gneiss used its default multi2025-equivalent settings (robust weighting,
+two-phase Q, baseline-gated ZWD).
+
+| metric | RTKLIB default | **Gneiss** | ratio |
+|---|---|---|---|
+| fix rate | 48.8% | **86.6%** | 1.8× |
+| h_p50 | 113 mm | **24 mm** | 4.7× |
+| h_p95 | 143 mm | **54 mm** | 2.7× |
+| h_RMS | 119 mm | **33 mm** | 3.6× |
+
+Both using broadcast ephemerides only. RTKLIB run with NGS-published
+base coordinates (-r flag) and static mode (-p 2). Gneiss improvements
+(resolution-weighted robust estimation, two-phase Q, ZWD state) account
+for the difference.
+
+IMPORTANT CAVEAT: RTKLIB has many additional options not exercised here
+(troposphere estimation via options file, precise ephemeris via SP3,
+different AR strategies, elevation mask tuning). A fully optimized
+RTKLIB configuration would narrow but likely not close the gap, given
+that our improvements target exactly the failure modes (atmospheric
+bias → wrong fixes) that cause RTKLIB's low fix rate.
+
+Binary at /tmp/rnx2rtkp for future comparisons.
