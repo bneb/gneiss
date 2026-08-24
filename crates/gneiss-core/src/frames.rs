@@ -46,14 +46,13 @@
 //!   (< 1 mm and cm-level respectively); both links equal the ITRF2020 row.
 
 use core::marker::PhantomData;
+use crate::constants::MILLIARCSEC_TO_RAD;
 use nalgebra::{Matrix3, Vector3};
 
 /// Millimetres to metres.
 const MM_TO_M: f64 = 1.0e-3;
 /// Parts per billion to dimensionless.
 const PPB: f64 = 1.0e-9;
-/// Milliarcseconds to radians.
-const MAS_TO_RAD: f64 = core::f64::consts::PI / 648_000_000.0;
 
 /// 14-parameter Helmert set mapping one frame's coordinates into another;
 /// units mirror the published ITRF/IGS tables and `*_rate` fields are annual
@@ -132,13 +131,7 @@ impl HelmertParams {
             ry_mas: self.ry_mas + self.ry_rate * dt,
             rz_mas: self.rz_mas + self.rz_rate * dt,
             ref_epoch_yr: t_yr,
-            tx_rate: self.tx_rate,
-            ty_rate: self.ty_rate,
-            tz_rate: self.tz_rate,
-            scale_rate: self.scale_rate,
-            rx_rate: self.rx_rate,
-            ry_rate: self.ry_rate,
-            rz_rate: self.rz_rate,
+            ..self
         }
     }
 
@@ -178,7 +171,7 @@ impl HelmertParams {
     }
 
     fn rotation_rad(self) -> Vector3<f64> {
-        Vector3::new(self.rx_mas, self.ry_mas, self.rz_mas) * MAS_TO_RAD
+        Vector3::new(self.rx_mas, self.ry_mas, self.rz_mas) * MILLIARCSEC_TO_RAD
     }
 
     fn scale_factor(self) -> f64 {
@@ -200,7 +193,10 @@ pub trait ReferenceFrame {
     const HELMERT_TO_ITRF2014: Option<HelmertParams>;
 }
 
-/// Published ITRF2020 -> ITRF2014 link (epoch 2015.0; rotations and rates 0).
+/// Published ITRF2020 -> ITRF2014 link (epoch 2015.0; rotations zero).
+/// WARNING: rates here are zeroed pending confirmation against itrf.ign.fr —
+/// some sources report Tz drift ≈ −0.2 mm/yr for this row, which would shift
+/// Z by ~2 mm by 2025. Verify before trusting sub-mm conversions far from 2015.
 const ITRF2020_TO_ITRF2014: HelmertParams = HelmertParams {
     tx_mm: -1.4,
     ty_mm: -0.9,
@@ -328,9 +324,11 @@ mod tests {
     struct TestRotZ;
     impl ReferenceFrame for TestRotZ {
         const NAME: &'static str = "TEST-ROTZ";
-        /// +1000 mas about Z pins down the rotation sign convention.
+        /// Distinct rotations about all three axes pin the sign convention.
         const HELMERT_TO_ITRF2014: Option<HelmertParams> = Some(HelmertParams {
-            rz_mas: 1000.0,
+            rx_mas: 1000.0,
+            ry_mas: -2000.0,
+            rz_mas: 3000.0,
             ..HelmertParams::identity_at(2015.0)
         });
     }
@@ -366,9 +364,10 @@ mod tests {
 
     #[test]
     fn identity_conversion_is_bit_exact() {
-        // ITRF2014 is the hub (None params): conversion must be exact at any
-        // epoch, which also pins the `None` => identity semantics.
+        // Hub frame (None params) converts exactly at any epoch, pinning the
+        // `None` => identity semantics; ITRF2014 must stay the unique None.
         let p = EcefPos::<Itrf2014>::new(SITE);
+        assert_eq!(Itrf2014::HELMERT_TO_ITRF2014, None);
         for t in [2015.0_f64, 2020.0, 2040.0] {
             assert_eq!(p.convert_to::<Itrf2014>(t).0, SITE);
         }
@@ -392,7 +391,7 @@ mod tests {
         let orig = EcefPos::<A>::new(v);
         let back = orig.convert_to::<B>(t).convert_to::<A>(t);
         let err = (back.vector() - orig.vector()).norm();
-        assert!(err < 1.0e-6, "{} -> {} round trip drifted {err:e} m", A::NAME, B::NAME);
+        assert!(err < 1.0e-6, "{} -> {} drifted {err:e} m", A::NAME, B::NAME);
     }
 
     #[test]
@@ -412,23 +411,35 @@ mod tests {
             (got - expected_shift).abs().max() < 1.0e-8,
             "shift {got:?} != published {expected_shift:?}"
         );
-        // Total effect is millimetre-level: big enough to corrupt PPK output.
-        assert!(got.norm() > 1.0e-3 && got.norm() < 5.0e-3);
     }
 
     #[test]
-    fn positive_rotation_moves_x_toward_y() {
-        // Altamimi convention: X' = T + (1+s)(X + ω×X), so +rz sends +X toward +Y.
-        let out = EcefPos::<TestRotZ>::new(Vector3::new(1.0, 0.0, 0.0))
-            .convert_to::<Itrf2014>(2015.0)
-            .0;
-        let rz_rad = 1000.0 * MAS_TO_RAD;
-        assert!(
-            (out[0] - 1.0).abs() < 1.0e-15
-                && (out[1] - rz_rad).abs() < 1.0e-18
-                && out[2].abs() < 1.0e-24,
-            "rotation sign or axis wrong: {out:?}"
-        );
+    fn rotation_axes_follow_altamimi_sign_convention() {
+        // X' = X + ω×X with ω = (1000, −2000, 3000) mas. Expected values are
+        // hardcoded (rad per mas literal) so a corrupted unit conversion or
+        // flipped sign on ANY axis cannot self-verify.
+        const K: f64 = 4.848_136_811_095_360e-9; // rad per mas
+        let cases = [
+            (
+                Vector3::new(1.0, 0.0, 0.0),
+                Vector3::new(1.0, 3000.0 * K, 2000.0 * K),
+            ),
+            (
+                Vector3::new(0.0, 1.0, 0.0),
+                Vector3::new(-3000.0 * K, 1.0, 1000.0 * K),
+            ),
+            (
+                Vector3::new(0.0, 0.0, 1.0),
+                Vector3::new(-2000.0 * K, -1000.0 * K, 1.0),
+            ),
+        ];
+        for (v, expected) in cases {
+            let out = EcefPos::<TestRotZ>::new(v).convert_to::<Itrf2014>(2015.0).0;
+            assert!(
+                (out - expected).abs().max() < 1.0e-12,
+                "rotation {v:?} -> {out:?}, expected {expected:?}"
+            );
+        }
     }
 
     #[test]
@@ -446,15 +457,23 @@ mod tests {
         assert!((minus10[2] + 0.010).abs() < 1.0e-8);
         assert!(plus10[0].abs() < 1.0e-8 && plus10[1].abs() < 1.0e-8);
         assert!(minus10[0].abs() < 1.0e-8 && minus10[1].abs() < 1.0e-8);
-        // `at` must re-anchor the reference epoch and carry rates through.
-        let propagated = full_params(2015.0).at(2025.0);
-        assert_eq!(propagated.ref_epoch_yr, 2025.0);
-        assert!((propagated.tx_rate - 0.2).abs() < 1.0e-15);
+        // `at` must re-anchor the reference epoch and propagate ALL seven
+        // quantities with their signed rates (literals kill sign mutants).
+        let q = full_params(2015.0).at(2025.0);
+        assert_eq!(q.ref_epoch_yr, 2025.0);
+        let drift = (q.tx_mm - 3.0).abs()
+            + (q.ty_mm + 3.5).abs()
+            + (q.tz_mm - 6.0).abs()
+            + (q.scale_ppb - 12.5).abs()
+            + (q.rx_mas - 804.0).abs()
+            + (q.ry_mas + 1506.0).abs()
+            + (q.rz_mas - 2207.0).abs();
+        assert!(drift < 1.0e-9, "propagation drift {drift:e}");
     }
 
     #[test]
-    fn shipped_frame_links_match_published_itrf2020_row() {
-        // All three are ITRF2020-aligned: identical published constants.
+    fn shipped_frame_links_are_consistent_with_itrf2020_row() {
+        // Internal consistency only (provenance needs itrf.ign.fr).
         for link in [
             Itrf2020::HELMERT_TO_ITRF2014,
             Igs20::HELMERT_TO_ITRF2014,
@@ -492,6 +511,7 @@ mod tests {
         assert_eq!(Itrf2014::NAME, "ITRF2014");
         assert!(format!("{p:?}").contains("IGS20"));
         let copied = p;
-        assert!(copied == p, "Copy/PartialEq must work for any tag type");
+        let different = EcefPos::<Igs20>::new(Vector3::new(3.0, 4.0, 1.0));
+        assert!(copied == p && different != p, "Copy/PartialEq broken");
     }
 }

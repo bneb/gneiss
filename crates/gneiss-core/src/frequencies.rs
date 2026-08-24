@@ -6,7 +6,14 @@
 //! (GPS band 2 = L2 @ 1227.60 MHz, Galileo band 2 = ambiguous legacy slot).
 //!
 //! References: GPS ICD-IS-200/705, GLONASS ICD (5.1 ed.), Galileo ICD OS-SIS,
-//! BeiDou ICD B1I/B3I (all center frequencies are ITU-allocated RNSS carriers).
+//! BeiDou ICD B1I/B3I (all centre frequencies are ITU-allocated RNSS carriers).
+//!
+//! # Integration status
+//!
+//! The legacy [`crate::signal`] lookups remain wired into the estimators; this
+//! registry is the reference they must converge onto. Do not migrate only one
+//! call site while others keep legacy band-2 semantics — that recreates the
+//! very cross-path inconsistency this module exists to remove.
 
 use crate::constants::SPEED_OF_LIGHT_M_S;
 use crate::sat::Constellation;
@@ -36,48 +43,19 @@ pub enum Signal {
     BdsB3i,
 }
 
-/// One character class of a RINEX observable type string (`"C1"`, `"L2W"`, `"P1"`…).
-struct RinexCode {
-    kind: char,
-    band: u8,
-    attr: char,
-}
-
-impl RinexCode {
-    /// Parses 2-char RINEX 2 types (`"L1"`, `"P2"`) and 3-char RINEX 3 types
-    /// (`"C1C"`, `"L2W"`). Case-insensitive; missing attribute becomes `' '`.
-    /// Only valid observation kinds (`C`/`L`/`P`/`D`/`S`) parse.
-    fn parse(rinex_type: &str) -> Option<Self> {
-        let mut chars = rinex_type.chars();
-        let kind = chars.next()?.to_ascii_uppercase();
-        if !matches!(kind, 'C' | 'L' | 'P' | 'D' | 'S') {
-            return None;
-        }
-        let band = chars.next()?.to_digit(10)? as u8;
-        let attr = chars.next().unwrap_or(' ').to_ascii_uppercase();
-        Some(Self { kind, band, attr })
-    }
-
-    /// True for P-code style observations: RINEX 2 `"P1"/"P2"` kinds and
-    /// RINEX 3 encrypted-tracking attributes `W` (P(Y)) / `Y` (P(Y)-AS).
-    fn is_precise(&self) -> bool {
-        self.kind == 'P' || self.attr == 'W' || self.attr == 'Y'
-    }
-}
-
 impl Signal {
     /// Base frequency in Hz (without FDMA offset for GLONASS).
     pub fn base_freq_hz(&self) -> f64 {
         match self {
-            Signal::GpsL1Ca | Signal::GpsL1P | Signal::GalE1Os => 1_575_420_000.0,
-            Signal::GpsL2Cm | Signal::GpsL2P => 1_227_600_000.0,
-            Signal::GpsL5 | Signal::GalE5a => 1_176_450_000.0,
-            Signal::GloL1Of => 1_602_000_000.0,
-            Signal::GloL2Of => 1_246_000_000.0,
-            Signal::GalE5b => 1_207_140_000.0,
-            Signal::GalE6Cs => 1_278_750_000.0,
-            Signal::BdsB1i => 1_561_098_000.0,
-            Signal::BdsB3i => 1_268_520_000.0,
+            Signal::GpsL1Ca | Signal::GpsL1P | Signal::GalE1Os => 1575.42e6,
+            Signal::GpsL2Cm | Signal::GpsL2P => 1227.60e6,
+            Signal::GpsL5 | Signal::GalE5a => 1176.45e6,
+            Signal::GloL1Of => 1602.0e6,
+            Signal::GloL2Of => 1246.0e6,
+            Signal::GalE5b => 1207.14e6,
+            Signal::GalE6Cs => 1278.75e6,
+            Signal::BdsB1i => 1561.098e6,
+            Signal::BdsB3i => 1268.52e6,
         }
     }
 
@@ -100,25 +78,61 @@ impl Signal {
     }
 }
 
+/// One character class of a RINEX observable type string (`"C1"`, `"L2W"`, `"P1"`…).
+struct RinexCode {
+    kind: char,
+    band: u8,
+    attr: char,
+}
+
+impl RinexCode {
+    /// Parses 2-char RINEX 2 types (`"L1"`, `"P2"`) and 3-char RINEX 3 types
+    /// (`"C1C"`, `"L2W"`). Case-insensitive; missing attribute becomes `' '`;
+    /// characters beyond the third are ignored. Only valid observation kinds
+    /// (`C`/`L`/`P`/`D`/`S`) parse.
+    fn parse(rinex_type: &str) -> Option<Self> {
+        let mut chars = rinex_type.chars();
+        let kind = chars.next()?.to_ascii_uppercase();
+        if !matches!(kind, 'C' | 'L' | 'P' | 'D' | 'S') {
+            return None;
+        }
+        let band = chars.next()?.to_digit(10)? as u8;
+        let attr = chars.next().unwrap_or(' ').to_ascii_uppercase();
+        Some(Self { kind, band, attr })
+    }
+
+    /// True for P-code style observations: RINEX 2 `"P1"/"P2"` kinds and
+    /// RINEX 3 encrypted-tracking attributes `W` (P(Y)) / `Y` (P(Y)-AS).
+    fn is_precise(&self) -> bool {
+        self.kind == 'P' || self.attr == 'W' || self.attr == 'Y'
+    }
+}
+
 /// Map from RINEX observable type + constellation to [`Signal`].
 ///
 /// Accepts RINEX 2 (`"L1"`, `"P2"`) and RINEX 3 (`"C1C"`, `"L2W"`) spellings.
 ///
-/// # The Galileo band-2 ambiguity (resolved here, once)
+/// # The Galileo band-2 ambiguity (pinned here, once)
 ///
 /// RINEX 3 makes Galileo bands unambiguous: 1 = E1, 5 = E5a, 6 = E6, 7 = E5b.
 /// RINEX 2.11 mixed GNSS exports instead reuse the GPS letter scheme, and the
 /// second-frequency slot labelled `"L2"/"C2"` for Galileo satellites is written
 /// **differently by different converters**: some put E5a (1176.45 MHz) there,
-/// others E5b (1207.14 MHz). The datasets this engine consumes put **E5a** in
-/// the L2 slot, so this registry resolves Galileo `"L2"` to
-/// [`Signal::GalE5a`]. Note this deliberately *differs* from the legacy
-/// `crate::signal::get_frequency(.., band 2, ..)`, which assumes E5b — that
-/// disagreement was the bug class this module eliminates. Prefer unambiguous
-/// RINEX 3 codes (band 5 = E5a, band 7 = E5b) whenever the file provides them.
+/// others E5b (1207.14 MHz). Per the project's dataset directive this registry
+/// resolves Galileo `"L2"` to [`Signal::GalE5a`], which deliberately *differs*
+/// from the legacy `crate::signal::get_frequency(.., band 2, ..)` (= E5b);
+/// before migrating a call site, confirm which convention your files use.
+/// Unambiguous RINEX 3 codes (band 5 = E5a, band 7 = E5b) are always preferred.
 ///
-/// Returns `None` for combinations with no modelled signal (e.g. NavIC, BDS
-/// B2a/B2b, Galileo E5 AltBOC band 8) — callers must skip such observables.
+/// # BeiDou band numbers are version-dependent
+///
+/// In RINEX 3, B1I rides band 2 (`C2I`, confirmed by MGEX headers) while band
+/// 1 carries BDS-3 B1C @1575.42 MHz (`C1P/C1X`). B1C has no variant here yet,
+/// so band-1-with-B1C-attribute resolves to `None` rather than risking a
+/// 14.3 MHz error. Legacy RINEX 2 files put B1I in the plain band-1 slot.
+///
+/// Returns `None` for combinations with no modelled signal (NavIC, BDS
+/// B1C/B2a/B2b, Galileo E5 AltBOC band 8) — callers must skip such observables.
 pub fn rinex_type_to_signal(constellation: Constellation, rinex_type: &str) -> Option<Signal> {
     let code = RinexCode::parse(rinex_type)?;
     match constellation {
@@ -126,17 +140,19 @@ pub fn rinex_type_to_signal(constellation: Constellation, rinex_type: &str) -> O
         Constellation::Sbas => sbas_signal(code.band),
         Constellation::Glonass => glonass_signal(code.band),
         Constellation::Galileo => galileo_signal(code.band),
-        Constellation::Beidou => beidou_signal(code.band),
+        Constellation::Beidou => beidou_signal(&code),
         Constellation::Navic => None, // L5/S-band not modelled yet
     }
 }
 
 /// Actual transmitted frequency in Hz for a specific satellite.
 ///
-/// `freq_num` is the GLONASS FDMA channel number `k`; it is ignored for CDMA
-/// signals. If `sat` disagrees with the signal's own constellation (only
-/// possible for the FDMA branch), the nominal k = 0 channel is returned rather
-/// than panicking — callers should treat that combination as a bug upstream.
+/// `freq_num` is the GLONASS FDMA channel number `k` (ICD operational range
+/// −7..+6; out-of-range values pass through arithmetically — callers must
+/// validate); it is ignored for CDMA signals. If `sat` disagrees with the
+/// signal's own constellation (only possible for the FDMA branch), the nominal
+/// k = 0 channel is returned rather than panicking; treat that combination as
+/// an upstream bug.
 pub fn frequency_for(sat: Constellation, signal: Signal, freq_num: i8) -> f64 {
     match signal.fdma_offset_hz() {
         None => signal.base_freq_hz(),
@@ -185,17 +201,19 @@ fn galileo_signal(band: u8) -> Option<Signal> {
     }
 }
 
-/// BeiDou: B1I on band 1, B3I on RINEX 3 band 6. Bands 2 (B2I ≈1207 MHz) and
-/// 5 (B2a 1176.45) have no variant in this registry version yet. Caveat:
-/// RINEX 3 BDS-3 `C1P/C1X` observables track B1C (1575.42 MHz), NOT B1I —
-/// they resolve to [`Signal::BdsB1i`] here because no B1C variant exists;
-/// callers processing BDS-3-only receivers must not trust band-1 frequencies
-/// until a `BdsB1c` variant is added.
-fn beidou_signal(band: u8) -> Option<Signal> {
-    match band {
-        1 => Some(Signal::BdsB1i),
+/// BeiDou — band numbers are RINEX-version-dependent, resolved via attributes:
+/// RINEX 3 band 2 (`C2I`) carries B1I @1561.098; RINEX 3 band 1 carries BDS-3
+/// B1C @1575.42 (`C1P/C1X`) which has NO variant here, so it maps to None
+/// rather than risking a 14.3 MHz error. Legacy RINEX 2 files put B1I in the
+/// plain band-1 slot (`"C1"`), kept as [`Signal::BdsB1i`]. Band 6 = B3I.
+/// Bands 5 (B2a) and 7 (B2b) have no variant in this registry version yet.
+fn beidou_signal(code: &RinexCode) -> Option<Signal> {
+    let b1c_attr = matches!(code.attr, 'P' | 'X' | 'D');
+    match code.band {
+        1 if !b1c_attr => Some(Signal::BdsB1i), // RINEX 2 legacy slot only
+        2 => Some(Signal::BdsB1i),              // RINEX 3 B1I (e.g. "C2I")
         6 => Some(Signal::BdsB3i),
-        _ => None,
+        _ => None, // bands 1(B1C)/5(B2a)/7(B2b) unmodelled
     }
 }
 
@@ -226,59 +244,75 @@ mod tests {
         );
     }
 
+    /// Asserts every whitespace-separated RINEX type maps to `want`.
+    fn assert_maps(cons: Constellation, types: &str, want: Option<Signal>) {
+        for t in types.split_whitespace() {
+            assert_eq!(rinex_type_to_signal(cons, t), want, "type {t:?}");
+        }
+    }
+
     #[test]
-    fn base_freqs_match_icd_within_1hz() {
-        // Centre frequencies straight from the ICDs (in Hz).
+    fn icd_constants_and_wavelengths() {
+        // (signal, ICD centre frequency Hz, lambda m) — references computed
+        // independently of this module (lambda = c/f, c = 299792458).
         let cases = [
-            (Signal::GpsL1Ca, 1575.42e6),
-            (Signal::GpsL1P, 1575.42e6),
-            (Signal::GpsL2Cm, 1227.60e6),
-            (Signal::GpsL2P, 1227.60e6),
-            (Signal::GpsL5, 1176.45e6),
-            (Signal::GloL1Of, 1602.0e6),
-            (Signal::GloL2Of, 1246.0e6),
-            (Signal::GalE1Os, 1575.42e6),
-            (Signal::GalE5a, 1176.45e6),
-            (Signal::GalE5b, 1207.14e6),
-            (Signal::GalE6Cs, 1278.75e6),
-            (Signal::BdsB1i, 1561.098e6),
-            (Signal::BdsB3i, 1268.52e6),
+            (Signal::GpsL1Ca, 1575.42e6, 0.190293672798),
+            (Signal::GpsL1P, 1575.42e6, 0.190293672798),
+            (Signal::GpsL2Cm, 1227.60e6, 0.244210213425),
+            (Signal::GpsL2P, 1227.60e6, 0.244210213425),
+            (Signal::GpsL5, 1176.45e6, 0.254828048791),
+            (Signal::GloL1Of, 1602.0e6, 0.187136365793), // nominal k=0
+            (Signal::GloL2Of, 1246.0e6, 0.240603898876),
+            (Signal::GalE1Os, 1575.42e6, 0.190293672798),
+            (Signal::GalE5a, 1176.45e6, 0.254828048791),
+            (Signal::GalE5b, 1207.14e6, 0.248349369584),
+            (Signal::GalE6Cs, 1278.75e6, 0.234441804888),
+            (Signal::BdsB1i, 1561.098e6, 0.192039486310),
+            (Signal::BdsB3i, 1268.52e6, 0.236332464604),
         ];
-        for (signal, icd_hz) in cases {
+        for (signal, icd_hz, icd_lam) in cases {
             assert_close(signal.base_freq_hz(), icd_hz, HZ_TOL, "base freq");
+            let lam = signal.wavelength_m();
+            assert_close(lam, icd_lam, 1e-9, "lambda ref");
+            // Cross-path check through wavelength_for: FDMA signals at k=0,
+            // CDMA signals with an arbitrary channel, must both agree.
+            let glo = Constellation::Glonass;
+            let via_for = if glo == Constellation::Glonass && signal.fdma_offset_hz().is_some() {
+                wavelength_for(glo, signal, 0)
+            } else {
+                wavelength_for(Constellation::Gps, signal, 3)
+            };
+            assert_close(via_for, lam, 1e-12, "wavelength_for cross-path");
         }
     }
 
     #[test]
-    fn fdma_offsets_exhaustive() {
-        let cases = [
-            (Signal::GpsL1Ca, None),
-            (Signal::GpsL1P, None),
-            (Signal::GpsL2Cm, None),
-            (Signal::GpsL2P, None),
-            (Signal::GpsL5, None),
-            (Signal::GloL1Of, Some(562_500.0)),
-            (Signal::GloL2Of, Some(437_500.0)),
-            (Signal::GalE1Os, None),
-            (Signal::GalE5a, None),
-            (Signal::GalE5b, None),
-            (Signal::GalE6Cs, None),
-            (Signal::BdsB1i, None),
-            (Signal::BdsB3i, None),
+    fn glonass_fdma_offsets_and_channel_sweep() {
+        assert_eq!(Signal::GloL1Of.fdma_offset_hz(), Some(562_500.0));
+        assert_eq!(Signal::GloL2Of.fdma_offset_hz(), Some(437_500.0));
+        let cdma = [
+            Signal::GpsL1Ca,
+            Signal::GpsL1P,
+            Signal::GpsL2Cm,
+            Signal::GpsL2P,
+            Signal::GpsL5,
+            Signal::GalE1Os,
+            Signal::GalE5a,
+            Signal::GalE5b,
+            Signal::GalE6Cs,
+            Signal::BdsB1i,
+            Signal::BdsB3i,
         ];
-        for (signal, offset) in cases {
-            assert_eq!(signal.fdma_offset_hz(), offset);
+        for signal in cdma {
+            assert_eq!(signal.fdma_offset_hz(), None, "{signal:?}");
         }
-    }
-
-    #[test]
-    fn glonass_fdma_k_minus7_to_plus6() {
-        // Independent formula: f(k) = f0 + k * delta, valid channels -7..+6.
+        // Independent formula: f(k) = f0 + k * delta, valid channels −7..+6.
         for k in -7..=6i8 {
-            let f1 = frequency_for(Constellation::Glonass, Signal::GloL1Of, k);
-            let f2 = frequency_for(Constellation::Glonass, Signal::GloL2Of, k);
-            assert_close(f1, 1_602_000_000.0 + f64::from(k) * 562_500.0, HZ_TOL, "L1(k)");
-            assert_close(f2, 1_246_000_000.0 + f64::from(k) * 437_500.0, HZ_TOL, "L2(k)");
+            let g = Constellation::Glonass;
+            let f1 = frequency_for(g, Signal::GloL1Of, k);
+            let f2 = frequency_for(g, Signal::GloL2Of, k);
+            assert_close(f1, 1602.0e6 + f64::from(k) * 562_500.0, HZ_TOL, "L1(k)");
+            assert_close(f2, 1246.0e6 + f64::from(k) * 437_500.0, HZ_TOL, "L2(k)");
         }
         // Published GLONASS ICD edge-channel spot checks.
         let (g, l1, l2) = (Constellation::Glonass, Signal::GloL1Of, Signal::GloL2Of);
@@ -286,74 +320,35 @@ mod tests {
         assert_close(frequency_for(g, l1, 6), 1605.375e6, HZ_TOL, "L1(k=+6)");
         assert_close(frequency_for(g, l2, -7), 1242.9375e6, HZ_TOL, "L2(k=-7)");
         assert_close(frequency_for(g, l2, 6), 1248.625e6, HZ_TOL, "L2(k=+6)");
-    }
-
-    #[test]
-    fn wavelengths_match_c_over_f() {
-        // Hardcoded references computed independently of this module.
-        let cases = [
-            (Signal::GpsL1Ca, 0.190293672798),
-            (Signal::GpsL2Cm, 0.244210213425),
-            (Signal::GpsL5, 0.254828048791),
-            (Signal::GloL1Of, 0.187136365793), // nominal k=0
-            (Signal::GloL2Of, 0.240603898876),
-            (Signal::GalE1Os, 0.190293672798),
-            (Signal::GalE5a, 0.254828048791),
-            (Signal::GalE5b, 0.248349369584),
-            (Signal::GalE6Cs, 0.234441804888),
-            (Signal::BdsB1i, 0.192039486310),
-            (Signal::BdsB3i, 0.236332464604),
-        ];
-        for (signal, lam_ref) in cases {
-            let lam = signal.wavelength_m();
-            assert_close(lam, lam_ref, 1e-9, "lambda ref");
-            // Cross-check: lambda must equal c/f exactly (relative tol).
-            let ratio = lam / (SPEED_OF_LIGHT_M_S / signal.base_freq_hz());
-            assert_close(ratio, 1.0, 1e-12, "lambda = c/f");
-        }
         // Channel-correct GLONASS wavelengths at the extreme channels.
-        let l1_lo = wavelength_for(Constellation::Glonass, Signal::GloL1Of, -7);
-        let l2_hi = wavelength_for(Constellation::Glonass, Signal::GloL2Of, 6);
-        assert_close(l1_lo, 0.187597455043, 1e-9, "GLO L1 lambda k=-7");
-        assert_close(l2_hi, 0.240098074282, 1e-9, "GLO L2 lambda k=+6");
+        let w1 = wavelength_for(g, l1, -7);
+        let w2 = wavelength_for(g, l2, 6);
+        assert_close(w1, 0.187597455043, 1e-9, "GLO L1 lambda k=-7");
+        assert_close(w2, 0.240098074282, 1e-9, "GLO L2 lambda k=+6");
     }
 
     #[test]
     fn gps_rinex_types_map_correctly() {
-        let ca = [("C1", Signal::GpsL1Ca), ("L1", Signal::GpsL1Ca), ("D1", Signal::GpsL1Ca), ("S1", Signal::GpsL1Ca), ("C1C", Signal::GpsL1Ca), ("L1C", Signal::GpsL1Ca)];
-        for (t, want) in ca {
-            assert_eq!(rinex_type_to_signal(Constellation::Gps, t), Some(want), "{t}");
-        }
-        let pcode = [("P1", Signal::GpsL1P), ("C1W", Signal::GpsL1P), ("L1W", Signal::GpsL1P), ("C1Y", Signal::GpsL1P), ("C2", Signal::GpsL2Cm), ("L2", Signal::GpsL2Cm), ("P2", Signal::GpsL2P), ("C2W", Signal::GpsL2P), ("C2X", Signal::GpsL2Cm)];
-        for (t, want) in pcode {
-            assert_eq!(rinex_type_to_signal(Constellation::Gps, t), Some(want), "{t}");
-        }
-        assert_eq!(rinex_type_to_signal(Constellation::Gps, "C5"), Some(Signal::GpsL5));
-        assert_eq!(rinex_type_to_signal(Constellation::Gps, "L5Q"), Some(Signal::GpsL5));
-        // Unmodelled GPS bands and malformed types.
-        for t in ["C6", "C7", "C8", "", "C", "X1", "1C"] {
-            assert_eq!(rinex_type_to_signal(Constellation::Gps, t), None, "{t}");
-        }
+        let g = Constellation::Gps;
+        assert_maps(g, "C1 L1 D1 S1 C1C L1C c1", Some(Signal::GpsL1Ca));
+        assert_maps(g, "P1 p1 C1W L1W C1Y", Some(Signal::GpsL1P));
+        assert_maps(g, "C2 L2 C2X c2x l2", Some(Signal::GpsL2Cm));
+        assert_maps(g, "P2 C2W L2W", Some(Signal::GpsL2P));
+        assert_maps(g, "C5 L5 C5Q l5q", Some(Signal::GpsL5));
+        // Unmodelled bands plus malformed / invalid-kind strings.
+        assert_maps(g, "C6 C7 C8 X1 1C Q1", None);
+        assert_eq!(rinex_type_to_signal(g, ""), None);
+        assert_eq!(rinex_type_to_signal(g, "C"), None);
     }
 
     #[test]
     fn glonass_rinex_types_map_correctly() {
-        let cases = [
-            ("C1", Signal::GloL1Of),
-            ("L1", Signal::GloL1Of),
-            ("P1", Signal::GloL1Of),
-            ("C2", Signal::GloL2Of),
-            ("L2", Signal::GloL2Of),
-            ("P2", Signal::GloL2Of),
-        ];
-        for (t, want) in cases {
-            assert_eq!(rinex_type_to_signal(Constellation::Glonass, t), Some(want), "{t}");
-        }
-        for t in ["C3", "C5", "C6"] {
-            assert_eq!(rinex_type_to_signal(Constellation::Glonass, t), None, "{t}");
-        }
-        // Channel number rides along: R01 with k = -4 (classic GLONASS slot).
-        let f1 = frequency_for(Constellation::Glonass, Signal::GloL1Of, -4);
+        let r = Constellation::Glonass;
+        assert_maps(r, "C1 L1 P1 D1 d1", Some(Signal::GloL1Of));
+        assert_maps(r, "C2 L2 P2 C2P c2p", Some(Signal::GloL2Of)); // P shares OF carrier
+        assert_maps(r, "C3 C5 C6", None);
+        // Channel number rides along: R01 with k=-4 (classic GLONASS slot).
+        let f1 = frequency_for(r, Signal::GloL1Of, -4);
         assert_close(f1, 1599.75e6, HZ_TOL, "R01 L1 k=-4");
     }
 
@@ -361,18 +356,12 @@ mod tests {
     ///
     /// Two conventions exist in the wild: converters writing E5b into the L2
     /// slot (matching the old `get_frequency(band=2)` behaviour) and converters
-    /// writing E5a there (what our datasets actually contain). This registry
-    /// pins the policy to **E5a** — see the module documentation — while E5b
-    /// stays reachable through its unambiguous RINEX 3 band 7 (`"L7"`).
+    /// writing E5a there (the project dataset directive). This registry pins
+    /// the policy to **E5a** — see module documentation — while E5b stays
+    /// reachable through its unambiguous RINEX 3 band 7 (`"L7"`).
     #[test]
     fn galileo_l2_maps_to_e5a_with_documented_ambiguity() {
-        for t in ["L2", "C2", "P2", "C2W"] {
-            assert_eq!(
-                rinex_type_to_signal(Constellation::Galileo, t),
-                Some(Signal::GalE5a),
-                "Galileo legacy '{t}' must resolve to E5a per documented policy"
-            );
-        }
+        assert_maps(Constellation::Galileo, "L2 C2 P2 C2W", Some(Signal::GalE5a));
         // E5b must remain reachable, and must NOT be what "L2" gives.
         assert_eq!(rinex_type_to_signal(Constellation::Galileo, "L7"), Some(Signal::GalE5b));
         let l2_hz = frequency_for(Constellation::Galileo, Signal::GalE5a, 0);
@@ -382,69 +371,62 @@ mod tests {
 
     #[test]
     fn galileo_unambiguous_bands() {
-        let cases = [
-            ("C1", Signal::GalE1Os),
-            ("L1", Signal::GalE1Os),
-            ("C5", Signal::GalE5a),
-            ("L5", Signal::GalE5a),
-            ("C6", Signal::GalE6Cs),
-            ("L6", Signal::GalE6Cs),
-            ("C7", Signal::GalE5b),
-            ("L7", Signal::GalE5b),
-        ];
-        for (t, want) in cases {
-            assert_eq!(rinex_type_to_signal(Constellation::Galileo, t), Some(want), "{t}");
-        }
-        assert_eq!(rinex_type_to_signal(Constellation::Galileo, "C8"), None);
+        let e = Constellation::Galileo;
+        assert_maps(e, "C1 L1 c1a", Some(Signal::GalE1Os));
+        assert_maps(e, "C5 L5 C5Q", Some(Signal::GalE5a));
+        assert_maps(e, "C6 L6 C6A", Some(Signal::GalE6Cs));
+        assert_maps(e, "C7 L7 C7X", Some(Signal::GalE5b));
+        assert_maps(e, "C8 L8", None); // E5 AltBOC composite unmodelled
     }
 
     #[test]
     fn beidou_rinex_types_map_correctly() {
-        assert_eq!(rinex_type_to_signal(Constellation::Beidou, "C1"), Some(Signal::BdsB1i));
-        assert_eq!(rinex_type_to_signal(Constellation::Beidou, "C1I"), Some(Signal::BdsB1i));
-        // Documented limitation: BDS-3 B1C codes resolve to BdsB1i because no
-        // B1C variant exists yet — see beidou_signal docs.
-        assert_eq!(rinex_type_to_signal(Constellation::Beidou, "C1P"), Some(Signal::BdsB1i));
-        assert_eq!(rinex_type_to_signal(Constellation::Beidou, "L6"), Some(Signal::BdsB3i));
-        assert_eq!(rinex_type_to_signal(Constellation::Beidou, "C6I"), Some(Signal::BdsB3i));
-        // B2I (band 2) and B2a (band 5) have no registry variant yet: explicit None.
-        for t in ["C2", "L2", "C5", "L5", "L7", "C3"] {
-            assert_eq!(rinex_type_to_signal(Constellation::Beidou, t), None, "{t}");
-        }
+        let c = Constellation::Beidou;
+        // RINEX 3: B1I lives on band 2 ("C2I" per real MGEX headers); B3I on 6.
+        assert_maps(c, "C2 C2I L2I D2I c2i", Some(Signal::BdsB1i));
+        assert_close(frequency_for(c, Signal::BdsB1i, 0), 1561.098e6, HZ_TOL, "B1I");
+        assert_maps(c, "C6 L6 C6I", Some(Signal::BdsB3i));
+        // RINEX 2 legacy: plain band-1 slot carried B1I.
+        assert_maps(c, "C1 L1", Some(Signal::BdsB1i));
+        // RINEX 3 band 1 is BDS-3 B1C @1575.42 (attrs P/X/D) — NO variant here;
+        // must resolve None, never B1I @1561.098 (14.3 MHz error otherwise).
+        assert_maps(c, "C1P C1X L1D", None);
+        // B2a (band 5), B2b (band 7) also have no registry variant yet.
+        assert_maps(c, "C5 L5 C7 C7D L7 C3 C8", None);
     }
 
     #[test]
-    fn qzss_aliases_gps_and_sbas_l1_l5_only() {
-        assert_eq!(rinex_type_to_signal(Constellation::Qzss, "C1"), Some(Signal::GpsL1Ca));
-        assert_eq!(rinex_type_to_signal(Constellation::Qzss, "C2"), Some(Signal::GpsL2Cm));
-        assert_eq!(rinex_type_to_signal(Constellation::Qzss, "C5"), Some(Signal::GpsL5));
-        assert_eq!(rinex_type_to_signal(Constellation::Sbas, "C1"), Some(Signal::GpsL1Ca));
-        assert_eq!(rinex_type_to_signal(Constellation::Sbas, "L5"), Some(Signal::GpsL5));
-        assert_eq!(rinex_type_to_signal(Constellation::Sbas, "C2"), None);
-    }
-
-    #[test]
-    fn navic_explicitly_unmodelled() {
-        for t in ["C1", "L1", "C5", "L5", "C9"] {
-            assert_eq!(rinex_type_to_signal(Constellation::Navic, t), None, "{t}");
-        }
-    }
-
-    #[test]
-    fn parsing_is_case_insensitive_and_handles_short_codes() {
-        assert_eq!(rinex_type_to_signal(Constellation::Galileo, "c2"), Some(Signal::GalE5a));
-        assert_eq!(rinex_type_to_signal(Constellation::Gps, "p2"), Some(Signal::GpsL2P));
-        assert_eq!(rinex_type_to_signal(Constellation::Gps, "c1c"), Some(Signal::GpsL1Ca));
-        assert_eq!(rinex_type_to_signal(Constellation::Gps, ""), None);
+    fn other_constellations_follow_documented_policy() {
+        let (q, s) = (Constellation::Qzss, Constellation::Sbas);
+        // QZSS aliases the GPS radio plan (identical frequencies); no L6.
+        assert_maps(q, "C1 L1", Some(Signal::GpsL1Ca));
+        assert_maps(q, "C2 L2", Some(Signal::GpsL2Cm));
+        assert_maps(q, "C5 L5", Some(Signal::GpsL5));
+        assert_eq!(rinex_type_to_signal(q, "C6"), None);
+        // SBAS: L1 + L5 only.
+        assert_maps(s, "C1 L1 C5 L5", Some(Signal::GpsL1Ca.min(Signal::GpsL5)));
+        assert_maps(s, "C2 L2 C6", None);
+        // NavIC (L5/S-band) explicitly unmodelled.
+        assert_maps(Constellation::Navic, "C1 L1 C5 L5 S5 C9", None);
+        // Case-insensitive parsing.
+        assert_maps(Constellation::Galileo, "c2", Some(Signal::GalE5a));
+        assert_maps(Constellation::Gps, "p2 c1c", Some(Signal::GpsL1P.min(Signal::GpsL1Ca)));
     }
 
     #[test]
     fn frequency_for_ignores_k_for_cdma_and_guards_mismatch() {
-        // CDMA signals ignore the channel entirely.
-        assert_close(frequency_for(Constellation::Gps, Signal::GpsL1Ca, 42), FREQ_GPS_L1, 0.0, "k ignored");
+        let (gps, glo) = (Constellation::Gps, Constellation::Glonass);
+        // CDMA signals ignore the channel entirely — including a GLONASS sat
+        // argument, whose k must not leak into a CDMA signal's frequency.
+        assert_close(frequency_for(gps, Signal::GpsL1Ca, 42), FREQ_GPS_L1, 0.0, "k ignored");
+        assert_close(frequency_for(glo, Signal::GpsL1Ca, -4), FREQ_GPS_L1, 0.0, "CDMA on GLO");
         // Mismatched (constellation, FDMA signal) falls back to nominal k=0.
-        assert_close(frequency_for(Constellation::Gps, Signal::GloL1Of, 3), FREQ_GLO_L1_NOMINAL, 0.0, "guard");
-        assert_close(frequency_for(Constellation::Gps, Signal::GloL2Of, -7), FREQ_GLO_L2_NOMINAL, 0.0, "guard");
+        assert_close(frequency_for(gps, Signal::GloL1Of, 3), FREQ_GLO_L1_NOMINAL, 0.0, "guard");
+        assert_close(frequency_for(gps, Signal::GloL2Of, -7), FREQ_GLO_L2_NOMINAL, 0.0, "guard");
+        // Out-of-ICD-range channels pass through arithmetically (no clamping);
+        // callers validate the operational −7..+6 window.
+        let k12 = frequency_for(glo, Signal::GloL1Of, 12);
+        assert_close(k12, 1602.0e6 + f64::from(12) * 562_500.0, HZ_TOL, "k passthrough");
     }
 
     #[test]
@@ -456,10 +438,20 @@ mod tests {
         assert_close(Signal::GalE1Os.base_freq_hz(), FREQ_GPS_L1, 0.0, "E1=L1");
         assert_close(Signal::GalE5b.base_freq_hz(), FREQ_GAL_E5B, 0.0, "E5b");
         assert_close(Signal::BdsB1i.base_freq_hz(), FREQ_BDS_B1I, 0.0, "B1I");
-        assert_close(Signal::GloL1Of.fdma_offset_hz().unwrap_or(0.0), FREQ_GLO_L1_DELTA, 0.0, "dF1");
-        assert_close(Signal::GloL2Of.fdma_offset_hz().unwrap_or(0.0), FREQ_GLO_L2_DELTA, 0.0, "dF2");
         assert_close(Signal::GloL1Of.base_freq_hz(), FREQ_GLO_L1_NOMINAL, 0.0, "nom1");
         assert_close(Signal::GloL2Of.base_freq_hz(), FREQ_GLO_L2_NOMINAL, 0.0, "nom2");
+        assert_close(
+            Signal::GloL1Of.fdma_offset_hz().unwrap_or_default(),
+            FREQ_GLO_L1_DELTA,
+            0.0,
+            "dF1",
+        );
+        assert_close(
+            Signal::GloL2Of.fdma_offset_hz().unwrap_or_default(),
+            FREQ_GLO_L2_DELTA,
+            0.0,
+            "dF2",
+        );
     }
 
     /// Every constellation the engine defines must produce a *defined* answer
@@ -467,20 +459,26 @@ mod tests {
     /// silent GPS fallbacks, no panics. This is the coverage contract.
     #[test]
     fn all_engine_constellations_have_defined_band_answers() {
-        let bands = ["1", "2", "5", "6", "7"];
-        for cons in [Constellation::Gps, Constellation::Glonass, Constellation::Galileo, Constellation::Beidou, Constellation::Sbas, Constellation::Qzss, Constellation::Navic] {
-            for b in bands {
-                // Must terminate with Some or None — never fall back to GPS L1.
-                let sig = rinex_type_to_signal(cons, b);
-                if let Some(s) = sig {
+        let cons_all = [
+            Constellation::Gps,
+            Constellation::Glonass,
+            Constellation::Galileo,
+            Constellation::Beidou,
+            Constellation::Sbas,
+            Constellation::Qzss,
+            Constellation::Navic,
+        ];
+        for cons in cons_all {
+            for b in ["C1", "C2", "C5", "C6", "C7"] {
+                if let Some(s) = rinex_type_to_signal(cons, b) {
                     let f = frequency_for(cons, s, 0);
                     assert!(f > 1.0e9 && f < 2.0e9, "sanity freq for {cons:?}/{b}");
                 }
             }
         }
-        // Spot-assert the documented policy edges.
-        assert_eq!(rinex_type_to_signal(Constellation::Navic, "1"), None);
-        assert_eq!(rinex_type_to_signal(Constellation::Beidou, "2"), None);
-        assert_eq!(rinex_type_to_signal(Constellation::Sbas, "2"), None);
+        // Spot-assert documented policy edges.
+        assert_maps(Constellation::Navic, "C1", None);
+        assert_maps(Constellation::Beidou, "C2", Some(Signal::BdsB1i));
+        assert_maps(Constellation::Sbas, "C2", None);
     }
 }

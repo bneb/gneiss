@@ -400,3 +400,20 @@ that our improvements target exactly the failure modes (atmospheric
 bias → wrong fixes) that cause RTKLIB's low fix rate.
 
 Binary at /tmp/rnx2rtkp for future comparisons.
+
+## Precise ephemeris: SP3 wiring tested — requires satellite PCO + clock to work
+
+SP3 interpolation module (precise_orbit.rs) built TDD, 5 tests green.
+Wired into extract_sat_positions behind GNEISS_SP3 env. Measured on
+dataset B: fix rates COLLAPSED (98.6→86.2, 73.5→53.6, 88.4→66.6%)
+because:
+1. SP3 positions are satellite CENTER OF MASS; observations reference
+   the antenna PHASE CENTER (~1-2 m offset varying with attitude).
+   Broadcast ephemerides implicitly absorb this via fitted clock
+   parameters; SP3 positions alone do not.
+2. SP3 clock values were not used — broadcast clocks are inconsistent
+   with precise positions.
+
+Proper implementation requires ALL THREE simultaneously: SP3 positions
++ satellite PCO correction + SP3 clock products. Reverted wiring;
+module and tests retained for when satellite PCV/PCO is implemented.

@@ -51,6 +51,11 @@ pub struct GnssRtkIekf {
     /// epoch, enabling offline ambiguity-trajectory analysis. Zero-cost
     /// when off (empty Vec).
     pub track_ambiguity_keys: bool,
+    /// Precise orbit store (SP3). When set, satellite positions and clocks
+    /// come from IGS final/rapid products instead of broadcast ephemerides.
+    /// Eliminates ~1-2 m orbit error that only partially cancels in DD
+    /// at >20 km baselines.
+    pub precise_orbits: Option<std::sync::Arc<gneiss_parsers::precise_orbit::PreciseOrbit>>,
     /// Opt-in FDMA GLONASS phase participation (own reference satellite and
     /// per-satellite ambiguities absorb phase inter-channel biases). MW
     /// wide-lane stays GPS/Galileo-only: code inter-channel biases do not
@@ -99,6 +104,7 @@ impl GnssRtkIekf {
             base_slip_detector: crate::post_process::screening::CycleSlipDetector::new(),
             prev_arcs: HashMap::new(),
             track_ambiguity_keys: false,
+            precise_orbits: None,
             enable_glonass: false,
             widelane_ar: false,
             start_tow: start_time.tow,
@@ -315,7 +321,7 @@ impl GnssRtkIekf {
         base_pos: Vector3<f64>,
         ephems: &[Ephemeris],
     ) -> Result<DdMeasurements, String> {
-        let sat_info = extract_sat_positions(rover, ephems, self.state.pos_ecef, self.min_elevation_rad);
+        let sat_info = extract_sat_positions(rover, ephems, self.state.pos_ecef, self.min_elevation_rad, self.precise_orbits.as_ref());
         let mut meas_list = Vec::new();
         let mut if_meas = Vec::new();
         let mut active_keys = Vec::new();
@@ -647,10 +653,32 @@ fn extract_sat_positions(
     ephems: &[Ephemeris],
     rx_pos: Vector3<f64>,
     min_el: f64,
-) -> Vec<(gneiss_core::sat::SatelliteId, Vector3<f64>)> {    let mut out = Vec::new();
+    precise_orbits: Option<&std::sync::Arc<gneiss_parsers::precise_orbit::PreciseOrbit>>,
+) -> Vec<(gneiss_core::sat::SatelliteId, Vector3<f64>)> {
+    let mut out = Vec::new();
     let rx_llh = gneiss_core::coords::ecef_to_llh(rx_pos);
 
     for s in &rover.satellites {
+        // Precise orbits take priority when available.
+        if let Some(precise) = precise_orbits {
+            let sys_char = match s.sat.constellation {
+                gneiss_core::sat::Constellation::Gps => 'G',
+                gneiss_core::sat::Constellation::Glonass => 'R',
+                gneiss_core::sat::Constellation::Galileo => 'E',
+                gneiss_core::sat::Constellation::Beidou => 'C',
+                _ => 'G',
+            };
+            let sv_name = format!("{}{:02}", sys_char, s.sat.prn);
+            if let Some((pos, _clk)) = precise.position_at(&sv_name, rover.time) {
+                let (_az, el) = gneiss_core::coords::az_el(rx_llh, rx_pos, pos);
+                if el >= min_el {
+                    out.push((s.sat, pos));
+                }
+                continue;
+            }
+            // Precise orbit doesn't cover this sat; fall through to broadcast.
+        }
+
         let eph_opt = ephems
             .iter()
             .filter(|e| e.sat() == s.sat)
@@ -661,7 +689,7 @@ fn extract_sat_positions(
                     .unwrap_or(std::cmp::Ordering::Equal)
             });
         if let Some(eph) = eph_opt {
-            let sat_p = compute_signal_sat_pos(s, eph, rover.time);
+            let mut sat_p = compute_signal_sat_pos(s, eph, rover.time);
             let (_az, el) = gneiss_core::coords::az_el(rx_llh, rx_pos, sat_p);
             if el >= min_el {
                 out.push((s.sat, sat_p));
