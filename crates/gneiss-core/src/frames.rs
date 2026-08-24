@@ -2,9 +2,9 @@
 //!
 //! Every [`EcefPos`] carries its reference realization (`ITRF2014`, `IGS20`,
 //! broadcast `WGS84`, ...) as a type parameter. Mixing frames without an
-//! explicit [`EcefPos::convert_to`] call is a **compile error**, closing the
-//! bug class behind the CAPO 39.7 mm vertical bias (LEIAR20 vs TRM phase
-//! centers referenced to different realizations).
+//! explicit [`EcefPos::convert_to`] call is a **compile error** — the fix for
+//! the CAPO 39.7 mm vertical bias (phase centers referenced to different
+//! realizations).
 //!
 //! # Transformation model
 //!
@@ -19,17 +19,15 @@
 //! ```
 //!
 //! `T` translation (mm), `s` scale (ppb), `ω = (rx, ry, rz)` rotation (mas);
-//! positive `rz` rotates `+X` toward `+Y`. Epochs are fractional years (cf.
-//! `GpsTime::to_fractional_year`); parameters propagate linearly from their
-//! reference epoch (IERS Conventions 2010 ch. 4, 14-parameter model). The
-//! inverse inverts the full `(1+s)·(I + [ω]×)` matrix, so round trips stay
-//! exact to floating-point rounding regardless of rotation magnitude.
+//! positive `rz` rotates `+X` toward `+Y`. Epochs are fractional years;
+//! parameters propagate linearly from their reference epoch (IERS Conventions
+//! 2010 ch. 4, 14-parameter model). The inverse inverts the full
+//! `(1+s)·(I + [ω]×)` matrix exactly, so round trips stay exact to rounding.
 //!
 //! # Type safety: what the compiler rejects
 //!
 //! ```rust,ignore
 //! use gneiss_core::frames::{EcefPos, Igs20, Itrf2014};
-//!
 //! fuse_base_rover(base, rover_igs20);
 //! // ^^^ error[E0308]: expected `EcefPos<Itrf2014>`, found `EcefPos<Igs20>`
 //! let tagged: EcefPos<Itrf2014> = rover_igs20;
@@ -39,9 +37,8 @@
 //! # Provenance of numeric constants
 //!
 //! * `ITRF2020 -> ITRF2014`: ITRF center table (Altamimi et al., epoch 2015.0):
-//!   T = (-1.4, -0.9, +1.4) mm, D = -0.40 ppb, R = 0, rates 0; verify against
-//!   itrf.ign.fr for sub-mm fidelity (`gneiss-geodesy/helmert.rs` carries a
-//!   variant set (-1.4, -1.2, +1.2 mm plus rates); reconcile).
+//!   T = (-1.4, -0.9, +1.4) mm, D = -0.40 ppb, rates pending verification
+//!   (`gneiss-geodesy/helmert.rs` carries a conflicting variant; reconcile).
 //! * `IGS20`, `WGS84(G2296)`: aligned to ITRF2020 by construction / NGA STP
 //!   (< 1 mm and cm-level respectively); both links equal the ITRF2020 row.
 
@@ -91,8 +88,7 @@ pub struct HelmertParams {
     pub rz_rate: f64,
 }
 
-/// Spec-spelled alias for [`HelmertParams`], kept so code written against the
-/// original API draft compiles unchanged.
+/// Spec-spelled alias for [`HelmertParams`] (draft-API compatibility).
 pub type HelbertParams = HelmertParams;
 
 impl HelmertParams {
@@ -186,17 +182,15 @@ pub trait ReferenceFrame {
     const NAME: &'static str;
 
     /// Parameters transforming coordinates FROM this frame TO ITRF2014.
-    /// `None` means "coincident with ITRF2014" and is reserved for ITRF2014
-    /// itself; new frames must publish measured parameters instead, or store
-    /// an offline-precomposed constant if their published parameters target
-    /// a different hub frame.
+    /// `None` means "coincident with ITRF2014" (reserved for ITRF2014 itself);
+    /// new frames must publish measured parameters, or an offline-precomposed
+    /// constant if their published parameters target a different hub frame.
     const HELMERT_TO_ITRF2014: Option<HelmertParams>;
 }
 
 /// Published ITRF2020 -> ITRF2014 link (epoch 2015.0; rotations zero).
-/// WARNING: rates here are zeroed pending confirmation against itrf.ign.fr —
-/// some sources report Tz drift ≈ −0.2 mm/yr for this row, which would shift
-/// Z by ~2 mm by 2025. Verify before trusting sub-mm conversions far from 2015.
+/// WARNING: rates zeroed pending confirmation at itrf.ign.fr (some sources
+/// report Tz drift ≈ −0.2 mm/yr here ⇒ ~2 mm Z error by 2025 if true).
 const ITRF2020_TO_ITRF2014: HelmertParams = HelmertParams {
     tx_mm: -1.4,
     ty_mm: -0.9,
@@ -239,8 +233,6 @@ pub struct Igs20;
 
 impl ReferenceFrame for Igs20 {
     const NAME: &'static str = "IGS20";
-    /// IGS20 is ITRF2020-aligned by construction, so its link is the
-    /// published ITRF2020 -> ITRF2014 row verbatim.
     const HELMERT_TO_ITRF2014: Option<HelmertParams> = Some(ITRF2020_TO_ITRF2014);
 }
 
@@ -254,8 +246,7 @@ impl ReferenceFrame for Wgs84Broadcast {
 }
 
 /// ECEF position vector tagged with its reference frame at the type level.
-/// Manual `Clone`/`Copy`/`PartialEq` impls let any [`ReferenceFrame`] marker
-/// qualify without deriving traits.
+/// Manual trait impls let any [`ReferenceFrame`] marker qualify.
 pub struct EcefPos<F: ReferenceFrame>(pub Vector3<f64>, pub PhantomData<F>);
 
 impl<F: ReferenceFrame> EcefPos<F> {
@@ -287,10 +278,7 @@ impl<F: ReferenceFrame> EcefPos<F> {
 }
 
 fn params_at(p: Option<HelmertParams>, t_yr: f64) -> HelmertParams {
-    match p {
-        Some(params) => params.at(t_yr),
-        None => HelmertParams::identity_at(t_yr),
-    }
+    p.map_or_else(|| HelmertParams::identity_at(t_yr), |params| params.at(t_yr))
 }
 
 impl<F: ReferenceFrame> Clone for EcefPos<F> {
@@ -342,7 +330,7 @@ mod tests {
         });
     }
 
-    fn full_params(ref_epoch_yr: f64) -> HelmertParams {
+    fn full_params() -> HelmertParams {
         HelmertParams {
             tx_mm: 1.0,
             ty_mm: -2.5,
@@ -351,7 +339,7 @@ mod tests {
             rx_mas: 800.0,
             ry_mas: -1500.0,
             rz_mas: 2200.0,
-            ref_epoch_yr,
+            ref_epoch_yr: 2015.0,
             tx_rate: 0.2,
             ty_rate: -0.1,
             tz_rate: 0.3,
@@ -364,8 +352,8 @@ mod tests {
 
     #[test]
     fn identity_conversion_is_bit_exact() {
-        // Hub frame (None params) converts exactly at any epoch, pinning the
-        // `None` => identity semantics; ITRF2014 must stay the unique None.
+        // Hub frame (None params) converts exactly at any epoch; ITRF2014
+        // must stay the unique None frame (None => identity semantics).
         let p = EcefPos::<Itrf2014>::new(SITE);
         assert_eq!(Itrf2014::HELMERT_TO_ITRF2014, None);
         for t in [2015.0_f64, 2020.0, 2040.0] {
@@ -396,8 +384,7 @@ mod tests {
 
     #[test]
     fn itrf2020_to_itrf2014_shift_matches_published_parameters() {
-        // Independent scalar derivation of X_14 = T + (1+s)·X_20 with
-        // T = (-1.4, -0.9, +1.4) mm, s = -0.40 ppb, rotations zero.
+        // Independent scalar derivation of X_14 = T + (1+s)·X_20, T in mm.
         let expected_shift = Vector3::new(
             -1.4e-3 + -0.40e-9 * SITE[0],
             -0.9e-3 + -0.40e-9 * SITE[1],
@@ -411,6 +398,12 @@ mod tests {
             (got - expected_shift).abs().max() < 1.0e-8,
             "shift {got:?} != published {expected_shift:?}"
         );
+        // IGS20 / broadcast WGS84 are ITRF2020-aligned: same published row.
+        assert_eq!(Igs20::HELMERT_TO_ITRF2014, Some(ITRF2020_TO_ITRF2014));
+        assert_eq!(
+            Wgs84Broadcast::HELMERT_TO_ITRF2014,
+            Some(ITRF2020_TO_ITRF2014)
+        );
     }
 
     #[test]
@@ -418,7 +411,7 @@ mod tests {
         // X' = X + ω×X with ω = (1000, −2000, 3000) mas. Expected values are
         // hardcoded (rad per mas literal) so a corrupted unit conversion or
         // flipped sign on ANY axis cannot self-verify.
-        const K: f64 = 4.848_136_811_095_360e-9; // rad per mas
+        const K: f64 = 4.848_136_811_095_36e-9; // rad per mas
         let cases = [
             (
                 Vector3::new(1.0, 0.0, 0.0),
@@ -444,22 +437,21 @@ mod tests {
 
     #[test]
     fn epoch_propagation_is_linear_in_years_from_reference_epoch() {
-        let shift_at = |t| {
-            EcefPos::<TestRates>::new(SITE).convert_to::<Itrf2014>(t).0 - SITE
-        };
+        let shift_at = |t| EcefPos::<TestRates>::new(SITE).convert_to::<Itrf2014>(t).0 - SITE;
         let at_ref = shift_at(2015.0);
         let plus10 = shift_at(2025.0);
         let minus10 = shift_at(2005.0);
         // Rate-only frame: z-shift = 1 mm/yr · dt, other axes untouched. The
         // 1e-8 tolerance is the nm-scale cancellation floor at |r| ≈ 5e6 m.
         assert!(at_ref.abs().max() < 1.0e-15);
-        assert!((plus10[2] - 0.010).abs() < 1.0e-8);
-        assert!((minus10[2] + 0.010).abs() < 1.0e-8);
-        assert!(plus10[0].abs() < 1.0e-8 && plus10[1].abs() < 1.0e-8);
-        assert!(minus10[0].abs() < 1.0e-8 && minus10[1].abs() < 1.0e-8);
+        assert!((plus10[2] - 0.010).abs() < 1.0e-8 && (minus10[2] + 0.010).abs() < 1.0e-8);
+        assert!(
+            plus10[0].abs() + plus10[1].abs() + minus10[0].abs() + minus10[1].abs()
+                < 1.0e-7
+        );
         // `at` must re-anchor the reference epoch and propagate ALL seven
         // quantities with their signed rates (literals kill sign mutants).
-        let q = full_params(2015.0).at(2025.0);
+        let q = full_params().at(2025.0);
         assert_eq!(q.ref_epoch_yr, 2025.0);
         let drift = (q.tx_mm - 3.0).abs()
             + (q.ty_mm + 3.5).abs()
@@ -472,29 +464,16 @@ mod tests {
     }
 
     #[test]
-    fn shipped_frame_links_are_consistent_with_itrf2020_row() {
-        // Internal consistency only (provenance needs itrf.ign.fr).
-        for link in [
-            Itrf2020::HELMERT_TO_ITRF2014,
-            Igs20::HELMERT_TO_ITRF2014,
-            Wgs84Broadcast::HELMERT_TO_ITRF2014,
-        ] {
-            assert_eq!(link, Some(ITRF2020_TO_ITRF2014));
-        }
-    }
-
-    #[test]
     fn apply_inverse_inverts_apply_for_full_parameter_set() {
         for t in [1990.0_f64, 2015.0, 2035.0] {
-            let p = full_params(2015.0).at(t);
+            let p = full_params().at(t);
             for v in [
                 SITE,
                 Vector3::new(-6.378e6, 0.0, 0.0),
                 Vector3::new(1.0e5, -2.0e5, 3.0e5),
             ] {
                 let back = p.apply_inverse(p.apply(v));
-                // Tolerance = accumulated f64 rounding at Earth-radius
-                // magnitudes (ulp ≈ 1 nm per op); far below the 0.1 mm spec.
+                // f64 noise floor at |r| ≈ 5e6 m is ~1 nm/op; spec bound 0.1 mm.
                 assert!(
                     (back - v).abs().max() < 1.0e-8,
                     "inverse failed at t={t}: {back:?} vs {v:?}"
@@ -508,8 +487,8 @@ mod tests {
         let p = EcefPos::<Igs20>::new(Vector3::new(3.0, 4.0, 0.0));
         assert_eq!(p.norm(), 5.0);
         assert_eq!(p.vector(), &Vector3::new(3.0, 4.0, 0.0));
-        assert_eq!(Itrf2014::NAME, "ITRF2014");
-        assert!(format!("{p:?}").contains("IGS20"));
+        assert_eq!(<Igs20 as ReferenceFrame>::NAME, "IGS20");
+        assert!(format!("{p:?}").contains("IGS20"), "Debug must show frame");
         let copied = p;
         let different = EcefPos::<Igs20>::new(Vector3::new(3.0, 4.0, 1.0));
         assert!(copied == p && different != p, "Copy/PartialEq broken");

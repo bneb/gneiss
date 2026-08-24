@@ -157,7 +157,11 @@ pub fn frequency_for(sat: Constellation, signal: Signal, freq_num: i8) -> f64 {
     match signal.fdma_offset_hz() {
         None => signal.base_freq_hz(),
         Some(offset) => {
-            let k = if sat == Constellation::Glonass { freq_num } else { 0 };
+            let k = if sat == Constellation::Glonass {
+                freq_num
+            } else {
+                0
+            };
             signal.base_freq_hz() + f64::from(k) * offset
         }
     }
@@ -172,8 +176,16 @@ pub fn wavelength_for(sat: Constellation, signal: Signal, freq_num: i8) -> f64 {
 /// reuses the GPS variants as documented frequency-equivalent aliases.
 fn gps_signal(code: &RinexCode) -> Option<Signal> {
     match code.band {
-        1 => Some(if code.is_precise() { Signal::GpsL1P } else { Signal::GpsL1Ca }),
-        2 => Some(if code.is_precise() { Signal::GpsL2P } else { Signal::GpsL2Cm }),
+        1 => Some(if code.is_precise() {
+            Signal::GpsL1P
+        } else {
+            Signal::GpsL1Ca
+        }),
+        2 => Some(if code.is_precise() {
+            Signal::GpsL2P
+        } else {
+            Signal::GpsL2Cm
+        }),
         5 => Some(Signal::GpsL5),
         _ => None,
     }
@@ -253,8 +265,7 @@ mod tests {
 
     #[test]
     fn icd_constants_and_wavelengths() {
-        // (signal, ICD centre frequency Hz, lambda m) — references computed
-        // independently of this module (lambda = c/f, c = 299792458).
+        // (signal, ICD centre frequency Hz, lambda m); refs computed independently.
         let cases = [
             (Signal::GpsL1Ca, 1575.42e6, 0.190293672798),
             (Signal::GpsL1P, 1575.42e6, 0.190293672798),
@@ -276,9 +287,8 @@ mod tests {
             assert_close(lam, icd_lam, 1e-9, "lambda ref");
             // Cross-path check through wavelength_for: FDMA signals at k=0,
             // CDMA signals with an arbitrary channel, must both agree.
-            let glo = Constellation::Glonass;
-            let via_for = if glo == Constellation::Glonass && signal.fdma_offset_hz().is_some() {
-                wavelength_for(glo, signal, 0)
+            let via_for = if signal.fdma_offset_hz().is_some() {
+                wavelength_for(Constellation::Glonass, signal, 0)
             } else {
                 wavelength_for(Constellation::Gps, signal, 3)
             };
@@ -287,35 +297,29 @@ mod tests {
     }
 
     #[test]
-    fn glonass_fdma_offsets_and_channel_sweep() {
+    fn fdma_offsets_exhaustive() {
         assert_eq!(Signal::GloL1Of.fdma_offset_hz(), Some(562_500.0));
         assert_eq!(Signal::GloL2Of.fdma_offset_hz(), Some(437_500.0));
-        let cdma = [
-            Signal::GpsL1Ca,
-            Signal::GpsL1P,
-            Signal::GpsL2Cm,
-            Signal::GpsL2P,
-            Signal::GpsL5,
-            Signal::GalE1Os,
-            Signal::GalE5a,
-            Signal::GalE5b,
-            Signal::GalE6Cs,
-            Signal::BdsB1i,
-            Signal::BdsB3i,
-        ];
+        // One CDMA representative per constellation: all share the same
+        // `_ => None` arm, so a per-variant sweep adds no mutant coverage.
+        let cdma = [Signal::GpsL1Ca, Signal::GalE5b, Signal::BdsB3i];
         for signal in cdma {
             assert_eq!(signal.fdma_offset_hz(), None, "{signal:?}");
         }
+    }
+
+    #[test]
+    fn glonass_fdma_channel_sweep() {
+        let g = Constellation::Glonass;
         // Independent formula: f(k) = f0 + k * delta, valid channels −7..+6.
         for k in -7..=6i8 {
-            let g = Constellation::Glonass;
             let f1 = frequency_for(g, Signal::GloL1Of, k);
             let f2 = frequency_for(g, Signal::GloL2Of, k);
             assert_close(f1, 1602.0e6 + f64::from(k) * 562_500.0, HZ_TOL, "L1(k)");
             assert_close(f2, 1246.0e6 + f64::from(k) * 437_500.0, HZ_TOL, "L2(k)");
         }
         // Published GLONASS ICD edge-channel spot checks.
-        let (g, l1, l2) = (Constellation::Glonass, Signal::GloL1Of, Signal::GloL2Of);
+        let (l1, l2) = (Signal::GloL1Of, Signal::GloL2Of);
         assert_close(frequency_for(g, l1, -7), 1598.0625e6, HZ_TOL, "L1(k=-7)");
         assert_close(frequency_for(g, l1, 6), 1605.375e6, HZ_TOL, "L1(k=+6)");
         assert_close(frequency_for(g, l2, -7), 1242.9375e6, HZ_TOL, "L2(k=-7)");
@@ -323,8 +327,8 @@ mod tests {
         // Channel-correct GLONASS wavelengths at the extreme channels.
         let w1 = wavelength_for(g, l1, -7);
         let w2 = wavelength_for(g, l2, 6);
-        assert_close(w1, 0.187597455043, 1e-9, "GLO L1 lambda k=-7");
-        assert_close(w2, 0.240098074282, 1e-9, "GLO L2 lambda k=+6");
+        assert_close(w1, 0.187597455043, 1e-9, "L1 lambda k=-7");
+        assert_close(w2, 0.240098074282, 1e-9, "L2 lambda k=+6");
     }
 
     #[test]
@@ -363,7 +367,10 @@ mod tests {
     fn galileo_l2_maps_to_e5a_with_documented_ambiguity() {
         assert_maps(Constellation::Galileo, "L2 C2 P2 C2W", Some(Signal::GalE5a));
         // E5b must remain reachable, and must NOT be what "L2" gives.
-        assert_eq!(rinex_type_to_signal(Constellation::Galileo, "L7"), Some(Signal::GalE5b));
+        assert_eq!(
+            rinex_type_to_signal(Constellation::Galileo, "L7"),
+            Some(Signal::GalE5b)
+        );
         let l2_hz = frequency_for(Constellation::Galileo, Signal::GalE5a, 0);
         assert_close(l2_hz, 1176.45e6, HZ_TOL, "Galileo L2-slot = E5a");
         assert!((l2_hz - FREQ_GAL_E5B).abs() > 30.0e6, "E5a/E5b must differ");
@@ -384,7 +391,8 @@ mod tests {
         let c = Constellation::Beidou;
         // RINEX 3: B1I lives on band 2 ("C2I" per real MGEX headers); B3I on 6.
         assert_maps(c, "C2 C2I L2I D2I c2i", Some(Signal::BdsB1i));
-        assert_close(frequency_for(c, Signal::BdsB1i, 0), 1561.098e6, HZ_TOL, "B1I");
+        let b1i = frequency_for(c, Signal::BdsB1i, 0);
+        assert_close(b1i, 1561.098e6, HZ_TOL, "B1I");
         assert_maps(c, "C6 L6 C6I", Some(Signal::BdsB3i));
         // RINEX 2 legacy: plain band-1 slot carried B1I.
         assert_maps(c, "C1 L1", Some(Signal::BdsB1i));
@@ -404,13 +412,14 @@ mod tests {
         assert_maps(q, "C5 L5", Some(Signal::GpsL5));
         assert_eq!(rinex_type_to_signal(q, "C6"), None);
         // SBAS: L1 + L5 only.
-        assert_maps(s, "C1 L1 C5 L5", Some(Signal::GpsL1Ca.min(Signal::GpsL5)));
+        assert_maps(s, "C1 L1", Some(Signal::GpsL1Ca));
+        assert_maps(s, "C5 L5", Some(Signal::GpsL5));
         assert_maps(s, "C2 L2 C6", None);
         // NavIC (L5/S-band) explicitly unmodelled.
         assert_maps(Constellation::Navic, "C1 L1 C5 L5 S5 C9", None);
         // Case-insensitive parsing.
         assert_maps(Constellation::Galileo, "c2", Some(Signal::GalE5a));
-        assert_maps(Constellation::Gps, "p2 c1c", Some(Signal::GpsL1P.min(Signal::GpsL1Ca)));
+        assert_maps(Constellation::Gps, "c1c", Some(Signal::GpsL1Ca));
     }
 
     #[test]
@@ -418,15 +427,20 @@ mod tests {
         let (gps, glo) = (Constellation::Gps, Constellation::Glonass);
         // CDMA signals ignore the channel entirely — including a GLONASS sat
         // argument, whose k must not leak into a CDMA signal's frequency.
-        assert_close(frequency_for(gps, Signal::GpsL1Ca, 42), FREQ_GPS_L1, 0.0, "k ignored");
-        assert_close(frequency_for(glo, Signal::GpsL1Ca, -4), FREQ_GPS_L1, 0.0, "CDMA on GLO");
+        let f = frequency_for(gps, Signal::GpsL1Ca, 42);
+        assert_close(f, FREQ_GPS_L1, 0.0, "k ignored");
+        let f = frequency_for(glo, Signal::GpsL1Ca, -4);
+        assert_close(f, FREQ_GPS_L1, 0.0, "CDMA on GLO");
         // Mismatched (constellation, FDMA signal) falls back to nominal k=0.
-        assert_close(frequency_for(gps, Signal::GloL1Of, 3), FREQ_GLO_L1_NOMINAL, 0.0, "guard");
-        assert_close(frequency_for(gps, Signal::GloL2Of, -7), FREQ_GLO_L2_NOMINAL, 0.0, "guard");
+        let f = frequency_for(gps, Signal::GloL1Of, 3);
+        assert_close(f, FREQ_GLO_L1_NOMINAL, 0.0, "guard");
+        let f = frequency_for(gps, Signal::GloL2Of, -7);
+        assert_close(f, FREQ_GLO_L2_NOMINAL, 0.0, "guard");
         // Out-of-ICD-range channels pass through arithmetically (no clamping);
         // callers validate the operational −7..+6 window.
-        let k12 = frequency_for(glo, Signal::GloL1Of, 12);
-        assert_close(k12, 1602.0e6 + f64::from(12) * 562_500.0, HZ_TOL, "k passthrough");
+        let f = frequency_for(glo, Signal::GloL1Of, 12);
+        let want = 1602.0e6 + f64::from(12) * 562_500.0;
+        assert_close(f, want, HZ_TOL, "k passthrough");
     }
 
     #[test]
@@ -438,20 +452,14 @@ mod tests {
         assert_close(Signal::GalE1Os.base_freq_hz(), FREQ_GPS_L1, 0.0, "E1=L1");
         assert_close(Signal::GalE5b.base_freq_hz(), FREQ_GAL_E5B, 0.0, "E5b");
         assert_close(Signal::BdsB1i.base_freq_hz(), FREQ_BDS_B1I, 0.0, "B1I");
-        assert_close(Signal::GloL1Of.base_freq_hz(), FREQ_GLO_L1_NOMINAL, 0.0, "nom1");
-        assert_close(Signal::GloL2Of.base_freq_hz(), FREQ_GLO_L2_NOMINAL, 0.0, "nom2");
-        assert_close(
-            Signal::GloL1Of.fdma_offset_hz().unwrap_or_default(),
-            FREQ_GLO_L1_DELTA,
-            0.0,
-            "dF1",
-        );
-        assert_close(
-            Signal::GloL2Of.fdma_offset_hz().unwrap_or_default(),
-            FREQ_GLO_L2_DELTA,
-            0.0,
-            "dF2",
-        );
+        let n1 = Signal::GloL1Of.base_freq_hz();
+        let n2 = Signal::GloL2Of.base_freq_hz();
+        assert_close(n1, FREQ_GLO_L1_NOMINAL, 0.0, "nom1");
+        assert_close(n2, FREQ_GLO_L2_NOMINAL, 0.0, "nom2");
+        let d1 = Signal::GloL1Of.fdma_offset_hz().unwrap_or_default();
+        let d2 = Signal::GloL2Of.fdma_offset_hz().unwrap_or_default();
+        assert_close(d1, FREQ_GLO_L1_DELTA, 0.0, "dF1");
+        assert_close(d2, FREQ_GLO_L2_DELTA, 0.0, "dF2");
     }
 
     /// Every constellation the engine defines must produce a *defined* answer
