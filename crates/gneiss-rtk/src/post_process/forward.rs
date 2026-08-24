@@ -75,19 +75,19 @@ fn run_forward_iekf(
     });
     let mut iekf = GnssRtkIekf::new(init_pos, rover_epochs[0].time, q_accel);
     iekf.widelane_ar = widelane_ar;
-    iekf.wl_tracker.sat_upd = sat_upd.clone();
-
-
-
-    // The cadence hint changes slip-gating behavior, so it applies only on
-    // the opt-in long-baseline path; the legacy path stays byte-exact.
-    let cadence = if widelane_ar {
-        crate::post_process::screening::infer_cadence_hint(rover_epochs)
+    if widelane_ar {
+        // Long-baseline mode: estimate rover wet zenith residual as a
+        // random-walk state inside the filter.
+        iekf.state.enable_zwd(0.0225);
+        let cadence_hint =
+            crate::post_process::screening::infer_cadence_hint(rover_epochs);
+        iekf.slip_detector.cadence_hint_s = cadence_hint;
+        iekf.base_slip_detector.cadence_hint_s = cadence_hint;
+        iekf.wl_tracker.sat_upd = sat_upd.clone();
     } else {
-        None
-    };
-    iekf.slip_detector.cadence_hint_s = cadence;
-    iekf.base_slip_detector.cadence_hint_s = cadence;
+        iekf.wl_tracker.sat_upd = None;
+    }
+
     let mut results = Vec::with_capacity(rover_epochs.len());
 
     for epoch in rover_epochs {
