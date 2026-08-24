@@ -234,6 +234,25 @@ fn run_pass(
         );
     }
     let (h, d3, up_errs, fix, fixed_errs) = collect_errors(&traj, ctx.truth);
+    if std::env::var("WL_DUMP").is_ok() {
+        // Full per-epoch error dump for cross-base correlation studies.
+        let path = format!("/tmp/dump_{}_{}.csv", base.id, label);
+        if let Ok(mut f) = std::fs::File::create(&path) {
+            use std::io::Write;
+            let _ = writeln!(f, "tow,h,v,q,sep,nsat");
+            for ep in &traj {
+                if let Some(&t) = ctx.truth.get(&(ep.time.tow.round() as u32)) {
+                    let _ = writeln!(
+                        f, "{:.0},{:.4},{:+.4},{},{:.3},{}",
+                        ep.time.tow,
+                        horizontal_error(ep.position_ecef, t),
+                        vertical_error(ep.position_ecef, t),
+                        ep.quality, ep.separation_3d, ep.n_satellites,
+                    );
+                }
+            }
+        }
+    }
     if std::env::var("WL_OUTLIERS").is_ok() {
         for ep in &traj {
             if let Some(&t) = ctx.truth.get(&(ep.time.tow.round() as u32)) {

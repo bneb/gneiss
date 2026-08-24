@@ -198,6 +198,14 @@ impl GnssRtkIekf {
             let far_vetoed = ar_res.is_fixed
                 && !widelane::far_matches_widelanes(&self.wl_tracker, &ar_res);
             if !ar_res.is_fixed || far_vetoed {
+                if tracing::enabled!(tracing::Level::DEBUG) {
+                    tracing::debug!(
+                        "ar-decision: tow={:.0} far_fixed={} vetoed={} cascade={}",
+                        rover.time.tow, ar_res.is_fixed, far_vetoed,
+                        widelane::resolve_cascade(&self.state, &self.wl_tracker)
+                            .map(|c| c.is_fixed).unwrap_or(false),
+                    );
+                }
                 ar_res = ar::float_result(&self.state);
                 if let Some(cascade) = widelane::resolve_cascade(&self.state, &self.wl_tracker) {
                     ar_res = cascade;
