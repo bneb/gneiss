@@ -102,6 +102,7 @@ fn run_backward_iekf(
         // OHLN h_p95 degrades when unconditional).
         if std::env::var("GNEISS_TROPO_GRAD").is_ok() {
             iekf.state.enable_gradients(crate::estimators::rtk_iekf::update::GRAD_INIT_VAR_M2);
+        iekf.enable_glonass = std::env::var("GNEISS_GLONASS").is_ok();
         }
         }
         let cadence_hint =

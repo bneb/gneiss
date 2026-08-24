@@ -257,3 +257,23 @@ Caveats: truth is UNR-IGS20-derived (sigma_h 3.7-10.3 mm), so absolute
 biases are not yet calibrated like dataset A; GLONASS/BeiDou still
 excluded by the filter. Next: add R to the mix, then tune against the
 new dataset with the old one kept as regression/stress set.
+
+## GLONASS: FDMA plumbing landed, participation gated off (measured)
+
+freq_num now threads from GlonassEphemeris into every frequency lookup
+(DD pairs, MW tracker, phase wide-lane, iono-free) — before this, all
+GLONASS frequencies were wrong-by-nominal (1602.0 MHz). Constellation
+gating extracted to `GnssRtkIekf::select_constellations` (unit-tested)
+with `enable_glonass` flag behind `GNEISS_GLONASS=1`; GLONASS pairs are
+excluded from MW arcs by design (code inter-channel biases do not cancel
+between receivers).
+
+Measured GE -> GER (+glo) on 2025 DOY160: P181/P222 identical; P225 fix
+-1.7%, v_p95 +92 mm; network fused +0.1%. Verdict: phase ambiguities
+absorb per-satellite constants but code ICBs still leak via float
+seeding and code rows. Kept opt-in until per-receiver code ICB handling
+(e.g. between-satellite-differenced code or estimated ICB states).
+
+Also fixed en route: Galileo secondary-band fallback (L2 absent ->
+E5a band 5) now reaches the MW tracker and iono-free stage — metric-
+neutral on the benign-day dataset, hardening for degraded conditions.

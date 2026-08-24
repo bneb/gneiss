@@ -47,6 +47,11 @@ pub struct GnssRtkIekf {
     /// states accumulate across epochs.
     pub base_slip_detector: crate::post_process::screening::CycleSlipDetector,
     pub prev_arcs: HashMap<DoubleDiffKey, u32>,
+    /// Opt-in FDMA GLONASS phase participation (own reference satellite and
+    /// per-satellite ambiguities absorb phase inter-channel biases). MW
+    /// wide-lane stays GPS/Galileo-only: code inter-channel biases do not
+    /// cancel between receivers and would corrupt the arcs.
+    pub enable_glonass: bool,
     /// Opt-in Melbourne–Wübbena wide-lane cascade AR (long baselines).
     /// Default off; enabling changes only epochs the joint FAR/PAR left float.
     pub widelane_ar: bool,
@@ -89,6 +94,7 @@ impl GnssRtkIekf {
             slip_detector: crate::post_process::screening::CycleSlipDetector::new(),
             base_slip_detector: crate::post_process::screening::CycleSlipDetector::new(),
             prev_arcs: HashMap::new(),
+            enable_glonass: false,
             widelane_ar: false,
             start_tow: start_time.tow,
             static_lock_after_s: None,
@@ -255,6 +261,20 @@ impl GnssRtkIekf {
         smoother::run_rts_smoother(&self.history)
     }
 
+    /// Constellations that participate in DD formation, sorted by id.
+    /// GLONASS requires the opt-in FDMA policy (see `enable_glonass`).
+    fn select_constellations(
+        sat_info: &[(gneiss_core::sat::SatelliteId, Vector3<f64>)],
+        glo: bool,
+    ) -> Vec<u8> {
+        let mut v: Vec<u8> = sat_info.iter().map(|(s, _)| s.constellation as u8).collect();
+        v.sort_unstable();
+        v.dedup();
+        let glo_id = gneiss_core::sat::Constellation::Glonass as u8;
+        v.retain(|&c| c != glo_id || glo);
+        v
+    }
+
     /// Form double-difference measurements across all visible satellites.
     fn build_dd_measurements(
         &mut self,
@@ -268,15 +288,7 @@ impl GnssRtkIekf {
         let mut if_meas = Vec::new();
         let mut active_keys = Vec::new();
 
-        let mut constellations: Vec<u8> = sat_info.iter().map(|(s, _)| s.constellation as u8).collect();
-        constellations.sort_unstable();
-        constellations.dedup();
-
-        for const_id in constellations {
-            // Skip FDMA GLONASS until receiver-specific inter-channel biases are calibrated
-            if const_id == gneiss_core::sat::Constellation::Glonass as u8 {
-                continue;
-            }
+        for const_id in Self::select_constellations(sat_info.as_slice(), self.enable_glonass) {
 
             let const_sats: Vec<(gneiss_core::sat::SatelliteId, Vector3<f64>)> = sat_info
                 .iter()
@@ -312,15 +324,21 @@ impl GnssRtkIekf {
                 let rov_s = rover.satellites.iter().find(|s| s.sat == *sat_id);
                 let bas_s = base.satellites.iter().find(|s| s.sat == *sat_id);
                 if let (Some(rs), Some(bs)) = (rov_s, bas_s) {
-                    if self.widelane_ar {
+                    // MW arcs are code-bias sensitive: FDMA inter-channel
+                    // biases do not cancel between receivers, so GLONASS
+                    // pairs validate but never feed the arcs.
+                    let mw_eligible = sat_id.constellation
+                        != gneiss_core::sat::Constellation::Glonass;
+                    if self.widelane_ar && mw_eligible {
                         mw::update_tracker_from_obs(
                             &mut self.wl_tracker, *sat_id, ref_sat_id, rs, bs, r_rov, r_bas,
+                            glo_freq_num(ephems, *sat_id),
                         );
                     }
                     let mut pair_cp: HashMap<u8, f64> = HashMap::new();
                     for freq_band in [1, 2, 5, 7] {
                         if let Some(m) = self.build_single_dd_pair(
-                            *sat_id, ref_sat_id, *sat_pos, ref_pos, base_pos, rs, bs, r_rov, r_bas, freq_band,
+                            ephems, *sat_id, ref_sat_id, *sat_pos, ref_pos, base_pos, rs, bs, r_rov, r_bas, freq_band,
                         ) {
                             if let Some(cp) = m.dd_cp_cycles {
                                 pair_cp.insert(freq_band, cp);
@@ -347,6 +365,7 @@ impl GnssRtkIekf {
                             self.update_phase_wl(
                                 *sat_id, *sat_pos, ref_sat_id, ref_pos,
                                 base_pos, *cp1, *cp2, b2,
+                                glo_freq_num(ephems, *sat_id),
                             );
                         }
                     }
@@ -354,6 +373,7 @@ impl GnssRtkIekf {
                         *sat_id, rs, bs, r_rov, r_bas, *sat_pos, ref_pos, base_pos,
                         self.state.pos_ecef,
                         DoubleDiffKey { constellation_id: sat_id.constellation as u8, sat: sat_id.prn as u16, ref_sat: ref_sat_id, freq_band: 1 },
+                        glo_freq_num(ephems, *sat_id),
                     ) {
                         if_meas.push(m);
                     }
@@ -367,6 +387,7 @@ impl GnssRtkIekf {
     #[allow(clippy::too_many_arguments)]
     fn build_single_dd_pair(
         &mut self,
+        ephems: &[Ephemeris],
         sat_id: gneiss_core::sat::SatelliteId,
         ref_sat_id: u16,
         sat_pos: Vector3<f64>,
@@ -384,7 +405,11 @@ impl GnssRtkIekf {
         let pr_br = bas_ref.get_observable(freq_band)?;
         let dd_pr = (pr_rs - pr_rr) - (pr_bs - pr_br);
 
-        let freq_hz = gneiss_core::signal::get_frequency(sat_id, freq_band, 0);
+        let freq_hz = gneiss_core::signal::get_frequency(
+            sat_id,
+            freq_band,
+            glo_freq_num(ephems, sat_id),
+        );
         let lambda = SPEED_OF_LIGHT_M_S / freq_hz;
         let (cp_rs, cp_rr, cp_bs, cp_br) = (
             rov_s.get_observable_phase(freq_band),
@@ -502,6 +527,7 @@ impl GnssRtkIekf {
         dd_cp1: f64,
         dd_cp2: f64,
         b2: u8,
+        glo_k: i8,
     ) {
         let key = DoubleDiffKey {
             constellation_id: sat_id.constellation as u8,
@@ -515,8 +541,8 @@ impl GnssRtkIekf {
         let base_dd =
             (sat_pos - base_pos).norm() - (ref_pos - base_pos).norm();
         let tropo = update::compute_tropo_dd(sat_pos, ref_pos, base_pos, cur);
-        let f1 = gneiss_core::signal::get_frequency(sat_id, 1, 0);
-        let f2 = gneiss_core::signal::get_frequency(sat_id, b2, 0);
+        let f1 = gneiss_core::signal::get_frequency(sat_id, 1, glo_k);
+        let f2 = gneiss_core::signal::get_frequency(sat_id, b2, glo_k);
         let lambda_wl = SPEED_OF_LIGHT_M_S / (f1 - f2);
         let pwl_cycles = dd_cp1 - dd_cp2;
         let pw = pwl_cycles - ((rs - rr) - base_dd + tropo) / lambda_wl;
@@ -568,6 +594,20 @@ impl GnssRtkIekf {
         }
         chosen
     }
+}
+
+
+/// GLONASS FDMA frequency channel number for a satellite, from its
+/// broadcast ephemeris (0 when unknown -> nominal frequency).
+fn glo_freq_num(ephems: &[Ephemeris], sat_id: gneiss_core::sat::SatelliteId) -> i8 {
+    for e in ephems {
+        if let Ephemeris::Glonass(g) = e {
+            if g.sat == sat_id {
+                return g.freq_num;
+            }
+        }
+    }
+    0
 }
 
 fn extract_sat_positions(
@@ -652,4 +692,33 @@ mod tests {
         let smoothed = engine.smooth();
         assert_eq!(smoothed.len(), 10);
     }
+    #[test]
+    fn test_select_constellations_drops_glonass_by_default() {
+        use gneiss_core::sat::{Constellation, SatelliteId};
+        let mk = |c: Constellation, prn: u8| {
+            (SatelliteId { constellation: c, prn }, Vector3::zeros())
+        };
+        let sat_info = vec![
+            mk(Constellation::Gps, 6u8),
+            mk(Constellation::Glonass, 8u8),
+            mk(Constellation::Galileo, 3u8),
+            mk(Constellation::Gps, 12u8),
+        ];
+        // Default policy: FDMA GLONASS stays out until ICB handling lands.
+        let got = GnssRtkIekf::select_constellations(&sat_info, false);
+        assert_eq!(got, vec![
+            Constellation::Gps as u8,
+            Constellation::Galileo as u8,
+        ]);
+        // Opt-in keeps it, sorted and de-duplicated.
+        let got = GnssRtkIekf::select_constellations(&sat_info, true);
+        assert_eq!(got, vec![
+            Constellation::Gps as u8,
+            Constellation::Glonass as u8,
+            Constellation::Galileo as u8,
+        ]);
+        // Empty input stays empty.
+        assert!(GnssRtkIekf::select_constellations(&[], true).is_empty());
+    }
+
 }

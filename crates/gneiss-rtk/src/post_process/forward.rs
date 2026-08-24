@@ -98,6 +98,7 @@ fn run_forward_iekf(
         if std::env::var("GNEISS_TROPO_GRAD").is_ok() {
             iekf.state.enable_gradients(crate::estimators::rtk_iekf::update::GRAD_INIT_VAR_M2);
         }
+        iekf.enable_glonass = std::env::var("GNEISS_GLONASS").is_ok();
     }
     if widelane_ar {
         let cadence_hint =

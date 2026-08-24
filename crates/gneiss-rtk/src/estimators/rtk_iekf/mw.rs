@@ -276,6 +276,7 @@ pub fn update_tracker_from_obs(
     bas_s: &SatObs,
     rov_ref: &SatObs,
     bas_ref: &SatObs,
+    glo_k: i8,
 ) {
     let key = DoubleDiffKey {
         constellation_id: sat_id.constellation as u8,
@@ -286,8 +287,8 @@ pub fn update_tracker_from_obs(
     // Secondary band: GPS/GLONASS L2 (2); Galileo exports carry E5a on
     // band 5 instead of L2. Fall back so Galileo pairs reach the tracker.
     let b2 = if rov_s.get_observable_phase(2).is_some() { 2 } else { 5 };
-    let f1 = gneiss_core::signal::get_frequency(sat_id, 1, 0);
-    let f2 = gneiss_core::signal::get_frequency(sat_id, b2, 0);
+    let f1 = gneiss_core::signal::get_frequency(sat_id, 1, glo_k);
+    let f2 = gneiss_core::signal::get_frequency(sat_id, b2, glo_k);
     let band1 = band_quad(rov_s, rov_ref, bas_s, bas_ref, 1);
     let band2 = band_quad(rov_s, rov_ref, bas_s, bas_ref, b2);
     let slip = [rov_s, rov_ref, bas_s, bas_ref].iter().any(|o| {

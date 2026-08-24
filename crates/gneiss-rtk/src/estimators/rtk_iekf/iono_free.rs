@@ -65,8 +65,9 @@ pub fn form_iono_free_dd(
     base_pos: Vector3<f64>,
     rover_pos: Vector3<f64>,
     key: DoubleDiffKey,
+    glo_k: i8,
 ) -> Option<IonoFreeMeasurement> {
-    let f1 = gneiss_core::signal::get_frequency(sat_id, 1, 0);
+    let f1 = gneiss_core::signal::get_frequency(sat_id, 1, glo_k);
     // Secondary band: L2 for GPS/GLONASS; E5a (band 5) for Galileo
     // exports that carry no L2 slot. All four stations must have it.
     let b2 = if rov_s.get_observable_phase(2).is_some()
@@ -78,7 +79,7 @@ pub fn form_iono_free_dd(
     } else {
         5
     };
-    let f2 = gneiss_core::signal::get_frequency(sat_id, b2, 0);
+    let f2 = gneiss_core::signal::get_frequency(sat_id, b2, glo_k);
 
     if f1 <= 0.0 || f2 <= 0.0 || (f1 - f2).abs() < 1e6 {
         return None;
