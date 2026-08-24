@@ -199,3 +199,36 @@ the elevation-dependent PCV residual that PCO cannot address; that plus
 receiver PCV generally is the next antenna-modeling step. Multi-GNSS
 scoping closed: no Galileo in any base file (GLONASS partial), so DD
 multi-constellation is data-blocked, not code-blocked.
+
+## Modern multi-GNSS dataset staged (2025-06-09) — unlocks the real ceiling
+
+Discovery round: the 2020 benchmark's hard ceilings (8-sat GPS-only
+geometry, no Galileo in base files, single marine-layer day) are all
+**data artifacts, not engine limits**:
+
+- P224 rover AND P181/P222/P225 bases were upgraded to multi-GNSS
+  receivers and now log 20-observable RINEX 2.11 MIXED exports:
+  GPS + GLONASS + **Galileo L1/L5a/L5b/L6/L7/L8** (~27 E SVs visible).
+- Constellation census (station summaries, DOY 160/2025):
+  P224/P181/P222/P225 = {G:~32, E:27, R:24, C:1}; OHLN/CAPO remain G+R.
+- Broadcast ephemerides for ALL constellations: BKG IGS mirror serves
+  per-station RINEX 3.04 MN files openly; any MGEX station's file
+  carries the globally-identical Galileo broadcast (2,424 E records on
+  DOY 160). Parser already handles RINEX 3 nav natively.
+- Precise-orbit route exists too: NGS day dirs host IGS final SP3
+  (GPS-only); multi-GNSS SP3 needs CDDIS-auth or another mirror.
+
+Fetch tooling: `scripts/fetch_multignss_dataset.py` (idempotent).
+Files staged under /tmp/ds2025 (move into datasets/multignss_2025d160/
+when wired).
+
+Next-round engineering queue (in order):
+1. Wire a second eval config (env-selected dataset dir + truth from NGS
+   coordinates propagated to 2025.44).
+2. Engine: enable Galileo constellation in DD formation behind an env
+   gate — Ephemeris enum + RINEX3 nav parsing already support it; audit
+   hardcoded F1/F2 in widelane.rs NL_SCALE and Klobuchar applicability.
+3. Controlled experiment: fix-rate / p95 / RMS on identical day with
+   GPS-only vs GPS+Galileo DD. Prediction: dual-freq pair count roughly
+   doubles -> geometry/redundancy gains should move fix rates toward the
+   >=90% Tier-1 band and shrink h_p95 tails via outlier voting.
