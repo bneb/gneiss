@@ -285,8 +285,18 @@ pub fn update_tracker_from_obs(
         freq_band: 1,
     };
     // Secondary band: GPS/GLONASS L2 (2); Galileo exports carry E5a on
-    // band 5 instead of L2. Fall back so Galileo pairs reach the tracker.
-    let b2 = if rov_s.get_observable_phase(2).is_some() { 2 } else { 5 };
+    // band 5 instead of L2. Policy matches all other consumers: require
+    // band-2 phase at ALL FOUR stations so a single dropped slot cannot
+    // silently switch an arc between E5b- and E5a-based wide lanes.
+    let b2 = if rov_s.get_observable_phase(2).is_some()
+        && bas_s.get_observable_phase(2).is_some()
+        && rov_ref.get_observable_phase(2).is_some()
+        && bas_ref.get_observable_phase(2).is_some()
+    {
+        2
+    } else {
+        5
+    };
     let f1 = gneiss_core::signal::get_frequency(sat_id, 1, glo_k);
     let f2 = gneiss_core::signal::get_frequency(sat_id, b2, glo_k);
     let band1 = band_quad(rov_s, rov_ref, bas_s, bas_ref, 1);

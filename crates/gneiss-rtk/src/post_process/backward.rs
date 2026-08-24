@@ -37,7 +37,7 @@ pub fn run_backward_pass(
             let init_p = initial_rover_pos.unwrap_or_else(|| {
                 compute_initial_position(rover_epochs, ephemerides, bp)
             });
-            return run_backward_iekf(ephemerides, rover_epochs, base_epochs.unwrap_or(&[]), bp, init_p, q_accel.unwrap_or(1.0), widelane_ar, sat_upd);
+            return run_backward_iekf(ephemerides, rover_epochs, base_epochs.unwrap_or(&[]), bp, init_p, q_accel.unwrap_or(1.0), widelane_ar, tropo_grad, sat_upd);
         }
     }
 
@@ -74,6 +74,7 @@ fn run_backward_iekf(
     initial_rover_pos: Vector3<f64>,
     q_accel: f64,
     widelane_ar: bool,
+    tropo_grad: bool,
     sat_upd: Option<std::collections::HashMap<u16, f64>>,
 ) -> BTreeMap<u64, FilteredEpoch> {
     let mut results = BTreeMap::new();
@@ -98,14 +99,14 @@ fn run_backward_iekf(
         let baseline_m = (initial_rover_pos - base_pos).norm();
         if baseline_m < super::forward::ZWD_BASELINE_GATE_M {
             iekf.state.enable_zwd(0.0225);
-        // Experimental tropo gradients: opt-in via env while the
-        // OHLN interaction is unresolved (v_p95 -6mm pooled, but
-        // OHLN h_p95 degrades when unconditional).
-        if std::env::var("GNEISS_TROPO_GRAD").is_ok() {
-            iekf.state.enable_gradients(crate::estimators::rtk_iekf::update::GRAD_INIT_VAR_M2);
+            // Experimental tropo gradients: opt-in via env while the
+            // OHLN interaction is unresolved (v_p95 -6mm pooled, but
+            // OHLN h_p95 degrades when unconditional).
+            if tropo_grad {
+                iekf.state.enable_gradients(crate::estimators::rtk_iekf::update::GRAD_INIT_VAR_M2);
+            }
+        }
         iekf.enable_glonass = std::env::var("GNEISS_GLONASS").is_ok();
-        }
-        }
         let cadence_hint =
             crate::post_process::screening::infer_cadence_hint(rover_epochs);
         iekf.slip_detector.cadence_hint_s = cadence_hint;

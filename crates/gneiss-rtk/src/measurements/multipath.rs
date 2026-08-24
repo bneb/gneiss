@@ -123,7 +123,7 @@ impl MultipathEstimator {
                     // Compute β = 2/(α-1) where α = (f1/f2)²
                     let (f1, f2) = gneiss_core::signal::satellite_frequencies(
                         sat_obs.sat,
-                        0, // freq_num=0 for CDMA; GLONASS will use actual freq_num
+                        0, // CDMA-only metric: for GLONASS the f1/f2 ratio is 9/7 for EVERY channel, so nominal k=0 yields identical alpha/beta/gamma (verified over k in [-12,12])
                     );
                     let alpha = (f1 / f2).powi(2);
                     let beta = 2.0 / (alpha - 1.0);
