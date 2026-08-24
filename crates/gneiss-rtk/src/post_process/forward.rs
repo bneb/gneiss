@@ -40,10 +40,11 @@ pub fn run_forward_pass(
     initial_rover_pos: Option<Vector3<f64>>,
     q_accel: Option<f64>,
     widelane_ar: bool,
+    sat_upd: Option<std::collections::HashMap<u16, f64>>,
 ) -> Vec<FilteredEpoch> {
     if imu_samples.is_none() && base_pos.is_some() && base_epochs.is_some() {
         if let Some(bp) = base_pos {
-            let (epochs, _wl, _pw) = run_forward_iekf(ephemerides, rover_epochs, base_epochs.unwrap_or(&[]), bp, initial_rover_pos, q_accel.unwrap_or(1.0), widelane_ar);
+            let (epochs, _wl, _pw) = run_forward_iekf(ephemerides, rover_epochs, base_epochs.unwrap_or(&[]), bp, initial_rover_pos, q_accel.unwrap_or(1.0), widelane_ar, sat_upd.clone());
             return epochs;
         }
     }
@@ -51,6 +52,7 @@ pub fn run_forward_pass(
     run_forward_swfg(config, ephemerides, klobuchar, rover_epochs, base_epochs, base_pos, imu_samples)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run_forward_iekf(
     ephemerides: &[Ephemeris],
     rover_epochs: &[EpochObs],
@@ -59,6 +61,7 @@ fn run_forward_iekf(
     initial_rover_pos: Option<Vector3<f64>>,
     q_accel: f64,
     widelane_ar: bool,
+    sat_upd: Option<std::collections::HashMap<u16, f64>>,
 ) -> (Vec<FilteredEpoch>, crate::estimators::rtk_iekf::mw::WidelaneTracker, crate::estimators::rtk_iekf::mw::WidelaneTracker) {
     if rover_epochs.is_empty() {
         return (
@@ -72,6 +75,7 @@ fn run_forward_iekf(
     });
     let mut iekf = GnssRtkIekf::new(init_pos, rover_epochs[0].time, q_accel);
     iekf.widelane_ar = widelane_ar;
+    iekf.wl_tracker.sat_upd = sat_upd.clone();
 
 
 
@@ -150,6 +154,7 @@ pub fn run_forward_pass_collecting(
         None,
         q_accel,
         true,
+        None,
     );
     (epochs, wl, pw)
 }

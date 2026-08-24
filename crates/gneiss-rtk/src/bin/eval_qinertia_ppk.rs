@@ -205,6 +205,7 @@ fn evaluate_dataset_spec(spec: &DatasetSpec) {
         klobuchar_beta: klobuchar.as_ref().map(|k| k.beta),
         q_accel: None,
         widelane_ar: false,
+        network_sat_upd: None,
     };
     let fwd_res = match execute_post_process(&config, &ephemerides, selected_rover, Some(&base_epochs), imu_samples.as_deref(), &fwd_options) {
         Ok(r) => r,
@@ -234,6 +235,7 @@ fn evaluate_dataset_spec(spec: &DatasetSpec) {
         klobuchar_beta: klobuchar.as_ref().map(|k| k.beta),
         q_accel: None,
         widelane_ar: false,
+        network_sat_upd: None,
     };
     let smooth_res = match execute_post_process(&config, &ephemerides, selected_rover, Some(&base_epochs), imu_samples.as_deref(), &smooth_options) {
         Ok(r) => r,

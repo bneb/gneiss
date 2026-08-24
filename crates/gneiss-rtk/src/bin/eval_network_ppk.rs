@@ -172,6 +172,7 @@ struct RunContext<'a> {
     klob: Option<([f64; 4], [f64; 4])>,
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run_pass(
     config: &EngineConfig,
     ctx: &RunContext,
@@ -180,6 +181,7 @@ fn run_pass(
     base: &NetworkBase,
     label: &str,
     bidir: bool,
+    network_upd: Option<HashMap<u16, f64>>,
 ) -> ([f64; 4], Vec<SmoothedEpoch>) {
     let options = PostProcessOptions {
         enable_bidirectional: bidir,
@@ -191,6 +193,7 @@ fn run_pass(
         // epoch and keeps the float solution from converging (ambiguity
         // floats sit 0.4+ cycles off, blocking AR). 1e-6 allows slow drift.
         q_accel: Some(1e-6),
+        network_sat_upd: network_upd.clone(),
         // Long baselines need iono-immune fixing: MW wide-lane cascade AR
         // unlocks the iono-free stage beyond ~20 km.
         widelane_ar: std::env::var("WL_DISABLE").is_err(),
@@ -234,7 +237,14 @@ fn run_pass(
     (stats, traj)
 }
 
-fn run_base(base: &NetworkBase, dir: &Path, ctx: &RunContext, rover: &[EpochObs]) -> ([f64; 8], Vec<SmoothedEpoch>) {
+#[allow(clippy::too_many_arguments)]
+fn run_base(
+    base: &NetworkBase,
+    dir: &Path,
+    ctx: &RunContext,
+    rover: &[EpochObs],
+    network_upd: Option<HashMap<u16, f64>>,
+) -> ([f64; 8], Vec<SmoothedEpoch>) {
     let base_f = match File::open(dir.join(base.base_file)) {
         Ok(f) => f,
         Err(e) => {
@@ -250,8 +260,8 @@ fn run_base(base: &NetworkBase, dir: &Path, ctx: &RunContext, rover: &[EpochObs]
         initial_position: Some([base.base_pos.x, base.base_pos.y, base.base_pos.z]),
         ..Default::default()
     });
-    let (fwd, _fwd_traj) = run_pass(&config, ctx, rover, &base_epochs, base, "Forward", false);
-    let (smooth, smooth_traj) = run_pass(&config, ctx, rover, &base_epochs, base, "Smoothed", true);
+    let (fwd, _fwd_traj) = run_pass(&config, ctx, rover, &base_epochs, base, "Forward", false, network_upd.clone());
+    let (smooth, smooth_traj) = run_pass(&config, ctx, rover, &base_epochs, base, "Smoothed", true, network_upd.clone());
     let mut out = [0.0; 8];
     out[..4].copy_from_slice(&fwd);
     out[4..].copy_from_slice(&smooth);
@@ -332,8 +342,10 @@ fn main() {
     let only = std::env::var("WL_ONLY_BASE").ok();
 
     // Phase A: per-base forward passes collecting phase-only wide-lane
-    // arc means; cross-base least squares solves satellite wide-lane UPDs.
-    if std::env::var("WL_UPD").is_ok() {
+    // arc means; cross-base least squares solves satellite wide-lane UPDs
+    // that Phase B applies before wide-lane rounding.
+    let mut network_upd: Option<HashMap<u16, f64>> = None;
+    if std::env::var("WL_NO_UPD").is_err() {
         let mut per_base: Vec<HashMap<DoubleDiffKey, f64>> = Vec::new();
         for base in BASES {
             if let Some(want) = &only { if base.id != want.as_str() { continue; } }
@@ -352,17 +364,21 @@ fn main() {
             per_base.push(means);
         }
         let sol = gneiss_rtk::estimators::rtk_iekf::mw::solve_network_upd(&per_base);
-        println!("Network WL UPD solution (residual RMS {:.3} cyc):", sol.residual_rms);
+        println!(
+            "Network WL UPD solution (residual RMS {:.3} cyc, {} sats):",
+            sol.residual_rms, sol.sat_upd.len()
+        );
         let mut rows: Vec<_> = sol.sat_upd.iter().collect();
         rows.sort_by_key(|(s, _)| **s);
         for (s, u) in rows {
             println!("  G{:02}: {:+.3}", s, u);
         }
+        network_upd = Some(sol.sat_upd);
     }
 
     for base in BASES {
         if let Some(want) = &only { if base.id != want.as_str() { continue; } }
-        let (stats, traj) = run_base(base, dir, &ctx, selected_rover);
+        let (stats, traj) = run_base(base, dir, &ctx, selected_rover, network_upd.clone());
         if stats.iter().any(|s| *s > 0.0) {
             results.push((base, stats));
         }

@@ -55,6 +55,10 @@ pub struct PostProcessOptions {
     /// epochs the joint FAR/PAR left float, and requires six confidently
     /// fixed wide-lane pairs before claiming a fix.
     pub widelane_ar: bool,
+    /// Network-solved satellite wide-lane UPDs (cycles): consumed by the
+    /// MW tracker when `widelane_ar` is on. Produced by a Phase-A
+    /// pre-pass (`mw::solve_network_upd`) over all bases.
+    pub network_sat_upd: Option<std::collections::HashMap<u16, f64>>,
 }
 
 /// Execute the complete offline post-processing pipeline.
@@ -82,6 +86,7 @@ pub fn execute_post_process(
     // Pass 2: Forward Pass
     let forward_traj = forward::run_forward_pass(
         config, ephemerides, klob, rover_epochs, base_epochs, base_pos, imu_samples, options.initial_rover_position, options.q_accel, options.widelane_ar,
+        options.network_sat_upd.clone(),
     );
 
     // Pass 3: Backward Pass (if enabled)
@@ -89,6 +94,7 @@ pub fn execute_post_process(
         let initial_rover_pos = forward_traj.last().map(|e| e.position_ecef);
         backward::run_backward_pass(
             config, ephemerides, klob, rover_epochs, base_epochs, base_pos, imu_samples, initial_rover_pos, options.q_accel, options.widelane_ar,
+            options.network_sat_upd.clone(),
         )
     } else {
         std::collections::BTreeMap::new()

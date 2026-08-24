@@ -89,6 +89,10 @@ impl MwTrack {
 pub struct WidelaneTracker {
     tracks: HashMap<DoubleDiffKey, MwTrack>,
     nl_scales: HashMap<DoubleDiffKey, f64>,
+    /// Network-solved satellite wide-lane UPDs (cycles, sum-zero): applied
+    /// before rounding so MW arc means round to the true integer despite
+    /// per-satellite biases.
+    pub sat_upd: Option<HashMap<u16, f64>>,
 }
 
 impl WidelaneTracker {
@@ -139,10 +143,15 @@ impl WidelaneTracker {
             );
             return None;
         }
-        let w = track.mean();
+        let mut w = track.mean();
+        if let Some(upd) = self.sat_upd.as_ref() {
+            if let (Some(&us), Some(&ur)) = (upd.get(&key.sat), upd.get(&key.ref_sat)) {
+                w -= us - ur;
+            }
+        }
         let w_int = w.round();
         if (w - w_int).abs() > MAX_DEVIATION_CYCLES {
-            tracing::debug!("wl-track {} deviates: w={w:.3}", key.sat);
+            tracing::debug!("wl-track {} deviates after UPD correction: w={w:.3}", key.sat);
             return None;
         }
         Some((w, w_int as i64))

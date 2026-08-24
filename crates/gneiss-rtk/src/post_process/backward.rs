@@ -29,13 +29,14 @@ pub fn run_backward_pass(
     initial_rover_pos: Option<Vector3<f64>>,
     q_accel: Option<f64>,
     widelane_ar: bool,
+    sat_upd: Option<std::collections::HashMap<u16, f64>>,
 ) -> BTreeMap<u64, FilteredEpoch> {
     if imu_samples.is_none() && base_pos.is_some() && base_epochs.is_some() {
         if let Some(bp) = base_pos {
             let init_p = initial_rover_pos.unwrap_or_else(|| {
                 compute_initial_position(rover_epochs, ephemerides, bp)
             });
-            return run_backward_iekf(ephemerides, rover_epochs, base_epochs.unwrap_or(&[]), bp, init_p, q_accel.unwrap_or(1.0), widelane_ar);
+            return run_backward_iekf(ephemerides, rover_epochs, base_epochs.unwrap_or(&[]), bp, init_p, q_accel.unwrap_or(1.0), widelane_ar, sat_upd);
         }
     }
 
@@ -63,6 +64,7 @@ fn compute_initial_position(
     fallback
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run_backward_iekf(
     ephemerides: &[Ephemeris],
     rover_epochs: &[EpochObs],
@@ -71,6 +73,7 @@ fn run_backward_iekf(
     initial_rover_pos: Vector3<f64>,
     q_accel: f64,
     widelane_ar: bool,
+    sat_upd: Option<std::collections::HashMap<u16, f64>>,
 ) -> BTreeMap<u64, FilteredEpoch> {
     let mut results = BTreeMap::new();
     if rover_epochs.is_empty() {
@@ -82,6 +85,7 @@ fn run_backward_iekf(
 
     let mut iekf = GnssRtkIekf::new(initial_rover_pos, rev_epochs[0].time, q_accel);
     iekf.widelane_ar = widelane_ar;
+    iekf.wl_tracker.sat_upd = sat_upd.clone();
 
 
 
@@ -259,7 +263,7 @@ mod tests {
     #[test]
     fn test_empty_backward_pass_runs() {
         let config = EngineConfig::Spp(Default::default());
-        let results = run_backward_pass(&config, &[], None, &[], None, None, None, None, None, false);
+        let results = run_backward_pass(&config, &[], None, &[], None, None, None, None, None, false, None);
         assert!(results.is_empty());
     }
 }
