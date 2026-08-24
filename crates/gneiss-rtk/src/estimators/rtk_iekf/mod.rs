@@ -53,6 +53,10 @@ pub struct GnssRtkIekf {
     pub zwd_est_m: f64,
     pub zwd_var_m2: f64,
     prev_zwd_tow: f64,
+    /// Phase-only wide-lane arc means per DD pair (long-baseline mode):
+    /// pw = dd_phi1 - dd_phi2 - geom_wl, converges to N_W + satellite UPD
+    /// difference with millimetre-level noise (no code term involved).
+    pub pw_tracker: mw::WidelaneTracker,
     /// Rover ZWD residual (m of zenith wet delay) on top of the Saastamoinen
     /// model, tracked as a scalar random walk. Long-baseline mode only.
 
@@ -76,6 +80,7 @@ impl GnssRtkIekf {
             zwd_est_m: 0.0,
             zwd_var_m2: update::ZWD_INIT_VAR_M2,
             prev_zwd_tow: start_time.tow,
+            pw_tracker: mw::WidelaneTracker::default(),
 
             wl_tracker: mw::WidelaneTracker::default(),
         }
@@ -279,12 +284,29 @@ impl GnssRtkIekf {
                             &mut self.wl_tracker, *sat_id, ref_sat_id, rs, bs, r_rov, r_bas,
                         );
                     }
+                    let mut pair_cp: HashMap<u8, f64> = HashMap::new();
                     for freq_band in [1, 2, 5, 7] {
                         if let Some(m) = self.build_single_dd_pair(
                             *sat_id, ref_sat_id, *sat_pos, ref_pos, base_pos, rs, bs, r_rov, r_bas, freq_band,
                         ) {
+                            if let Some(cp) = m.dd_cp_cycles {
+                                pair_cp.insert(freq_band, cp);
+                            }
                             active_keys.push(m.key);
                             meas_list.push(m);
+                        }
+                    }
+                    if self.widelane_ar {
+                        // Phase-only wide-lane arc mean (no code term):
+                        // converges to N_W + satellite UPD difference with
+                        // millimetre-level noise once geometry is removed.
+                        if let (Some(cp1), Some(cp2)) =
+                            (pair_cp.get(&1), pair_cp.get(&2))
+                        {
+                            self.update_phase_wl(
+                                *sat_id, *sat_pos, ref_sat_id, ref_pos,
+                                base_pos, *cp1, *cp2,
+                            );
                         }
                     }
                     if let Some(m) = iono_free::form_iono_free_dd(
@@ -410,6 +432,42 @@ impl GnssRtkIekf {
             out.push((m.dm_wet_rov / m.lambda, cp - pred, m.cp_var_cycles2.max(1e-4)));
         }
         out
+    }
+
+    /// Absorb one phase-only wide-lane observation for a DD pair.
+    ///
+    /// pw = dd_phi1 - dd_phi2 - geom_wl, where geom_wl uses the current
+    /// float position and the Saastamoinen model. The arc mean converges to
+    /// N_W + satellite UPD difference with millimetre-level noise.
+    #[allow(clippy::too_many_arguments)]
+    fn update_phase_wl(
+        &mut self,
+        sat_id: gneiss_core::sat::SatelliteId,
+        sat_pos: Vector3<f64>,
+        ref_sat_id: u16,
+        ref_pos: Vector3<f64>,
+        base_pos: Vector3<f64>,
+        dd_cp1: f64,
+        dd_cp2: f64,
+    ) {
+        let key = DoubleDiffKey {
+            constellation_id: sat_id.constellation as u8,
+            sat: sat_id.prn as u16,
+            ref_sat: ref_sat_id,
+            freq_band: 1,
+        };
+        let cur = self.state.pos_ecef;
+        let rs = (sat_pos - cur).norm();
+        let rr = (ref_pos - cur).norm();
+        let base_dd =
+            (sat_pos - base_pos).norm() - (ref_pos - base_pos).norm();
+        let tropo = update::compute_tropo_dd(sat_pos, ref_pos, base_pos, cur);
+        let f1 = gneiss_core::signal::get_frequency(sat_id, 1, 0);
+        let f2 = gneiss_core::signal::get_frequency(sat_id, 2, 0);
+        let lambda_wl = SPEED_OF_LIGHT_M_S / (f1 - f2);
+        let pwl_cycles = dd_cp1 - dd_cp2;
+        let pw = pwl_cycles - ((rs - rr) - base_dd + tropo) / lambda_wl;
+        self.pw_tracker.update(key, pw, 0.0, false);
     }
 
     fn compute_dd_variances(&self, sat_pos: Vector3<f64>, ref_pos: Vector3<f64>, lambda: f64) -> (f64, f64) {

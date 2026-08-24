@@ -85,7 +85,7 @@ impl MwTrack {
 ///
 /// Keys are the band-1 DD keys; a reference-satellite switch changes the key
 /// and therefore starts a fresh arc automatically.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct WidelaneTracker {
     tracks: HashMap<DoubleDiffKey, MwTrack>,
     nl_scales: HashMap<DoubleDiffKey, f64>,
@@ -119,6 +119,14 @@ impl WidelaneTracker {
     /// starts a fresh average.
     pub fn reset_pair(&mut self, key: &DoubleDiffKey) {
         self.tracks.remove(key);
+    }
+
+    /// Converged arc means `(mean, count)` per tracked pair.
+    pub fn arc_means(&self) -> HashMap<DoubleDiffKey, (f64, u32)> {
+        self.tracks.iter()
+            .filter(|(_, t)| t.count() >= MIN_TRACK_EPOCHS)
+            .map(|(k, t)| (*k, (t.mean(), t.count())))
+            .collect()
     }
 
     /// Fixed `(w_float, w_int)` once the arc average converged near an integer.
@@ -280,3 +288,185 @@ pub fn update_tracker_from_obs(
     }
 }
 
+
+// ---------------------------------------------------------------------------
+// Network UPD estimation from phase-only wide-lane arc means
+// ---------------------------------------------------------------------------
+
+/// Result of the cross-base satellite wide-lane UPD decomposition.
+#[derive(Debug, Clone, Default)]
+pub struct NetworkUpdSolution {
+    /// Satellite wide-lane UPD estimates (cycles), sum-to-zero constrained.
+    pub sat_upd: HashMap<u16, f64>,
+    /// Post-fit residual of every input observation (cycles).
+    pub residuals: Vec<(DoubleDiffKey, f64)>,
+    /// RMS of post-fit residuals across all used observations.
+    pub residual_rms: f64,
+}
+
+/// Solve satellite wide-lane UPDs from per-base PHASE-only wide-lane arc
+/// means.
+///
+/// Inputs are the converged means of `pw = dd_phi1 - dd_phi2 - geom_wl`
+/// (geometry and troposphere removed with the known trajectory), keyed by
+/// band-1 DD pairs. For each observation:
+///
+///   pw_arc_mean = N_W + u_sat - u_ref  (+ noise), all in cycles
+///
+/// so the fractional part carries the satellite UPD difference. The
+/// integer N_W is eliminated by working with `frac = mean - round(mean)`
+/// wrapped to [-0.5, 0.5); the rank defect is fixed by sum(u) = 0.
+/// Observations whose wrapped fraction sits within 1e-3 of +-0.5 are
+/// skipped (unresolvable half-cycle ambiguity between two hypotheses).
+pub fn solve_network_upd(
+    per_base_means: &[HashMap<DoubleDiffKey, f64>],
+) -> NetworkUpdSolution {
+    // Observations: (sat, ref, wrapped fraction) per DD pair.
+    let mut obs: Vec<(DoubleDiffKey, u16, u16, f64)> = Vec::new();
+    for means in per_base_means {
+        for (k, m) in means {
+            let frac = m - m.round();
+            let wrapped = frac.rem_euclid(1.0);
+            // Unresolvable half-cycle: skip rather than guess a side.
+            if (wrapped - 0.5).abs() < 1e-3 {
+                continue;
+            }
+            let signed = if wrapped > 0.5 { wrapped - 1.0 } else { wrapped };
+            obs.push((*k, k.sat, k.ref_sat, signed));
+        }
+    }
+    let mut sats: Vec<u16> = obs.iter().flat_map(|(_, s, r, _)| [*s, *r]).collect();
+    sats.sort_unstable();
+    sats.dedup();
+    if sats.len() < 2 || obs.is_empty() {
+        return NetworkUpdSolution::default();
+    }
+
+    // Eliminate the rank defect via substitution: u_last = -sum(u_free).
+    // Each observation contributes c . u_free + k to the predicted
+    // fraction, with c_i = d(i,sat) - d(i,ref), k = -(d(sat,last)-d(ref,last)).
+    let last = *sats.last().expect("non-empty");
+    let free: Vec<u16> = sats[..sats.len() - 1].to_vec();
+    let fidx: HashMap<u16, usize> = free.iter().enumerate()
+        .map(|(i, &v)| (v, i)).collect();
+    let m = free.len();
+
+    let mut ata = vec![vec![0.0_f64; m]; m];
+    let mut atb = vec![0.0_f64; m];
+    for (key, s, r, frac) in &obs {
+        let mut coef = vec![0.0_f64; m];
+        for &(station, sign) in &[(s, 1.0), (r, -1.0)] {
+            match fidx.get(station) {
+                Some(&ci) => coef[ci] += sign,
+                // Eliminated satellite: u_last = -sum(u_free), so its
+                // contribution lands on EVERY free coefficient.
+                None => {
+                    for ci in coef.iter_mut() {
+                        *ci -= sign;
+                    }
+                }
+            }
+        }
+        for i in 0..m {
+            for j2 in 0..m {
+                ata[i][j2] += coef[i] * coef[j2];
+            }
+            atb[i] += coef[i] * frac;
+        }
+        let _ = key;
+    }
+
+    // Solve the normal equations (Gaussian elimination + back-substitution).
+    let mut sol_free = atb.clone();
+    for col in 0..m {
+        let piv = (col..m)
+            .fold(col, |best, r| {
+                if ata[r][col].abs() > ata[best][col].abs() { r } else { best }
+            });
+        if ata[piv][col].abs() < 1e-12 {
+            return NetworkUpdSolution::default();
+        }
+        ata.swap(piv, col);
+        sol_free.swap(piv, col);
+        // Forward elimination only; the back-substitution pass below
+        // resolves the unknowns top-down.
+        let pivot_row: Vec<f64> = ata[col].clone();
+        for rr in col + 1..m {
+            let fct = ata[rr][col] / ata[col][col];
+            if fct == 0.0 { continue; }
+            for cc in col..m {
+                ata[rr][cc] -= fct * pivot_row[cc];
+            }
+            sol_free[rr] -= fct * sol_free[col];
+        }
+    }
+    for row in (0..m).rev() {
+        let mut acc = sol_free[row];
+        for cc in row + 1..m {
+            acc -= ata[row][cc] * sol_free[cc];
+        }
+        sol_free[row] = acc / ata[row][row];
+    }
+
+    let mut sat_upd: HashMap<u16, f64> =
+        free.iter().enumerate().map(|(i, &v)| (v, sol_free[i])).collect();
+    sat_upd.insert(last, -sol_free.iter().sum::<f64>());
+    // Exact post-fit residuals with the solved UPDs.
+    let mut residuals = Vec::with_capacity(obs.len());
+    let mut sq = 0.0_f64;
+    for (key, s, r, frac) in &obs {
+        let pred = sat_upd[s] - sat_upd[r];
+        let mut e = frac - pred;
+        while e >= 0.5 { e -= 1.0; }
+        while e < -0.5 { e += 1.0; }
+        sq += e * e;
+        residuals.push((*key, e));
+    }
+    let residual_rms = if obs.is_empty() { 0.0 } else { (sq / obs.len() as f64).sqrt() };
+
+    NetworkUpdSolution { sat_upd, residuals, residual_rms }
+}
+
+#[cfg(test)]
+mod upd_tests {
+    use super::*;
+
+    #[test]
+    fn test_network_upd_solver_recovers_satellite_offsets() {
+        // True satellite UPDs (sum zero), observed from two bases over
+        // pairs against ref G21, with small deterministic noise.
+        let true_u: HashMap<u16, f64> = [
+            (21u16, 0.0_f64),
+            (2u16, 0.30),
+            (5u16, -0.20),
+            (12u16, -0.10),
+        ]
+        .into_iter()
+        .collect();
+        let mut per_base: Vec<HashMap<DoubleDiffKey, f64>> = Vec::new();
+        for b in 0..2u32 {
+            let mut means = HashMap::new();
+            for (&s, &u) in true_u.iter() {
+                if s == 21 {
+                    continue;
+                }
+                let key = DoubleDiffKey { constellation_id: 0, sat: s, ref_sat: 21, freq_band: 1 };
+                let noise = if b == 0 { 0.01 } else { -0.01 };
+                // N_W chosen so the arc mean = N_W + frac difference.
+                let n_w = 7.0 + s as f64;
+                means.insert(key, n_w + u - true_u[&21] + noise);
+            }
+            per_base.push(means);
+        }
+
+        let sol = solve_network_upd(&per_base);
+        assert!(sol.residual_rms < 0.03, "rms {}", sol.residual_rms);
+        for (&s, &u) in true_u.iter() {
+            let est = sol.sat_upd.get(&s).copied().unwrap_or(f64::NAN);
+            assert!(
+                (est - u).abs() < 0.05,
+                "sat {s}: estimated {est:.3} vs true {u:.3}"
+            );
+        }
+    }
+}

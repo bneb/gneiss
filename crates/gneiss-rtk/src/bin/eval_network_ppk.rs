@@ -19,7 +19,7 @@
 //! Usage: cargo run --release --bin eval_network_ppk
 //!        MAX_EPOCHS=1440 cargo run --release --bin eval_network_ppk
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
@@ -29,6 +29,8 @@ use nalgebra::Vector3;
 use gneiss_core::ephemeris::Ephemeris;
 use gneiss_core::obs::EpochObs;
 use gneiss_core::time::GpsTime;
+use gneiss_rtk::estimators::rtk_iekf::DoubleDiffKey;
+use gneiss_rtk::post_process::forward;
 use gneiss_rtk::post_process::{execute_post_process, network, PostProcessOptions, SmoothedEpoch};
 use gneiss_rtk::swfg::config::EngineConfig;
 
@@ -324,7 +326,40 @@ fn main() {
     let selected_rover = select_rover_epochs(&data.rover_epochs);
     let mut results = Vec::new();
     let mut base_trajs: Vec<Vec<SmoothedEpoch>> = Vec::new();
+    // Phase A: per-base forward passes collecting phase-only wide-lane
+    // arc means; the cross-base least-squares decomposition solves the
+    // satellite wide-lane UPDs that make MW rounding trustworthy.
     let only = std::env::var("WL_ONLY_BASE").ok();
+
+    // Phase A: per-base forward passes collecting phase-only wide-lane
+    // arc means; cross-base least squares solves satellite wide-lane UPDs.
+    if std::env::var("WL_UPD").is_ok() {
+        let mut per_base: Vec<HashMap<DoubleDiffKey, f64>> = Vec::new();
+        for base in BASES {
+            if let Some(want) = &only { if base.id != want.as_str() { continue; } }
+            let Ok(f) = File::open(dir.join(base.base_file)) else { continue };
+            let Ok((base_epochs, _)) = gneiss_parsers::rinex::parse_rinex_obs(BufReader::new(f)) else { continue };
+            let (_, _wl, pw) = forward::run_forward_pass_collecting(
+                ctx.ephemerides, selected_rover, &base_epochs,
+                base.base_pos, 1e-6,
+            );
+            let means: HashMap<DoubleDiffKey, f64> = pw
+                .arc_means()
+                .into_iter()
+                .map(|(k, (m, _))| (k, m))
+                .collect();
+            println!("UPD pre-pass [{}]: {} converged pairs", base.id, means.len());
+            per_base.push(means);
+        }
+        let sol = gneiss_rtk::estimators::rtk_iekf::mw::solve_network_upd(&per_base);
+        println!("Network WL UPD solution (residual RMS {:.3} cyc):", sol.residual_rms);
+        let mut rows: Vec<_> = sol.sat_upd.iter().collect();
+        rows.sort_by_key(|(s, _)| **s);
+        for (s, u) in rows {
+            println!("  G{:02}: {:+.3}", s, u);
+        }
+    }
+
     for base in BASES {
         if let Some(want) = &only { if base.id != want.as_str() { continue; } }
         let (stats, traj) = run_base(base, dir, &ctx, selected_rover);

@@ -43,7 +43,8 @@ pub fn run_forward_pass(
 ) -> Vec<FilteredEpoch> {
     if imu_samples.is_none() && base_pos.is_some() && base_epochs.is_some() {
         if let Some(bp) = base_pos {
-            return run_forward_iekf(ephemerides, rover_epochs, base_epochs.unwrap_or(&[]), bp, initial_rover_pos, q_accel.unwrap_or(1.0), widelane_ar);
+            let (epochs, _wl, _pw) = run_forward_iekf(ephemerides, rover_epochs, base_epochs.unwrap_or(&[]), bp, initial_rover_pos, q_accel.unwrap_or(1.0), widelane_ar);
+            return epochs;
         }
     }
 
@@ -58,9 +59,13 @@ fn run_forward_iekf(
     initial_rover_pos: Option<Vector3<f64>>,
     q_accel: f64,
     widelane_ar: bool,
-) -> Vec<FilteredEpoch> {
+) -> (Vec<FilteredEpoch>, crate::estimators::rtk_iekf::mw::WidelaneTracker, crate::estimators::rtk_iekf::mw::WidelaneTracker) {
     if rover_epochs.is_empty() {
-        return Vec::new();
+        return (
+            Vec::new(),
+            Default::default(),
+            Default::default(),
+        );
     }
     let init_pos = initial_rover_pos.unwrap_or_else(|| {
         compute_initial_position(rover_epochs, ephemerides, base_pos)
@@ -88,7 +93,7 @@ fn run_forward_iekf(
             }
         }
     }
-    results
+    (results, iekf.wl_tracker.clone(), iekf.pw_tracker.clone())
 }
 
 fn compute_initial_position(
@@ -121,6 +126,32 @@ fn compute_initial_position(
         }
     }
     fallback
+}
+
+/// Forward-only pass that also returns the converged wide-lane (MW) and
+/// phase-only wide-lane trackers — used by the network UPD pre-pass.
+#[allow(clippy::too_many_arguments)]
+pub fn run_forward_pass_collecting(
+    ephemerides: &[Ephemeris],
+    rover_epochs: &[EpochObs],
+    base_epochs: &[EpochObs],
+    base_pos: Vector3<f64>,
+    q_accel: f64,
+) -> (
+    Vec<FilteredEpoch>,
+    crate::estimators::rtk_iekf::mw::WidelaneTracker,
+    crate::estimators::rtk_iekf::mw::WidelaneTracker,
+) {
+    let (epochs, wl, pw) = run_forward_iekf(
+        ephemerides,
+        rover_epochs,
+        base_epochs,
+        base_pos,
+        None,
+        q_accel,
+        true,
+    );
+    (epochs, wl, pw)
 }
 
 fn run_forward_swfg(
