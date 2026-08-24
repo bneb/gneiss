@@ -105,11 +105,11 @@ def main() -> int:
     check("network fused horizontal p50 (m)",
           line_value(net, "Horizontal Error:", 0), "<=", 0.04)
     check("network fused horizontal RMS (m)",
-          line_value(net, "Horizontal Error:", 3), "<=", 0.12)
+          line_value(net, "Horizontal Error:", 3), "<=", 0.06)
     check("network fused vertical RMS (m)",
-          line_value(net, "Vertical Error:", 1), "<=", 0.15)
+          line_value(net, "Vertical Error:", 1), "<=", 0.08)
 
-    for base, budget in [("P181", 0.05), ("P222", 0.12), ("SLAC", 0.15)]:
+    for base, budget in [("P181", 0.03), ("P222", 0.09), ("SLAC", 0.12)]:
         blk = find_block(log, f"Smoothed RTK [{base}]")
         check(f"{base} smoothed fixed-only p50 (m)",
               None if blk is None else fixed_only_p50(blk), "<=", budget)
@@ -117,9 +117,7 @@ def main() -> int:
     # Fix-rate floors reflect HONEST quality accounting on the
     # long-baseline branch: disputed epochs are flagged float rather than
     # counted as fixed, so rates sit below the legacy (dishonest) numbers.
-    # Fix-rate floors reflect honest accounting with ZWD estimation:
-    # fewer false fixes = lower rate but higher quality.
-    for base, floor in [("OHLN", 85.0), ("P181", 88.0), ("SLAC", 40.0)]:
+    for base, floor in [("OHLN", 83.0), ("P181", 86.0), ("SLAC", 60.0)]:
         hdr = next((h for h in log.splitlines()
                     if h.startswith("=== ") and f"[{base}]" in h and "Smoothed" in h), "")
         check(f"{base} smoothed fix rate (%)",
