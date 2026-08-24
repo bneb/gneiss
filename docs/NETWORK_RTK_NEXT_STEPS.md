@@ -417,3 +417,27 @@ because:
 Proper implementation requires ALL THREE simultaneously: SP3 positions
 + satellite PCO correction + SP3 clock products. Reverted wiring;
 module and tests retained for when satellite PCV/PCO is implemented.
+
+## Peer comparison: RTKLIB vs Gneiss, all six bases (dataset A)
+
+Fix rates (GPS-only, broadcast ephemerides, static PPK):
+
+| base | RTKLIB | Gneiss | ratio |
+|---|---|---|---|
+| P181 | 49.0% | 86.6% | 1.8× |
+| OHLN | 63.7% | 80.7% | 1.3× |
+| CAPO | 42.1% | 93.7% | 2.2× |
+| P225 | 50.0% | 86.1% | 1.7× |
+| P222 | 34.4% | 83.2% | 2.4× |
+| SLAC | 24.2% | 70.6% | **2.9×** |
+| **AVG** | **43.9%** | **83.5%** | **1.9×** |
+
+h_RMS (P181 with NGS base coords): RTKLIB 119 mm vs Gneiss **33 mm** (3.6×).
+
+Caveats: RTKLIB with default settings; optimized configuration would
+improve its results but our improvements target the same failure modes.
+RTKLIB absolute positions require correct base coordinates (-r flag)
+for meaningful RMS comparison — SPP-derived base position introduces
+metre-level errors that propagate into rover solution.
+
+RTKLIB binary at /tmp/rnx2rtkp for future comparisons.
