@@ -302,3 +302,24 @@ information. Queued behind guard promotion.
 Guard promoted: scripts/check_multignss_benchmark.py locks dataset-B GE
 budgets (fix floors 96/68/84%, h_p95 <=150/260/300 mm, v_p95 caps,
 network >=94%). Both guards green simultaneously.
+
+## IF residual screen: built, validated, empirically inert — and why that matters
+
+`update::if_residual_outliers` (TDD, 3 tests): per-pair post-fix
+iono-free range residuals, median-cancelling common-mode position error,
+flagging deviations >5 cm (~half lambda_IF). Detects same-cycle
+dual-frequency slips AND ±1 narrow-lane commit errors (both map to whole
+lambda_IF units). Wired behind `GNEISS_IF_VETO=1`.
+
+Empirical result: zero firings on either dataset — because its
+precondition almost never occurs. Iono-free telemetry on P222 shows
+both-band co-fixes cap at 5 pairs and usually 0-3; the screen needs >=3.
+
+The reframe this forces: P181's invisible wrong fixes are overwhelmingly
+SINGLE-BAND fixes. No same-epoch dual-frequency validation is possible
+against them even in principle — the information does not exist in that
+epoch's committed integers. Detection must come from cross-epoch
+consistency (ambiguity step-detection in smoothing/combiner) or
+two-station information. That is an architectural item, not a gate.
+
+Capability retained dormant: correct, tested, zero-cost when off.

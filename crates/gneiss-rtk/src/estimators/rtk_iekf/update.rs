@@ -1,5 +1,7 @@
 //! Iterated Extended Kalman Filter (IEKF) Double-Difference Measurement Update.
 
+use std::collections::HashMap;
+
 use nalgebra::{DMatrix, DVector, Vector3};
 use super::state::{DoubleDiffKey, RtkState};
 
@@ -432,4 +434,170 @@ mod tests {
         assert!(pos_err < 0.2, "position must stay pinned while zwd absorbs drift: {:.3}", pos_err);
     }
 
+    // --- IF residual outlier screen (TDD) --------------------------------
+    #[allow(clippy::type_complexity)]
+    fn if_meas_fixture(
+        slip_cycles: Option<f64>,
+    ) -> (Vec<DoubleDiffMeasurement>, Vector3<f64>, HashMap<DoubleDiffKey, f64>, HashMap<DoubleDiffKey, f64>) {
+        use gneiss_core::time::GpsTime;
+        use super::super::state::DoubleDiffKey;
+        let true_pos = Vector3::new(0.0, 0.0, 0.0);
+        let base_pos = Vector3::new(4_000_000.0, 500_000.0, 1_000_000.0);
+        let dirs = [
+            Vector3::new(-20_000.0, 15_000.0, 18_000.0),
+            Vector3::new(5_000.0, 24_000.0, -14_000.0),
+            Vector3::new(16_000.0, -18_000.0, 22_000.0),
+            Vector3::new(-9_000.0, -6_000.0, -26_000.0),
+            Vector3::new(22_000.0, 9_000.0, -19_000.0),
+            Vector3::new(-15_000.0, 21_000.0, 8_000.0),
+        ];
+        let ref_dir = dirs[0];
+        let f1 = 1575.42e6_f64;
+        let f2 = 1227.60e6_f64;
+        let l1 = 299792458.0 / f1;
+        let l2 = 299792458.0 / f2;
+        let mut meas = Vec::new();
+        for (i, dir) in dirs.iter().enumerate().skip(1) {
+            let key = DoubleDiffKey { constellation_id: 0, sat: 1 + i as u16, ref_sat: 1, freq_band: 1 };
+            let key2 = DoubleDiffKey { freq_band: 2, ..key };
+            let sat_p = *dir * 20_000_000.0;
+            let ref_p = ref_dir * 20_000_000.0;
+            let rho = |p: Vector3<f64>| math_dist(true_pos, p);
+            let geom_s = rho(sat_p); let geom_r = rho(ref_p);
+            let base_dd = math_dist(base_pos, sat_p) - math_dist(base_pos, ref_p);
+            for (k, lam, slip_here) in [(key, l1, false), (key2, l2, true)] {
+                let n = 10.0 + i as f64;
+                let mut cp = (geom_s - geom_r) / lam - base_dd / lam + n;
+                // Inject on the FIRST pair only: equal slips on every pair
+                // become common-mode and the median cancels them.
+                if slip_here && i == 1 {
+                    if let Some(sl) = slip_cycles { cp += sl; }
+                }
+                meas.push(DoubleDiffMeasurement {
+                    key: k,
+                    dd_pr_m: (geom_s - geom_r) - base_dd,
+                    dd_cp_cycles: Some(cp),
+                    sat_pos: sat_p,
+                    ref_pos: ref_p,
+                    base_pos,
+                    lambda: lam,
+                    pr_var_m2: 0.04,
+                    cp_var_cycles2: 1e-4,
+                    dm_wet_rov: 0.0,
+                    dgrad_n_rov: 0.0,
+                    dgrad_e_rov: 0.0,
+                });
+            }
+        }
+        // Truth integers for every pair on both bands.
+        let mut n1 = HashMap::new();
+        let mut n2 = HashMap::new();
+        for (i, dir) in dirs.iter().enumerate().skip(1) {
+            let key = DoubleDiffKey { constellation_id: 0, sat: 1 + i as u16, ref_sat: 1, freq_band: 1 };
+            let key2 = DoubleDiffKey { freq_band: 2, ..key };
+            let n = 10.0 + i as f64;
+            n1.insert(key, n);
+            n2.insert(key2, n);
+        }
+        (meas, true_pos, n1, n2)
+    }
+    // local dist helper to avoid name clash
+    #[allow(non_snake_case)]
+    fn math_dist(a: Vector3<f64>, b: Vector3<f64>) -> f64 {
+        (a - b).norm()
+    }
+
+    #[test]
+    fn test_if_screen_clean_data_has_no_outliers() {
+        let (meas, pos, n1, n2) = if_meas_fixture(None);
+        let out = if_residual_outliers(pos, &meas, &n1, &n2);
+        assert!(out.is_empty(), "clean data flagged: {:?}", out);
+    }
+
+    #[test]
+    fn test_if_screen_flags_single_slipped_pair() {
+        // One pair slipped +2 cycles on BOTH bands: geometry-free blind,
+        // but its post-fix IF residual jumps ~2 * lambda_IF.
+        let (meas, pos, n1, n2) = if_meas_fixture(Some(2.0));
+        let out = if_residual_outliers(pos, &meas, &n1, &n2);
+        assert_eq!(out.len(), 1, "expected exactly the slipped pair: {:?}", out);
+        assert_eq!(out[0].sat, 2, "slipped pair is sat=2 vs ref=1");
+    }
+
+    #[test]
+    fn test_if_screen_common_mode_position_error_not_flagged() {
+        // A biased position shifts every pair coherently; the median
+        // cancels it and no pair may be flagged.
+        let (meas, _, n1, n2) = if_meas_fixture(None);
+        let biased = Vector3::new(0.02, -0.012, 0.008);
+        let out = if_residual_outliers(biased, &meas, &n1, &n2);
+        assert!(out.is_empty(), "common-mode error flagged pairs: {:?}", out);
+    }
+
+}
+/// Per-pair iono-free residual outlier screen over a fixed ambiguity set.
+/// For each band-1 pair with band-2 phases and fixed integers on both
+/// bands, computes the DD iono-free float ambiguity against geometry at
+/// `pos`. A same-cycle dual-frequency slip leaves the geometry-free
+/// combination unchanged but shifts that pair's IF ambiguity by exactly
+/// the slip count in cycles of lambda_IF (~10.7 cm GPS), so deviating
+/// pairs stand out once the cross-pair MEDIAN cancels common-mode
+/// position/model error. Returns keys deviating more than MAX_DEV metres.
+pub fn if_residual_outliers(
+    pos: Vector3<f64>,
+    measurements: &[DoubleDiffMeasurement],
+    fixed_n1: &HashMap<DoubleDiffKey, f64>,
+    fixed_n2: &HashMap<DoubleDiffKey, f64>,
+) -> Vec<DoubleDiffKey> {
+    /// ~4x the ~1 cm iono-free observation noise, safely below half of
+    /// lambda_IF (~10.7 cm GPS): a single whole-cycle slip cannot hide.
+    const MAX_DEV_M: f64 = 0.05;
+
+    let mut b2: HashMap<DoubleDiffKey, &DoubleDiffMeasurement> = HashMap::new();
+    for m in measurements {
+        if m.key.freq_band == 2 && m.dd_cp_cycles.is_some() {
+            b2.insert(DoubleDiffKey { freq_band: 1, ..m.key }, m);
+        }
+    }
+
+    let mut items: Vec<(DoubleDiffKey, f64)> = Vec::new();
+    for m in measurements {
+        if m.key.freq_band != 1 {
+            continue;
+        }
+        let Some(cp1) = m.dd_cp_cycles else { continue };
+        let Some(m2) = b2.get(&m.key) else { continue };
+        let Some(cp2) = m2.dd_cp_cycles else { continue };
+        let k2 = DoubleDiffKey { freq_band: 2, ..m.key };
+        let (Some(n1), Some(n2)) = (fixed_n1.get(&m.key), fixed_n2.get(&k2)) else {
+            continue;
+        };
+
+        let r_sat = (m.sat_pos - pos).norm();
+        let r_ref = (m.ref_pos - pos).norm();
+        let base_dd = (m.sat_pos - m.base_pos).norm() - (m.ref_pos - m.base_pos).norm();
+        let geom_m = (r_sat - r_ref) - base_dd;
+        // Per-band post-fix range residuals (metres): observation minus
+        // geometry minus the committed integer's range contribution.
+        // Zero when integers are correct; a same-cycle dual-frequency slip
+        // delta leaves d1 = delta*lambda1, d2 = delta*lambda2.
+        let d1 = cp1 * m.lambda - geom_m - n1 * m.lambda;
+        let d2 = cp2 * m2.lambda - geom_m - n2 * m2.lambda;
+        // Ionosphere-free combination of the two range residuals:
+        // (f1^2 d1 - f2^2 d2)/(f1^2 - f2^2), expressed via lambda ratios.
+        // A same-cycle slip maps to delta * lambda_IF (~10.7 cm GPS).
+        let res = (d1 / (m.lambda * m.lambda) - d2 / (m2.lambda * m2.lambda))
+            / (1.0 / (m.lambda * m.lambda) - 1.0 / (m2.lambda * m2.lambda));
+        items.push((m.key, res));
+    }
+    if items.len() < 3 {
+        return Vec::new();
+    }
+    let mut rs: Vec<f64> = items.iter().map(|(_, v)| *v).collect();
+    rs.sort_by(|a, b| a.total_cmp(b));
+    let med = rs[rs.len() / 2];
+    items.into_iter()
+        .filter(|(_, v)| (v - med).abs() > MAX_DEV_M)
+        .map(|(k, _)| k)
+        .collect()
 }

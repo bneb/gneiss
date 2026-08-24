@@ -220,6 +220,28 @@ impl GnssRtkIekf {
             }
         }
 
+        // Experimental: post-fix iono-free residual screen. A same-cycle
+        // dual-frequency slip leaves MW (geometry-free) untouched but
+        // shifts the pair's IF ambiguity by whole lambda_IF cycles, so
+        // deviating pairs expose confidently-wrong fixes that carry no
+        // wide-lane contradiction signal.
+        if ar_res.is_fixed && std::env::var("GNEISS_IF_VETO").is_ok() {
+            let mut fixed_n1: HashMap<DoubleDiffKey, f64> = HashMap::new();
+            let mut fixed_n2: HashMap<DoubleDiffKey, f64> = HashMap::new();
+            for (k, v) in &ar_res.fixed_ambiguities {
+                if k.freq_band == 1 { fixed_n1.insert(*k, *v); }
+                if k.freq_band == 2 { fixed_n2.insert(DoubleDiffKey { freq_band: 1, ..*k }, *v); }
+            }
+            let suspects = update::if_residual_outliers(
+                ar_res.position_ecef, &dd_meas.dd, &fixed_n1, &fixed_n2,
+            );
+            if !suspects.is_empty() {
+                tracing::debug!("if-screen: tow={:.0} suspect pairs={} -> float",
+                    rover.time.tow, suspects.len());
+                ar_res = ar::float_result(&self.state);
+            }
+        }
+
         // When fixed, re-estimate the position from iono-free phase to
         // remove the DD ionosphere bias that grows with baseline length.
         let (pos_ecef, cov_pos) = if ar_res.is_fixed {
