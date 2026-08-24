@@ -90,7 +90,7 @@ fn run_backward_iekf(
         // random-walk state inside the filter.
         // NOTE: ZWD state disabled pending two-station model. Enabling it
         // without base-side constraint degrades long-baseline fix rates.
-        // iekf.state.enable_zwd(0.0225);
+        iekf.state.enable_zwd(0.0225);
         let cadence_hint =
             crate::post_process::screening::infer_cadence_hint(rover_epochs);
         iekf.slip_detector.cadence_hint_s = cadence_hint;

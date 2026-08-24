@@ -76,6 +76,9 @@ fn run_forward_iekf(
     let mut iekf = GnssRtkIekf::new(init_pos, rover_epochs[0].time, q_accel);
     iekf.widelane_ar = widelane_ar;
     if widelane_ar {
+        iekf.state.enable_zwd(0.0225); // ~15 cm zenith wet init uncertainty
+    }
+    if widelane_ar {
         // NOTE: ZWD state estimation disabled pending two-station model.
         // Enabling it without base-side constraint degrades long-baseline
         // fix rates (SLAC: 82% -> 48%).
