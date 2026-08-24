@@ -58,34 +58,7 @@ pub const STRICT_DISAGREE_M: f64 = 0.50;
 fn combine_bidirectional_epoch(fwd: &FilteredEpoch, bwd: &FilteredEpoch, strict: bool) -> SmoothedEpoch {
     let sep = (fwd.position_ecef - bwd.position_ecef).norm();
 
-    // Strict mode (long-baseline path): large disagreement means at least
-    // one pass is wrong. Fuse as float with honest quality instead of
-    // blessing either side's fixed claim.
-    if strict && sep > STRICT_DISAGREE_M {
-        let q_merged = fwd.quality.min(bwd.quality);
-        let (pos, cov, _) = fuse_covariances(fwd, bwd, q_merged);
-        let (std_e, std_n, std_u) = compute_enu_stds(pos, cov);
-        return SmoothedEpoch {
-            time: fwd.time,
-            position_ecef: pos,
-            velocity_ecef: match (&fwd.velocity_ecef, &bwd.velocity_ecef) {
-                (Some(vf), Some(vb)) => Some(0.5 * (vf + vb)),
-                (Some(vf), None) => Some(*vf),
-                (None, Some(vb)) => Some(*vb),
-                (None, None) => None,
-            },
-            attitude: None,
-            cov_position: cov,
-            std_east: std_e,
-            std_north: std_n,
-            std_up: std_u,
-            separation_3d: sep,
-            quality: 2,
-            n_satellites: fwd.n_satellites.max(bwd.n_satellites),
-        };
-    }
-
-    let (pos, cov, q) = if fwd.is_fixed && !bwd.is_fixed {
+    let (pos, cov, mut q) = if fwd.is_fixed && !bwd.is_fixed {
         if sep < 0.50 {
             fuse_covariances(fwd, bwd, 1)
         } else {
@@ -115,6 +88,13 @@ fn combine_bidirectional_epoch(fwd: &FilteredEpoch, bwd: &FilteredEpoch, strict:
             (bwd.position_ecef, bwd.cov_position, q_merged)
         }
     };
+
+    // Long-baseline honesty: when the passes disagree beyond the static
+    // threshold, whichever side was picked cannot be trusted as fixed.
+    // Cap quality to float so downstream consumers see the uncertainty.
+    if strict && sep > STRICT_DISAGREE_M && q == 1 {
+        q = 2;
+    }
 
     let (std_e, std_n, std_u) = compute_enu_stds(pos, cov);
     let vel = match (fwd.velocity_ecef, bwd.velocity_ecef) {
