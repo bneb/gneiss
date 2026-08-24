@@ -86,6 +86,12 @@ fn run_backward_iekf(
     let mut iekf = GnssRtkIekf::new(initial_rover_pos, rev_epochs[0].time, q_accel);
     iekf.widelane_ar = widelane_ar;
     if widelane_ar {
+        // Two-phase static Q (mirrors forward pass): the backward session
+        // anchor is end-of-day, so elapsed time counts symmetrically.
+        iekf.static_lock_after_s = Some(900.0);
+        iekf.static_lock_q_accel = 1e-8;
+    }
+    if widelane_ar {
         // Rover-side ZWD random walk: gate by baseline length (same as
         // forward pass) so only correlated-atmosphere short baselines get it.
         let baseline_m = (initial_rover_pos - base_pos).norm();

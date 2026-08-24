@@ -81,6 +81,11 @@ fn run_forward_iekf(
     });
     let mut iekf = GnssRtkIekf::new(init_pos, rover_epochs[0].time, q_accel);
     iekf.widelane_ar = widelane_ar;
+    if widelane_ar {
+        // Two-phase static Q: converge loosely, then lock the monument.
+        iekf.static_lock_after_s = Some(900.0);
+        iekf.static_lock_q_accel = 1e-8;
+    }
     // Rover-side ZWD random walk helps short baselines (atmosphere correlated)
     // but hurts long baselines (>25 km) where rover/base wet delay decouples.
     // Gate by baseline length so only correlated-atmosphere cases get the state.

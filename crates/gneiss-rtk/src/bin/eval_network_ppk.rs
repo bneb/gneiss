@@ -209,7 +209,7 @@ fn run_pass(
         // Static monuments: q=1.0 re-randomizes position ~55 m per 30 s
         // epoch and keeps the float solution from converging (ambiguity
         // floats sit 0.4+ cycles off, blocking AR). 1e-6 allows slow drift.
-        q_accel: Some(1e-6),
+        q_accel: Some(1e-9),
         network_sat_upd: network_upd.clone(),
         // Long baselines need iono-immune fixing: MW wide-lane cascade AR
         // unlocks the iono-free stage beyond ~20 km.

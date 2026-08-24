@@ -49,6 +49,18 @@ pub struct GnssRtkIekf {
     /// Opt-in Melbourne–Wübbena wide-lane cascade AR (long baselines).
     /// Default off; enabling changes only epochs the joint FAR/PAR left float.
     pub widelane_ar: bool,
+    /// TOW of the first epoch this filter processed (session anchor for
+    /// two-phase static Q timing). For the backward pass this is the END
+    /// of the session, so elapsed time counts backward identically.
+    pub start_tow: f64,
+    /// Two-phase static Q (long-baseline mode): after this many seconds of
+    /// elapsed session time, switch from `q_accel` to `static_lock_q_accel`.
+    /// Loose early Q lets the float solution converge; tight late Q freezes
+    /// the monument so wrong fixes surface as residual inflation instead of
+    /// absorbing into position drift. Active only when `widelane_ar` is on.
+    pub static_lock_after_s: Option<f64>,
+    /// Post-lock acceleration process noise (m/s^2).
+    pub static_lock_q_accel: f64,
     /// Rover ZWD residual (m zenith wet) scalar random-walk estimate.
     pub zwd_est_m: f64,
     pub zwd_var_m2: f64,
@@ -77,6 +89,9 @@ impl GnssRtkIekf {
             base_slip_detector: crate::post_process::screening::CycleSlipDetector::new(),
             prev_arcs: HashMap::new(),
             widelane_ar: false,
+            start_tow: start_time.tow,
+            static_lock_after_s: None,
+            static_lock_q_accel: 1e-9,
             zwd_est_m: 0.0,
             zwd_var_m2: update::ZWD_INIT_VAR_M2,
             prev_zwd_tow: start_time.tow,
@@ -112,10 +127,19 @@ impl GnssRtkIekf {
 
         // Reverse-safe covariance growth on the opt-in long-baseline path:
         // the legacy signed-dt Q poisons the backward pass over long arcs.
+        let q_now = match self.static_lock_after_s {
+            Some(lock_s)
+                if self.widelane_ar
+                    && (rover.time.tow - self.start_tow).abs() > lock_s =>
+            {
+                self.static_lock_q_accel
+            }
+            _ => self.q_accel,
+        };
         let f_mat = if self.widelane_ar {
-            predict::predict_state_gated(&mut self.state, rover.time, self.q_accel, true)
+            predict::predict_state_gated(&mut self.state, rover.time, q_now, true)
         } else {
-            predict::predict_state(&mut self.state, rover.time, self.q_accel)
+            predict::predict_state(&mut self.state, rover.time, q_now)
         };
         let (x_pred, p_pred) = (self.state.to_dvector(), self.state.cov.clone());
 
