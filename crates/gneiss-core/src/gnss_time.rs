@@ -15,7 +15,8 @@
 //! mis-sign. This module makes the time system part of the *type*: values are
 //! constructed in their native scale ([`GnssTime::new`],
 //! [`GnssTime::from_gpst`]) and converted explicitly ([`GnssTime::to_gpst`]) —
-//! the single place where the offsets live.
+//! one typed home for the offsets, onto which the remaining ad-hoc call sites
+//! (rinex.rs, ephemeris.rs) migrate as a follow-up.
 //!
 //! # Sign convention
 //!
@@ -53,11 +54,11 @@ pub enum TimeSystem {
 
 impl TimeSystem {
     /// Leap seconds between the GPST epoch (1980-01-06) and UTC, i.e. how far
-    /// GPST leads UTC. 18 s since 2017-01-01. Update when IERS/BIPM announce
-    /// the next leap second — only the GLONASS conversion depends on it
-    /// (BDT/GST offsets are fixed relative to GPST by design and immune to
-    /// future leap-second insertions).
-    pub const GPS_LEAP_SECONDS: f64 = 18.0;
+    /// GPST leads UTC. 18 s since 2017-01-01; bump when IERS/BIPM announce the
+    /// next leap second — only the GLONASS conversion depends on it (BDT/GST
+    /// offsets are fixed relative to GPST by design and immune to future
+    /// leap-second insertions).
+    pub const GPS_LEAP_SECONDS: i32 = 18;
 
     /// The fixed UTC(SU)+3 h component of GLONASS time, in seconds.
     pub const GLONASS_UTC_OFFSET: f64 = 10800.0;
@@ -71,7 +72,7 @@ impl TimeSystem {
 
     /// GLONASS → GPST offset under the current leap count:
     /// GPST = GLONASST − 3 h + leap seconds.
-    pub const GLONASS_TO_GPST: f64 = Self::GPS_LEAP_SECONDS - Self::GLONASS_UTC_OFFSET;
+    pub const GLONASS_TO_GPST: f64 = Self::GPS_LEAP_SECONDS as f64 - Self::GLONASS_UTC_OFFSET;
 
     /// Seconds to add to a reading in `self` to obtain the same instant in GPST.
     pub const fn gpst_offset(self) -> f64 {
@@ -84,8 +85,8 @@ impl TimeSystem {
     }
 
     /// GLONASS → GPST offset under a future/hypothetical leap-second count.
-    pub fn glonass_offset_with_leap_seconds(gps_leap_seconds: f64) -> f64 {
-        gps_leap_seconds - Self::GLONASS_UTC_OFFSET
+    pub fn glonass_offset_with_leap_seconds(gps_leap_seconds: i32) -> f64 {
+        f64::from(gps_leap_seconds) - Self::GLONASS_UTC_OFFSET
     }
 }
 
@@ -122,14 +123,21 @@ impl GnssTime {
     }
 
     /// Like [`GnssTime::to_gpst`] but with an explicit GPS↔UTC leap-second
-    /// count, ready for the day IERS announces leap number 19 (affects the
-    /// GLONASS conversion only).
-    pub fn to_gpst_with_leap_seconds(&self, gps_leap_seconds: f64) -> GpsTime {
+    /// count (integer seconds, e.g. 18 today, 19 after the next IERS leap),
+    /// affecting the GLONASS conversion only.
+    pub fn to_gpst_with_leap_seconds(&self, gps_leap_seconds: i32) -> GpsTime {
         let offset = match self.sys {
             TimeSystem::Glonass => TimeSystem::glonass_offset_with_leap_seconds(gps_leap_seconds),
             sys => sys.gpst_offset(),
         };
-        GpsTime::new(self.week, self.tow + offset)
+        let tow = self.tow + offset;
+        if !tow.is_finite() {
+            // Poisoned input (NaN/±inf, possibly via direct field access) must
+            // NOT reach GpsTime's normalization loops, which would spin
+            // forever; hand the poison through instead.
+            return GpsTime { week: self.week, tow };
+        }
+        GpsTime::new(self.week, tow)
     }
 
     /// Converts a GPST timestamp *into* `sys`.
@@ -139,7 +147,7 @@ impl GnssTime {
 
     /// Leap-aware inverse of [`GnssTime::to_gpst_with_leap_seconds`]:
     /// `from_gpst_with_leap_seconds(sys, t, n).to_gpst_with_leap_seconds(n) == t`.
-    pub fn from_gpst_with_leap_seconds(sys: TimeSystem, t: GpsTime, gps_leap_seconds: f64) -> Self {
+    pub fn from_gpst_with_leap_seconds(sys: TimeSystem, t: GpsTime, gps_leap_seconds: i32) -> Self {
         let offset = match sys {
             TimeSystem::Glonass => TimeSystem::glonass_offset_with_leap_seconds(gps_leap_seconds),
             sys => sys.gpst_offset(),
@@ -148,30 +156,37 @@ impl GnssTime {
     }
 }
 
+/// Largest |tow| (seconds) that `normalized` will wrap: ~2^53 weeks ≈ 285
+/// million years. Beyond that the value is garbage data; wrapping it would be
+/// meaningless, so it passes through untouched instead of being looped on.
+const MAX_NORMALIZABLE_TOW: f64 = 9.0e15;
+
 /// Carries whole weeks out of `tow`, leaving it in `[0, SECONDS_IN_WEEK)`
-/// (or untouched when non-finite). Week arithmetic wraps like `GpsTime`.
-fn normalized(mut week: u32, mut tow: f64) -> (u32, f64) {
-    if !tow.is_finite() {
+/// (or untouched when non-finite / beyond [`MAX_NORMALIZABLE_TOW`]). Week
+/// arithmetic wraps mod 2^32, matching `GpsTime`.
+fn normalized(week: u32, tow: f64) -> (u32, f64) {
+    if !tow.is_finite() || tow.abs() > MAX_NORMALIZABLE_TOW {
         return (week, tow);
     }
-    if !(0.0..SECONDS_IN_WEEK).contains(&tow) {
-        // Remove whole weeks in O(1): float->int `as` truncates toward zero and
-        // saturates on absurd magnitudes, after which the fix-up loops below
-        // run at most once or twice. The i64 -> u32 cast keeps the low 32 bits,
-        // i.e. the same mod-2^32 wrapping as `GpsTime`.
-        let whole_weeks = (tow / SECONDS_IN_WEEK) as i64;
-        tow -= whole_weeks as f64 * SECONDS_IN_WEEK;
-        week = (i64::from(week)).wrapping_add(whole_weeks) as u32;
+    // IEEE fmod is exact and O(1) for any magnitude — a subtract-one-week loop
+    // is how naive kernels hang on hostile input. The remainder keeps the sign
+    // of `tow`; the discarded part is always an exact whole number of weeks.
+    let mut r = tow % SECONDS_IN_WEEK;
+    let mut w = i64::from(week) + ((tow - r) / SECONDS_IN_WEEK) as i64;
+    if r < 0.0 {
+        r += SECONDS_IN_WEEK;
+        w -= 1;
     }
-    while tow >= SECONDS_IN_WEEK {
-        tow -= SECONDS_IN_WEEK;
-        week = week.wrapping_add(1);
+    if r >= SECONDS_IN_WEEK {
+        // Rounding can park a tiny negative remainder exactly ON the boundary
+        // (e.g. tow = -1e-12 adds up to exactly 604800.0). Roll forward to
+        // preserve the invariant r ∈ [0, WEEK); the represented instant is
+        // unchanged to f64 resolution (half-ulp there is ~6e-11 s).
+        r -= SECONDS_IN_WEEK;
+        w += 1;
     }
-    while tow < 0.0 {
-        tow += SECONDS_IN_WEEK;
-        week = week.wrapping_sub(1);
-    }
-    (week, tow)
+    let r = if r == 0.0 { 0.0 } else { r }; // canonicalize -0.0 from exact multiples
+    (w as u32, r)
 }
 
 // ============================================================================
@@ -184,8 +199,9 @@ fn normalized(mut week: u32, mut tow: f64) -> (u32, f64) {
 //   2. from_gpst/to_gpst round trips,
 //   3. week-boundary carries near tow = 0 and 604800,
 //   4. negative / multi-week tow normalization,
-//   5. bit-exact reproduction of the retired ad-hoc corrections in
-//      gneiss-parsers/src/rinex.rs:756-757 and gneiss-core ephemeris.rs.
+//   5. bit-exact reproduction of the still-live ad-hoc corrections in
+//      gneiss-parsers/src/rinex.rs:756-757 and gneiss-core/src/ephemeris.rs
+//      (migrating those call sites onto this module is a tracked follow-up).
 // ============================================================================
 
 #[cfg(test)]
@@ -202,7 +218,7 @@ mod tests {
 
     #[test]
     fn icd_offsets_are_pinned() {
-        assert_eq!(TimeSystem::GPS_LEAP_SECONDS, 18.0);
+        assert_eq!(TimeSystem::GPS_LEAP_SECONDS, 18);
         assert_eq!(TimeSystem::GLONASS_UTC_OFFSET, 10800.0);
         assert_eq!(TimeSystem::GLONASS_TO_GPST, 18.0 - 10800.0);
         assert_eq!(TimeSystem::BDT_TO_GPST, 14.0);
@@ -323,22 +339,23 @@ mod tests {
         // Hypothetical next leap second: 19 s.
         let glo = GnssTime::new(TimeSystem::Glonass, 2300, 0.0);
         assert_eq!(
-            glo.to_gpst_with_leap_seconds(19.0),
+            glo.to_gpst_with_leap_seconds(19),
             GpsTime::new(2299, 594_019.0)
         );
         // Default path still uses the pinned 18 s.
         assert_eq!(glo.to_gpst(), GpsTime::new(2299, 594_018.0));
         // BDT/GST are leap-independent by design.
         let bdt = GnssTime::new(TimeSystem::Bdt, 1, 10.0);
-        assert_eq!(bdt.to_gpst_with_leap_seconds(37.0), GpsTime::new(1, 24.0));
+        assert_eq!(bdt.to_gpst_with_leap_seconds(37), GpsTime::new(1, 24.0));
+        let gst = GnssTime::new(TimeSystem::Gst, 9, 777.0);
+        assert_eq!(gst.to_gpst_with_leap_seconds(99), GpsTime::new(9, 777.0));
     }
 
     #[test]
     fn leap_second_parameter_round_trips() {
         let origin = GpsTime::new(W, 456_789.0);
-        let native =
-            GnssTime::from_gpst_with_leap_seconds(TimeSystem::Glonass, origin, 19.0);
-        assert_eq!(native.to_gpst_with_leap_seconds(19.0), origin);
+        let native = GnssTime::from_gpst_with_leap_seconds(TimeSystem::Glonass, origin, 19);
+        assert_eq!(native.to_gpst_with_leap_seconds(19), origin);
         // Converting back with a stale leap count betrays exactly 1 s.
         assert_eq!(native.to_gpst() - origin, -1.0);
     }
@@ -426,5 +443,55 @@ mod tests {
             GnssTime::from_gpst(TimeSystem::Gst, GpsTime::new(1, 1.0)).sys,
             TimeSystem::Gst
         );
+    }
+
+    #[test]
+    fn seam_between_weeks_stays_in_range() {
+        // A tiny negative remainder rounds onto exactly 604800.0 during the
+        // borrow; the kernel must roll forward so the documented invariant
+        // tow ∈ [0, 604800) survives (the instant is unchanged to f64 ulp).
+        let g = GnssTime::new(TimeSystem::Gps, 7, -1e-12);
+        assert_eq!((g.week, g.tow), (7, 0.0));
+        assert!((0.0..SECONDS_IN_WEEK).contains(&g.tow));
+
+        let g = GnssTime::new(TimeSystem::Glonass, 100, -SECONDS_IN_WEEK);
+        assert_eq!(g.tow, 0.0);
+        assert!(!g.tow.is_sign_negative(), "negative zero must be canonicalized");
+    }
+
+    #[test]
+    fn absurd_magnitudes_pass_through_without_hanging() {
+        for tow in [-1.0e300, 1.0e300] {
+            let g = GnssTime::new(TimeSystem::Gps, 42, tow);
+            assert_eq!((g.week, g.tow), (42, tow), "garbage must not be wrapped");
+        }
+    }
+
+    #[test]
+    fn week_counter_wraps_at_u32_edges() {
+        let g = GnssTime::new(TimeSystem::Bdt, u32::MAX, SECONDS_IN_WEEK);
+        assert_eq!((g.week, g.tow), (0, 0.0));
+
+        // BDT lags: early-week GPST borrows from week 0 into u32::MAX.
+        let g = GnssTime::from_gpst(TimeSystem::Bdt, GpsTime::new(0, 5.0));
+        assert_eq!((g.week, g.tow), (u32::MAX, 604_791.0));
+
+        // GLONASS leads: late-week GPST spills from u32::MAX into week 0.
+        let g = GnssTime::from_gpst(TimeSystem::Glonass, GpsTime::new(u32::MAX, 604_000.0));
+        assert_eq!((g.week, g.tow), (0, 9_982.0));
+    }
+
+    #[test]
+    fn non_finite_tow_bypasses_normalization_on_conversion() {
+        // Direct field construction bypasses GnssTime::new; to_gpst must hand
+        // the poison through instead of entering GpsTime's unbounded loops.
+        let g = GnssTime {
+            sys: TimeSystem::Gps,
+            week: 3,
+            tow: f64::NEG_INFINITY,
+        };
+        let out = g.to_gpst();
+        assert_eq!(out.week, 3);
+        assert!(out.tow.is_infinite());
     }
 }

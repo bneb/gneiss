@@ -144,6 +144,7 @@ mod tests {
             is_fixed: true,
             n_sats: 8,
             quality: 1,
+            amb_keys: Vec::new(),
         };
         let res = run_rts_smoother(&[snap]);
         assert_eq!(res.len(), 1);

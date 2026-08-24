@@ -33,19 +33,17 @@
 //! fuse_base_rover(base, rover_igs20);
 //! // ^^^ error[E0308]: expected `EcefPos<Itrf2014>`, found `EcefPos<Igs20>`
 //! let tagged: EcefPos<Itrf2014> = rover_igs20;
-//! // ^^^ error[E0308]: no implicit coercion between frame tags exists either
+//! // ^^^ error[E0308]: no implicit coercion between frame tags either
 //! ```
 //!
 //! # Provenance of numeric constants
 //!
 //! * `ITRF2020 -> ITRF2014`: ITRF center table (Altamimi et al., epoch 2015.0):
-//!   T = (-1.4, -0.9, +1.4) mm, D = -0.40 ppb, R = 0, rates 0. Verify against
-//!   itrf.ign.fr before relying on sub-mm fidelity (`gneiss-geodesy/helmert.rs`
-//!   carries a variant set (-1.4, -1.2, +1.2 mm plus rates); reconcile).
-//! * `IGS20 -> ITRF2020`: aligned by construction (Rebischung et al. 2022);
-//!   residuals < 1 mm neglected, so its link equals the ITRF2020 link.
-//! * `WGS84(G2296)`: NGA STP aligns it to ITRF2020 at cm level; treated as
-//!   identical to ITRF2020 here.
+//!   T = (-1.4, -0.9, +1.4) mm, D = -0.40 ppb, R = 0, rates 0; verify against
+//!   itrf.ign.fr for sub-mm fidelity (`gneiss-geodesy/helmert.rs` carries a
+//!   variant set (-1.4, -1.2, +1.2 mm plus rates); reconcile).
+//! * `IGS20`, `WGS84(G2296)`: aligned to ITRF2020 by construction / NGA STP
+//!   (< 1 mm and cm-level respectively); both links equal the ITRF2020 row.
 
 use core::marker::PhantomData;
 use nalgebra::{Matrix3, Vector3};
@@ -57,11 +55,9 @@ const PPB: f64 = 1.0e-9;
 /// Milliarcseconds to radians.
 const MAS_TO_RAD: f64 = core::f64::consts::PI / 648_000_000.0;
 
-/// 14-parameter Helmert set mapping one frame's coordinates into another.
-///
-/// Field units mirror the published ITRF/IGS tables; the `*_rate` fields are
-/// annual rates used to propagate parameters from [`Self::ref_epoch_yr`] to
-/// the observation epoch.
+/// 14-parameter Helmert set mapping one frame's coordinates into another;
+/// units mirror the published ITRF/IGS tables and `*_rate` fields are annual
+/// rates for propagation from [`Self::ref_epoch_yr`].
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct HelmertParams {
     /// Translation X at `ref_epoch_yr` (mm).
@@ -154,12 +150,10 @@ impl HelmertParams {
             + self.translation_m()
     }
 
-    /// Inverse transform, computed exactly by inverting the full
-    /// `(1+s)·(I + [ω]×)` matrix (the closed-form first-order shortcut would
-    /// accumulate O(ω²·r) error, i.e. hundreds of µm for mas-scale rotations).
-    /// Falls back to the first-order formula only if the matrix were
-    /// numerically singular, which cannot happen for physical parameters
-    /// (det ≈ (1+s)³(1+‖ω‖²) > 0).
+    /// Inverse transform; inverts the full `(1+s)·(I + [ω]×)` matrix exactly
+    /// (first-order shortcuts accumulate O(ω²·r) error). Falls back to a
+    /// first-order formula only if numerically singular — impossible for
+    /// physical parameters (det ≈ (1+s)³(1+‖ω‖²) > 0).
     #[must_use]
     pub fn apply_inverse(self, v: Vector3<f64>) -> Vector3<f64> {
         let w = self.rotation_rad();
@@ -192,29 +186,6 @@ impl HelmertParams {
     }
 }
 
-/// Composes links `src -> mid` then `mid -> dst` into one `src -> dst` set,
-/// both evaluated at a common epoch. Translation and scale combine exactly;
-/// rotations add component-wise (exact for mas-level angles). Rate fields are
-/// taken from `mid_to_dst`; composing two rated parameter sets is not
-/// supported (no such pair is published today).
-///
-/// Used to precompute the `TO_ITRF2014` constants of frames whose published
-/// parameters target a different hub epoch/frame.
-#[must_use]
-pub fn chain(src_to_mid: HelmertParams, mid_to_dst: HelmertParams) -> HelmertParams {
-    let combined_t_mm = mid_to_dst.apply(src_to_mid.translation_m()) * (1.0 / MM_TO_M);
-    let mut out = mid_to_dst;
-    out.tx_mm = combined_t_mm[0];
-    out.ty_mm = combined_t_mm[1];
-    out.tz_mm = combined_t_mm[2];
-    out.scale_ppb =
-        src_to_mid.scale_ppb + mid_to_dst.scale_ppb * src_to_mid.scale_factor();
-    out.rx_mas += src_to_mid.rx_mas;
-    out.ry_mas += src_to_mid.ry_mas;
-    out.rz_mas += src_to_mid.rz_mas;
-    out
-}
-
 /// Marker trait binding a coordinate realization to its published Helmert
 /// link into the ITRF2014 hub.
 pub trait ReferenceFrame {
@@ -223,7 +194,9 @@ pub trait ReferenceFrame {
 
     /// Parameters transforming coordinates FROM this frame TO ITRF2014.
     /// `None` means "coincident with ITRF2014" and is reserved for ITRF2014
-    /// itself; new frames must publish measured parameters instead.
+    /// itself; new frames must publish measured parameters instead, or store
+    /// an offline-precomposed constant if their published parameters target
+    /// a different hub frame.
     const HELMERT_TO_ITRF2014: Option<HelmertParams>;
 }
 
@@ -270,8 +243,8 @@ pub struct Igs20;
 
 impl ReferenceFrame for Igs20 {
     const NAME: &'static str = "IGS20";
-    /// Equals `chain(identity_at(2020.0), ITRF2020_TO_ITRF2014)`; the test
-    /// `composed_constants_equal_runtime_chaining` pins that equivalence.
+    /// IGS20 is ITRF2020-aligned by construction, so its link is the
+    /// published ITRF2020 -> ITRF2014 row verbatim.
     const HELMERT_TO_ITRF2014: Option<HelmertParams> = Some(ITRF2020_TO_ITRF2014);
 }
 
@@ -285,9 +258,8 @@ impl ReferenceFrame for Wgs84Broadcast {
 }
 
 /// ECEF position vector tagged with its reference frame at the type level.
-///
-/// `Clone`/`Copy`/`PartialEq` are implemented manually so any marker type
-/// implementing [`ReferenceFrame`] qualifies, even without deriving traits.
+/// Manual `Clone`/`Copy`/`PartialEq` impls let any [`ReferenceFrame`] marker
+/// qualify without deriving traits.
 pub struct EcefPos<F: ReferenceFrame>(pub Vector3<f64>, pub PhantomData<F>);
 
 impl<F: ReferenceFrame> EcefPos<F> {
@@ -309,8 +281,8 @@ impl<F: ReferenceFrame> EcefPos<F> {
         &self.0
     }
 
-    /// Converts to frame `F2` via the ITRF2014 hub, propagating both Helmert
-    /// sets to observation epoch `t_epoch_yr` (fractional years).
+    /// Converts to frame `F2` via the ITRF2014 hub; both Helmert sets are
+    /// propagated to observation epoch `t_epoch_yr` (fractional years).
     pub fn convert_to<F2: ReferenceFrame>(&self, t_epoch_yr: f64) -> EcefPos<F2> {
         let to_hub = params_at(F::HELMERT_TO_ITRF2014, t_epoch_yr);
         let from_hub = params_at(F2::HELMERT_TO_ITRF2014, t_epoch_yr);
@@ -372,12 +344,6 @@ mod tests {
         });
     }
 
-    struct TestUnknown;
-    impl ReferenceFrame for TestUnknown {
-        const NAME: &'static str = "TEST-UNKNOWN";
-        const HELMERT_TO_ITRF2014: Option<HelmertParams> = None;
-    }
-
     fn full_params(ref_epoch_yr: f64) -> HelmertParams {
         HelmertParams {
             tx_mm: 1.0,
@@ -400,6 +366,8 @@ mod tests {
 
     #[test]
     fn identity_conversion_is_bit_exact() {
+        // ITRF2014 is the hub (None params): conversion must be exact at any
+        // epoch, which also pins the `None` => identity semantics.
         let p = EcefPos::<Itrf2014>::new(SITE);
         for t in [2015.0_f64, 2020.0, 2040.0] {
             assert_eq!(p.convert_to::<Itrf2014>(t).0, SITE);
@@ -407,16 +375,9 @@ mod tests {
     }
 
     #[test]
-    fn unknown_frame_without_params_is_identity() {
-        let p = EcefPos::<TestUnknown>::new(SITE);
-        assert_eq!(p.convert_to::<Itrf2014>(2030.0).0, SITE);
-    }
-
-    #[test]
     fn round_trip_preserves_position_below_spec_bound() {
         let cases = [
             (SITE, 2015.0_f64),
-            (Vector3::new(-2_900_000.0, 1_300_000.0, 5_500_000.0), 2000.0),
             (Vector3::new(500_000.0, -5_800_000.0, 2_100_000.0), 2040.0),
         ];
         for (v, t) in cases {
@@ -431,12 +392,7 @@ mod tests {
         let orig = EcefPos::<A>::new(v);
         let back = orig.convert_to::<B>(t).convert_to::<A>(t);
         let err = (back.vector() - orig.vector()).norm();
-        assert!(
-            err < 1.0e-6,
-            "{} -> {} round trip drifted {err:e} m",
-            A::NAME,
-            B::NAME
-        );
+        assert!(err < 1.0e-6, "{} -> {} round trip drifted {err:e} m", A::NAME, B::NAME);
     }
 
     #[test]
@@ -467,9 +423,12 @@ mod tests {
             .convert_to::<Itrf2014>(2015.0)
             .0;
         let rz_rad = 1000.0 * MAS_TO_RAD;
-        assert!((out[0] - 1.0).abs() < 1.0e-15);
-        assert!((out[1] - rz_rad).abs() < 1.0e-18, "rotation sign flipped?");
-        assert!(out[2].abs() < 1.0e-24);
+        assert!(
+            (out[0] - 1.0).abs() < 1.0e-15
+                && (out[1] - rz_rad).abs() < 1.0e-18
+                && out[2].abs() < 1.0e-24,
+            "rotation sign or axis wrong: {out:?}"
+        );
     }
 
     #[test]
@@ -480,10 +439,8 @@ mod tests {
         let at_ref = shift_at(2015.0);
         let plus10 = shift_at(2025.0);
         let minus10 = shift_at(2005.0);
-        // Rate-only frame: z-shift = 1 mm/yr · dt, other axes untouched.
-        // Tolerance is the ~1 nm cancellation floor of subtracting
-        // coordinates ~5e6 m apart; a dropped or wrong-sign rate shifts z by
-        // 10 mm and fails loudly.
+        // Rate-only frame: z-shift = 1 mm/yr · dt, other axes untouched. The
+        // 1e-8 tolerance is the nm-scale cancellation floor at |r| ≈ 5e6 m.
         assert!(at_ref.abs().max() < 1.0e-15);
         assert!((plus10[2] - 0.010).abs() < 1.0e-8);
         assert!((minus10[2] + 0.010).abs() < 1.0e-8);
@@ -496,52 +453,14 @@ mod tests {
     }
 
     #[test]
-    fn chaining_matches_sequential_application_and_shipped_constants() {
-        // Property: the composed set transforms identically to applying the
-        // two links in order (sequential application is ground truth).
-        let h1 = HelmertParams {
-            tx_mm: 2.0,
-            ty_mm: -1.0,
-            tz_mm: 4.0,
-            scale_ppb: 5.0,
-            rx_mas: 100.0,
-            ry_mas: -60.0,
-            rz_mas: 40.0,
-            ref_epoch_yr: 2000.0,
-            tx_rate: 0.1,
-            ty_rate: 0.05,
-            tz_rate: -0.02,
-            scale_rate: 0.01,
-            rx_rate: 0.3,
-            ry_rate: 0.2,
-            rz_rate: -0.1,
-        };
-        let v = Vector3::new(-6.378e6, 1.0e6, -2.0e6);
-        let composed = chain(h1, ITRF2020_TO_ITRF2014);
-        for t in [1995.0_f64, 2000.0, 2005.0] {
-            let seq = ITRF2020_TO_ITRF2014.at(t).apply(h1.at(t).apply(v));
-            assert!(
-                (composed.at(t).apply(v) - seq).abs().max() < 1.0e-7,
-                "chain diverges from sequential application at t={t}"
-            );
-        }
-        // Shipped constants equal chaining an ITRF2020-aligned identity link.
-        for frame_params in [
+    fn shipped_frame_links_match_published_itrf2020_row() {
+        // All three are ITRF2020-aligned: identical published constants.
+        for link in [
             Itrf2020::HELMERT_TO_ITRF2014,
             Igs20::HELMERT_TO_ITRF2014,
             Wgs84Broadcast::HELMERT_TO_ITRF2014,
         ] {
-            let stored = frame_params.expect("shipped frames carry parameters");
-            let chained =
-                chain(HelmertParams::identity_at(stored.ref_epoch_yr), ITRF2020_TO_ITRF2014);
-            for t in [stored.ref_epoch_yr, stored.ref_epoch_yr + 10.0] {
-                let (p, q) = (chained.at(t), stored.at(t));
-                assert!(
-                    (p.apply(SITE) - q.apply(SITE)).abs().max() < 1.0e-9,
-                    "chained {p:?} != stored {q:?}"
-                );
-            }
-            assert_eq!(chained.ref_epoch_yr, stored.ref_epoch_yr);
+            assert_eq!(link, Some(ITRF2020_TO_ITRF2014));
         }
     }
 

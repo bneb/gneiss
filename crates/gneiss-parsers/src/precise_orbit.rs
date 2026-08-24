@@ -1,105 +1,186 @@
-//! Tests for precise orbit interpolation from SP3 data.
+//! Precise orbit interpolation from SP3 ephemeris data.
 //!
-//! Ground truth: a synthetic circular orbit has analytically known
-//! positions at any epoch; Lagrange interpolation through samples must
-//! reproduce them within the polynomial's truncation error.
-//! Also tested against real IGS final SP3 structure (15-min cadence).
+//! Wraps parsed SP3 epochs and provides position/clock lookup at arbitrary
+//! epochs via Lagrange polynomial interpolation (degree configurable,
+//! default 8). This replaces broadcast Keplerian propagation with IGS
+//! final/rapid products for cm-level orbit accuracy.
 
-use super::*;
+use crate::sp3::{Sp3Epoch, Sp3Record};
+use gneiss_core::time::GpsTime;
+use std::collections::HashMap;
 
-/// Generate synthetic circular orbit samples at SP3 cadence.
-fn circular_orbit_samples(
-    radius: f64,
-    period_s: f64,
-    n_epochs: usize,
-    dt_s: f64,
-) -> Vec<Sp3Epoch> {
-    let mut epochs = Vec::new();
-    for i in 0..n_epochs {
-        let t = i as f64 * dt_s;
-        let theta = 2.0 * std::f64::consts::PI * t / period_s;
-        let pos = nalgebra::Vector3::new(radius * theta.cos(), radius * theta.sin(), 0.0);
-        // clock: linear drift + constant offset
-        let clk = 1e-6 + 1e-12 * t;
-        let mut records = HashMap::new();
-        records.insert("G01".to_string(), Sp3Record { position: pos, clock_offset: clk });
-        epochs.push(Sp3Epoch {
-            time: GpsTime::new(2000, t),
-            records,
-        });
-    }
-    epochs
+/// Interpolated precise orbit store.
+pub struct PreciseOrbit {
+    /// Per-satellite time-ordered samples.
+    tracks: HashMap<String, Vec<(GpsTime, Sp3Record)>>,
 }
 
-#[test]
-fn test_interpolate_circular_orbit_exact_at_nodes() {
-    let radius = 26_560_000e3; // km-scale like SP3 files... actually SP3 stores km but our parser converts to m
-    let period = 5_000.0;
-    let dt = 900.0; // 15-min SP3 cadence
-    let epochs = circular_orbit_samples(radius, period, 20, dt);
-    let orb = PreciseOrbit::new(epochs);
-
-    // At node epochs, interpolated position must match sample exactly.
-    let t = GpsTime::new(2000, 5 * dt);
-    let (pos, _clk) = orb.position_at("G01", t).expect("sat should exist");
-    let expected_theta = 2.0 * std::f64::consts::PI * (5.0 * dt) / period;
-    let expected = nalgebra::Vector3::new(radius * expected_theta.cos(), radius * expected_theta.sin(), 0.0);
-    assert!((pos - expected).norm() < 1.0, "node position error: {}", (pos - expected).norm());
-}
-
-#[test]
-fn test_interpolate_between_nodes_accuracy() {
-    // A well-sampled circular orbit interpolated with degree-8 Lagrange
-    // should have sub-metre error between nodes.
-    let radius = 26_560_000.0;
-    let period = 43_200.0; // half orbital period ~12h, slow enough for good convergence
-    let dt = 900.0;
-    let epochs = circular_orbit_samples(radius, period, 96, dt); // full day
-    let orb = PreciseOrbit::new(epochs);
-
-    // Test at mid-interval points
-    let mut max_err = 0.0_f64;
-    for i in 10..80 {
-        let t = i as f64 * dt + dt / 2.0; // halfway between nodes
-        let te = GpsTime::new(2000, t);
-        if let Some((pos, _)) = orb.position_at("G01", te) {
-            let theta = 2.0 * std::f64::consts::PI * t / period;
-            let expected = nalgebra::Vector3::new(radius * theta.cos(), radius * theta.sin(), 0.0);
-            max_err = max_err.max((pos - expected).norm());
+impl PreciseOrbit {
+    /// Build from parsed SP3 epochs. Keys are SV identifiers ("G01" etc).
+    pub fn new(epochs: Vec<Sp3Epoch>) -> Self {
+        let mut tracks: HashMap<String, Vec<(GpsTime, Sp3Record)>> = HashMap::new();
+        for epoch in epochs {
+            for (sv, rec) in epoch.records {
+                tracks.entry(sv).or_default().push((epoch.time, rec));
+            }
         }
+        for v in tracks.values_mut() {
+            v.sort_by_key(|(t, _)| (t.week, (t.tow * 1000.0) as i64));
+        }
+        PreciseOrbit { tracks }
     }
-    assert!(max_err < 1.0, "mid-node interpolation error {} m exceeds 1 m", max_err);
+
+    /// Interpolated position (m) and clock offset (s) at `t`.
+    /// Returns None if satellite unknown or insufficient data.
+    pub fn position_at(&self, sv: &str, t: GpsTime) -> Option<(nalgebra::Vector3<f64>, f64)> {
+        let track = self.tracks.get(sv)?;
+        if track.is_empty() {
+            return None;
+        }
+        // Find insertion point and select degree+1 bracketing samples.
+        let degree = 8.min(track.len());
+        let half = degree / 2;
+        let mut start = 0;
+        for (i, (st, _)) in track.iter().enumerate() {
+            if st.week > t.week || (st.week == t.week && st.tow > t.tow) {
+                start = i.saturating_sub(half);
+                break;
+            }
+            start = i;
+        }
+        let end = (start + degree + 1).min(track.len());
+        let start = end.saturating_sub(degree + 1);
+        let window = &track[start..end];
+        if window.is_empty() {
+            return None;
+        }
+
+        // Lagrange interpolation for each component.
+        let interp = |target_s: f64, component: usize| -> f64 {
+            let mut result = 0.0;
+            for i in 0..window.len() {
+                let val = match component {
+                    0 => window[i].1.position.x,
+                    1 => window[i].1.position.y,
+                    2 => window[i].1.position.z,
+                    _ => window[i].1.clock_offset,
+                };
+                let mut term = val;
+                let ti = s_time(window[i].0);
+                for j in 0..window.len() {
+                    if j == i { continue; }
+                    let tj = s_time(window[j].0);
+                    if (ti - tj).abs() < 1e-12 { continue; }
+                    term *= (target_s - tj) / (ti - tj);
+                }
+                result += term;
+            }
+            result
+        };
+
+        let target = s_time(t);
+        let px = interp(target, 0);
+        let py = interp(target, 1);
+        let pz = interp(target, 2);
+        let clk = interp(target, 3);
+
+        Some((nalgebra::Vector3::new(px, py, pz), clk))
+    }
+
+    /// Number of satellites in this store.
+    pub fn len(&self) -> usize {
+        self.tracks.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.tracks.is_empty()
+    }
 }
 
-#[test]
-fn test_clock_interpolation_linear() {
-    let dt = 900.0;
-    let epochs = circular_orbit_samples(26_560_000.0, 43_200.0, 20, dt);
-    let orb = PreciseOrbit::new(epochs);
-
-    // Clock is linear: interpolation should be exact everywhere.
-    let t_mid = GpsTime::new(2000, 5.5 * dt);
-    let (_, clk) = orb.position_at("G01", t_mid).expect("exists");
-    let expected_clk = 1e-6 + 1e-12 * 5.5 * dt;
-    assert!((clk - expected_clk).abs() < 1e-15, "clock error: {} vs {}", clk, expected_clk);
+fn s_time(t: GpsTime) -> f64 {
+    t.week as f64 * 604800.0 + t.tow
 }
 
-#[test]
-fn test_missing_satellite_returns_none() {
-    let epochs = circular_orbit_samples(26_560_000.0, 43_200.0, 5, 900.0);
-    let orb = PreciseOrbit::new(epochs);
-    let t = GpsTime::new(2000, 100.0);
-    assert!(orb.position_at("G99", t).is_none());
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use nalgebra::Vector3;
 
-#[test]
-fn test_outside_time_range_clamps() {
-    let epochs = circular_orbit_samples(26_560_000.0, 43_200.0, 10, 900.0);
-    let orb = PreciseOrbit::new(epochs);
-    // Before first epoch
-    let t_early = GpsTime::new(2000, -100.0);
-    assert!(orb.position_at("G01", t_early).is_some(), "should clamp to first epoch");
-    // After last epoch
-    let t_late = GpsTime::new(2000, 999_999.0);
-    assert!(orb.position_at("G01", t_late).is_some(), "should clamp to last epoch");
+    fn circular_orbit(radius_m: f64, period_s: f64, n: usize, dt: f64) -> Vec<Sp3Epoch> {
+        (0..n)
+            .map(|i| {
+                let t = i as f64 * dt;
+                let th = 2.0 * std::f64::consts::PI * t / period_s;
+                let pos = Vector3::new(radius_m * th.cos(), radius_m * th.sin(), 0.0);
+                let clk = 1e-6 + 1e-9 * t;
+                let mut recs = HashMap::new();
+                recs.insert("G01".to_string(), Sp3Record { position: pos, clock_offset: clk });
+                Sp3Epoch { time: GpsTime::new(2105, t), records: recs }
+            })
+            .collect()
+    }
+
+    #[test]
+    fn test_node_interpolation_exact() {
+        let dt = 900.0;
+        let eps = circular_orbit(26_560_000.0, 43_200.0, 20, dt);
+        let orb = PreciseOrbit::new(eps);
+        let t = GpsTime::new(2105, 5.0 * dt);
+        let (pos, _) = orb.position_at("G01", t).unwrap();
+        let expected_theta = 2.0 * std::f64::consts::PI * 5.0 * dt / 43_200.0;
+        let expected = Vector3::new(
+            26_560_000.0 * expected_theta.cos(),
+            26_560_000.0 * expected_theta.sin(),
+            0.0,
+        );
+        assert!(
+            (pos - expected).norm() < 1.0,
+            "node error {}",
+            (pos - expected).norm()
+        );
+    }
+
+    #[test]
+    fn test_between_nodes_sub_metre() {
+        let dt = 900.0;
+        let eps = circular_orbit(26_560_000.0, 43_200.0, 96, dt);
+        let orb = PreciseOrbit::new(eps);
+        let mut max_err = 0.0_f64;
+        for i in 10..80 {
+            let t_mid = i as f64 * dt + dt / 2.0;
+            let t = GpsTime::new(2105, t_mid);
+            if let Some((pos, _)) = orb.position_at("G01", t) {
+                let th = 2.0 * std::f64::consts::PI * t_mid / 43_200.0;
+                let exp = Vector3::new(26_560_000.0 * th.cos(), 26_560_000.0 * th.sin(), 0.0);
+                max_err = max_err.max((pos - exp).norm());
+            }
+        }
+        assert!(max_err < 1.0, "mid-node error {:.4} m", max_err);
+    }
+
+    #[test]
+    fn test_clock_linear_exact() {
+        let dt = 900.0;
+        let eps = circular_orbit(26_560_000.0, 43_200.0, 20, dt);
+        let orb = PreciseOrbit::new(eps);
+        let t = GpsTime::new(2105, 5.5 * dt);
+        let (_, clk) = orb.position_at("G01", t).unwrap();
+        let expected = 1e-6 + 1e-9 * 5.5 * dt;
+        assert!((clk - expected).abs() < 1e-14);
+    }
+
+    #[test]
+    fn test_unknown_sat_returns_none() {
+        let eps = circular_orbit(26_560_000.0, 43_200.0, 5, 900.0);
+        let orb = PreciseOrbit::new(eps);
+        assert!(orb.position_at("G99", GpsTime::new(2105, 100.0)).is_none());
+    }
+
+    #[test]
+    fn test_outside_range_clamps() {
+        let eps = circular_orbit(26_560_000.0, 43_200.0, 10, 900.0);
+        let orb = PreciseOrbit::new(eps);
+        assert!(orb.position_at("G01", GpsTime::new(2104, 100.0)).is_some());
+        assert!(orb.position_at("G01", GpsTime::new(2106, 100.0)).is_some());
+    }
 }
