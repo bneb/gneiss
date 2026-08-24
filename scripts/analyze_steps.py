@@ -146,9 +146,12 @@ def causal_z(xs: list[float], win: int, floor: float) -> list[float]:
     zs, min_obs = [], min(30, win // 2)
     for i in range(len(xs)):
         ref = xs[max(0, i - win):i]
-        zs.append(0.0 if len(ref) < min_obs
-                  else (xs[i] - _med(ref)) / (1.4826 * _med([abs(v - _med(ref))
-                                                            for v in ref]) + floor))
+        if len(ref) < min_obs:
+            zs.append(0.0)
+            continue
+        med = _med(ref)
+        mad = _med([abs(v - med) for v in ref])
+        zs.append((xs[i] - med) / (1.4826 * mad + floor))
     return zs
 
 def score_series(eps: list[Epoch], cfg) -> list[float]:

@@ -323,3 +323,21 @@ consistency (ambiguity step-detection in smoothing/combiner) or
 two-station information. That is an architectural item, not a gate.
 
 Capability retained dormant: correct, tested, zero-cost when off.
+
+## Dataset B AR-failure anatomy: two mechanisms, both atmospheric
+
+Cross-base AR failure timelines (2025 DOY160, GE systems, true dual-pass
+gradients) reveal:
+1. Regional events (minutes 1180-1380): ALL THREE bases fail
+   simultaneously (P181 to 44/10-min, P225/P222 to 80). Tropospheric
+   decorrelation large enough to affect even the 15 km baseline.
+2. Baseline-length-scaled windows (minutes 780-900): P225+P222 fail,
+   P181 immune. Consistent with wet-delay spatial gradients that grow
+   with distance from the rover.
+3. P222 (longest) has isolated failures throughout.
+
+This is expected RTK physics, not engine defects. The network fusion
+product already exploits the three-baseline redundancy; per-base fix
+rates below Tier-1 targets during regional events reflect information
+limits of single-baseline processing under degraded conditions, not
+tunable parameters.
