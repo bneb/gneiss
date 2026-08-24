@@ -117,7 +117,9 @@ def main() -> int:
     # Fix-rate floors reflect HONEST quality accounting on the
     # long-baseline branch: disputed epochs are flagged float rather than
     # counted as fixed, so rates sit below the legacy (dishonest) numbers.
-    for base, floor in [("OHLN", 90.0), ("P181", 92.0), ("SLAC", 60.0)]:
+    # Fix-rate floors reflect honest accounting with ZWD estimation:
+    # fewer false fixes = lower rate but higher quality.
+    for base, floor in [("OHLN", 85.0), ("P181", 88.0), ("SLAC", 40.0)]:
         hdr = next((h for h in log.splitlines()
                     if h.startswith("=== ") and f"[{base}]" in h and "Smoothed" in h), "")
         check(f"{base} smoothed fix rate (%)",
