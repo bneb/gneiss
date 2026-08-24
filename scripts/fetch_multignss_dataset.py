@@ -22,6 +22,7 @@ from pathlib import Path
 
 YEAR, DOY = 2025, 160
 SITES = ["p224", "p181", "p225", "p222"]
+ADJACENT_DAYS = [157, 158, 159, 161, 162, 163]  # sidereal/multipath repeats
 OUT = Path("/tmp/ds2025")
 
 
@@ -38,11 +39,14 @@ def fetch(url: str, dest: Path, min_size: int = 1000) -> bool:
 def main() -> int:
     OUT.mkdir(exist_ok=True)
     ok = True
-    for s in SITES:
-        ok &= fetch(
-            f"https://geodesy.noaa.gov/corsdata/rinex/{YEAR}/{DOY}/{s}/{s}{DOY}0.{YEAR%100}o.gz",
-            OUT / f"{s}{DOY}0.{YEAR%100}o.gz",
-        )
+    days = [DOY] + ADJACENT_DAYS
+    for doy in days:
+        for s in SITES:
+            ok &= fetch(
+                f"https://geodesy.noaa.gov/corsdata/rinex/{YEAR}/{doy:03d}/{s}/"
+                f"{s}{doy:03d}0.{YEAR%100}o.gz",
+                OUT / f"{s}{doy:03d}0.{YEAR%100}o.gz",
+            )
     # mixed broadcast nav from BKG mirror (first station listing)
     listing = subprocess.run(
         ["curl", "-s", "--max-time", "30",
