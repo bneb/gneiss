@@ -101,7 +101,11 @@ pub fn execute_post_process(
     };
 
     // Pass 4: Optimal Bidirectional Fusion
-    let smoothed_traj = combiner::combine_trajectories(&forward_traj, &backward_map);
+    let smoothed_traj = combiner::combine_trajectories(
+        &forward_traj,
+        &backward_map,
+        options.widelane_ar,
+    );
     let quality_rep = quality::generate_quality_report(&smoothed_traj);
 
     Ok(PostProcessResult {

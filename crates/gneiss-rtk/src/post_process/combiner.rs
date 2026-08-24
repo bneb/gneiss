@@ -26,9 +26,14 @@ pub struct SmoothedEpoch {
 }
 
 /// Combine forward and backward trajectories using covariance intersection.
+///
+/// `strict_disagreement` enables the long-baseline honesty rule: when the
+/// two passes disagree by more than [`STRICT_DISAGREE_M`], neither fixed
+/// claim is trusted and the product is downgraded to float quality.
 pub fn combine_trajectories(
     forward: &[FilteredEpoch],
     backward: &BTreeMap<u64, FilteredEpoch>,
+    strict_disagreement: bool,
 ) -> Vec<SmoothedEpoch> {
     let mut smoothed = Vec::with_capacity(forward.len());
 
@@ -37,7 +42,7 @@ pub fn combine_trajectories(
         let bwd_opt = backward.get(&tow_ms);
 
         let epoch_res = match bwd_opt {
-            Some(bwd) => combine_bidirectional_epoch(fwd, bwd),
+            Some(bwd) => combine_bidirectional_epoch(fwd, bwd, strict_disagreement),
             None => single_pass_epoch(fwd),
         };
         smoothed.push(epoch_res);
@@ -45,9 +50,40 @@ pub fn combine_trajectories(
     smoothed
 }
 
+/// Passes disagreeing beyond this cannot both be right for a static
+/// monument: whichever side wins, a fixed claim would be dishonest.
+pub const STRICT_DISAGREE_M: f64 = 0.50;
+
 /// Helper to fuse forward and backward estimates for a single epoch.
-fn combine_bidirectional_epoch(fwd: &FilteredEpoch, bwd: &FilteredEpoch) -> SmoothedEpoch {
+fn combine_bidirectional_epoch(fwd: &FilteredEpoch, bwd: &FilteredEpoch, strict: bool) -> SmoothedEpoch {
     let sep = (fwd.position_ecef - bwd.position_ecef).norm();
+
+    // Strict mode (long-baseline path): large disagreement means at least
+    // one pass is wrong. Fuse as float with honest quality instead of
+    // blessing either side's fixed claim.
+    if strict && sep > STRICT_DISAGREE_M {
+        let q_merged = fwd.quality.min(bwd.quality);
+        let (pos, cov, _) = fuse_covariances(fwd, bwd, q_merged);
+        let (std_e, std_n, std_u) = compute_enu_stds(pos, cov);
+        return SmoothedEpoch {
+            time: fwd.time,
+            position_ecef: pos,
+            velocity_ecef: match (&fwd.velocity_ecef, &bwd.velocity_ecef) {
+                (Some(vf), Some(vb)) => Some(0.5 * (vf + vb)),
+                (Some(vf), None) => Some(*vf),
+                (None, Some(vb)) => Some(*vb),
+                (None, None) => None,
+            },
+            attitude: None,
+            cov_position: cov,
+            std_east: std_e,
+            std_north: std_n,
+            std_up: std_u,
+            separation_3d: sep,
+            quality: 2,
+            n_satellites: fwd.n_satellites.max(bwd.n_satellites),
+        };
+    }
 
     let (pos, cov, q) = if fwd.is_fixed && !bwd.is_fixed {
         if sep < 0.50 {
