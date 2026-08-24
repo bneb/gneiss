@@ -55,6 +55,10 @@ pub struct PostProcessOptions {
     /// epochs the joint FAR/PAR left float, and requires six confidently
     /// fixed wide-lane pairs before claiming a fix.
     pub widelane_ar: bool,
+    /// Opt-in tropospheric N/E gradient states. Default off; the
+    /// multi-GNSS profile enables them (measured: network fused
+    /// 96.5 -> 97.5% with v-tail improvements, no regressions).
+    pub tropo_gradients: bool,
     /// Network-solved satellite wide-lane UPDs (cycles): consumed by the
     /// MW tracker when `widelane_ar` is on. Produced by a Phase-A
     /// pre-pass (`mw::solve_network_upd`) over all bases.
@@ -85,7 +89,7 @@ pub fn execute_post_process(
 
     // Pass 2: Forward Pass
     let forward_traj = forward::run_forward_pass(
-        config, ephemerides, klob, rover_epochs, base_epochs, base_pos, imu_samples, options.initial_rover_position, options.q_accel, options.widelane_ar,
+        config, ephemerides, klob, rover_epochs, base_epochs, base_pos, imu_samples, options.initial_rover_position, options.q_accel, options.widelane_ar, options.tropo_gradients,
         options.network_sat_upd.clone(),
     );
 
@@ -93,7 +97,7 @@ pub fn execute_post_process(
     let backward_map = if options.enable_bidirectional {
         let initial_rover_pos = forward_traj.last().map(|e| e.position_ecef);
         backward::run_backward_pass(
-            config, ephemerides, klob, rover_epochs, base_epochs, base_pos, imu_samples, initial_rover_pos, options.q_accel, options.widelane_ar,
+            config, ephemerides, klob, rover_epochs, base_epochs, base_pos, imu_samples, initial_rover_pos, options.q_accel, options.widelane_ar, options.tropo_gradients,
             options.network_sat_upd.clone(),
         )
     } else {

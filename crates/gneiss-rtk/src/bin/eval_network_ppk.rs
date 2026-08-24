@@ -206,6 +206,7 @@ struct RunContext<'a> {
     truth: &'a Truth,
     rover_init: Option<Vector3<f64>>,
     klob: Option<([f64; 4], [f64; 4])>,
+    tropo_gradients: bool,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -235,6 +236,7 @@ fn run_pass(
         // Long baselines need iono-immune fixing: MW wide-lane cascade AR
         // unlocks the iono-free stage beyond ~20 km.
         widelane_ar: std::env::var("WL_DISABLE").is_err(),
+        tropo_gradients: ctx.tropo_gradients,
     };
     let res = match execute_post_process(config, ctx.ephemerides, rover, Some(base_epochs), None, &options) {
         Ok(r) => r,
@@ -506,7 +508,8 @@ fn main() {
 
     // Rover filter init is left to the SPP in broadcast frame (None): the
     // RINEX header approx is NAD83 and must not seed the filter.
-    let ctx = RunContext { ephemerides: &data.ephemerides, truth: &data.truth, rover_init: None, klob: data.klob };
+    let tropo_gradients = multi2025 && std::env::var("GNEISS_TROPO_GRAD").as_deref() != Ok("0");
+    let ctx = RunContext { ephemerides: &data.ephemerides, truth: &data.truth, rover_init: None, klob: data.klob, tropo_gradients };
     let selected_rover = select_rover_epochs(&data.rover_epochs);
     let mut results = Vec::new();
     let mut base_trajs: Vec<Vec<SmoothedEpoch>> = Vec::new();

@@ -29,6 +29,7 @@ pub fn run_backward_pass(
     initial_rover_pos: Option<Vector3<f64>>,
     q_accel: Option<f64>,
     widelane_ar: bool,
+    tropo_grad: bool,
     sat_upd: Option<std::collections::HashMap<u16, f64>>,
 ) -> BTreeMap<u64, FilteredEpoch> {
     if imu_samples.is_none() && base_pos.is_some() && base_epochs.is_some() {
@@ -282,7 +283,7 @@ mod tests {
     #[test]
     fn test_empty_backward_pass_runs() {
         let config = EngineConfig::Spp(Default::default());
-        let results = run_backward_pass(&config, &[], None, &[], None, None, None, None, None, false, None);
+        let results = run_backward_pass(&config, &[], None, &[], None, None, None, None, None, false, false, None);
         assert!(results.is_empty());
     }
 }

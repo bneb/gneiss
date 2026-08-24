@@ -17,11 +17,13 @@ BIN = Path("target/release/eval_network_ppk")
 
 # Budgets from verified GE run @ c8a85f0+ (see docs/NETWORK_RTK_NEXT_STEPS.md)
 BUDGETS = {
-    "P181": {"fix_min": 96.0, "h_p95_max": 150.0, "v_p95_max": 320.0},
-    "P225": {"fix_min": 68.0, "h_p95_max": 260.0, "v_p95_max": 400.0},
-    "P222": {"fix_min": 84.0, "h_p95_max": 300.0, "v_p95_max": 140.0},
+    # Measured with gradients default-on (see docs): P181 98.6/129/252,
+    # P225 73.5/213/333, P222 88.4/267/115, network fused 97.5%.
+    "P181": {"fix_min": 97.5, "h_p95_max": 145.0, "v_p95_max": 290.0},
+    "P225": {"fix_min": 71.0, "h_p95_max": 245.0, "v_p95_max": 370.0},
+    "P222": {"fix_min": 86.0, "h_p95_max": 295.0, "v_p95_max": 135.0},
 }
-NETWORK_FIX_MIN = 94.0
+NETWORK_FIX_MIN = 96.5
 
 
 def main() -> int:

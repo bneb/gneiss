@@ -60,6 +60,7 @@ fn test_tier1_geodetic_cors_baseline_sub_centimeter() {
         klobuchar_beta: klob.as_ref().map(|k| k.beta),
         q_accel: None,
         widelane_ar: false,
+        tropo_gradients: false,
         network_sat_upd: None,
     };
 
@@ -109,6 +110,7 @@ fn test_tier2_high_dynamic_circular_kinematic_sub_centimeter() {
         klobuchar_beta: None,
         q_accel: None,
         widelane_ar: false,
+        tropo_gradients: false,
         network_sat_upd: None,
     };
 
