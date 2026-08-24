@@ -3,6 +3,13 @@
 use nalgebra::{DMatrix, DVector, Vector3};
 use super::state::{DoubleDiffKey, RtkState};
 
+/// Robust estimation: inflate measurement variance when its normalized
+/// innovation squared exceeds this threshold (~3-sigma point). Below it,
+/// measurements keep nominal weight; above it, weight decays as 1/innov².
+/// This limits multipath and unmodeled-atmosphere corruption without the
+/// information loss of hard exclusion.
+pub const ROBUST_INNOVATION_THRESHOLD: f64 = 9.0;
+
 /// Double-difference observation for a satellite pair on a single frequency band.
 #[derive(Debug, Clone)]
 pub struct DoubleDiffMeasurement {
@@ -158,8 +165,10 @@ fn append_dd_meas_rows(
         pr_h[zi] = m.dm_wet_rov;
     }
     h_rows.push(pr_h);
-    y_vals.push(m.dd_pr_m - geom_dd - m.dm_wet_rov * zwd_val);
-    r_diag.push(m.pr_var_m2.max(0.01));
+    let pr_y = m.dd_pr_m - geom_dd - m.dm_wet_rov * zwd_val;
+    let pr_r = m.pr_var_m2.max(0.01);
+    y_vals.push(pr_y);
+    r_diag.push(robust_inflate(pr_y, pr_r));
 
     if let (Some(cp_obs), Some(amb_idx)) = (m.dd_cp_cycles, state.get_amb_idx(&m.key)) {
         let amb_val = x_current[amb_idx];
@@ -173,8 +182,21 @@ fn append_dd_meas_rows(
             cp_h[zi] = m.dm_wet_rov / m.lambda;
         }
         h_rows.push(cp_h);
-        y_vals.push(cp_obs - pred_cp);
-        r_diag.push(m.cp_var_cycles2.max(1e-4));
+        let cp_y = cp_obs - pred_cp;
+        let cp_r = m.cp_var_cycles2.max(1e-4);
+        y_vals.push(cp_y);
+        r_diag.push(robust_inflate(cp_y, cp_r));
+    }
+}
+
+/// Huber-style variance inflation: keep nominal R below the normalized
+/// innovation threshold, decay weight smoothly above it.
+fn robust_inflate(innovation: f64, variance: f64) -> f64 {
+    let nis = innovation * innovation / variance;
+    if nis > ROBUST_INNOVATION_THRESHOLD {
+        variance * (nis / ROBUST_INNOVATION_THRESHOLD)
+    } else {
+        variance
     }
 }
 

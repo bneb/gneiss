@@ -135,7 +135,10 @@ fn print_fixed_stats(name: &str, mut h_errs: Vec<f64>) -> f64 {
     }
     h_errs.sort_by(|a, b| a.total_cmp(b));
     let p50 = h_errs[h_errs.len() / 2];
-    println!("  [{} fixed-only horizontal p50: {:.3}m, N={}]", name, p50, h_errs.len());
+    let n = h_errs.len();
+    let p95 = h_errs[(n as f64 * 0.95) as usize];
+    let rms = (h_errs.iter().map(|e| e * e).sum::<f64>() / n as f64).sqrt();
+    println!("  [{} fixed-only horizontal p50: {:.3}m, p95: {:.3}m, RMS: {:.3}m, N={}]", name, p50, p95, rms, n);
     p50
 }
 
@@ -144,6 +147,7 @@ fn collect_errors(traj: &[SmoothedEpoch], truth: &Truth) -> (Vec<f64>, Vec<f64>,
     let mut d3_errs = Vec::new();
     let mut up_errs = Vec::new();
     let mut fixed_errs = Vec::new();
+    let mut wrong_tows: Vec<u32> = Vec::new();
     let mut fix = 0;
     for ep in traj {
         let tow = ep.time.tow.round() as u32;
@@ -157,10 +161,23 @@ fn collect_errors(traj: &[SmoothedEpoch], truth: &Truth) -> (Vec<f64>, Vec<f64>,
                 d3_errs.push((ep.position_ecef - t).norm());
                 up_errs.push(vertical_error(ep.position_ecef, t));
                 if ep.quality == 1 {
+                    if h > 0.30 {
+                        wrong_tows.push(tow);
+                    }
                     fixed_errs.push(h);
                 }
             }
         }
+    }
+    // Wrong-fix diagnostic: fixed epochs with gross position error.
+    if !wrong_tows.is_empty() && std::env::var("WL_DIAG").is_ok() {
+        let n_fixed = fixed_errs.len();
+        eprintln!(
+            "  [DIAG] wrong fixes (h>0.30m): {}/{} | TOW {}..{} (span {:.1} min)",
+            wrong_tows.len(), n_fixed,
+            wrong_tows[0], wrong_tows[wrong_tows.len()-1],
+            (wrong_tows[wrong_tows.len()-1] - wrong_tows[0]) as f64 / 60.0
+        );
     }
     (h_errs, d3_errs, up_errs, fix, fixed_errs)
 }
