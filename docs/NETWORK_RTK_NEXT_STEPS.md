@@ -126,3 +126,32 @@ OHLN, LEIAR20 CAPO, TRM29659 P225); cross-family differential PCO/PCV
 does NOT cancel between stations and plausibly explains CAPO's -53 mm
 vertical bias. Requires matching RINEX antenna types to ANTEX receiver
 entries AND base coordinates consistent with ARP conventions.
+
+## Measured: north-south tropospheric gradient signature (afternoon)
+
+Per-base mean signed vertical error by local (PDT) hour, outliers >0.5 m
+excluded (WL_DUMP per-epoch CSVs). At hours 14-18 local the bases split
+by bearing from the rover:
+
+| base | bearing | h16 signed v |
+|------|---------|-------------|
+| P181 | NW  | +82 mm |
+| OHLN | N   | +41 mm |
+| CAPO | S   | -148 mm |
+| P225 | ESE | -125 mm |
+| P222 | SSE | -139 mm |
+| SLAC | SSW | -142 mm |
+
+Antisymmetric about the rover's latitude, coherent across four southern
+stations at -125..-148 mm, peaking exactly in the marine-surge window.
+This is the classical signature of a north-south wet-delay gradient:
+single-scalar rover ZWD cannot represent it (no azimuth dependence in
+its mapping), so the residual leaks into vertical position with sign set
+by baseline azimuth.
+
+Engineering consequence: add tropo NORTH/EAST gradient states to the
+long-baseline filter (mapping m_grad(el)*[cos az, sin az], random walk,
+gated behind widelane_ar like the ZWD state). Predicted effect: removes
+the afternoon-signed vertical systematics on the four southern bases and
+improves their float quality / fix rates. This replaces vague
+"two-station tropo" as the concrete Phase-5 design.
