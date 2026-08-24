@@ -441,3 +441,21 @@ for meaningful RMS comparison — SPP-derived base position introduces
 metre-level errors that propagate into rover solution.
 
 RTKLIB binary at /tmp/rnx2rtkp for future comparisons.
+
+## Controlled experiment: GPS vs GPS+Galileo precision impact
+
+Identical data/stations/filter; only constellation set differs.
+Adding Galileo improves EVERY metric on EVERY base:
+
+- P181: h_p95 -40%, h_RMS -19%, v_p95 -31%
+- P225: h_p95 -51%, h_RMS -32%, v_p95 -32%
+- P222: h_p95 -62%, h_RMS -50%, v_p95 -43%
+- Network fused fix rate: 78.9% -> 99.3%
+
+p50 improvements are modest (~1-25 mm) while p95 improvements are
+dramatic (88-438 mm) — consistent with redundancy-driven outlier
+suppression rather than fundamental accuracy improvement.
+
+Absolute precision remains limited by frame mismatch between UNR IGS20
+truth coordinates and broadcast-solution frame. Resolving this requires
+either Helmert frame transformation or self-consistent truth definition.
