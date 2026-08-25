@@ -84,6 +84,11 @@ fn run_forward_iekf(
         compute_initial_position(rover_epochs, ephemerides, base_pos)
     });
     let mut iekf = GnssRtkIekf::new(init_pos, rover_epochs[0].time, q_accel);
+    if let Ok(deg) = std::env::var("GNEISS_ELEV_DEG") {
+        if let Ok(rad) = deg.parse::<f64>() {
+            iekf.min_elevation_rad = rad.to_radians();
+        }
+    }
     iekf.widelane_ar = widelane_ar;
     if let Some(pair) = receiver_pcv {
         iekf.receiver_pcv = Some((pair.rover.clone(), pair.base.clone()));
