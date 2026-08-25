@@ -210,6 +210,7 @@ struct RunContext<'a> {
 }
 
 #[allow(clippy::too_many_arguments)]
+
 fn run_pass(
     config: &EngineConfig,
     ctx: &RunContext,
@@ -222,6 +223,7 @@ fn run_pass(
     base_pos_eff: Vector3<f64>,
     receiver_pcv: Option<std::sync::Arc<ReceiverPcvPair>>,
 ) -> ([f64; 4], Vec<SmoothedEpoch>) {
+    // Receiver antenna PCV loading (gated by GNEISS_RECV_PCV=1).
     let options = PostProcessOptions {
         enable_bidirectional: bidir,
         base_position: Some(base_pos_eff),
@@ -325,7 +327,7 @@ fn base_recv_pco_ecef(rinex_path: &Path, antex_path: &str, arp: Vector3<f64>) ->
     let (fam, rad) = rinex_ant_type(rinex_path)?;
 
     // 2. ANTEX receiver entry for that family/radome
-    let db = AntexDatabase::parse(antex_path).ok()?;
+    let db = match AntexDatabase::parse(antex_path) { Ok(d) => d, Err(e) => { eprintln!("DEBUG: ANTEX parse failed: {:?}", e); return None; } };
     let ant = gneiss_parsers::receiver_antenna::ReceiverAntenna::lookup(&db, &fam, &rad)?;
     // Parser reorders the ANTEX north/east/up columns to east/north/up.
     let [east_mm, north_mm, up_mm] = ant.pco_enu_mm;
@@ -349,8 +351,8 @@ fn load_receiver_pcv(rover_path: &Path, base_path: &Path, antex_path: &str) -> O
     use gneiss_parsers::antex::AntexDatabase;
     use gneiss_parsers::receiver_antenna::ReceiverAntenna;
 
-    let db = AntexDatabase::parse(antex_path).ok()?;
-    let (rfam, rrad) = rinex_ant_type(rover_path)?;
+    let db = match AntexDatabase::parse(antex_path) { Ok(d) => d, Err(e) => { eprintln!("DEBUG: ANTEX parse failed: {:?}", e); return None; } };
+    let (rfam, rrad) = match rinex_ant_type(rover_path) { Some(x) => x, None => { eprintln!("DEBUG: ant type not found in {}", rover_path.display()); return None; } };
     let rover = ReceiverAntenna::lookup(&db, &rfam, &rrad)?;
     let (bfam, brad) = rinex_ant_type(base_path)?;
     let base = ReceiverAntenna::lookup(&db, &bfam, &brad)?;
@@ -369,6 +371,7 @@ fn load_receiver_pcv(rover_path: &Path, base_path: &Path, antex_path: &str) -> O
 fn run_base(
     base: &NetworkBase,
     dir: &Path,
+    rover_file: &str,
     ctx: &RunContext,
     rover: &[EpochObs],
     network_upd: Option<HashMap<u16, f64>>,
@@ -423,9 +426,10 @@ fn run_base(
     // Opt-in elevation-dependent receiver PCV correction (GNEISS_PCV=1):
     // strips the differential antenna signature from every DD phase.
     let receiver_pcv = if std::env::var("GNEISS_PCV").is_ok() {
+        eprintln!("DEBUG: GNEISS_PCV detected");
         let antex = std::env::var("GNEISS_ANTEX")
             .unwrap_or_else(|_| "datasets/igs14.atx".into());
-        load_receiver_pcv(&dir.join(ROVER_FILE), &dir.join(base.base_file), &antex)
+        load_receiver_pcv(&dir.join(rover_file), &dir.join(base.base_file), &antex)
     } else {
         None
     };
@@ -588,7 +592,7 @@ fn main() {
 
     for base in bases {
         if let Some(want) = &only { if base.id != want.as_str() { continue; } }
-        let (stats, traj) = run_base(base, dir, &ctx, selected_rover, network_upd.clone());
+        let (stats, traj) = run_base(base, dir, rover_file, &ctx, selected_rover, network_upd.clone());
         if stats.iter().any(|s| *s > 0.0) {
             results.push((base, stats));
         }

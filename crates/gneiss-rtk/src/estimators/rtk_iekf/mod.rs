@@ -655,7 +655,11 @@ impl GnssRtkIekf {
         let llh = gneiss_core::coords::ecef_to_llh(self.state.pos_ecef);
         let (_az_s, el_s) = gneiss_core::coords::az_el(llh, self.state.pos_ecef, sat_pos);
         let (_az_r, el_r) = gneiss_core::coords::az_el(llh, self.state.pos_ecef, ref_pos);
-        compute_dd_pcv_correction(rov, bas, &code, el_s, el_r)
+        let corr = compute_dd_pcv_correction(rov, bas, &code, el_s, el_r);
+        if std::env::var("GNEISS_PCV_DEBUG").is_ok() && corr.abs() > 1e-12 {
+            eprintln!("PCV [{}]: {:.4} mm (el_s={:.1} el_r={:.1})", sat_id, corr*1000.0, el_s.to_degrees(), el_r.to_degrees());
+        }
+        corr
     }
 
     /// Phase innovations with sensitivity to the rover ZWD residual.
