@@ -471,6 +471,34 @@ struct Dataset {
     rover_epochs: Vec<EpochObs>,
 }
 
+
+/// Apply Hatch filter to rover L1 pseudoranges in-place.
+fn apply_hatch_filter(rover_epochs: &mut [EpochObs], window: usize) {
+    use gneiss_core::hatch::HatchFilter;
+    let mut hf = HatchFilter::new(window);
+    for epoch in rover_epochs.iter_mut() {
+        for sat_obs in epoch.satellites.iter_mut() {
+            // L1 only: the primary band used for DD ambiguity init.
+            let lambda = gneiss_core::frequencies::frequency_for(
+                sat_obs.sat.constellation,
+                gneiss_core::frequencies::Signal::GpsL1Ca,
+                1,
+            ) / 299_792_458.0;
+            if let Some(pr_val) = sat_obs.get_observable(1) {
+                if let Some(cp_val) = sat_obs.get_observable_phase(1) {
+                    let smoothed = hf.apply(sat_obs.sat, pr_val, cp_val, lambda);
+                    if let Some(o) = sat_obs.observations.iter_mut().find(|o| {
+                        o.code.obs_type == gneiss_core::obs::ObsType::Pseudorange
+                            && o.code.signal.freq_band == 1
+                    }) {
+                        o.value = smoothed;
+                    }
+                }
+            }
+        }
+    }
+}
+
 fn load_dataset(dir: &Path, rover_file: &str, truth_file: &str, nav_file: &str) -> Result<Dataset, String> {
     if !dir.join(rover_file).exists() {
         return Err(format!(
@@ -500,7 +528,7 @@ fn load_dataset(dir: &Path, rover_file: &str, truth_file: &str, nav_file: &str) 
         _ => false,
     };
     let n_before: usize = rover_epochs.iter().map(|e| e.satellites.len()).sum();
-    let rover_epochs: Vec<EpochObs> = rover_epochs
+    let mut rover_epochs: Vec<EpochObs> = rover_epochs
         .into_iter()
         .map(|mut e| {
             e.satellites.retain(|s| keep(s.sat.constellation));
@@ -510,6 +538,15 @@ fn load_dataset(dir: &Path, rover_file: &str, truth_file: &str, nav_file: &str) 
     let n_after: usize = rover_epochs.iter().map(|e| e.satellites.len()).sum();
     if n_before != n_after {
         println!("SYSTEM FILTER: {}/{} rover satellites kept ({})", n_after, n_before, allowed.iter().collect::<String>());
+    }
+    // Carrier-smoothed-code (Hatch) filter, opt-in via GNEISS_HATCH=N.
+    if let Ok(win) = std::env::var("GNEISS_HATCH") {
+        if let Ok(n) = win.parse::<usize>() {
+            if n > 0 {
+                apply_hatch_filter(&mut rover_epochs, n);
+                println!("HATCH: {}-epoch carrier-smoothed code applied", n);
+            }
+        }
     }
     let truth = parse_truth(&dir.join(truth_file));
     Ok(Dataset {

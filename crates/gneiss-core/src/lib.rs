@@ -8,6 +8,7 @@ pub mod coords;
 pub mod dop;
 pub mod ephemeris;
 pub mod frames;
+pub mod hatch;
 pub mod frequencies;
 #[cfg(test)] mod geodetic_tests;
 pub mod gnss_time;
