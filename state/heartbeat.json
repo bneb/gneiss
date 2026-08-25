@@ -1,0 +1,13 @@
+{
+  "unix_ts": 1787651283.958085,
+  "human_time": "2026-08-25 02:53:32",
+  "head": "12a7d74 feat(pcv): geometry-derived DD correction + row nine in frame-safety ledger",
+  "dirty_files": 1,
+  "tests_passed": 673,
+  "tests_failed": 0,
+  "guards": {
+    "dataset_a": "PASS",
+    "dataset_b": "PASS"
+  },
+  "prev_interval_min": null
+}
