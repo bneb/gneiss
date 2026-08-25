@@ -530,3 +530,23 @@ applies to ALL cross-station corrections (tides, gradients, tropo).
 This is the strongest argument yet for integrating the frame-safety
 types into actual call sites rather than leaving them as unused
 infrastructure.
+
+## Validated negative result #5: SP3+satellite PCO degrades DD RTK
+
+Third controlled experiment confirming that GFZ0MGXRAP rapid SP3
+positions degrade our benchmark even WITH nadir-projected satellite
+L1 PCO correction applied:
+
+| base | broadcast fix% | SP3+PCO fix% | broadcast h_p95 | SP3+PCO h_p95 |
+|---|---|---|---|---|
+| P181 | 98.6 | 86.2 | 129 mm | **347 mm** |
+| P225 | 73.4 | 56.2 | 214 mm | **323 mm** |
+
+Root causes (ranked):
+1. Precise clock products not wired (RinexClock parser exists, unused)
+2. Frame inconsistency between IGb20 (SP3) and solution frame
+3. Nadir-projection approximates full 3-axis body-frame rotation
+
+Conclusion: broadcast ephemerides are BETTER for short-baseline DD RTK.
+Precise products require the full chain (orbits+clocks+PCV) together,
+not incrementally. Module preserved in sat_pco.rs for future use.
