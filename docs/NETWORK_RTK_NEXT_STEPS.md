@@ -550,3 +550,18 @@ Root causes (ranked):
 Conclusion: broadcast ephemerides are BETTER for short-baseline DD RTK.
 Precise products require the full chain (orbits+clocks+PCV) together,
 not incrementally. Module preserved in sat_pco.rs for future use.
+
+## Feature combination experiment: no global optimum
+
+All features simultaneously (receiver PCV + iono states + AR gate +
+15° elevation mask) vs defaults on dataset B:
+
+- P225 improves across all metrics (fix +4.9pp, p50 -6mm, p95 -21mm)
+- P181 degrades (fix -4.3pp from elevation mask)
+- P222 degrades (fix -5.1pp)
+- Network fused: 97.5% -> 95.7% (NET NEGATIVE)
+
+Conclusion: features have per-baseline optima; a single global
+configuration cannot capture all benefits. Defaults (10° mask, AR
+gate off) remain best for network fused accuracy. Users should tune
+GNEISS_ELEV_DEG per their baseline length.
