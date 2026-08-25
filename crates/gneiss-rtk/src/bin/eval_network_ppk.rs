@@ -31,7 +31,7 @@ use gneiss_core::obs::EpochObs;
 use gneiss_core::time::GpsTime;
 use gneiss_rtk::estimators::rtk_iekf::DoubleDiffKey;
 use gneiss_rtk::post_process::forward;
-use gneiss_rtk::post_process::{execute_post_process, network, PostProcessOptions, SmoothedEpoch};
+use gneiss_rtk::post_process::{execute_post_process, network, PostProcessOptions, ReceiverPcvPair, SmoothedEpoch};
 use gneiss_rtk::swfg::config::EngineConfig;
 
 const ROVER_FILE: &str = "p2241350.20o";
@@ -220,6 +220,7 @@ fn run_pass(
     bidir: bool,
     network_upd: Option<HashMap<u16, f64>>,
     base_pos_eff: Vector3<f64>,
+    receiver_pcv: Option<std::sync::Arc<ReceiverPcvPair>>,
 ) -> ([f64; 4], Vec<SmoothedEpoch>) {
     let options = PostProcessOptions {
         enable_bidirectional: bidir,
@@ -237,6 +238,7 @@ fn run_pass(
         // unlocks the iono-free stage beyond ~20 km.
         widelane_ar: std::env::var("WL_DISABLE").is_err(),
         tropo_gradients: ctx.tropo_gradients,
+        receiver_pcv,
     };
     let res = match execute_post_process(config, ctx.ephemerides, rover, Some(base_epochs), None, &options) {
         Ok(r) => r,
@@ -296,39 +298,36 @@ fn run_pass(
     (stats, traj)
 }
 
+/// Antenna family + radome from a RINEX observation header (`ANT # / TYPE`),
+/// radome defaulting to NONE when absent.
+fn rinex_ant_type(rinex_path: &Path) -> Option<(String, String)> {
+    use std::io::BufRead;
+    let f = File::open(rinex_path).ok()?;
+    for line in BufReader::new(f).lines().take(80).flatten() {
+        if line.len() >= 60 && line[60..].trim() == "ANT # / TYPE" {
+            let fields: Vec<&str> = line[20..40].split_whitespace().collect();
+            let fam = fields.first()?.to_string();
+            let rad = fields.get(1).copied().unwrap_or("NONE").to_string();
+            return Some((fam, rad));
+        }
+    }
+    None
+}
+
 #[allow(clippy::too_many_arguments)]
 /// Receiver L1 PCO (ECEF, m) for a base station: RINEX header antenna
 /// type/radome looked up in an ANTEX file. Opt-in via GNEISS_RECV_PCO=1
 /// (file via GNEISS_ANTEX, default datasets/igs14.atx).
 fn base_recv_pco_ecef(rinex_path: &Path, antex_path: &str, arp: Vector3<f64>) -> Option<Vector3<f64>> {
     use gneiss_parsers::antex::AntexDatabase;
-    use std::io::BufRead;
 
     // 1. antenna type + radome from the RINEX2 header
-    let f = File::open(rinex_path).ok()?;
-    let mut fam_radome: Option<(String, String)> = None;
-    for line in BufReader::new(f).lines().take(80).flatten() {
-        if line.len() >= 60 && line[60..].trim() == "ANT # / TYPE" {
-            let fields: Vec<&str> = line[20..40].split_whitespace().collect();
-            let fam = fields.first()?.to_string();
-            let rad = fields.get(1).copied().unwrap_or("NONE").to_string();
-            fam_radome = Some((fam, rad));
-            break;
-        }
-    }
-    let (fam, rad) = fam_radome?;
+    let (fam, rad) = rinex_ant_type(rinex_path)?;
 
-    // 2. ANTEX receiver entry: type field may hold "FAM RADOME" or "FAM"
+    // 2. ANTEX receiver entry for that family/radome
     let db = AntexDatabase::parse(antex_path).ok()?;
-    let ant = db.antennas.iter().find(|a| {
-        let parts: Vec<&str> = a.antenna_type.split_whitespace().collect();
-        match parts.as_slice() {
-            [t, r] => *t == fam && *r == rad,
-            [t] => *t == fam && rad == "NONE",
-            _ => false,
-        }
-    })?;
-    let pco_mm = &ant.frequencies.get("G01")?.pco;
+    let ant = gneiss_parsers::receiver_antenna::ReceiverAntenna::lookup(&db, &fam, &rad)?;
+    let pco_mm = &ant.model().frequencies.get("G01")?.pco;
 
     // 3. ENU -> ECEF at the ARP
     let llh = gneiss_core::coords::ecef_to_llh(arp);
@@ -340,6 +339,30 @@ fn base_recv_pco_ecef(rinex_path: &Path, antex_path: &str, arp: Vector3<f64>) ->
     let up = Vector3::new(clat * clon, clat * slon, slat);
     let m = 1e-3;
     Some(north * (pco_mm.x * m) + east * (pco_mm.y * m) + up * (pco_mm.z * m))
+}
+
+/// Receiver antenna PCV models (rover, base) from the ANTEX database,
+/// opt-in via GNEISS_PCV=1. Both headers must resolve to calibrations;
+/// otherwise None keeps the legacy uncorrected path.
+fn load_receiver_pcv(rover_path: &Path, base_path: &Path, antex_path: &str) -> Option<std::sync::Arc<ReceiverPcvPair>> {
+    use gneiss_parsers::antex::AntexDatabase;
+    use gneiss_parsers::receiver_antenna::ReceiverAntenna;
+
+    let db = AntexDatabase::parse(antex_path).ok()?;
+    let (rfam, rrad) = rinex_ant_type(rover_path)?;
+    let rover = ReceiverAntenna::lookup(&db, &rfam, &rrad)?;
+    let (bfam, brad) = rinex_ant_type(base_path)?;
+    let base = ReceiverAntenna::lookup(&db, &bfam, &brad)?;
+    println!(
+        "RECV-PCV enabled: rover [{}] base [{}] ({})",
+        rover.antenna_type(),
+        base.antenna_type(),
+        antex_path
+    );
+    Some(std::sync::Arc::new(ReceiverPcvPair {
+        rover: std::sync::Arc::new(rover),
+        base: std::sync::Arc::new(base),
+    }))
 }
 
 fn run_base(
@@ -396,12 +419,21 @@ fn run_base(
         eprintln!("Failed to parse {}", base.base_file);
         return ([0.0; 8], Vec::new());
     };
+    // Opt-in elevation-dependent receiver PCV correction (GNEISS_PCV=1):
+    // strips the differential antenna signature from every DD phase.
+    let receiver_pcv = if std::env::var("GNEISS_PCV").is_ok() {
+        let antex = std::env::var("GNEISS_ANTEX")
+            .unwrap_or_else(|_| "datasets/igs14.atx".into());
+        load_receiver_pcv(&dir.join(ROVER_FILE), &dir.join(base.base_file), &antex)
+    } else {
+        None
+    };
     let config = EngineConfig::Rtk(gneiss_rtk::swfg::config::RtkConfig {
         initial_position: Some([base_pos_eff.x, base_pos_eff.y, base_pos_eff.z]),
         ..Default::default()
     });
-    let (fwd, _fwd_traj) = run_pass(&config, ctx, rover, &base_epochs, base, "Forward", false, network_upd.clone(), base_pos_eff);
-    let (smooth, smooth_traj) = run_pass(&config, ctx, rover, &base_epochs, base, "Smoothed", true, network_upd.clone(), base_pos_eff);
+    let (fwd, _fwd_traj) = run_pass(&config, ctx, rover, &base_epochs, base, "Forward", false, network_upd.clone(), base_pos_eff, receiver_pcv.clone());
+    let (smooth, smooth_traj) = run_pass(&config, ctx, rover, &base_epochs, base, "Smoothed", true, network_upd.clone(), base_pos_eff, receiver_pcv);
     let mut out = [0.0; 8];
     out[..4].copy_from_slice(&fwd);
     out[4..].copy_from_slice(&smooth);

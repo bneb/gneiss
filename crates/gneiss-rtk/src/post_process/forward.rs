@@ -48,10 +48,11 @@ pub fn run_forward_pass(
     widelane_ar: bool,
     tropo_grad: bool,
     sat_upd: Option<std::collections::HashMap<u16, f64>>,
+    receiver_pcv: Option<std::sync::Arc<super::ReceiverPcvPair>>,
 ) -> Vec<FilteredEpoch> {
     if imu_samples.is_none() && base_pos.is_some() && base_epochs.is_some() {
         if let Some(bp) = base_pos {
-            let (epochs, _wl, _pw) = run_forward_iekf(ephemerides, rover_epochs, base_epochs.unwrap_or(&[]), bp, initial_rover_pos, q_accel.unwrap_or(1.0), widelane_ar, tropo_grad, sat_upd.clone());
+            let (epochs, _wl, _pw) = run_forward_iekf(ephemerides, rover_epochs, base_epochs.unwrap_or(&[]), bp, initial_rover_pos, q_accel.unwrap_or(1.0), widelane_ar, tropo_grad, sat_upd.clone(), receiver_pcv);
             return epochs;
         }
     }
@@ -70,6 +71,7 @@ fn run_forward_iekf(
     widelane_ar: bool,
     tropo_grad: bool,
     sat_upd: Option<std::collections::HashMap<u16, f64>>,
+    receiver_pcv: Option<std::sync::Arc<super::ReceiverPcvPair>>,
 ) -> (Vec<FilteredEpoch>, crate::estimators::rtk_iekf::mw::WidelaneTracker, crate::estimators::rtk_iekf::mw::WidelaneTracker) {
     if rover_epochs.is_empty() {
         return (
@@ -83,6 +85,9 @@ fn run_forward_iekf(
     });
     let mut iekf = GnssRtkIekf::new(init_pos, rover_epochs[0].time, q_accel);
     iekf.widelane_ar = widelane_ar;
+    if let Some(pair) = receiver_pcv {
+        iekf.receiver_pcv = Some((pair.rover.clone(), pair.base.clone()));
+    }
     if widelane_ar {
         // Two-phase static Q: converge loosely, then lock the monument.
         iekf.static_lock_after_s = Some(900.0);
@@ -228,6 +233,7 @@ pub fn run_forward_pass_collecting(
         q_accel,
         true,
         false,
+        None,
         None,
     );
     (epochs, wl, pw)

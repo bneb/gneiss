@@ -10,12 +10,15 @@ pub mod update;
 pub mod widelane;
 
 use std::collections::HashMap;
+use std::sync::Arc;
+
 use nalgebra::Vector3;
 
 use gneiss_core::constants::SPEED_OF_LIGHT_M_S;
 use gneiss_core::ephemeris::Ephemeris;
 use gneiss_core::obs::{EpochObs, SatObs};
 use gneiss_core::time::GpsTime;
+use gneiss_parsers::receiver_antenna::{compute_dd_pcv_correction, frequency_code, ReceiverAntenna};
 
 use crate::post_process::combiner::SmoothedEpoch;
 use crate::post_process::forward::FilteredEpoch;
@@ -51,6 +54,12 @@ pub struct GnssRtkIekf {
     /// epoch, enabling offline ambiguity-trajectory analysis. Zero-cost
     /// when off (empty Vec).
     pub track_ambiguity_keys: bool,
+    /// Minimum epochs a DD pair must be tracked before its ambiguity
+    /// participates in AR. Prevents freshly-risen satellites with poorly
+    /// converged floats from corrupting LAMBDA. 0 = disabled.
+    pub min_ar_lock_epochs: u32,
+    /// Per-pair tracking duration (epochs since first seen).
+    pair_epochs: HashMap<DoubleDiffKey, u32>,
     /// Precise orbit store (SP3). When set, satellite positions and clocks
     /// come from IGS final/rapid products instead of broadcast ephemerides.
     /// Eliminates ~1-2 m orbit error that only partially cancels in DD
@@ -88,6 +97,11 @@ pub struct GnssRtkIekf {
     /// model, tracked as a scalar random walk. Long-baseline mode only.
 
     pub wl_tracker: mw::WidelaneTracker,
+    /// Receiver antenna PCV calibrations `(rover, base)`. When both are set,
+    /// the elevation-dependent differential receiver PCV is removed from
+    /// every DD phase observation before ambiguity estimation. Same-family
+    /// pairs cancel to ~zero; cross-family pairs carry mm-level signatures.
+    pub receiver_pcv: Option<(Arc<ReceiverAntenna>, Arc<ReceiverAntenna>)>,
 }
 
 impl GnssRtkIekf {
@@ -104,6 +118,8 @@ impl GnssRtkIekf {
             base_slip_detector: crate::post_process::screening::CycleSlipDetector::new(),
             prev_arcs: HashMap::new(),
             track_ambiguity_keys: false,
+            min_ar_lock_epochs: 0,
+            pair_epochs: HashMap::new(),
             precise_orbits: None,
             enable_glonass: false,
             widelane_ar: false,
@@ -116,6 +132,7 @@ impl GnssRtkIekf {
             pw_tracker: mw::WidelaneTracker::default(),
 
             wl_tracker: mw::WidelaneTracker::default(),
+            receiver_pcv: None,
         }
     }
 
@@ -207,6 +224,15 @@ impl GnssRtkIekf {
 
 
 
+        // AR eligibility gating: exclude pairs tracked for too few epochs.
+        if self.min_ar_lock_epochs > 0 {
+            let min_ep = self.min_ar_lock_epochs;
+            let eligible: Vec<DoubleDiffKey> = self.pair_epochs.iter()
+                .filter(|(_, &age)| age >= min_ep)
+                .map(|(k, _)| *k)
+                .collect();
+            self.state.ambiguities.retain(|(k, _)| eligible.contains(k));
+        }
         let mut ar_res = ar::resolve_ambiguities(&self.state, 3, self.target_pf);
         if self.widelane_ar {
             // A FAR fix contradicting a converged MW wide lane is a
@@ -381,6 +407,7 @@ impl GnssRtkIekf {
                             if let Some(cp) = m.dd_cp_cycles {
                                 pair_cp.insert(freq_band, cp);
                             }
+                            *self.pair_epochs.entry(m.key).or_insert(0) += 1;
                             active_keys.push(m.key);
                             meas_list.push(m);
                         }
@@ -519,6 +546,10 @@ impl GnssRtkIekf {
             || rov_ref.get_lli(freq_band).is_some_and(|l| (l & 1) != 0)
             || arc_changed;
 
+        // Receiver antenna PCV: strip the differential signature before the
+        // observation seeds an ambiguity or enters the measurement update.
+        let dd_cp = self.strip_receiver_pcv(dd_cp, sat_id, freq_band, lambda, sat_pos, ref_pos.into());
+
         self.update_dd_ambiguity(key, dd_cp, dd_pr, lambda, lli_slip);
 
         Some(DoubleDiffMeasurement {
@@ -536,6 +567,39 @@ impl GnssRtkIekf {
             dgrad_e_rov,
             tide_dd_m,
         })
+    }
+
+    /// Remove the differential receiver PCV from one DD phase observation.
+    ///
+    /// `phi_obs = rho/lam + N + phi_PCV(zenith)`, so the embedded antenna
+    /// signature is subtracted (`cp - corr/lambda`), matching the windup
+    /// convention. Elevations are computed in the rover frame and reused for
+    /// both stations: baseline << orbit altitude keeps the station-to-station
+    /// elevation difference sub-mm in PCV terms. No-op unless both rover and
+    /// base calibrations are loaded; unknown frequency codes also no-op.
+    fn strip_receiver_pcv(
+        &self,
+        dd_cp: Option<f64>,
+        sat_id: gneiss_core::sat::SatelliteId,
+        freq_band: u8,
+        lambda: f64,
+        sat_pos: Vector3<f64>,
+        ref_pos: Vector3<f64>,
+    ) -> Option<f64> {
+        let cp = dd_cp?;
+        let (rov, bas) = match &self.receiver_pcv {
+            Some(pair) => pair,
+            None => return dd_cp,
+        };
+        let code = frequency_code(sat_id.constellation, freq_band)?;
+        let llh = gneiss_core::coords::ecef_to_llh(self.state.pos_ecef);
+        let (_az_s, el_s) = gneiss_core::coords::az_el(llh, self.state.pos_ecef, sat_pos);
+        let (_az_r, el_r) = gneiss_core::coords::az_el(llh, self.state.pos_ecef, ref_pos);
+        let pcv_m = compute_dd_pcv_correction(rov, bas, &code, el_s, el_r);
+        if pcv_m == 0.0 {
+            return Some(cp);
+        }
+        Some(cp - pcv_m / lambda)
     }
 
     /// Phase innovations with sensitivity to the rover ZWD residual.

@@ -158,10 +158,16 @@ mod tests {
         db
     }
 
-    /// Receiver-style block with a linear NOAZI ramp: PCV(zen) = -1 mm/deg.
-    /// Radome `NONE` yields the single-token TYPE form used by unradomed
-    /// calibrations.
+    /// Receiver-style block with a linear NOAZI ramp of -1 mm/deg.
     fn linear_block(family: &str, radome: &str) -> String {
+        linear_block_sloped(family, radome, -1.0)
+    }
+
+    /// Same block shape with a configurable ramp slope (mm per degree),
+    /// so two calibrations can be given distinct PCV signatures. Radome
+    /// `NONE` yields the single-token TYPE form used by unradomed
+    /// calibrations.
+    fn linear_block_sloped(family: &str, radome: &str, slope: f64) -> String {
         let type_field = if radome == "NONE" {
             family.to_string()
         } else {
@@ -174,8 +180,8 @@ mod tests {
         b.push_str(&ant_line("     0.0  18.0   1.0", "ZEN1 / ZEN2 / DZEN"));
         b.push_str(&ant_line("   G01", "START OF FREQUENCY"));
         b.push_str(&ant_line("      0.00      0.00      5.00", "NORTH / EAST / UP"));
-        let row: Vec<String> = (0..=18).map(|i| format!("{:>6.2}", -(i as f64))).collect();
-        b.push_str(&format!("   NOAZI{}\n", row.join("")));
+        let row: Vec<String> = (0..=18).map(|i| format!("{:>6.2}", slope * i as f64)).collect();
+        b.push_str(&format!("   NOAZI{}\n", row.join(" ")));
         b.push_str(&ant_line("", "END OF FREQUENCY"));
         b.push_str(&ant_line("", "END OF ANTENNA"));
         b
@@ -266,12 +272,20 @@ mod tests {
 
     #[test]
     fn test_dd_correction_antisymmetric() {
-        let db = db_from(&format!("{}{}", linear_block("ANT_A", "NONE"), linear_block("ANT_B", "NONE")));
+        let db = db_from(&format!(
+            "{}{}",
+            linear_block("ANT_A", "NONE"),
+            linear_block_sloped("ANT_B", "NONE", -2.0)
+        ));
         let a = ReceiverAntenna::lookup(&db, "ANT_A", "NONE").unwrap();
         let b = ReceiverAntenna::lookup(&db, "ANT_B", "NONE").unwrap();
-        let ab = compute_dd_pcv_correction(&a, &b, "G01", 0.2618, 0.7854);
-        let ba = compute_dd_pcv_correction(&b, &a, "G01", 0.2618, 0.7854);
-        assert!(ab.abs() > 1e-6);
+        // 80 deg elevation -> zenith 10 (grid node), 50 deg -> zenith 40
+        // clamps to the last node at 18 deg. Slopes -1 vs -2 mm/deg:
+        // [-10-(-18)] - [-20-(-36)] = 8 - 16 = -8 mm.
+        let ab = compute_dd_pcv_correction(&a, &b, "G01", 80f64.to_radians(), 50f64.to_radians());
+        let ba = compute_dd_pcv_correction(&b, &a, "G01", 80f64.to_radians(), 50f64.to_radians());
+        assert!((ab - (-0.008)).abs() < 1e-9, "ab={:.6}", ab);
+        assert!((ab + ba).abs() < 1e-12);
         assert!((ab + ba).abs() < 1e-12);
     }
 
@@ -317,9 +331,12 @@ mod tests {
         let d60 = compute_dd_pcv_correction(&trm, &ash, "G01", 60f64.to_radians(), 40f64.to_radians());
 
         // Reference satellite held at 40 deg elevation. Hand-computed from
-        // the tabulated NOAZI grids: single difference SD(zen) =
-        // PCV_trm(zen) - PCV_ash(zen), e.g. SD(zen50) = -8.82 - (-9.18)
-        // = +0.36 mm; DD(el) = SD(90deg-el) - SD(zen50).
+        // the tabulated NOAZI grids (5 deg nodes, zen index = zen/5):
+        // SD(zen) = PCV_trm(zen) - PCV_ash(zen);
+        // SD(zen80) = +4.82 - (+3.03) = +1.79 mm -> d10 = 1.79 - 0.36;
+        // SD(zen60) = -6.45 - (-7.16) = +0.71 mm -> d30 = 0.71 - 0.36;
+        // SD(zen30) = -7.38 - (-7.18) = -0.20 mm -> d60 = -0.20 - 0.36;
+        // with SD(zen50, ref sat at 40 deg el) = -8.82 - (-9.18) = +0.36 mm.
         assert!(d10.abs() > 1e-4 && d10.abs() < 0.02, "d10={:.6} m", d10);
         assert!(d30.abs() > 1e-4 && d30.abs() < 0.02, "d30={:.6} m", d30);
         assert!(d60.abs() > 1e-4 && d60.abs() < 0.02, "d60={:.6} m", d60);
@@ -327,7 +344,7 @@ mod tests {
         // Exact grid-node values (metres).
         assert!((d10 - 0.00143).abs() < 1e-4, "d10={:.6}", d10);
         assert!((d30 - 0.00035).abs() < 1e-4, "d30={:.6}", d30);
-        assert!((d60 - 0.00057).abs() < 1e-4, "d60={:.6}", d60);
+        assert!((d60 - (-0.00056)).abs() < 1e-4, "d60={:.6}", d60);
     }
 
     /// LEIAR20 LEIM vs TRM59800.00 SCIT diverges much more at high

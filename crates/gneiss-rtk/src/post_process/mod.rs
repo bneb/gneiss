@@ -63,6 +63,18 @@ pub struct PostProcessOptions {
     /// MW tracker when `widelane_ar` is on. Produced by a Phase-A
     /// pre-pass (`mw::solve_network_upd`) over all bases.
     pub network_sat_upd: Option<std::collections::HashMap<u16, f64>>,
+    /// Opt-in receiver antenna PCV correction `(rover, base)`. Default off
+    /// (bit-identical legacy path); when set, the elevation-dependent
+    /// differential receiver PCV is removed from DD carrier phase before
+    /// ambiguity estimation. Arc-wrapped so cloning options stays cheap.
+    pub receiver_pcv: Option<std::sync::Arc<ReceiverPcvPair>>,
+}
+
+/// Paired receiver antenna PCV models consumed by the DD engine.
+#[derive(Debug, Clone)]
+pub struct ReceiverPcvPair {
+    pub rover: std::sync::Arc<gneiss_parsers::receiver_antenna::ReceiverAntenna>,
+    pub base: std::sync::Arc<gneiss_parsers::receiver_antenna::ReceiverAntenna>,
 }
 
 /// Execute the complete offline post-processing pipeline.
@@ -91,6 +103,7 @@ pub fn execute_post_process(
     let forward_traj = forward::run_forward_pass(
         config, ephemerides, klob, rover_epochs, base_epochs, base_pos, imu_samples, options.initial_rover_position, options.q_accel, options.widelane_ar, options.tropo_gradients,
         options.network_sat_upd.clone(),
+        options.receiver_pcv.clone(),
     );
 
     // Pass 3: Backward Pass (if enabled)
@@ -99,6 +112,7 @@ pub fn execute_post_process(
         backward::run_backward_pass(
             config, ephemerides, klob, rover_epochs, base_epochs, base_pos, imu_samples, initial_rover_pos, options.q_accel, options.widelane_ar, options.tropo_gradients,
             options.network_sat_upd.clone(),
+            options.receiver_pcv.clone(),
         )
     } else {
         std::collections::BTreeMap::new()

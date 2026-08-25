@@ -31,13 +31,14 @@ pub fn run_backward_pass(
     widelane_ar: bool,
     tropo_grad: bool,
     sat_upd: Option<std::collections::HashMap<u16, f64>>,
+    receiver_pcv: Option<std::sync::Arc<super::ReceiverPcvPair>>,
 ) -> BTreeMap<u64, FilteredEpoch> {
     if imu_samples.is_none() && base_pos.is_some() && base_epochs.is_some() {
         if let Some(bp) = base_pos {
             let init_p = initial_rover_pos.unwrap_or_else(|| {
                 compute_initial_position(rover_epochs, ephemerides, bp)
             });
-            return run_backward_iekf(ephemerides, rover_epochs, base_epochs.unwrap_or(&[]), bp, init_p, q_accel.unwrap_or(1.0), widelane_ar, tropo_grad, sat_upd);
+            return run_backward_iekf(ephemerides, rover_epochs, base_epochs.unwrap_or(&[]), bp, init_p, q_accel.unwrap_or(1.0), widelane_ar, tropo_grad, sat_upd, receiver_pcv);
         }
     }
 
@@ -76,6 +77,7 @@ fn run_backward_iekf(
     widelane_ar: bool,
     tropo_grad: bool,
     sat_upd: Option<std::collections::HashMap<u16, f64>>,
+    receiver_pcv: Option<std::sync::Arc<super::ReceiverPcvPair>>,
 ) -> BTreeMap<u64, FilteredEpoch> {
     let mut results = BTreeMap::new();
     if rover_epochs.is_empty() {
@@ -87,6 +89,9 @@ fn run_backward_iekf(
 
     let mut iekf = GnssRtkIekf::new(initial_rover_pos, rev_epochs[0].time, q_accel);
     iekf.widelane_ar = widelane_ar;
+    if let Some(pair) = receiver_pcv {
+        iekf.receiver_pcv = Some((pair.rover.clone(), pair.base.clone()));
+    }
     if widelane_ar {
         // Two-phase static Q (mirrors forward pass): the backward session
         // anchor is end-of-day, so elapsed time counts symmetrically.
@@ -289,7 +294,7 @@ mod tests {
     #[test]
     fn test_empty_backward_pass_runs() {
         let config = EngineConfig::Spp(Default::default());
-        let results = run_backward_pass(&config, &[], None, &[], None, None, None, None, None, false, false, None);
+        let results = run_backward_pass(&config, &[], None, &[], None, None, None, None, None, false, false, None, None);
         assert!(results.is_empty());
     }
 }
