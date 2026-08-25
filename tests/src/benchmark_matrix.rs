@@ -62,6 +62,7 @@ fn test_tier1_geodetic_cors_baseline_sub_centimeter() {
         widelane_ar: false,
         tropo_gradients: false,
         network_sat_upd: None,
+        receiver_pcv: None,
     };
 
     let result = execute_post_process(&config, &ephems, selected_rover, Some(&base_epochs), None, &options)
@@ -112,6 +113,7 @@ fn test_tier2_high_dynamic_circular_kinematic_sub_centimeter() {
         widelane_ar: false,
         tropo_gradients: false,
         network_sat_upd: None,
+        receiver_pcv: None,
     };
 
     let result = execute_post_process(

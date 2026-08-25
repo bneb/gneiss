@@ -54,6 +54,7 @@ pub async fn run_process(
             widelane_ar: false,
             tropo_gradients: false,
             network_sat_upd: None,
+        receiver_pcv: None,
         };
         let post_res = gneiss_rtk::post_process::execute_post_process(
             &swfg_config,
