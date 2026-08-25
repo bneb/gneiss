@@ -82,6 +82,15 @@ fn build_process_noise(state: &RtkState, dim: usize, dt: f64, q_accel: f64, reve
         q[(gn, gn)] = super::update::GRAD_RW_M2_PER_S * dt_abs;
         q[(ge, ge)] = super::update::GRAD_RW_M2_PER_S * dt_abs;
     }
+    // Per-pair iono residual: slow random walk.
+    const IONO_RW_M2_PER_S: f64 = 1e-8;
+    let io_off = state.iono_offset();
+    for i in 0..state.ionos.len() {
+        let idx = io_off + i;
+        if idx < q.nrows() {
+            q[(idx, idx)] += IONO_RW_M2_PER_S * dt_abs;
+        }
+    }
 
     q
 }

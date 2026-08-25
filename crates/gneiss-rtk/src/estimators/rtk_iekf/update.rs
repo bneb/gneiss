@@ -193,6 +193,9 @@ fn append_dd_meas_rows(
         Some((gn, ge)) => (Some((gn, ge)), x_current[gn], x_current[ge]),
         None => (None, 0.0, 0.0),
     };
+    let iono_val = state.get_iono_idx(&m.key)
+        .map(|ii| x_current[ii])
+        .unwrap_or(0.0);
 
     let mut pr_h = DVector::zeros(state_dim);
     pr_h[0] = d_geom_dpos.x;
@@ -207,9 +210,13 @@ fn append_dd_meas_rows(
         pr_h[gn] = m.dgrad_n_rov;
         pr_h[ge] = m.dgrad_e_rov;
     }
+    // Iono state: DD code includes +I_DD
+    if let Some(ii) = state.get_iono_idx(&m.key) {
+        pr_h[ii] = 1.0;
+    }
     h_rows.push(pr_h);
     let grad_pr = m.dgrad_n_rov * grad_n_val + m.dgrad_e_rov * grad_e_val;
-    let pr_y = m.dd_pr_m - geom_dd - m.dm_wet_rov * zwd_val - grad_pr;
+    let pr_y = m.dd_pr_m - geom_dd - m.dm_wet_rov * zwd_val - grad_pr - iono_val;
     let pr_r = m.pr_var_m2.max(0.01);
     y_vals.push(pr_y);
     r_diag.push(robust_inflate(pr_y, pr_r));
@@ -217,12 +224,17 @@ fn append_dd_meas_rows(
     if let (Some(cp_obs), Some(amb_idx)) = (pcv_corrected_cp(m), state.get_amb_idx(&m.key)) {
         let amb_val = x_current[amb_idx];
         let pred_cp = geom_dd / m.lambda + amb_val
-            + (m.dm_wet_rov * zwd_val + grad_pr) / m.lambda;
+            + (m.dm_wet_rov * zwd_val + grad_pr) / m.lambda
+            - iono_val / m.lambda;
         let mut cp_h = DVector::zeros(state_dim);
         cp_h[0] = d_geom_dpos.x / m.lambda;
         cp_h[1] = d_geom_dpos.y / m.lambda;
         cp_h[2] = d_geom_dpos.z / m.lambda;
         cp_h[amb_idx] = 1.0;
+        // Iono state: DD phase includes -I_DD/λ
+        if let Some(ii) = state.get_iono_idx(&m.key) {
+            cp_h[ii] = -1.0 / m.lambda;
+        }
         if let Some(zi) = zwd_idx {
             cp_h[zi] = m.dm_wet_rov / m.lambda;
         }

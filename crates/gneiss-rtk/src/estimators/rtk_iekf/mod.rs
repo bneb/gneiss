@@ -774,6 +774,7 @@ impl GnssRtkIekf {
             self.code_phase_div.push((key.freq_band, offset));
         }
         self.state.ensure_ambiguity(key, init_amb - offset, 100.0);
+        self.state.ensure_iono(key, 4.0); // 2m sigma iono residual
     }
 
     /// Record one per-epoch coherency sample when the gate is active.

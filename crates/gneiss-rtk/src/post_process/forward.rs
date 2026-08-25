@@ -89,6 +89,7 @@ fn run_forward_iekf(
             iekf.min_elevation_rad = rad.to_radians();
         }
     }
+    iekf.state.iono_enabled = std::env::var("GNEISS_IONO_STATES").as_deref() == Ok("1");
     iekf.widelane_ar = widelane_ar;
     if let Some(pair) = receiver_pcv {
         iekf.receiver_pcv = Some((pair.rover.clone(), pair.base.clone()));

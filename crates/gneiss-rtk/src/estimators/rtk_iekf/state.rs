@@ -34,6 +34,10 @@ pub struct RtkState {
     pub grad_enabled: bool,
     pub grad_n_m: f64,
     pub grad_e_m: f64,
+    /// Per-DD-pair ionosphere residual states (metres of L1 slant delay).
+    /// Enabled as a set; keys mirror band-1 ambiguity keys.
+    pub iono_enabled: bool,
+    pub ionos: Vec<(DoubleDiffKey, f64)>,
     pub cov: DMatrix<f64>,
 }
 
@@ -58,6 +62,8 @@ impl RtkState {
             grad_enabled: false,
             grad_n_m: 0.0,
             grad_e_m: 0.0,
+            iono_enabled: false,
+            ionos: Vec::new(),
             cov,
         }
     }
@@ -67,6 +73,32 @@ impl RtkState {
         6 + self.ambiguities.len()
             + self.zwd_enabled as usize
             + 2 * self.grad_enabled as usize
+            + self.ionos.len()
+    }
+
+    /// Column offset of the first iono state (after all ambiguities).
+    pub fn iono_offset(&self) -> usize {
+        self.amb_offset() + self.ambiguities.len()
+    }
+
+    /// Column index for a specific pair's iono state.
+    pub fn get_iono_idx(&self, key: &DoubleDiffKey) -> Option<usize> {
+        self.ionos.iter().position(|(k, _)| k == key)
+            .map(|idx| self.iono_offset() + idx)
+    }
+
+    /// Ensure an iono state exists for this pair.
+    pub fn ensure_iono(&mut self, key: DoubleDiffKey, initial_var: f64) {
+        if !self.iono_enabled || self.get_iono_idx(&key).is_some() {
+            return;
+        }
+        self.ionos.push((key, 0.0));
+        let old_dim = self.cov.nrows();
+        let new_dim = old_dim + 1;
+        let mut new_cov = DMatrix::zeros(new_dim, new_dim);
+        new_cov.view_range_mut(0..old_dim, 0..old_dim).copy_from(&self.cov);
+        new_cov[(old_dim, old_dim)] = initial_var.max(0.01);
+        self.cov = new_cov;
     }
 
     /// Column offset applied to ambiguity indices.
@@ -151,6 +183,10 @@ impl RtkState {
             vec[gn] = self.grad_n_m;
             vec[ge] = self.grad_e_m;
         }
+        let io = self.iono_offset();
+        for (i, (_, val)) in self.ionos.iter().enumerate() {
+            vec[io + i] = *val;
+        }
         vec
     }
 
@@ -168,6 +204,10 @@ impl RtkState {
         if let Some((gn, ge)) = self.grad_idx() {
             self.grad_n_m = vec[gn];
             self.grad_e_m = vec[ge];
+        }
+        let io = self.iono_offset();
+        for (i, (_, val)) in self.ionos.iter_mut().enumerate() {
+            *val = vec[io + i];
         }
     }
 
@@ -320,5 +360,63 @@ mod tests {
         state.retain_active_ambiguities(&[k2]);
         assert_eq!(state.dim(), 7);
         assert_eq!(state.get_amb_idx(&k2), Some(6));
+    }
+}
+
+#[cfg(test)]
+mod iono_tests {
+    use super::*;
+
+    fn dd_key(sv: u16, band: u8) -> DoubleDiffKey {
+        DoubleDiffKey { constellation_id: 0, sat: sv, ref_sat: 1, freq_band: band }
+    }
+
+    #[test]
+    fn test_iono_disabled_zero_impact() {
+        let t = GpsTime::new(2100, 0.0);
+        let st = RtkState::new(Vector3::zeros(), t);
+        assert!(!st.iono_enabled);
+        assert_eq!(st.ionos.len(), 0);
+        // dim unchanged from legacy
+        assert_eq!(st.dim(), 6);
+    }
+
+    #[test]
+    fn test_iono_dim_and_offset() {
+        let t = GpsTime::new(2100, 0.0);
+        let mut st = RtkState::new(Vector3::zeros(), t);
+        st.iono_enabled = true;
+        st.ensure_ambiguity(dd_key(5, 1), 100.0, 100.0);
+        st.ensure_iono(dd_key(5, 1), 4.0);
+        // pos(3)+vel(3)+1 amb+1 iono = 8
+        assert_eq!(st.dim(), 8);
+        assert_eq!(st.iono_offset(), st.amb_offset() + 1);
+        assert_eq!(st.get_iono_idx(&dd_key(5, 1)), Some(7));
+    }
+
+    #[test]
+    fn test_iono_roundtrip_preserves_values() {
+        let t = GpsTime::new(2100, 0.0);
+        let mut st = RtkState::new(Vector3::zeros(), t);
+        st.zwd_enabled = true;
+        st.iono_enabled = true;
+        st.ensure_ambiguity(dd_key(5, 1), 50.0, 100.0);
+        st.ensure_iono(dd_key(5, 1), 4.0);
+        st.ionos[0].1 = -1.234;
+        let v = st.to_dvector();
+        let mut st2 = st.clone();
+        st2.update_from_dvector(&v);
+        assert!((st2.ionos[0].1 - (-1.234)).abs() < 1e-12);
+    }
+
+    #[test]
+    fn test_ensure_iono_idempotent() {
+        let t = GpsTime::new(2100, 0.0);
+        let mut st = RtkState::new(Vector3::zeros(), t);
+        st.iono_enabled = true;
+        st.ensure_iono(dd_key(5, 1), 4.0);
+        st.ensure_iono(dd_key(5, 1), 4.0); // second call no-op
+        assert_eq!(st.ionos.len(), 1);
+        assert_eq!(st.dim(), 7);
     }
 }
