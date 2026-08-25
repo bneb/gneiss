@@ -14,6 +14,7 @@ Every bug we've encountered maps to a missing frame distinction:
 | UNR truth offset | Reference-frame: IGS20 ≠ broadcast WGS84 realization |
 | OHLN coastal v_p50 | Physical-model: ocean tide loading absent |
 | Gradient sign | Azimuthal-frame: az from North CW vs from East CCW |
+| Relational coupling (PCV) | Cross-station zenith angles passed as independent floats, allowing physically impossible geometry; caught in minutes by review, not weeks by benchmark anomaly (3 orders of magnitude cheaper detection) |
 
 ## Three-Track Solution (parallel implementation)
 

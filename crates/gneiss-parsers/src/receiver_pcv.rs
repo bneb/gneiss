@@ -41,6 +41,13 @@ pub struct ReceiverPcv {
     pub zen_step_deg: f64,
 }
 
+
+/// Convert zenith angle (degrees from vertical) to elevation angle
+/// (degrees from horizon): elevation = 90° − zenith.
+fn zenith_to_elevation(zen_deg: f64) -> f64 {
+    90.0 - zen_deg
+}
+
 impl ReceiverPcv {
     /// Load from ANTEX database by matching type+radome.
     ///
@@ -109,6 +116,33 @@ impl ReceiverPcv {
         let bas_diff_mm = bas.interpolate(zen_bas_sat_deg) - bas.interpolate(zen_bas_ref_deg);
         (rov_diff_mm - bas_diff_mm) / MM_PER_M
     }
+
+    /// DD correction derived from shared satellite geometry.
+    ///
+    /// Zenith angles are computed internally from station and satellite
+    /// positions, making inconsistent geometry unrepresentable. This is
+    /// the production entry point; [`dd_correction_m`] with explicit
+    /// angles is retained for testing only.
+    pub fn dd_correction_from_geometry(
+        rov: &ReceiverPcv,
+        bas: &ReceiverPcv,
+        rov_llh: nalgebra::Vector3<f64>,
+        bas_llh: nalgebra::Vector3<f64>,
+        sat_pos: nalgebra::Vector3<f64>,
+        ref_sat_pos: nalgebra::Vector3<f64>,
+    ) -> f64 {
+        use gneiss_core::coords::az_el;
+        let (_, zen_rov_sat) = az_el(rov_llh, rov_llh, sat_pos);
+        let (_, zen_rov_ref) = az_el(rov_llh, rov_llh, ref_sat_pos);
+        let (_, zen_bas_sat) = az_el(bas_llh, bas_llh, sat_pos);
+        let (_, zen_bas_ref) = az_el(bas_llh, bas_llh, ref_sat_pos);
+        Self::dd_correction_m(rov, bas,
+            zenith_to_elevation(zen_rov_sat),
+            zenith_to_elevation(zen_rov_ref),
+            zenith_to_elevation(zen_bas_sat),
+            zenith_to_elevation(zen_bas_ref),
+        )
+    }
 }
 
 /// Match a stored `TYPE / SERIAL NO` string against family + radome.
@@ -147,10 +181,7 @@ mod tests {
     /// Tight tolerance for values that are exact grid nodes (fp noise only).
     const TOL: f64 = 1e-9;
 
-    // ------------------------------------------------------------------
-    // Ground truth transcribed from datasets/igs14.atx G01 NOAZI rows
-    // (coordinator-verified analysis).
-    // ------------------------------------------------------------------
+    // --- Ground truth: datasets/igs14.atx G01 NOAZI rows (coordinator-verified). ---
 
     /// ASH701945B_M SCIT: zen 0..=80 deg, step 5 deg.
     const ASH_G01_GRID: [f64; 17] = [
@@ -180,15 +211,10 @@ mod tests {
     }
 
     fn assert_grid_matches(pcv: &ReceiverPcv, expected: &[f64]) {
-        assert_eq!(
-            pcv.pcv_grid_mm.len(),
-            expected.len(),
-            "{} {}: grid length",
-            pcv.ant_type,
-            pcv.radome
-        );
+        let label = format!("{} {}", pcv.ant_type, pcv.radome);
+        assert_eq!(pcv.pcv_grid_mm.len(), expected.len(), "{label}: grid length");
         for (i, (got, want)) in pcv.pcv_grid_mm.iter().zip(expected).enumerate() {
-            assert_eq!(got, want, "{} {} node {i}", pcv.ant_type, pcv.radome);
+            assert_eq!(got, want, "{label} node {i}");
         }
     }
 
@@ -206,11 +232,7 @@ mod tests {
         )
     }
 
-    fn synth_db(
-        ant_type: &str,
-        dzen: f64,
-        freqs: Vec<(String, FrequencyPcv)>,
-    ) -> AntexDatabase {
+    fn synth_db(ant_type: &str, dzen: f64, freqs: Vec<(String, FrequencyPcv)>) -> AntexDatabase {
         let mut map = HashMap::new();
         for (code, freq) in freqs {
             map.insert(code, freq);
@@ -301,21 +323,16 @@ mod tests {
     #[test]
     fn interpolation_is_exact_at_every_grid_node() {
         let db = load_db();
-        for (family, radome) in [
-            ("ASH701945B_M", "SCIT"),
-            ("LEIAR20", "LEIM"),
-            ("TRM59800.00", "SCIT"),
-            ("TRM59800.80", "SCIT"),
-        ] {
+        let cases = [
+            ("ASH701945B_M", "SCIT"), ("LEIAR20", "LEIM"),
+            ("TRM59800.00", "SCIT"), ("TRM59800.80", "SCIT"),
+        ];
+        for (family, radome) in cases {
             let pcv = ReceiverPcv::from_antex(&db, family, radome)
                 .unwrap_or_else(|| panic!("{family} {radome} must load"));
             for (i, &expected) in pcv.pcv_grid_mm.iter().enumerate() {
                 let zen = pcv.zen_start_deg + i as f64 * pcv.zen_step_deg;
-                assert_eq!(
-                    pcv.interpolate(zen),
-                    expected,
-                    "{family} {radome} node {i} at {zen} deg"
-                );
+                assert_eq!(pcv.interpolate(zen), expected, "{family} {radome} node {i} @ {zen}");
             }
         }
     }
