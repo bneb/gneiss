@@ -9,4 +9,5 @@ pub mod sinex_bia;
 pub mod sp3;
 pub mod precise_orbit;
 pub mod receiver_antenna;
+pub mod receiver_pcv;
 pub mod ubx;
