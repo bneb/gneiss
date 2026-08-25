@@ -486,3 +486,23 @@ Key red-team takeaways:
 Parity confirmed (no action needed): per-constellation DD formation,
 ISB handling, earth tides, tropo mapping breadth, BDS GEO tilt,
 GLONASS RK4+J2 integration.
+
+## RTKLIB comparison: comprehensive results + orbit-error finding
+
+### Six-base fix-rate comparison (dataset A, GPS-only, broadcast eph)
+Gneiss beats RTKLIB 1.9× average fix rate (83.5% vs 43.9%).
+Best: SLAC 2.9×; worst: OHLN 1.3×. Every base improved.
+h_RMS at P181: Gneiss 33mm vs RTKLIB 119mm (3.6× better).
+
+### Precise ephemeris finding
+RTKLIB with IGS final SP3 produces IDENTICAL results to broadcast
+at 15 km baselines. Orbit error cancels in short-baseline DD.
+Implication: SP3 integration will NOT improve P181/P225 accuracy.
+It MAY improve P222/SLAC (>30 km) where residual orbit error is larger,
+but atmospheric effects dominate even there.
+
+### Multi-GNSS limitation discovered
+RTKLIB cannot process our 20-observable mixed RINEX 2.11 files
+(Galileo/GLONASS obs present but not parsed). Gneiss handles them
+natively — an advantage over the reference implementation for
+modern multi-GNSS datasets.

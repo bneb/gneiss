@@ -101,10 +101,10 @@ impl PreciseOrbit {
 }
 
 /// Select up to `degree + 1` samples centred on the insertion point of `t`.
-fn select_window<'a>(
-    track: &'a [(GpsTime, Sp3Record)],
+fn select_window(
+    track: &[(GpsTime, Sp3Record)],
     t: GpsTime,
-) -> Option<&'a [(GpsTime, Sp3Record)]> {
+) -> Option<&[(GpsTime, Sp3Record)]> {
     if track.is_empty() {
         return None;
     }
