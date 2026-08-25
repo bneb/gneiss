@@ -41,3 +41,18 @@ cargo clippy --workspace         # Must pass with 0 warnings
 See [ARCHITECTURE.md](./ARCHITECTURE.md) for the full architecture document.
 See [POST_MORTEM.md](./POST_MORTEM.md) for the PPP accuracy investigation.
 See [SPRINT_PLAN.md](./SPRINT_PLAN.md) for the current sprint plan.
+
+## Frame Safety (added from PCV incident — see docs/NETWORK_RTK_NEXT_STEPS.md)
+
+- **Relational coupling must be structurally enforced.** Parameters that are
+  views of the same object, epoch, or frame must be derived from shared
+  typed inputs inside the callee — never accepted as parallel bare floats.
+  Example: rover/base zenith angles to the same satellite pair must be
+  computed from shared satellite positions, not passed as four independent
+  f64 values (which allows physically impossible geometry).
+  
+- **Review checklist**: "Which of these arguments must pairwise agree,
+  and what makes disagreement unrepresentable?"
+
+- Canonical citation: receiver_pcv.rs dd_correction_m — doc author violated
+  documented invariant within minutes of implementing it correctly.
