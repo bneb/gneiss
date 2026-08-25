@@ -153,7 +153,11 @@ impl AntexDatabase {
                     _ => {
                         if let Some(freq) = current_frequency.as_mut() {
                             if line.starts_with("   NOAZI") {
-                                let values: Vec<f64> = line[8..60]
+                                // NOAZI records extend past the fixed 60-col
+                                // label boundary (up to ~152 chars); parse
+                                // the whole remainder or the grid is
+                                // silently truncated to ~6 nodes.
+                                let values: Vec<f64> = line[8..]
                                     .split_whitespace()
                                     .filter_map(|s| s.parse().ok())
                                     .collect();
@@ -392,6 +396,33 @@ mod tests {
         assert!((g01.pco.z - 30.0).abs() < 1e-12);
         let g02 = db.antennas[0].frequencies.get("G02").unwrap();
         assert!((g02.pco.z - 60.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn test_parse_noazi_rows_longer_than_60_cols() {
+        // Real ANTEX NOAZI records run past the label column; every node
+        // must survive parsing.
+        let mut content = String::new();
+        content.push_str(&ant_line("", "START OF ANTENNA"));
+        content.push_str(&ant_line(&format!("{:<40}", "LONG_ROW"), "TYPE / SERIAL NO"));
+        content.push_str(&ant_line("     0.0", "DAZI"));
+        content.push_str(&ant_line("     0.0  90.0   5.0", "ZEN1 / ZEN2 / DZEN"));
+        content.push_str(&ant_line("   G01", "START OF FREQUENCY"));
+        content.push_str(&ant_line("      1.00      2.00      3.00", "NORTH / EAST / UP"));
+        let values: Vec<String> = (0..19).map(|i| format!("{:>8.2}", i as f64 * -0.5)).collect();
+        content.push_str(&format!("   NOAZI{}\n", values.join("")));
+        content.push_str(&ant_line("", "END OF FREQUENCY"));
+        content.push_str(&ant_line("", "END OF ANTENNA"));
+
+        let path = write_temp_antex(&content);
+        let db = AntexDatabase::parse(&path).unwrap();
+        std::fs::remove_file(&path).ok();
+
+        let noazi = &db.antennas[0].frequencies["G01"].noazi;
+        assert_eq!(noazi.len(), 19);
+        assert_eq!(noazi[0], 0.0);
+        assert_eq!(noazi[9], -4.5);
+        assert_eq!(noazi[18], -9.0);
     }
 
     #[test]

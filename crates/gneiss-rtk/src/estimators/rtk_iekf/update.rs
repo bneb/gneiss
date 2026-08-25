@@ -164,7 +164,6 @@ fn append_dd_meas_rows(
     let r_sat = (m.sat_pos - cur_pos).norm();
     let r_ref = (m.ref_pos - cur_pos).norm();
     let trop_dd = compute_tropo_dd(m.sat_pos, m.ref_pos, m.base_pos, cur_pos);
-
     let geom_dd = (r_sat - r_ref) - base_dd + trop_dd + m.tide_dd_m;
 
     let los_sat = (m.sat_pos - cur_pos) / r_sat.max(1e-3);
