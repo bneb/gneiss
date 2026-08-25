@@ -565,3 +565,22 @@ Conclusion: features have per-baseline optima; a single global
 configuration cannot capture all benefits. Defaults (10° mask, AR
 gate off) remain best for network fused accuracy. Users should tune
 GNEISS_ELEV_DEG per their baseline length.
+
+## Strict disagreement gate validated as critical
+
+A/B test: WL_DISABLE=1 disables widelane_ar which also turns off
+strict_disagreement in the forward/backward combiner. Results on
+dataset B:
+
+| base | strict h_p50 | non-strict h_p50 | strict h_p95 | non-strict h_p95 |
+|---|---|---|---|---|
+| P181 | 106 mm | 106 mm | 129 mm | 149 mm |
+| P225 | **56 mm** | 164 mm | 214 mm | **741 mm** |
+| P222 | 125 mm | 116 mm | 267 mm | 383 mm |
+| FUSED | **97.5%** | 66.9% | | |
+
+The apparent P225 "fix loss" in strict mode (83.2% fwd -> 73.4%
+smoothed) is not a bug: it is the combiner correctly refusing to
+claim fixes when forward and backward filters disagree beyond the
+0.50 m static-monument threshold. Non-strict mode accepts these
+divergent claims and accuracy collapses.
