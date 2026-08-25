@@ -506,3 +506,27 @@ RTKLIB cannot process our 20-observable mixed RINEX 2.11 files
 (Galileo/GLONASS obs present but not parsed). Gneiss handles them
 natively — an advantage over the reference implementation for
 modern multi-GNSS datasets.
+
+## Architectural debt: relational constraints need structural enforcement
+
+PCV agent independently demonstrated why frame-safe types matter: the
+four-angle DD PCV signature allows physically impossible inputs (rover
+and base "observing different satellites"). Caught within minutes by
+tests written by the same person who implemented the formula correctly.
+
+Proposed fix: replace per-station angle parameters with a function that
+takes shared satellite positions and derives zeniths internally:
+
+    dd_correction_from_geometry(
+        rov_pcv, bas_pcv,
+        rov_llh, bas_llh,
+        sat_pos: EcefPos<Itrf2014>, ref_sat: EcefPos<Itrf2014>,
+    ) -> f64
+
+Satellite identity becomes shared by construction; temporal consistency
+pinned at the single point where positions were computed. Same principle
+applies to ALL cross-station corrections (tides, gradients, tropo).
+
+This is the strongest argument yet for integrating the frame-safety
+types into actual call sites rather than leaving them as unused
+infrastructure.
