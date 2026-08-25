@@ -2,61 +2,146 @@
 //!
 //! Satellite blocks in ANTEX carry the PRN in the serial field; receiver
 //! blocks carry the antenna family in field 1 and the radome in field 2 of
-//! `TYPE / SERIAL NO` (e.g. `TRM59800.00     SCIT`). Both parse into
+//! `TYPE / SERIAL NO` (e.g. `TRM59800.80     SCIT`). Both parse into
 //! [`AntennaPcv`] identically; this module adds the receiver-side lookup,
-//! zenith-angle interpolation of the NOAZI PCV grid, and the
-//! double-difference PCV correction consumed by the DD pipeline.
+//! public PCO/PCV fields, zenith-angle interpolation of the NOAZI grid,
+//! and the double-difference PCV correction consumed by the DD pipeline.
+//!
+//! Grid convention: PCV node `i` sits at zenith angle
+//! `zen1_deg + i * dzen_deg`; values are millimetres. Interpolation is
+//! linear between neighbouring nodes and clamps outside the tabulated
+//! range (the elevation mask keeps normal operation well inside it).
 //!
 //! Sign convention (mirrors phase windup): the observed carrier phase
 //! *contains* the antenna signature, `phi_obs = rho/lam + N + phi_PCV`, so
-//! the correction returned by [`compute_dd_pcv_correction`] is **subtracted**
-//! from the DD phase observation.
+//! the correction returned by [`compute_dd_pcv_correction`] is
+//! **subtracted** from the DD phase observation.
+
+use std::collections::HashMap;
 
 use gneiss_core::sat::Constellation;
 
 use crate::antex::{AntennaPcv, AntexDatabase};
 
-/// A receiver antenna calibration selected from an [`AntexDatabase`].
+/// One receiver-antenna calibration extracted from an [`AntexDatabase`].
 #[derive(Debug, Clone)]
 pub struct ReceiverAntenna {
-    model: AntennaPcv,
+    /// Antenna family, e.g. `"TRM59800.80"`.
+    pub ant_type: String,
+    /// Radome type (`"SCIT"`), or `"NONE"` for unradomed calibrations.
+    pub radome: String,
+    /// L1 phase centre offset in millimetres, `[east, north, up]`.
+    /// ANTEX tabulates north/east/up; the components are reordered here.
+    pub pco_enu_mm: [f64; 3],
+    /// L1 NOAZI PCV values (mm) over the zenith grid.
+    pub pcv_l1_grid: Vec<f64>,
+    /// L2 NOAZI PCV values (mm) over the zenith grid.
+    pub pcv_l2_grid: Vec<f64>,
+    /// Zenith angle (deg) of the first grid node.
+    pub zen1_deg: f64,
+    /// Zenith grid step (deg).
+    pub dzen_deg: f64,
+    /// All NOAZI grids keyed by ANTEX frequency code (`"G01"`, `"R02"`,
+    /// ...) so constellations outside GPS L1/L2 stay reachable through
+    /// [`ReceiverAntenna::pcv_mm`].
+    grids: HashMap<String, Vec<f64>>,
 }
 
 impl ReceiverAntenna {
-    /// Find a receiver calibration by antenna family and radome.
+    /// Load a receiver calibration by antenna family and radome.
     ///
-    /// Matches against the whitespace-split TYPE / SERIAL NO field, so both
+    /// Matches the whitespace-split TYPE / SERIAL NO field, so both
     /// `"TRM59800.80     SCIT"` (family + radome) and single-token entries
-    /// like `"AOAD/M_T"` (radome `NONE`) resolve. The first structural match
-    /// wins; IGS14 lists each family/radome combination exactly once.
-    pub fn lookup(db: &AntexDatabase, family: &str, radome: &str) -> Option<Self> {
-        let model = db.antennas.iter().find(|a| {
-            let parts: Vec<&str> = a.antenna_type.split_whitespace().collect();
-            match parts.as_slice() {
-                [t, r] => *t == family && *r == radome,
-                [t] => *t == family && radome == "NONE",
-                _ => false,
-            }
-        })?;
-        Some(Self { model: model.clone() })
-    }
-
-    /// The underlying calibration record (PCO vectors, validity, grids).
-    pub fn model(&self) -> &AntennaPcv {
-        &self.model
-    }
-
-    pub fn antenna_type(&self) -> &str {
-        &self.model.antenna_type
-    }
-
-    /// NOAZI PCV in millimetres at a zenith angle in degrees.
+    /// like `"AOAD/M_T"` (radome `NONE`) resolve. Returns `None` when the
+    /// database has no such receiver entry.
     ///
-    /// Returns `None` when the antenna has no tabulation for `freq_code`.
-    /// Zenith angles outside the tabulated range clamp to the end values
-    /// (the elevation mask keeps normal operation well inside the grid).
+    /// The L1/L2 band grids prefer the GPS codes `G01`/`G02` and fall back
+    /// to the GLONASS k=0 codes `R01`/`R02` (the convention IGS ANTEX
+    /// files use for receiver GLONASS tables).
+    pub fn from_antex(db: &AntexDatabase, ant_type: &str, radome: &str) -> Option<Self> {
+        let model = find_block(db, ant_type, radome)?;
+        Some(from_model(model))
+    }
+
+    /// Alias of [`ReceiverAntenna::from_antex`] retained for engine call
+    /// sites that predate the public-field API.
+    pub fn lookup(db: &AntexDatabase, family: &str, radome: &str) -> Option<Self> {
+        Self::from_antex(db, family, radome)
+    }
+
+    /// Display name, e.g. `"TRM59800.80 SCIT"`.
+    pub fn antenna_type(&self) -> String {
+        format!("{} {}", self.ant_type, self.radome)
+    }
+
+    /// NOAZI PCV in millimetres at a zenith angle in degrees for a
+    /// frequency band (`1` = L1 grid, `2` = L2 grid, anything else is
+    /// `None`). Clamps outside the tabulated range.
+    pub fn pcv_mm_at_zenith(&self, freq_band: u8, zenith_deg: f64) -> Option<f64> {
+        let grid = match freq_band {
+            1 => &self.pcv_l1_grid,
+            2 => &self.pcv_l2_grid,
+            _ => return None,
+        };
+        interp_grid(grid, self.zen1_deg, self.dzen_deg, zenith_deg)
+    }
+
+
+    /// NOAZI PCV in millimetres at a zenith angle for an explicit ANTEX
+    /// frequency code (`"G01"`, `"R02"`, ...). `None` when the calibration
+    /// has no table for that code.
     pub fn pcv_mm(&self, freq_code: &str, zenith_deg: f64) -> Option<f64> {
-        interp_noazi_mm(&self.model, freq_code, zenith_deg)
+        interp_grid(self.grids.get(freq_code)?, self.zen1_deg, self.dzen_deg, zenith_deg)
+    }
+}
+
+/// Find a receiver calibration by family and radome.
+fn find_block<'a>(db: &'a AntexDatabase, family: &str, radome: &str) -> Option<&'a AntennaPcv> {
+    db.antennas.iter().find(|a| {
+        let tokens: Vec<&str> = a.antenna_type.split_whitespace().collect();
+        match tokens.as_slice() {
+            [t, r] => *t == family && *r == radome,
+            [t] => *t == family && radome == "NONE",
+            _ => false,
+        }
+    })
+}
+
+/// Extract the public calibration fields from one ANTEX block.
+///
+/// Band grids prefer GPS `G01`/`G02` and fall back to the GLONASS k=0
+/// codes `R01`/`R02`; the PCO comes from the L1 frequency. ANTEX stores
+/// the PCO as north/east/up, reordered here to east/north/up.
+fn from_model(model: &AntennaPcv) -> ReceiverAntenna {
+    let noazi = |codes: &[&str]| {
+        codes
+            .iter()
+            .find_map(|c| model.frequencies.get(*c))
+            .map(|f| f.noazi.clone())
+            .unwrap_or_default()
+    };
+    let l1 = model.frequencies.get("G01").or_else(|| model.frequencies.get("R01"));
+    let pco_enu_mm = l1.map_or([0.0; 3], |f| [f.pco.y, f.pco.x, f.pco.z]);
+    let grids = model
+        .frequencies
+        .iter()
+        .map(|(code, freq)| (code.clone(), freq.noazi.clone()))
+        .collect();
+    let tokens: Vec<&str> = model.antenna_type.split_whitespace().collect();
+    let (ant_type, radome) = match tokens.as_slice() {
+        [t] => ((*t).to_string(), "NONE".to_string()),
+        [t, r] => ((*t).to_string(), (*r).to_string()),
+        _ => (model.antenna_type.clone(), String::new()),
+    };
+    ReceiverAntenna {
+        ant_type,
+        radome,
+        pco_enu_mm,
+        pcv_l1_grid: noazi(&["G01", "R01"]),
+        pcv_l2_grid: noazi(&["G02", "R02"]),
+        zen1_deg: model.zen1,
+        dzen_deg: model.dzen,
+        grids,
     }
 }
 
@@ -75,33 +160,26 @@ pub fn frequency_code(constellation: Constellation, band: u8) -> Option<String> 
     if !(1..=9).contains(&band) {
         return None;
     }
-    // GLONASS receiver tables only expose the k=0 pair R01/R02; other
-    // constellations share the band number directly (G01/G02/G05, E01/E05/E07).
     Some(format!("{prefix}{band:0>2}"))
 }
 
-/// Linearly interpolate the NOAZI PCV grid (mm) at `zenith_deg`.
+/// Linearly interpolate a NOAZI PCV grid (mm) at `zenith_deg`.
 ///
-/// Grid value `i` sits at zenith angle `zen1 + i*dzen`; interpolation is
-/// linear between neighbouring nodes and clamps outside `[zen1, zen2]`.
-fn interp_noazi_mm(model: &AntennaPcv, freq_code: &str, zenith_deg: f64) -> Option<f64> {
-    let freq = model.frequencies.get(freq_code)?;
-    let v = freq.noazi.as_slice();
-    let step = model.dzen;
-    if v.is_empty() || step <= 0.0 {
+/// Node `i` sits at `zen1_deg + i*dzen_deg`; clamps outside the range.
+fn interp_grid(grid: &[f64], zen1_deg: f64, dzen_deg: f64, zenith_deg: f64) -> Option<f64> {
+    if grid.is_empty() || dzen_deg <= 0.0 {
         return None;
     }
-    let last = v.len() - 1;
-    let t = (zenith_deg - model.zen1) / step;
+    let last = grid.len() - 1;
+    let t = (zenith_deg - zen1_deg) / dzen_deg;
     if t <= 0.0 {
-        return Some(v[0]);
+        return Some(grid[0]);
     }
     if t >= last as f64 {
-        return Some(v[last]);
+        return Some(grid[last]);
     }
     let i = t.floor() as usize;
-    let frac = t - i as f64;
-    Some(v[i] + frac * (v[i + 1] - v[i]))
+    Some(grid[i] + (t - i as f64) * (grid[i + 1] - grid[i]))
 }
 
 /// Differential receiver PCV embedded in one DD phase observation, metres.
@@ -144,8 +222,20 @@ mod tests {
     use std::path::PathBuf;
     use std::sync::atomic::{AtomicU32, Ordering};
 
-    /// Atomically-increasing suffix so parallel `db_from` callers never
-    /// collide on one temp path.
+    // ------------------------------------------------------------------
+    // Fixtures
+    // ------------------------------------------------------------------
+
+    fn ant_line(data: &str, label: &str) -> String {
+        let mut line = String::from(data);
+        while line.len() < 60 {
+            line.push(' ');
+        }
+        line.push_str(label);
+        line.push('\n');
+        line
+    }
+
     static DB_COUNTER: AtomicU32 = AtomicU32::new(0);
 
     fn db_from(content: &str) -> AntexDatabase {
@@ -158,16 +248,10 @@ mod tests {
         db
     }
 
-    /// Receiver-style block with a linear NOAZI ramp of -1 mm/deg.
-    fn linear_block(family: &str, radome: &str) -> String {
-        linear_block_sloped(family, radome, -1.0)
-    }
-
-    /// Same block shape with a configurable ramp slope (mm per degree),
-    /// so two calibrations can be given distinct PCV signatures. Radome
-    /// `NONE` yields the single-token TYPE form used by unradomed
-    /// calibrations.
-    fn linear_block_sloped(family: &str, radome: &str, slope: f64) -> String {
+    /// Receiver-style block whose NOAZI row is a linear ramp
+    /// `slope * zen` over `0..=18 deg` step 1, with optional extra
+    /// `(code, slope)` frequency blocks after the G01 one.
+    fn ramp_block(family: &str, radome: &str, g01_slope: f64, extra: &[(&str, f64)]) -> String {
         let type_field = if radome == "NONE" {
             family.to_string()
         } else {
@@ -178,79 +262,223 @@ mod tests {
         b.push_str(&ant_line(&format!("{type_field:<40}"), "TYPE / SERIAL NO"));
         b.push_str(&ant_line("     0.0", "DAZI"));
         b.push_str(&ant_line("     0.0  18.0   1.0", "ZEN1 / ZEN2 / DZEN"));
+        for (code, slope) in [("G01", g01_slope)].into_iter().chain(extra.iter().copied()) {
+            b.push_str(&ant_line(&format!("   {code}"), "START OF FREQUENCY"));
+            b.push_str(&ant_line("      0.00      0.00      5.00", "NORTH / EAST / UP"));
+            let row: Vec<String> = (0..=18).map(|i| format!("{:>6.2}", slope * i as f64)).collect();
+            b.push_str(&format!("   NOAZI{}\n", row.join(" ")));
+            b.push_str(&ant_line("", "END OF FREQUENCY"));
+        }
+        b.push_str(&ant_line("", "END OF ANTENNA"));
+        b
+    }
+
+    /// Block with distinguishable PCO columns (N=1, E=2, U=3 mm).
+    fn pco_block(family: &str) -> String {
+        let mut b = String::new();
+        b.push_str(&ant_line("", "START OF ANTENNA"));
+        b.push_str(&ant_line(&format!("{family:<40}"), "TYPE / SERIAL NO"));
+        b.push_str(&ant_line("     0.0", "DAZI"));
+        b.push_str(&ant_line("     0.0  18.0   1.0", "ZEN1 / ZEN2 / DZEN"));
         b.push_str(&ant_line("   G01", "START OF FREQUENCY"));
-        b.push_str(&ant_line("      0.00      0.00      5.00", "NORTH / EAST / UP"));
-        let row: Vec<String> = (0..=18).map(|i| format!("{:>6.2}", slope * i as f64)).collect();
-        b.push_str(&format!("   NOAZI{}\n", row.join(" ")));
+        b.push_str(&ant_line("      1.00      2.00      3.00", "NORTH / EAST / UP"));
+        b.push_str(&ant_line("   NOAZI   0.00  -1.00", ""));
         b.push_str(&ant_line("", "END OF FREQUENCY"));
         b.push_str(&ant_line("", "END OF ANTENNA"));
         b
     }
 
-    fn ant_line(data: &str, label: &str) -> String {
-        let mut line = String::from(data);
-        while line.len() < 60 {
-            line.push(' ');
+    /// Block whose only frequency carries a PCO but no NOAZI table.
+    fn pco_only_block(family: &str) -> String {
+        let mut b = String::new();
+        b.push_str(&ant_line("", "START OF ANTENNA"));
+        b.push_str(&ant_line(&format!("{family:<40}"), "TYPE / SERIAL NO"));
+        b.push_str(&ant_line("     0.0", "DAZI"));
+        b.push_str(&ant_line("     0.0  18.0   1.0", "ZEN1 / ZEN2 / DZEN"));
+        b.push_str(&ant_line("   G01", "START OF FREQUENCY"));
+        b.push_str(&ant_line("      1.00      2.00      3.00", "NORTH / EAST / UP"));
+        b.push_str(&ant_line("", "END OF FREQUENCY"));
+        b.push_str(&ant_line("", "END OF ANTENNA"));
+        b
+    }
+
+    /// Real IGS14 database; `None` skips dependent tests when the dataset
+    /// is not checked out.
+    fn real_db() -> Option<AntexDatabase> {
+        let path = PathBuf::from("../../datasets/igs14.atx");
+        if !path.exists() {
+            return None;
         }
-        line.push_str(label);
-        line.push('\n');
-        line
+        AntexDatabase::parse(&path).ok()
+    }
+
+    // ------------------------------------------------------------------
+    // Real-data lookups (datasets/igs14.atx)
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn from_antex_ash701945bm_scit_matches_igs14_values() {
+        let Some(db) = real_db() else { return };
+        let ant = ReceiverAntenna::from_antex(&db, "ASH701945B_M", "SCIT")
+            .expect("igs14 must contain ASH701945B_M SCIT");
+        assert_eq!(ant.ant_type, "ASH701945B_M");
+        assert_eq!(ant.radome, "SCIT");
+        // ANTEX NORTH/EAST/UP = 0.76 / -0.43 / 89.24 mm.
+        assert!((ant.pco_enu_mm[0] - (-0.43)).abs() < 1e-9, "east {:?}", ant.pco_enu_mm);
+        assert!((ant.pco_enu_mm[1] - 0.76).abs() < 1e-9, "north {:?}", ant.pco_enu_mm);
+        assert!((ant.pco_enu_mm[2] - 89.24).abs() < 1e-9, "up {:?}", ant.pco_enu_mm);
+        assert!((ant.zen1_deg - 0.0).abs() < 1e-12);
+        assert!((ant.dzen_deg - 5.0).abs() < 1e-12);
+        assert_eq!(ant.pcv_l1_grid.len(), 17); // 0..=80 deg step 5
+        assert_eq!(ant.pcv_l2_grid.len(), 17);
     }
 
     #[test]
-    fn test_lookup_family_radome() {
-        let db = db_from(&linear_block("TRM59800.00", "SCIT"));
-        let ant = ReceiverAntenna::lookup(&db, "TRM59800.00", "SCIT").unwrap();
-        assert_eq!(ant.antenna_type(), "TRM59800.00 SCIT");
+    fn from_antex_trm59800_80_scit_exists() {
+        let Some(db) = real_db() else { return };
+        let ant = ReceiverAntenna::from_antex(&db, "TRM59800.80", "SCIT")
+            .expect("igs14 must contain TRM59800.80 SCIT");
+        assert_eq!(ant.radome, "SCIT");
+        // ANTEX N/E/U = 1.32 / 0.88 / 84.85 mm.
+        assert_eq!(ant.pco_enu_mm, [0.88, 1.32, 84.85]);
+        assert_eq!(ant.pcv_l1_grid.len(), 19); // 0..=90 deg step 5
     }
 
     #[test]
-    fn test_lookup_single_token_requires_none_radome() {
-        let db = db_from(&linear_block("AOAD/M_T", "NONE"));
-        assert!(ReceiverAntenna::lookup(&db, "AOAD/M_T", "NONE").is_some());
-        assert!(ReceiverAntenna::lookup(&db, "AOAD/M_T", "SCIT").is_none());
+    fn from_antex_leiar20_leim_exists() {
+        let Some(db) = real_db() else { return };
+        let ant = ReceiverAntenna::from_antex(&db, "LEIAR20", "LEIM")
+            .expect("igs14 must contain LEIAR20 LEIM");
+        assert_eq!(ant.ant_type, "LEIAR20");
+        assert_eq!(ant.radome, "LEIM");
+        assert!(ant.dzen_deg > 0.0);
+        assert!(!ant.pcv_l1_grid.is_empty());
+    }
+
+    /// Mission-specified interpolation spot-check at zenith 10 deg: an
+    /// exact grid node for both bands of TRM59800.80 SCIT.
+    #[test]
+    fn pcv_at_zenith_10_matches_tabulated_node() {
+        let Some(db) = real_db() else { return };
+        let ant = ReceiverAntenna::from_antex(&db, "TRM59800.80", "SCIT").unwrap();
+        assert!((ant.pcv_mm_at_zenith(1, 10.0).unwrap() - (-1.51)).abs() < 1e-9);
+        assert!((ant.pcv_mm_at_zenith(2, 10.0).unwrap() - (-0.52)).abs() < 1e-9);
+        // Off-node midpoint between the 10 deg (-1.51) and 15 deg (-3.05)
+        // L1 nodes.
+        assert!((ant.pcv_mm_at_zenith(1, 12.5).unwrap() - (-2.28)).abs() < 1e-9);
     }
 
     #[test]
-    fn test_lookup_missing_returns_none() {
-        let db = db_from(&linear_block("TRM59800.00", "SCIT"));
-        assert!(ReceiverAntenna::lookup(&db, "LEIAR20", "LEIM").is_none());
+    fn interpolation_clamps_outside_grid_range() {
+        let Some(db) = real_db() else { return };
+        let trm = ReceiverAntenna::from_antex(&db, "TRM59800.80", "SCIT").unwrap();
+        assert_eq!(trm.pcv_mm_at_zenith(1, -5.0).unwrap(), 0.00); // first node
+        assert_eq!(trm.pcv_mm_at_zenith(1, 95.0).unwrap(), 15.24); // last node
+        // ASH701945B_M SCIT stops at 80 deg; beyond that it holds +3.03.
+        let ash = ReceiverAntenna::from_antex(&db, "ASH701945B_M", "SCIT").unwrap();
+        assert_eq!(ash.pcv_mm_at_zenith(1, 82.5).unwrap(), 3.03);
+    }
+
+    /// Different radomes are different calibrations for the same family.
+    #[test]
+    fn different_radomes_produce_different_pcvs() {
+        let Some(db) = real_db() else { return };
+        let scit = ReceiverAntenna::from_antex(&db, "ASH701945B_M", "SCIT").unwrap();
+        let none = ReceiverAntenna::from_antex(&db, "ASH701945B_M", "NONE").unwrap();
+        assert_ne!(scit.pcv_l1_grid, none.pcv_l1_grid);
+        assert_ne!(scit.pco_enu_mm, none.pco_enu_mm);
+        // A wrong radome does not silently fall back to another entry.
+        assert!(ReceiverAntenna::from_antex(&db, "ASH701945B_M", "LEIM").is_none());
     }
 
     #[test]
-    fn test_interp_exact_grid_nodes() {
-        let db = db_from(&linear_block("TEST", "NONE"));
-        let ant = ReceiverAntenna::lookup(&db, "TEST", "NONE").unwrap();
-        assert!((ant.pcv_mm("G01", 0.0).unwrap() - 0.0).abs() < 1e-12);
-        assert!((ant.pcv_mm("G01", 5.0).unwrap() - (-5.0)).abs() < 1e-12);
-        assert!((ant.pcv_mm("G01", 18.0).unwrap() - (-18.0)).abs() < 1e-12);
+    fn from_antex_unknown_type_or_bad_db_entry_is_none() {
+        let Some(db) = real_db() else { return };
+        assert!(ReceiverAntenna::from_antex(&db, "NOT_AN_ANTENNA", "SCIT").is_none());
+        let empty = AntexDatabase::new(Vec::new());
+        assert!(ReceiverAntenna::from_antex(&empty, "TRM59800.80", "SCIT").is_none());
     }
 
     #[test]
-    fn test_interp_midpoint() {
-        let db = db_from(&linear_block("TEST", "NONE"));
-        let ant = ReceiverAntenna::lookup(&db, "TEST", "NONE").unwrap();
-        assert!((ant.pcv_mm("G01", 12.5).unwrap() - (-12.5)).abs() < 1e-12);
-        assert!((ant.pcv_mm("G01", 2.3).unwrap() - (-2.3)).abs() < 1e-12);
+    fn lookup_alias_agrees_with_from_antex() {
+        let Some(db) = real_db() else { return };
+        let via_alias = ReceiverAntenna::lookup(&db, "TRM59800.80", "SCIT").unwrap();
+        let direct = ReceiverAntenna::from_antex(&db, "TRM59800.80", "SCIT").unwrap();
+        assert_eq!(via_alias.ant_type, direct.ant_type);
+        assert_eq!(via_alias.pcv_l1_grid, direct.pcv_l1_grid);
+        assert_eq!(via_alias.pco_enu_mm, direct.pco_enu_mm);
+        assert_eq!(via_alias.antenna_type(), "TRM59800.80 SCIT");
+    }
+
+    // ------------------------------------------------------------------
+    // Band selection and grid extraction (synthetic fixtures)
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn band_outside_1_and_2_is_none() {
+        let db = db_from(&ramp_block("TEST", "NONE", -1.0, &[("G02", -2.0)]));
+        let ant = ReceiverAntenna::from_antex(&db, "TEST", "NONE").unwrap();
+        assert!(ant.pcv_mm_at_zenith(3, 10.0).is_none());
+        assert!(ant.pcv_mm_at_zenith(0, 10.0).is_none());
+        assert!(ant.pcv_mm_at_zenith(5, 10.0).is_none());
     }
 
     #[test]
-    fn test_interp_clamps_outside_range() {
-        let db = db_from(&linear_block("TEST", "NONE"));
-        let ant = ReceiverAntenna::lookup(&db, "TEST", "NONE").unwrap();
-        assert_eq!(ant.pcv_mm("G01", -10.0).unwrap(), 0.0);
-        assert_eq!(ant.pcv_mm("G01", 500.0).unwrap(), -18.0);
+    fn l2_grid_differs_from_l1_for_dual_band_calibration() {
+        let db = db_from(&ramp_block("DUAL", "NONE", -1.0, &[("G02", -2.0)]));
+        let ant = ReceiverAntenna::from_antex(&db, "DUAL", "NONE").unwrap();
+        assert!((ant.pcv_mm_at_zenith(1, 10.0).unwrap() - (-10.0)).abs() < 1e-9);
+        assert!((ant.pcv_mm_at_zenith(2, 10.0).unwrap() - (-20.0)).abs() < 1e-9);
     }
 
     #[test]
-    fn test_pcv_unknown_frequency_is_none() {
-        let db = db_from(&linear_block("TEST", "NONE"));
-        let ant = ReceiverAntenna::lookup(&db, "TEST", "NONE").unwrap();
-        assert!(ant.pcv_mm("G02", 30.0).is_none());
+    fn glonass_only_calibration_fills_band_grids_from_r01_r02() {
+        let mut b = String::new();
+        b.push_str(&ant_line("", "START OF ANTENNA"));
+        b.push_str(&ant_line(&format!("{:<40}", "GLO_ONLY"), "TYPE / SERIAL NO"));
+        b.push_str(&ant_line("     0.0", "DAZI"));
+        b.push_str(&ant_line("     0.0  18.0   1.0", "ZEN1 / ZEN2 / DZEN"));
+        for (code, slope) in [("R01", -1.0), ("R02", -2.0)] {
+            b.push_str(&ant_line(&format!("   {code}"), "START OF FREQUENCY"));
+            b.push_str(&ant_line("      0.00      0.00      5.00", "NORTH / EAST / UP"));
+            let row: Vec<String> = (0..=18).map(|i| format!("{:>6.2}", slope * i as f64)).collect();
+            b.push_str(&format!("   NOAZI{}\n", row.join(" ")));
+            b.push_str(&ant_line("", "END OF FREQUENCY"));
+        }
+        b.push_str(&ant_line("", "END OF ANTENNA"));
+        let db = db_from(&b);
+        let ant = ReceiverAntenna::from_antex(&db, "GLO_ONLY", "NONE").unwrap();
+        assert!((ant.pcv_mm_at_zenith(1, 5.0).unwrap() - (-5.0)).abs() < 1e-9);
+        assert!((ant.pcv_mm_at_zenith(2, 5.0).unwrap() - (-10.0)).abs() < 1e-9);
     }
 
+    /// ANTEX tabulates NORTH/EAST/UP; `pco_enu_mm` must be reordered to
+    /// east/north/up.
     #[test]
-    fn test_frequency_code_mapping() {
+    fn pco_enu_reorders_antex_north_east_up_columns() {
+        let db = db_from(&pco_block("PCOORD"));
+        let ant = ReceiverAntenna::from_antex(&db, "PCOORD", "NONE").unwrap();
+        assert_eq!(ant.pco_enu_mm, [2.0, 1.0, 3.0]);
+    }
+
+    /// A calibration with only a PCO (no NOAZI row) loads fine and its
+    /// zenith interpolation is `None` rather than a wrong value.
+    #[test]
+    fn calibration_without_pcv_table_yields_none_interpolation() {
+        let db = db_from(&pco_only_block("PCOONLY"));
+        let ant = ReceiverAntenna::from_antex(&db, "PCOONLY", "NONE").unwrap();
+        assert_eq!(ant.pco_enu_mm, [2.0, 1.0, 3.0]);
+        assert!(ant.pcv_l1_grid.is_empty());
+        assert!(ant.pcv_mm_at_zenith(1, 10.0).is_none());
+        assert!(interp_grid(&[], 0.0, 5.0, 10.0).is_none());
+    }
+
+    // ------------------------------------------------------------------
+    // Frequency-code mapping and DD correction math
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn frequency_code_mapping() {
         assert_eq!(frequency_code(Constellation::Gps, 1).as_deref(), Some("G01"));
         assert_eq!(frequency_code(Constellation::Gps, 2).as_deref(), Some("G02"));
         assert_eq!(frequency_code(Constellation::Gps, 5).as_deref(), Some("G05"));
@@ -263,120 +491,108 @@ mod tests {
     }
 
     #[test]
-    fn test_dd_correction_zero_for_same_antenna() {
-        let db = db_from(&linear_block("SAME", "NONE"));
-        let a = ReceiverAntenna::lookup(&db, "SAME", "NONE").unwrap();
+    fn single_token_type_requires_none_radome() {
+        let db = db_from(&ramp_block("AOAD/M_T", "NONE", -1.0, &[]));
+        assert!(ReceiverAntenna::from_antex(&db, "AOAD/M_T", "NONE").is_some());
+        assert!(ReceiverAntenna::from_antex(&db, "AOAD/M_T", "SCIT").is_none());
+    }
+
+    #[test]
+    fn dd_correction_zero_for_same_antenna() {
+        let db = db_from(&ramp_block("SAME", "NONE", -1.0, &[]));
+        let a = ReceiverAntenna::from_antex(&db, "SAME", "NONE").unwrap();
         let corr = compute_dd_pcv_correction(&a, &a, "G01", 0.2618, 0.7854);
         assert!(corr.abs() < 1e-12);
     }
 
     #[test]
-    fn test_dd_correction_antisymmetric() {
-        let db = db_from(&format!(
-            "{}{}",
-            linear_block("ANT_A", "NONE"),
-            linear_block_sloped("ANT_B", "NONE", -2.0)
-        ));
-        let a = ReceiverAntenna::lookup(&db, "ANT_A", "NONE").unwrap();
-        let b = ReceiverAntenna::lookup(&db, "ANT_B", "NONE").unwrap();
+    fn dd_correction_is_antisymmetric_in_station_order() {
+        let content = ramp_block("ANT_A", "NONE", -1.0, &[])
+            + &ramp_block("ANT_B", "NONE", -2.0, &[]);
+        let db = db_from(&content);
+        let a = ReceiverAntenna::from_antex(&db, "ANT_A", "NONE").unwrap();
+        let b = ReceiverAntenna::from_antex(&db, "ANT_B", "NONE").unwrap();
         // 80 deg elevation -> zenith 10 (grid node), 50 deg -> zenith 40
         // clamps to the last node at 18 deg. Slopes -1 vs -2 mm/deg:
         // [-10-(-18)] - [-20-(-36)] = 8 - 16 = -8 mm.
-        let ab = compute_dd_pcv_correction(&a, &b, "G01", 80f64.to_radians(), 50f64.to_radians());
-        let ba = compute_dd_pcv_correction(&b, &a, "G01", 80f64.to_radians(), 50f64.to_radians());
+        let el_s = 80f64.to_radians();
+        let el_r = 50f64.to_radians();
+        let ab = compute_dd_pcv_correction(&a, &b, "G01", el_s, el_r);
+        let ba = compute_dd_pcv_correction(&b, &a, "G01", el_s, el_r);
         assert!((ab - (-0.008)).abs() < 1e-9, "ab={:.6}", ab);
-        assert!((ab + ba).abs() < 1e-12);
         assert!((ab + ba).abs() < 1e-12);
     }
 
     #[test]
-    fn test_dd_correction_zero_when_elevations_equal() {
-        let db = db_from(&format!("{}{}", linear_block("ANT_A", "NONE"), linear_block("ANT_B", "NONE")));
-        let a = ReceiverAntenna::lookup(&db, "ANT_A", "NONE").unwrap();
-        let b = ReceiverAntenna::lookup(&db, "ANT_B", "NONE").unwrap();
-        // Identical zenith angles cancel in every bracket of the DD.
+    fn dd_correction_vanishes_when_elevations_equal() {
+        let content = ramp_block("ANT_A", "NONE", -1.0, &[])
+            + &ramp_block("ANT_B", "NONE", -2.0, &[]);
+        let db = db_from(&content);
+        let a = ReceiverAntenna::from_antex(&db, "ANT_A", "NONE").unwrap();
+        let b = ReceiverAntenna::from_antex(&db, "ANT_B", "NONE").unwrap();
         assert_eq!(compute_dd_pcv_correction(&a, &b, "G01", 0.5, 0.5), 0.0);
     }
 
     #[test]
-    fn test_dd_correction_zero_when_frequency_missing_on_one_side() {
-        // ANT_B block has only G01; requesting G02 must yield 0, not a
+    fn dd_correction_zero_when_frequency_missing_on_one_side() {
+        // ANT_B has no G02 table; requesting G02 must yield 0 rather than a
         // one-sided rover-only correction.
-        let content = format!(
-            "{}{}",
-            linear_block("ANT_A", "NONE"),
-            linear_block("ANT_B", "NONE")
-        );
+        let content = ramp_block("ANT_A", "NONE", -1.0, &[("G02", -1.0)])
+            + &ramp_block("ANT_B", "NONE", -2.0, &[]);
         let db = db_from(&content);
-        let a = ReceiverAntenna::lookup(&db, "ANT_A", "NONE").unwrap();
-        let b = ReceiverAntenna::lookup(&db, "ANT_B", "NONE").unwrap();
+        let a = ReceiverAntenna::from_antex(&db, "ANT_A", "NONE").unwrap();
+        let b = ReceiverAntenna::from_antex(&db, "ANT_B", "NONE").unwrap();
         assert_eq!(compute_dd_pcv_correction(&a, &b, "G02", 0.2618, 0.7854), 0.0);
     }
 
-    /// Real-calibration smoke test: cross-family TRM59800.00 SCIT vs
-    /// ASH701945B_M SCIT on GPS L1 must be non-zero but millimetre-scale.
+    // ------------------------------------------------------------------
+    // Real-data cross-family behaviour
+    // ------------------------------------------------------------------
+
+    /// Cross-family TRM59800.00 SCIT vs ASH701945B_M SCIT on GPS L1:
+    /// non-zero but millimetre-scale, matching hand-computed grid values.
     #[test]
-    fn test_real_igs14_cross_family_magnitudes() {
-        let path = PathBuf::from("../../datasets/igs14.atx");
-        if !path.exists() {
-            return; // dataset not available in this checkout
-        }
-        let db = AntexDatabase::parse(&path).unwrap();
-        let trm = ReceiverAntenna::lookup(&db, "TRM59800.00", "SCIT").expect("TRM59800.00 SCIT");
-        let ash = ReceiverAntenna::lookup(&db, "ASH701945B_M", "SCIT").expect("ASH701945B_M SCIT");
-
-        // Reference satellite held at 40 deg elevation.
-        let d10 = compute_dd_pcv_correction(&trm, &ash, "G01", 10f64.to_radians(), 40f64.to_radians());
-        let d30 = compute_dd_pcv_correction(&trm, &ash, "G01", 30f64.to_radians(), 40f64.to_radians());
-        let d60 = compute_dd_pcv_correction(&trm, &ash, "G01", 60f64.to_radians(), 40f64.to_radians());
-
-        // Reference satellite held at 40 deg elevation. Hand-computed from
-        // the tabulated NOAZI grids (5 deg nodes, zen index = zen/5):
-        // SD(zen) = PCV_trm(zen) - PCV_ash(zen);
-        // SD(zen80) = +4.82 - (+3.03) = +1.79 mm -> d10 = 1.79 - 0.36;
-        // SD(zen60) = -6.45 - (-7.16) = +0.71 mm -> d30 = 0.71 - 0.36;
-        // SD(zen30) = -7.38 - (-7.18) = -0.20 mm -> d60 = -0.20 - 0.36;
-        // with SD(zen50, ref sat at 40 deg el) = -8.82 - (-9.18) = +0.36 mm.
-        assert!(d10.abs() > 1e-4 && d10.abs() < 0.02, "d10={:.6} m", d10);
-        assert!(d30.abs() > 1e-4 && d30.abs() < 0.02, "d30={:.6} m", d30);
-        assert!(d60.abs() > 1e-4 && d60.abs() < 0.02, "d60={:.6} m", d60);
-
-        // Exact grid-node values (metres).
+    fn real_cross_family_corrections_match_hand_computed_values() {
+        let Some(db) = real_db() else { return };
+        let trm = ReceiverAntenna::from_antex(&db, "TRM59800.00", "SCIT").unwrap();
+        let ash = ReceiverAntenna::from_antex(&db, "ASH701945B_M", "SCIT").unwrap();
+        let el_ref = 40f64.to_radians();
+        let d10 = compute_dd_pcv_correction(&trm, &ash, "G01", 10f64.to_radians(), el_ref);
+        let d30 = compute_dd_pcv_correction(&trm, &ash, "G01", 30f64.to_radians(), el_ref);
+        let d60 = compute_dd_pcv_correction(&trm, &ash, "G01", 60f64.to_radians(), el_ref);
+        // Hand-computed from the tabulated NOAZI grids (5 deg nodes):
+        // SD(zen) = PCV_trm(zen) - PCV_ash(zen); ref sat at 40 deg el ->
+        // zen50, SD(zen50) = -8.82 - (-9.18) = +0.36 mm.
+        // SD(zen80)=+1.79, SD(zen60)=+0.71, SD(zen30)=-0.20 mm.
         assert!((d10 - 0.00143).abs() < 1e-4, "d10={:.6}", d10);
         assert!((d30 - 0.00035).abs() < 1e-4, "d30={:.6}", d30);
         assert!((d60 - (-0.00056)).abs() < 1e-4, "d60={:.6}", d60);
+        for d in [d10, d30, d60] {
+            assert!(d.abs() > 1e-4 && d.abs() < 0.02, "magnitude {d:.6}");
+        }
     }
 
-    /// LEIAR20 LEIM vs TRM59800.00 SCIT diverges much more at high
-    /// elevation than the Ashtech pair (~4 mm single difference).
     #[test]
-    fn test_real_igs14_leiar_vs_trm() {
-        let path = PathBuf::from("../../datasets/igs14.atx");
-        if !path.exists() {
-            return;
-        }
-        let db = AntexDatabase::parse(&path).unwrap();
-        let trm = ReceiverAntenna::lookup(&db, "TRM59800.00", "SCIT").unwrap();
-        let lei = ReceiverAntenna::lookup(&db, "LEIAR20", "LEIM").unwrap();
+    fn real_leiar_vs_trm_single_difference() {
+        let Some(db) = real_db() else { return };
+        let trm = ReceiverAntenna::from_antex(&db, "TRM59800.00", "SCIT").unwrap();
+        let lei = ReceiverAntenna::from_antex(&db, "LEIAR20", "LEIM").unwrap();
         // Single difference at 60 deg elevation (zen 30):
         // -2.26 - (-7.38) = +5.12 mm.
         let sd = lei.pcv_mm("G01", 30.0).unwrap() - trm.pcv_mm("G01", 30.0).unwrap();
         assert!((sd - 5.12).abs() < 1e-3, "sd={:.3} mm", sd);
     }
 
-    /// Frequency dependence: L2 correction differs from L1 for the same
-    /// geometry (both calibrations tabulate G02).
+    /// Frequency dependence: the L2 correction differs from L1 for the
+    /// same geometry (both calibrations tabulate G02).
     #[test]
-    fn test_real_igs14_frequency_dependence() {
-        let path = PathBuf::from("../../datasets/igs14.atx");
-        if !path.exists() {
-            return;
-        }
-        let db = AntexDatabase::parse(&path).unwrap();
-        let trm = ReceiverAntenna::lookup(&db, "TRM59800.00", "SCIT").unwrap();
-        let ash = ReceiverAntenna::lookup(&db, "ASH701945B_M", "SCIT").unwrap();
-        let l1 = compute_dd_pcv_correction(&trm, &ash, "G01", 10f64.to_radians(), 40f64.to_radians());
-        let l2 = compute_dd_pcv_correction(&trm, &ash, "G02", 10f64.to_radians(), 40f64.to_radians());
+    fn real_frequency_dependence_l1_vs_l2() {
+        let Some(db) = real_db() else { return };
+        let trm = ReceiverAntenna::from_antex(&db, "TRM59800.00", "SCIT").unwrap();
+        let ash = ReceiverAntenna::from_antex(&db, "ASH701945B_M", "SCIT").unwrap();
+        let els = (10f64.to_radians(), 40f64.to_radians());
+        let l1 = compute_dd_pcv_correction(&trm, &ash, "G01", els.0, els.1);
+        let l2 = compute_dd_pcv_correction(&trm, &ash, "G02", els.0, els.1);
         assert!((l1 - l2).abs() > 1e-4, "L1={:.6} L2={:.6}", l1, l2);
     }
 }

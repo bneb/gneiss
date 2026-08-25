@@ -44,6 +44,21 @@ pub struct DoubleDiffMeasurement {
     pub dgrad_e_rov: f64,
     /// Solid Earth tide DD correction (metres, LOS-projected).
     pub tide_dd_m: f64,
+    /// Differential receiver-antenna PCV embedded in this DD pair
+    /// (metres): `[PCV_rov(z_sat) - PCV_rov(z_ref)] -
+    /// [PCV_base(z_sat) - PCV_base(z_ref)]`. Subtracted from the carrier
+    /// phase by [`pcv_corrected_cp`] before any model comparison; zero
+    /// unless receiver calibrations are loaded and `GNEISS_RECV_PCV=1`.
+    pub dd_pcv_m: f64,
+}
+
+/// DD phase observation with the embedded differential receiver-PCV
+/// signature removed (`cp - dd_pcv_m / lambda` cycles), matching the
+/// phase-windup convention. All consumers of [`DoubleDiffMeasurement::
+/// dd_cp_cycles`] must go through here so the correction is applied
+/// exactly once per comparison.
+pub(crate) fn pcv_corrected_cp(m: &DoubleDiffMeasurement) -> Option<f64> {
+    m.dd_cp_cycles.map(|cp| cp - m.dd_pcv_m / m.lambda)
 }
 
 
@@ -199,7 +214,7 @@ fn append_dd_meas_rows(
     y_vals.push(pr_y);
     r_diag.push(robust_inflate(pr_y, pr_r));
 
-    if let (Some(cp_obs), Some(amb_idx)) = (m.dd_cp_cycles, state.get_amb_idx(&m.key)) {
+    if let (Some(cp_obs), Some(amb_idx)) = (pcv_corrected_cp(m), state.get_amb_idx(&m.key)) {
         let amb_val = x_current[amb_idx];
         let pred_cp = geom_dd / m.lambda + amb_val
             + (m.dm_wet_rov * zwd_val + grad_pr) / m.lambda;
@@ -296,7 +311,7 @@ pub fn phase_innovation_outliers(
 ) -> Vec<DoubleDiffKey> {
     let mut out = Vec::new();
     for m in measurements {
-        let Some(cp_obs) = m.dd_cp_cycles else { continue };
+        let Some(cp_obs) = pcv_corrected_cp(m) else { continue };
         let Some(amb_idx) = state.get_amb_idx(&m.key) else { continue };
         let cur_pos = state.pos_ecef;
         let r_sat = (m.sat_pos - cur_pos).norm();
@@ -367,6 +382,7 @@ mod tests {
             dgrad_e_rov: 0.0,
                 tide_dd_m: 0.0,
             dm_wet_rov: 0.0,
+            dd_pcv_m: 0.0,
         }];
 
         let res = iekf_update(&mut state, &meas);
@@ -412,6 +428,7 @@ mod tests {
                 dgrad_n_rov: 0.0,
                 dgrad_e_rov: 0.0,
                 tide_dd_m: 0.0,
+                dd_pcv_m: 0.0,
             });
         }
 
@@ -490,6 +507,7 @@ mod tests {
                     dgrad_n_rov: 0.0,
                     dgrad_e_rov: 0.0,
                 tide_dd_m: 0.0,
+                dd_pcv_m: 0.0,
                 });
             }
         }
@@ -538,6 +556,79 @@ mod tests {
         assert!(out.is_empty(), "common-mode error flagged pairs: {:?}", out);
     }
 
+    // --- Receiver-antenna PCV correction (TDD) ---------------------------
+
+    /// Minimal single-pair fixture: state parked on the truth position,
+    /// one ambiguity initialised, PCV signature already baked into the
+    /// observed phase.
+    fn pcv_fixture(dd_pcv_m: f64) -> (RtkState, DoubleDiffMeasurement) {
+        let truth = Vector3::new(100.0, 200.0, 300.0);
+        let mut state = RtkState::new(truth, GpsTime::new(2000, 100.0));
+        let key = DoubleDiffKey { constellation_id: 0, sat: 2, ref_sat: 1, freq_band: 1 };
+        state.ensure_ambiguity(key, 7.25, 100.0);
+        let m = DoubleDiffMeasurement {
+            key,
+            dd_pr_m: 10.0,
+            dd_cp_cycles: Some(55.0),
+            sat_pos: truth + Vector3::new(1.2e7, 0.4e7, 1.8e7),
+            ref_pos: truth + Vector3::new(-0.6e7, 1.9e7, 1.1e7),
+            base_pos: truth,
+            lambda: 0.190,
+            pr_var_m2: 0.04,
+            cp_var_cycles2: 1e-4,
+            dm_wet_rov: 0.0,
+            dgrad_n_rov: 0.0,
+            dgrad_e_rov: 0.0,
+            tide_dd_m: 0.0,
+            dd_pcv_m,
+        };
+        (state, m)
+    }
+
+    #[test]
+    fn pcv_corrected_cp_subtracts_pcv_over_lambda() {
+        let (_, m) = pcv_fixture(0.008);
+        let corrected = pcv_corrected_cp(&m).expect("phase present");
+        assert!(
+            (corrected - (55.0 - 0.008 / 0.190)).abs() < 1e-12,
+            "corrected={corrected}"
+        );
+    }
+
+    #[test]
+    fn pcv_corrected_cp_zero_pcv_is_identity() {
+        let (_, m) = pcv_fixture(0.0);
+        assert_eq!(pcv_corrected_cp(&m), Some(55.0));
+    }
+
+    #[test]
+    fn pcv_corrected_cp_passes_none_through() {
+        let (_, mut m) = pcv_fixture(0.008);
+        m.dd_cp_cycles = None;
+        assert_eq!(pcv_corrected_cp(&m), None);
+    }
+
+    /// The phase innovation must decrease by exactly `dd_pcv_m / lambda`
+    /// when the correction is enabled: the embedded antenna signature is
+    /// removed before model comparison.
+    #[test]
+    fn phase_innovation_shifts_exactly_by_dd_pcv_over_lambda() {
+        let pcv_m = 0.008_f64;
+        let (state_off, m_off) = pcv_fixture(0.0);
+        let (state_on, m_on) = pcv_fixture(pcv_m);
+        let x = |s: &RtkState| s.to_dvector();
+        let (_, y_off, _) = build_measurement_system(&state_off, &x(&state_off), &[m_off]);
+        let (_, y_on, _) = build_measurement_system(&state_on, &x(&state_on), &[m_on]);
+        assert_eq!(y_off.len(), 2, "code + phase rows expected");
+        assert_eq!(y_on.len(), 2);
+        let shift = y_off[1] - y_on[1];
+        let expected = pcv_m / 0.190;
+        assert!(
+            (shift - expected).abs() < 1e-12,
+            "shift={shift} expected={expected}"
+        );
+    }
+
 }
 /// Per-pair iono-free residual outlier screen over a fixed ambiguity set.
 /// For each band-1 pair with band-2 phases and fixed integers on both
@@ -569,9 +660,9 @@ pub fn if_residual_outliers(
         if m.key.freq_band != 1 {
             continue;
         }
-        let Some(cp1) = m.dd_cp_cycles else { continue };
+        let Some(cp1) = pcv_corrected_cp(m) else { continue };
         let Some(m2) = b2.get(&m.key) else { continue };
-        let Some(cp2) = m2.dd_cp_cycles else { continue };
+        let Some(cp2) = pcv_corrected_cp(m2) else { continue };
         let k2 = DoubleDiffKey { freq_band: 2, ..m.key };
         let (Some(n1), Some(n2)) = (fixed_n1.get(&m.key), fixed_n2.get(&k2)) else {
             continue;

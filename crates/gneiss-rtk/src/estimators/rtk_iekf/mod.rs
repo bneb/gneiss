@@ -1,6 +1,7 @@
 //! Double-Difference Iterated Extended Kalman Filter (DD-IEKF) and RTS Smoother Engine.
 
 pub mod ar;
+pub mod ar_gate;
 pub mod iono_free;
 pub mod mw;
 pub mod predict;
@@ -11,6 +12,7 @@ pub mod widelane;
 
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::OnceLock;
 
 use nalgebra::Vector3;
 
@@ -34,6 +36,23 @@ struct DdMeasurements {
     pub dd: Vec<DoubleDiffMeasurement>,
     pub iono_free: Vec<iono_free::IonoFreeMeasurement>,
     pub active_keys: Vec<DoubleDiffKey>,
+}
+
+/// Opt-in gate for the differential receiver-PCV correction: set
+/// `GNEISS_RECV_PCV=1` (exactly `1` after trimming; loading calibrations
+/// separately stays gated by `GNEISS_PCV` in the eval binaries).
+static RECV_PCV_ENABLED: OnceLock<bool> = OnceLock::new();
+
+/// Pure mapping of the `GNEISS_RECV_PCV` env value to the gate state.
+fn recv_pcv_gate_enabled(env_value: Option<&str>) -> bool {
+    env_value.is_some_and(|v| v.trim() == "1")
+}
+
+/// Process-wide gate state, read from the environment once.
+fn recv_pcv_enabled() -> bool {
+    *RECV_PCV_ENABLED.get_or_init(|| {
+        recv_pcv_gate_enabled(std::env::var("GNEISS_RECV_PCV").ok().as_deref())
+    })
 }
 
 /// Double-Difference IEKF and RTS Smoother engine for RTK/PPK.
@@ -102,9 +121,23 @@ pub struct GnssRtkIekf {
     /// every DD phase observation before ambiguity estimation. Same-family
     /// pairs cancel to ~zero; cross-family pairs carry mm-level signatures.
     pub receiver_pcv: Option<(Arc<ReceiverAntenna>, Arc<ReceiverAntenna>)>,
+    /// Master gate for the opt-in AR-quality techniques in [`ar_gate`]
+    /// (AR elevation mask + phase-code coherency bias init). Enabled by env
+    /// `GNEISS_AR_GATE=1`; default off preserves legacy behaviour exactly.
+    pub ar_gate: bool,
+    /// Elevation cut-off (rad) for AR participation when `ar_gate` is on.
+    /// Defaults to `min_elevation_rad`, i.e. no additional restriction.
+    pub ar_elevation_mask_rad: f64,
+    /// This epoch's code-minus-phase divergences `(freq_band, cycles)` of
+    /// the pairs tracked so far, used to coherently seed newly initialised
+    /// ambiguities when `ar_gate` is on. Cleared each epoch.
+    code_phase_div: Vec<(u8, f64)>,
 }
 
 impl GnssRtkIekf {
+    /// Default measurement elevation cut-off: 10 degrees.
+    const DEFAULT_MIN_ELEVATION_RAD: f64 = 0.1745;
+
     /// Create a new RTK IEKF solver.
     pub fn new(initial_pos: Vector3<f64>, start_time: GpsTime, q_accel: f64) -> Self {
         Self {
@@ -112,7 +145,7 @@ impl GnssRtkIekf {
             history: Vec::new(),
             q_accel,
             ref_sats: HashMap::new(),
-            min_elevation_rad: 0.1745, // 10 degrees
+            min_elevation_rad: Self::DEFAULT_MIN_ELEVATION_RAD,
             target_pf: 0.001,
             slip_detector: crate::post_process::screening::CycleSlipDetector::new(),
             base_slip_detector: crate::post_process::screening::CycleSlipDetector::new(),
@@ -133,6 +166,9 @@ impl GnssRtkIekf {
 
             wl_tracker: mw::WidelaneTracker::default(),
             receiver_pcv: None,
+            ar_gate: std::env::var("GNEISS_AR_GATE").is_ok_and(|v| v == "1"),
+            ar_elevation_mask_rad: Self::DEFAULT_MIN_ELEVATION_RAD,
+            code_phase_div: Vec::new(),
         }
     }
 
@@ -189,7 +225,7 @@ impl GnssRtkIekf {
             );
             for key in outliers {
                 if let Some(m) = dd_meas.dd.iter().find(|m| m.key == key) {
-                    if let Some(cp) = m.dd_cp_cycles {
+                    if let Some(cp) = update::pcv_corrected_cp(m) {
                         let seed = cp - m.dd_pr_m / m.lambda;
                         self.state.reset_ambiguity(&key, seed, 100.0);
                     }
@@ -233,7 +269,20 @@ impl GnssRtkIekf {
                 .collect();
             self.state.ambiguities.retain(|(k, _)| eligible.contains(k));
         }
-        let mut ar_res = ar::resolve_ambiguities(&self.state, 3, self.target_pf);
+        // Opt-in AR elevation mask (GNEISS_AR_GATE): resolve integers only
+        // from pairs whose both members sit above the higher AR cut-off.
+        // Non-destructive: only the LAMBDA input is restricted, the live
+        // state keeps every float so re-risen pairs resume where they left.
+        let ar_view_owned;
+        let ar_view = if self.ar_gate && self.ar_elevation_mask_rad > self.min_elevation_rad {
+            ar_view_owned = ar_gate::elevation_filtered_view(
+                &self.state, &dd_meas.dd, self.ar_elevation_mask_rad,
+            );
+            &ar_view_owned
+        } else {
+            &self.state
+        };
+        let mut ar_res = ar::resolve_ambiguities(ar_view, 3, self.target_pf);
         if self.widelane_ar {
             // A FAR fix contradicting a converged MW wide lane is a
             // confidently-wrong fix (slow iono drift dragged the per-band
@@ -347,6 +396,8 @@ impl GnssRtkIekf {
         base_pos: Vector3<f64>,
         ephems: &[Ephemeris],
     ) -> Result<DdMeasurements, String> {
+        // Divergences are a per-epoch sample: rebuilt from scratch each time.
+        self.code_phase_div.clear();
         let sat_info = extract_sat_positions(rover, ephems, self.state.pos_ecef, self.min_elevation_rad, self.precise_orbits.as_ref());
         let mut meas_list = Vec::new();
         let mut if_meas = Vec::new();
@@ -404,7 +455,7 @@ impl GnssRtkIekf {
                         if let Some(m) = self.build_single_dd_pair(
                             ephems, *sat_id, ref_sat_id, *sat_pos, ref_pos, base_pos, rs, bs, r_rov, r_bas, freq_band,
                         ) {
-                            if let Some(cp) = m.dd_cp_cycles {
+                            if let Some(cp) = update::pcv_corrected_cp(&m) {
                                 pair_cp.insert(freq_band, cp);
                             }
                             *self.pair_epochs.entry(m.key).or_insert(0) += 1;
@@ -546,13 +597,12 @@ impl GnssRtkIekf {
             || rov_ref.get_lli(freq_band).is_some_and(|l| (l & 1) != 0)
             || arc_changed;
 
-        // Receiver antenna PCV: strip the differential signature before the
-        // observation seeds an ambiguity or enters the measurement update.
-        let dd_cp = self.strip_receiver_pcv(dd_cp, sat_id, freq_band, lambda, sat_pos, ref_pos.into());
-
-        self.update_dd_ambiguity(key, dd_cp, dd_pr, lambda, lli_slip);
-
-        Some(DoubleDiffMeasurement {
+        // Receiver antenna PCV: the differential signature travels on the
+        // measurement and is removed by every consumer through
+        // pcv_corrected_cp, including the ambiguity seed below.
+        let dd_pcv_m =
+            self.receiver_dd_pcv_m(sat_id, freq_band, sat_pos, ref_pos.into(), recv_pcv_enabled());
+        let meas = DoubleDiffMeasurement {
             key,
             dd_pr_m: dd_pr,
             dd_cp_cycles: dd_cp,
@@ -566,40 +616,46 @@ impl GnssRtkIekf {
             dgrad_n_rov,
             dgrad_e_rov,
             tide_dd_m,
-        })
+            dd_pcv_m,
+        };
+
+        self.update_dd_ambiguity(key, update::pcv_corrected_cp(&meas), dd_pr, lambda, lli_slip);
+
+        Some(meas)
     }
 
-    /// Remove the differential receiver PCV from one DD phase observation.
+    /// Differential receiver-PCV carried by one DD pair (metres).
     ///
-    /// `phi_obs = rho/lam + N + phi_PCV(zenith)`, so the embedded antenna
-    /// signature is subtracted (`cp - corr/lambda`), matching the windup
-    /// convention. Elevations are computed in the rover frame and reused for
-    /// both stations: baseline << orbit altitude keeps the station-to-station
-    /// elevation difference sub-mm in PCV terms. No-op unless both rover and
-    /// base calibrations are loaded; unknown frequency codes also no-op.
-    fn strip_receiver_pcv(
+    /// `phi_obs = rho/lam + N + phi_PCV(zenith)`, so the measurement
+    /// stores its embedded antenna signature in `dd_pcv_m` and every
+    /// consumer removes it via [`update::pcv_corrected_cp`] (`cp -
+    /// pcv/lambda`, matching the windup convention). Elevations are
+    /// computed in the rover frame and reused for both stations:
+    /// baseline << orbit altitude keeps station-to-station elevation
+    /// differences sub-mm in PCV terms. Returns 0.0 — a no-op correction
+    /// — unless calibrations are loaded, the gate is on, and the
+    /// frequency is known.
+    fn receiver_dd_pcv_m(
         &self,
-        dd_cp: Option<f64>,
         sat_id: gneiss_core::sat::SatelliteId,
         freq_band: u8,
-        lambda: f64,
         sat_pos: Vector3<f64>,
         ref_pos: Vector3<f64>,
-    ) -> Option<f64> {
-        let cp = dd_cp?;
-        let (rov, bas) = match &self.receiver_pcv {
-            Some(pair) => pair,
-            None => return dd_cp,
+        gate_enabled: bool,
+    ) -> f64 {
+        if !gate_enabled {
+            return 0.0;
+        }
+        let Some((rov, bas)) = &self.receiver_pcv else {
+            return 0.0;
         };
-        let code = frequency_code(sat_id.constellation, freq_band)?;
+        let Some(code) = frequency_code(sat_id.constellation, freq_band) else {
+            return 0.0;
+        };
         let llh = gneiss_core::coords::ecef_to_llh(self.state.pos_ecef);
         let (_az_s, el_s) = gneiss_core::coords::az_el(llh, self.state.pos_ecef, sat_pos);
         let (_az_r, el_r) = gneiss_core::coords::az_el(llh, self.state.pos_ecef, ref_pos);
-        let pcv_m = compute_dd_pcv_correction(rov, bas, &code, el_s, el_r);
-        if pcv_m == 0.0 {
-            return Some(cp);
-        }
-        Some(cp - pcv_m / lambda)
+        compute_dd_pcv_correction(rov, bas, &code, el_s, el_r)
     }
 
     /// Phase innovations with sensitivity to the rover ZWD residual.
@@ -611,7 +667,7 @@ impl GnssRtkIekf {
         let cur = self.state.pos_ecef;
         let mut out = Vec::new();
         for m in meas {
-            let Some(cp) = m.dd_cp_cycles else { continue };
+            let Some(cp) = update::pcv_corrected_cp(m) else { continue };
             let Some(ai) = self.state.get_amb_idx(&m.key) else { continue };
             let rs = (m.sat_pos - cur).norm();
             let rr = (m.ref_pos - cur).norm();
@@ -684,12 +740,42 @@ impl GnssRtkIekf {
         if std::env::var("WL_TRACE").is_ok() && init_amb.abs() > 1e5 {
             eprintln!("BAD-SEED tow-file key={:?} init_amb={:.3e}", key, init_amb);
         }
-        if self.state.get_amb_idx(&key).is_some() {
+        if let Some(abs_idx) = self.state.get_amb_idx(&key) {
+            // Established pair: record its code-minus-phase divergence
+            // (raw seed minus converged float) as this epoch's coherency
+            // sample before any slip reset.
+            let rel = abs_idx - self.state.amb_offset();
+            let divergence = init_amb - self.state.ambiguities[rel].1;
+            self.record_code_phase_divergence(key.freq_band, dd_cp.is_some(), divergence);
             if lli_slip {
                 self.state.reset_ambiguity(&key, init_amb, 100.0);
             }
+            return;
+        }
+        // First epoch for this pair (absent from the state == never
+        // initialised; re-risen pairs were dropped by retain and count as
+        // new again). Under the gate, de-bias the raw code-minus-phase seed
+        // by the median divergence of the pairs already tracked this epoch,
+        // so the pair's code multipath/iono residual does not enter the
+        // filter as a step in the phase innovation.
+        let coherent = self.ar_gate && dd_cp.is_some();
+        let offset = if coherent {
+            ar_gate::coherence_offset(key.freq_band, &self.code_phase_div)
         } else {
-            self.state.ensure_ambiguity(key, init_amb, 100.0);
+            0.0
+        };
+        if coherent {
+            // The seeded pair joins this epoch's sample set so later new
+            // pairs on the same band see a stable median.
+            self.code_phase_div.push((key.freq_band, offset));
+        }
+        self.state.ensure_ambiguity(key, init_amb - offset, 100.0);
+    }
+
+    /// Record one per-epoch coherency sample when the gate is active.
+    fn record_code_phase_divergence(&mut self, band: u8, has_phase: bool, divergence: f64) {
+        if self.ar_gate && has_phase {
+            self.code_phase_div.push((band, divergence));
         }
     }
 
@@ -799,6 +885,31 @@ mod tests {
     use super::*;
     use crate::sim::generator::{generate_simulation_dataset, SimulationConfig};
 
+    fn test_engine(start: GpsTime) -> GnssRtkIekf {
+        GnssRtkIekf::new(Vector3::new(1.0, 2.0, 3.0), start, 1.0)
+    }
+
+    fn dd_key(sat: u16, band: u8) -> DoubleDiffKey {
+        DoubleDiffKey { constellation_id: 0, sat, ref_sat: 1, freq_band: band }
+    }
+
+    /// Run the sim dataset through `engine`, returning per-epoch fix flags
+    /// and positions for cross-run comparisons.
+    fn run_sim(
+        engine: &mut GnssRtkIekf,
+        sim: &crate::sim::generator::SimulationDataset,
+        base: Vector3<f64>,
+    ) -> Vec<(bool, Vector3<f64>)> {
+        let mut out = Vec::new();
+        for i in 0..sim.rover_epochs.len() {
+            let s = engine.process_epoch(
+                &sim.rover_epochs[i], &sim.base_epochs[i], base, &sim.ephemerides,
+            ).expect("epoch must process");
+            out.push((s.is_fixed, s.position_ecef));
+        }
+        out
+    }
+
     #[test]
     fn test_gnss_rtk_iekf_runs_on_simulated_dataset() {
         let cfg = SimulationConfig {
@@ -856,6 +967,243 @@ mod tests {
         ]);
         // Empty input stays empty.
         assert!(GnssRtkIekf::select_constellations(&[], true).is_empty());
+    }
+
+    // ---- GNEISS_AR_GATE: technique 1, AR elevation mask -------------------
+
+    #[test]
+    fn test_gate_defaults_off_and_mask_defaults_to_measurement_mask() {
+        let eng = test_engine(GpsTime::new(2200, 0.0));
+        assert!(!eng.ar_gate, "gate must default off without env");
+        assert_eq!(eng.ar_elevation_mask_rad, eng.min_elevation_rad);
+        assert!(eng.code_phase_div.is_empty());
+    }
+
+    #[test]
+    fn test_ar_elevation_mask_unit_view_through_engine() {
+        let mut eng = test_engine(GpsTime::new(2200, 100.0));
+        eng.ar_gate = true;
+        // Realistic rover ECEF so az/el geometry is meaningful.
+        eng.state.pos_ecef = Vector3::new(-3961904.4341, 3348994.2660, 3698211.7067);
+        let hi = dd_key(2, 1);
+        let lo = dd_key(3, 1);
+        eng.state.ensure_ambiguity(hi, 10.5, 4.0);
+        eng.state.ensure_ambiguity(lo, 20.5, 9.0);
+        let up = eng.state.pos_ecef.normalize();
+        let east = Vector3::new(-up.z, 0.0, up.x).normalize();
+        let mk_meas = |k: DoubleDiffKey, dir: Vector3<f64>| update::DoubleDiffMeasurement {
+            key: k,
+            dd_pr_m: 0.0,
+            dd_cp_cycles: None,
+            sat_pos: eng.state.pos_ecef + dir * 2.4e7,
+            ref_pos: eng.state.pos_ecef + up * 2.6e7,
+            base_pos: eng.state.pos_ecef,
+            lambda: 0.19,
+            pr_var_m2: 1.0,
+            cp_var_cycles2: 1.0,
+            dm_wet_rov: 0.0,
+            dgrad_n_rov: 0.0,
+            dgrad_e_rov: 0.0,
+            tide_dd_m: 0.0,
+            dd_pcv_m: 0.0,
+        };
+        let meas = vec![mk_meas(hi, up), mk_meas(lo, east)];
+        // 15 deg AR mask: horizon satellite must not reach LAMBDA.
+        eng.ar_elevation_mask_rad = 0.2618;
+        let view = ar_gate::elevation_filtered_view(&eng.state, &meas, eng.ar_elevation_mask_rad);
+        assert_eq!(view.ambiguities.len(), 1);
+        assert_eq!(view.ambiguities[0].0, hi);
+        // Non-destructive: live state keeps both floats.
+        assert_eq!(eng.state.ambiguities.len(), 2);
+    }
+
+    #[test]
+    fn test_gate_off_extreme_ar_mask_is_ignored_end_to_end() {
+        let cfg = SimulationConfig { duration_s: 10.0, ..Default::default() };
+        let sim = generate_simulation_dataset(&cfg);
+        // Gate off -> ar_elevation_mask_rad must be inert: fixes still occur.
+        let mut eng = GnssRtkIekf::new(cfg.base_ecef, sim.rover_epochs[0].time, 1.0);
+        eng.ar_elevation_mask_rad = 1.55;
+        let res = run_sim(&mut eng, &sim, cfg.base_ecef);
+        let fixed = res.iter().filter(|(f, _)| *f).count();
+        assert!(fixed >= 5, "legacy path ignores the AR mask, got {fixed} fixes");
+    }
+
+    #[test]
+    fn test_gate_on_extreme_ar_mask_suppresses_all_fixes() {
+        let cfg = SimulationConfig { duration_s: 10.0, ..Default::default() };
+        let sim = generate_simulation_dataset(&cfg);
+        // ~89 deg mask excludes every pair from LAMBDA -> float-only output.
+        let mut eng = GnssRtkIekf::new(cfg.base_ecef, sim.rover_epochs[0].time, 1.0);
+        eng.ar_gate = true;
+        eng.ar_elevation_mask_rad = 1.55;
+        let res = run_sim(&mut eng, &sim, cfg.base_ecef);
+        assert!(
+            res.iter().all(|(f, _)| !f),
+            "AR mask must exclude all pairs; unexpected fix"
+        );
+    }
+
+    #[test]
+    fn test_gate_on_with_default_masks_still_fixes_sim() {
+        let cfg = SimulationConfig { duration_s: 10.0, ..Default::default() };
+        let sim = generate_simulation_dataset(&cfg);
+        let mut eng = GnssRtkIekf::new(cfg.base_ecef, sim.rover_epochs[0].time, 1.0);
+        eng.ar_gate = true;
+        let mut fixed = 0;
+        for i in 0..sim.rover_epochs.len() {
+            let s = eng.process_epoch(
+                &sim.rover_epochs[i], &sim.base_epochs[i], cfg.base_ecef, &sim.ephemerides,
+            ).expect("epoch must process");
+            if s.is_fixed {
+                fixed += 1;
+                let err = (s.position_ecef - sim.truth_positions[i].1).norm();
+                assert!(err < 0.05, "gated fixed error {err:.4} m exceeds 5 cm");
+            }
+        }
+        assert!(fixed >= 5, "gate on with defaults should still fix, got {fixed}");
+    }
+
+    // ---- GNEISS_AR_GATE: technique 2, phase-code coherency bias init ------
+
+    #[test]
+    fn test_new_bias_init_gate_off_keeps_raw_code_phase_seed() {
+        let mut eng = test_engine(GpsTime::new(2200, 100.0));
+        let lambda = 0.2_f64;
+        let raw = 105.75 - 100.0 / lambda;
+        eng.update_dd_ambiguity(dd_key(5, 1), Some(105.75), 100.0, lambda, false);
+        assert_eq!(eng.state.get_amb_idx(&dd_key(5, 1)), Some(6));
+        assert!((eng.state.ambiguities[0].1 - raw).abs() < 1e-12, "seed must equal raw init");
+        assert!(eng.code_phase_div.is_empty(), "no samples recorded when gate off");
+    }
+
+    #[test]
+    fn test_new_bias_init_applies_median_coherency_offset() {
+        let mut eng = test_engine(GpsTime::new(2200, 100.0));
+        eng.ar_gate = true;
+        // Established band-1 pair plus this epoch's divergence samples:
+        // median over band 1 is 3.5; the band-2 sample must be ignored.
+        eng.state.ensure_ambiguity(dd_key(2, 1), 50.25, 100.0);
+        eng.code_phase_div = vec![(1, 2.5), (2, 100.0), (1, 3.5), (1, 4.5)];
+        let lambda = 0.2_f64;
+        let raw = 105.75 - 100.0 / lambda;
+        eng.update_dd_ambiguity(dd_key(5, 1), Some(105.75), 100.0, lambda, false);
+        let seeded = eng.state.ambiguities.iter().find(|(k, _)| *k == dd_key(5, 1)).unwrap().1;
+        assert!((seeded - (raw - 3.5)).abs() < 1e-12, "seed = raw − median(band-1 divergences)");
+        assert_eq!(eng.code_phase_div.len(), 5, "seeded pair joins the epoch's sample set");
+        assert_eq!(eng.code_phase_div.last().copied(), Some((1, 3.5)));
+    }
+
+    #[test]
+    fn test_new_bias_init_without_prior_samples_seeds_raw_under_gate() {
+        let mut eng = test_engine(GpsTime::new(2200, 100.0));
+        eng.ar_gate = true;
+        let lambda = 0.2_f64;
+        let raw = 105.75 - 100.0 / lambda;
+        eng.update_dd_ambiguity(dd_key(5, 1), Some(105.75), 100.0, lambda, false);
+        let seeded = eng.state.ambiguities[0].1;
+        assert!((seeded - raw).abs() < 1e-12, "no prior pairs -> no offset");
+        assert_eq!(eng.code_phase_div, vec![(1, 0.0)]);
+    }
+
+    #[test]
+    fn test_coherency_offset_never_crosses_frequency_bands() {
+        let mut eng = test_engine(GpsTime::new(2200, 100.0));
+        eng.ar_gate = true;
+        // Only band-2 samples exist; a new band-1 pair must seed raw.
+        eng.code_phase_div = vec![(2, 2.5), (2, 3.5)];
+        let lambda = 0.2_f64;
+        let raw = 105.75 - 100.0 / lambda;
+        eng.update_dd_ambiguity(dd_key(5, 1), Some(105.75), 100.0, lambda, false);
+        assert!((eng.state.ambiguities[0].1 - raw).abs() < 1e-12);
+    }
+
+    #[test]
+    fn test_slip_reset_stays_raw_even_under_gate() {
+        let mut eng = test_engine(GpsTime::new(2200, 100.0));
+        eng.ar_gate = true;
+        eng.state.ensure_ambiguity(dd_key(2, 1), 50.25, 100.0);
+        eng.code_phase_div = vec![(1, 2.5), (1, 3.5)];
+        let lambda = 0.2_f64;
+        let raw = 205.75 - 100.0 / lambda;
+        // Slip on an ESTABLISHED pair: legacy re-seed semantics preserved.
+        eng.update_dd_ambiguity(dd_key(2, 1), Some(205.75), 100.0, lambda, true);
+        assert!((eng.state.ambiguities[0].1 - raw).abs() < 1e-12);
+        assert_eq!(eng.code_phase_div.len(), 3, "established pair still contributes a sample");
+    }
+
+    // ---- GNEISS_AR_GATE: regression, gate off == exact legacy behaviour ---
+
+    #[test]
+    fn test_gate_disabled_run_matches_default_run_bit_for_bit() {
+        let cfg = SimulationConfig { duration_s: 10.0, ..Default::default() };
+        let sim = generate_simulation_dataset(&cfg);
+        let mut baseline = GnssRtkIekf::new(cfg.base_ecef, sim.rover_epochs[0].time, 1.0);
+        let mut gated = GnssRtkIekf::new(cfg.base_ecef, sim.rover_epochs[0].time, 1.0);
+        gated.ar_gate = false; // explicit, but identical to the default
+        let base_out = run_sim(&mut baseline, &sim, cfg.base_ecef);
+        let gate_out = run_sim(&mut gated, &sim, cfg.base_ecef);
+        assert_eq!(base_out, gate_out, "gate off must reproduce legacy exactly");
+        assert!(base_out.iter().filter(|(f, _)| *f).count() >= 5);
+    }
+
+    // ---- GNEISS_RECV_PCV: gate parsing and correction wiring ------------
+
+    #[test]
+    fn recv_pcv_gate_parses_env_value() {
+        assert!(recv_pcv_gate_enabled(Some("1")));
+        assert!(recv_pcv_gate_enabled(Some(" 1 "))); // trimmed
+        assert!(!recv_pcv_gate_enabled(Some("0")));
+        assert!(!recv_pcv_gate_enabled(Some("")));
+        assert!(!recv_pcv_gate_enabled(Some("true")));
+        assert!(!recv_pcv_gate_enabled(None));
+    }
+
+    /// Gate/pair matrix for the differential PCV: zero unless the env
+    /// gate is on AND both calibrations are loaded; otherwise equal to
+    /// the raw differential PCV at the rover-frame elevations. Skipped
+    /// when igs14 is absent or the process already runs with
+    /// GNEISS_RECV_PCV set (the OnceLock cache is order-sensitive under
+    /// parallel tests).
+    #[test]
+    fn receiver_dd_pcv_m_requires_gate_and_loaded_pair() {
+        if std::env::var("GNEISS_RECV_PCV").is_ok() {
+            return;
+        }
+        let Ok(db) = gneiss_parsers::antex::AntexDatabase::parse("../../datasets/igs14.atx")
+        else {
+            return;
+        };
+        use gneiss_parsers::receiver_antenna::{compute_dd_pcv_correction, ReceiverAntenna};
+        let trm =
+            Arc::new(ReceiverAntenna::lookup(&db, "TRM59800.00", "SCIT").expect("igs14 TRM"));
+        let ash =
+            Arc::new(ReceiverAntenna::lookup(&db, "ASH701945B_M", "SCIT").expect("igs14 ASH"));
+        let mut eng =
+            GnssRtkIekf::new(Vector3::new(-3961904.43, 3348994.27, 3698211.71), GpsTime::new(2000, 100.0), 1.0);
+        let sat_pos = eng.state.pos_ecef + Vector3::new(1.0e7, 5.0e6, 2.0e7);
+        let ref_pos = eng.state.pos_ecef + Vector3::new(0.0, 0.0, 2.4e7);
+        let sid = gneiss_core::sat::SatelliteId {
+            constellation: gneiss_core::sat::Constellation::Gps,
+            prn: 3,
+        };
+
+        // Gate off with calibrations loaded -> no correction.
+        eng.receiver_pcv = Some((trm.clone(), ash.clone()));
+        assert_eq!(eng.receiver_dd_pcv_m(sid, 1, sat_pos, ref_pos, false), 0.0);
+        // Gate on without calibrations -> no correction.
+        eng.receiver_pcv = None;
+        assert_eq!(eng.receiver_dd_pcv_m(sid, 1, sat_pos, ref_pos, true), 0.0);
+        // Gate on with calibrations -> raw differential PCV (non-zero for
+        // this cross-family pair at distinct elevations).
+        eng.receiver_pcv = Some((trm.clone(), ash.clone()));
+        let dd = eng.receiver_dd_pcv_m(sid, 1, sat_pos, ref_pos, true);
+        let llh = gneiss_core::coords::ecef_to_llh(eng.state.pos_ecef);
+        let (_, el_s) = gneiss_core::coords::az_el(llh, eng.state.pos_ecef, sat_pos);
+        let (_, el_r) = gneiss_core::coords::az_el(llh, eng.state.pos_ecef, ref_pos);
+        let expected = compute_dd_pcv_correction(&trm, &ash, "G01", el_s, el_r);
+        assert!(dd.abs() > 1e-6, "cross-family correction must be non-zero: {dd}");
+        assert!((dd - expected).abs() < 1e-12, "dd={dd} expected={expected}");
     }
 
 }

@@ -327,7 +327,8 @@ fn base_recv_pco_ecef(rinex_path: &Path, antex_path: &str, arp: Vector3<f64>) ->
     // 2. ANTEX receiver entry for that family/radome
     let db = AntexDatabase::parse(antex_path).ok()?;
     let ant = gneiss_parsers::receiver_antenna::ReceiverAntenna::lookup(&db, &fam, &rad)?;
-    let pco_mm = &ant.model().frequencies.get("G01")?.pco;
+    // Parser reorders the ANTEX north/east/up columns to east/north/up.
+    let [east_mm, north_mm, up_mm] = ant.pco_enu_mm;
 
     // 3. ENU -> ECEF at the ARP
     let llh = gneiss_core::coords::ecef_to_llh(arp);
@@ -338,7 +339,7 @@ fn base_recv_pco_ecef(rinex_path: &Path, antex_path: &str, arp: Vector3<f64>) ->
     let north = Vector3::new(-slat * clon, -slat * slon, clat);
     let up = Vector3::new(clat * clon, clat * slon, slat);
     let m = 1e-3;
-    Some(north * (pco_mm.x * m) + east * (pco_mm.y * m) + up * (pco_mm.z * m))
+    Some(north * (north_mm * m) + east * (east_mm * m) + up * (up_mm * m))
 }
 
 /// Receiver antenna PCV models (rover, base) from the ANTEX database,
