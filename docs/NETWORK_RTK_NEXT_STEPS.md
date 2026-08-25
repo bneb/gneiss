@@ -459,3 +459,30 @@ suppression rather than fundamental accuracy improvement.
 Absolute precision remains limited by frame mismatch between UNR IGS20
 truth coordinates and broadcast-solution frame. Resolving this requires
 either Helmert frame transformation or self-consistent truth definition.
+
+## RTKLIB deep-dive: top 10 adoptable techniques (prioritized)
+
+Full report at scratch/RTKLIB_TECHNIQUES_REPORT.md. Summary:
+
+| # | Technique | Impact | Complexity | Status |
+|---|---|---|---|---|
+| 1 | GLONASS AR via auto-calibrated IFB states | HIGH | moderate | queued |
+| 2 | Per-satellite iono states in float filter | MED-HIGH | moderate | **IN PROGRESS** |
+| 3 | Base-side ZWD alongside rover ZWD+grad | MED-HIGH | moderate | queued |
+| 4 | AR eligibility gating (minlock/elmaskar) | MEDIUM | trivial | **DONE** |
+| 5 | Fix-and-hold constraints | MEDIUM | caveats | deferred |
+| 6 | Phase-code coherency offset on new bias init | MEDIUM | trivial-mod | queued |
+| 7 | SP3 pipeline fixes (ωₑ rotation, linear clock, TX time) | HIGH | trivial-mod | **IN PROGRESS** |
+| 8 | Clock-stability variance term + baseline constraint | LOW-MED | trivial | queued |
+| 9 | Base-residual time interpolation for async epochs | contextual | moderate | queued |
+| 10 | SPP validation stack (chi-square/GDOP/RAIM-FDE) | LOW-MED | trivial | queued |
+
+Key red-team takeaways:
+- FFRT, PAR, Huber weighting already SUPERSEDE RTKLIB's approaches
+- Fix-and-hold conflicts with RTS smoothing unless keyed to DoubleDiffKey
+- Iono states need Huber/FFRT retuning when added
+- Hard innovation gates would fight the robust estimator
+
+Parity confirmed (no action needed): per-constellation DD formation,
+ISB handling, earth tides, tropo mapping breadth, BDS GEO tilt,
+GLONASS RK4+J2 integration.
