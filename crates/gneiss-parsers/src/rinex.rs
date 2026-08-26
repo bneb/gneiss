@@ -753,8 +753,8 @@ pub fn parse_rinex_nav<R: BufRead>(
 
             let mut toc_gpst = parse_rinex_nav_epoch_time(&line, is_rinex_3);
             match current_constellation {
-                Constellation::Glonass => toc_gpst += gneiss_core::gnss_time::TimeSystem::Glonass.gpst_offset(),
-                Constellation::Beidou => toc_gpst = toc_gpst + 14.0,
+                Constellation::Glonass => toc_gpst = toc_gpst + gneiss_core::gnss_time::TimeSystem::Glonass.gpst_offset(),
+                Constellation::Beidou => toc_gpst = toc_gpst + gneiss_core::gnss_time::TimeSystem::Bdt.gpst_offset(),
                 _ => {}
             }
             current_toc = toc_gpst;
