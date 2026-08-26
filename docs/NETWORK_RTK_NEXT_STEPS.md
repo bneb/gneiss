@@ -584,3 +584,18 @@ smoothed) is not a bug: it is the combiner correctly refusing to
 claim fixes when forward and backward filters disagree beyond the
 0.50 m static-monument threshold. Non-strict mode accepts these
 divergent claims and accuracy collapses.
+
+## Walkthrough reference refresh (incident report)
+
+During Sprint 1.4 verification, eval_qinertia_ppk differed from
+/tmp/wt_old.txt by exactly one digit (3D p95 0.926 -> 0.925 mm).
+Bisect across ten commits back to f5c6dc6 showed EVERY commit
+"differed" — including ones previously verified green.
+
+Forensics: wt_old.txt timestamp (Aug 23 22:31) postdates the newest
+branch commit (17:33) by five hours; it was generated from a different
+session's tree and is unreachable from this branch's history. Current
+binary output is deterministic (two runs byte-identical).
+
+Remediation: reference regenerated from current verified-green tree;
+protection remains active for future changes.
