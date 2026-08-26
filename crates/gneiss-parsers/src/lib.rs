@@ -1,4 +1,5 @@
 pub mod antex;
+pub mod clk_centering;
 pub mod ionex;
 pub mod lnav;
 pub mod rinex;

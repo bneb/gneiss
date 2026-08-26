@@ -10,10 +10,22 @@
 mod receiver_pcv_contract {
     use gneiss_parsers::antex::AntexDatabase;
     
-    const ANTEX_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../datasets/igs14.atx");
+    /// Locate the cached igs14.atx across checkout layouts: the main tree
+    /// keeps `datasets/` at the repo root, while worktrees expose the
+    /// shared store through a nested `datasets/datasets` symlink.
+    fn antex_path() -> std::path::PathBuf {
+        [
+            "../../datasets/igs14.atx",
+            "../../datasets/datasets/igs14.atx",
+        ]
+        .iter()
+        .map(|rel| std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(rel))
+        .find(|p| p.exists())
+        .expect("igs14.atx must be cached under datasets/")
+    }
 
     fn load_db() -> AntexDatabase {
-        AntexDatabase::parse(ANTEX_PATH).expect("must parse")
+        AntexDatabase::parse(antex_path()).expect("must parse")
     }
 
     // Helper: find receiver antenna by type + radome

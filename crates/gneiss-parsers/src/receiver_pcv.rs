@@ -175,8 +175,19 @@ mod tests {
     use crate::antex::{AntennaPcv, FrequencyPcv};
     use std::collections::HashMap;
 
-    const IGS14_PATH: &str =
-        concat!(env!("CARGO_MANIFEST_DIR"), "/../../datasets/igs14.atx");
+    /// Locate the cached igs14.atx across checkout layouts: the main tree
+    /// keeps `datasets/` at the repo root, while worktrees expose the
+    /// shared store through a nested `datasets/datasets` symlink. Returns
+    /// None when the file is not cached locally (tests then skip).
+    fn igs14_path() -> Option<std::path::PathBuf> {
+        [
+            "../../datasets/igs14.atx",
+            "../../datasets/datasets/igs14.atx",
+        ]
+        .iter()
+        .map(|rel| std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(rel))
+        .find(|p| p.exists())
+    }
 
     /// Tight tolerance for values that are exact grid nodes (fp noise only).
     const TOL: f64 = 1e-9;
@@ -200,7 +211,10 @@ mod tests {
     ];
 
     fn load_db() -> AntexDatabase {
-        AntexDatabase::parse(IGS14_PATH).expect("igs14.atx must parse")
+        let Some(path) = igs14_path() else {
+            panic!("igs14.atx not cached locally under datasets/");
+        };
+        AntexDatabase::parse(path).expect("igs14.atx must parse")
     }
 
     fn assert_near(actual: f64, expected: f64, tol: f64, what: &str) {

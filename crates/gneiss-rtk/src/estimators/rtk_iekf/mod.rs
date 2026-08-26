@@ -74,6 +74,69 @@ fn recv_pcv_enabled() -> bool {
     })
 }
 
+/// Pure pair decision for the centered precise-clock DD correction.
+///
+/// Takes the centered clock lookups for `(satellite, reference)` and
+/// returns `(correction_metres, gate_tripped)`:
+///
+/// - both lookups healthy and neither spread exceeds
+///   [`gneiss_parsers::clk_centering::MAX_CENTERED_SPREAD_S`]:
+///   `c · (dt_sat − dt_ref)` on the CENTERED biases;
+/// - either lookup missing (no record / too few constellation mates):
+///   `(0.0, false)` — silently disabled, matching legacy missing-bias
+///   behaviour;
+/// - either spread over threshold: `(0.0, true)` — pathological product
+///   epoch, correction suppressed and the caller latches the warning.
+fn centered_pair_correction(
+    sat: Option<gneiss_parsers::clk_centering::CenteredClock>,
+    reference: Option<gneiss_parsers::clk_centering::CenteredClock>,
+) -> (f64, bool) {
+    use gneiss_parsers::clk_centering::MAX_CENTERED_SPREAD_S;
+    const C: f64 = SPEED_OF_LIGHT_M_S;
+    match (sat, reference) {
+        (Some(a), Some(b)) => {
+            let tripped = a.spread_s > MAX_CENTERED_SPREAD_S || b.spread_s > MAX_CENTERED_SPREAD_S;
+            if tripped {
+                (0.0, true)
+            } else {
+                (C * (a.bias_s - b.bias_s), false)
+            }
+        }
+        _ => (0.0, false),
+    }
+}
+
+/// `GNEISS_CLK_TRACE` diagnostic: first 10 evaluations show the centered
+/// biases, spreads, and resulting pair correction (metres).
+fn clk_centering_trace(
+    tow: f64,
+    sat_id: gneiss_core::sat::SatelliteId,
+    ref_sv: gneiss_core::sat::SatelliteId,
+    cs: Option<gneiss_parsers::clk_centering::CenteredClock>,
+    cr: Option<gneiss_parsers::clk_centering::CenteredClock>,
+    corr_m: f64,
+) {
+    static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let n = N.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    if n >= 10 {
+        return;
+    }
+    let fmt = |c: Option<gneiss_parsers::clk_centering::CenteredClock>| match c {
+        Some(x) => format!("{:+.1}us/spr{:.1}us", x.bias_s * 1e6, x.spread_s * 1e6),
+        None => "none".to_string(),
+    };
+    eprintln!(
+        "CLKDD[{n}] tow={:.0} {:?}{:02}-{:02} sat={} ref={} -> {:+.3} m",
+        tow,
+        sat_id.constellation,
+        sat_id.prn,
+        ref_sv.prn,
+        fmt(cs),
+        fmt(cr),
+        corr_m
+    );
+}
+
 /// Double-Difference IEKF and RTS Smoother engine for RTK/PPK.
 pub struct GnssRtkIekf {
     pub state: RtkState,
@@ -105,6 +168,9 @@ pub struct GnssRtkIekf {
     pub precise_orbits: Option<std::sync::Arc<gneiss_parsers::precise_orbit::PreciseOrbit>>,
     /// Precise clock products (RINEX CLK) paired with SP3 orbits.
     pub precise_clocks: Option<std::sync::Arc<gneiss_parsers::rinex_clk::RinexClock>>,
+    /// Latched once the centered-spread gate first suppresses the
+    /// precise-clock DD correction: the one-shot warning has been printed.
+    clk_gate_warned: std::sync::atomic::AtomicBool,
     /// Opt-in FDMA GLONASS phase participation (own reference satellite and
     /// per-satellite ambiguities absorb phase inter-channel biases). MW
     /// wide-lane stays GPS/Galileo-only: code inter-channel biases do not
@@ -176,6 +242,7 @@ impl GnssRtkIekf {
             pair_epochs: HashMap::new(),
             precise_orbits: None,
             precise_clocks: None,
+            clk_gate_warned: std::sync::atomic::AtomicBool::new(false),
             enable_glonass: false,
             widelane_ar: false,
             start_tow: start_time.tow,
@@ -710,11 +777,17 @@ impl GnssRtkIekf {
     }
 
 
-    /// Differential precise-satellite-clock correction (metres of range).
+    /// Differential precise-satellite-clock correction (metres of range),
+    /// constellation-median centered with spread gating.
     ///
-    /// Evaluates each satellite's precise clock bias at its approximate
-    /// transmit time and returns `c · (dt_sat − dt_ref)`. Returns 0.0 when
-    /// no precise clock product is loaded or either bias is unavailable.
+    /// Each satellite's clock bias is evaluated at its approximate transmit
+    /// time and CENTERED by the median across its constellation mates at
+    /// that instant (removes the product's arbitrary timescale datum), then
+    /// the pair correction `c · (dt_sat − dt_ref)` is formed from the
+    /// centered biases. If the centered inter-satellite spread exceeds 100
+    /// µs the product epoch is pathological: the pair correction is
+    /// suppressed (0.0) and a latched warning prints once per engine.
+    /// Returns 0.0 when no product is loaded or either lookup is missing.
     fn precise_clock_dd_m(
         &self,
         sat_id: gneiss_core::sat::SatelliteId,
@@ -723,7 +796,7 @@ impl GnssRtkIekf {
         sat_pos: Vector3<f64>,
         ref_pos: Vector3<f64>,
     ) -> f64 {
-        const C: f64 = gneiss_core::constants::SPEED_OF_LIGHT_M_S;
+        use gneiss_core::constants::SPEED_OF_LIGHT_M_S as C;
         let Some(clk_prod) = &self.precise_clocks else {
             return 0.0;
         };
@@ -735,39 +808,43 @@ impl GnssRtkIekf {
             constellation: sat_id.constellation,
             prn: ref_sat_id as u8,
         };
-        let r = match (
-            clk_prod.get_clock_bias(sat_id, t_s),
-            clk_prod.get_clock_bias(ref_sv, t_r),
-        ) {
-            (Some(a), Some(b)) => C * (a - b),
-            _ => 0.0,
-        };
-        if std::env::var("GNEISS_CLK_TRACE").is_ok() {
-            static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-            let n = N.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            if n < 10 {
-                let bs = clk_prod.get_clock_bias(sat_id, t_s).unwrap_or(f64::NAN);
-                let br = clk_prod.get_clock_bias(ref_sv, t_r).unwrap_or(f64::NAN);
-                eprintln!(
-                    "CLKDD[{n}] tow={:.0} {:?}{:02}-{:02} bs={:+.1} br={:+.1} -> {:+.3} m",
-                    self.state.time.tow, sat_id.constellation, sat_id.prn, ref_sv.prn,
-                    bs * 1e6, br * 1e6, r
-                );
-            }
+        let cs = clk_prod.centered_clock(sat_id, t_s);
+        let cr = clk_prod.centered_clock(ref_sv, t_r);
+        let (corr_m, tripped) = centered_pair_correction(cs, cr);
+        if tripped {
+            self.latch_clk_gate_warning(sat_id, ref_sv);
         }
-        r
+        if std::env::var("GNEISS_CLK_TRACE").is_ok() {
+            clk_centering_trace(self.state.time.tow, sat_id, ref_sv, cs, cr, corr_m);
+        }
+        corr_m
     }
 
-    /// Trace helper: raw bias or NaN.
-    fn a_or_none(
-        sv: gneiss_core::sat::SatelliteId,
-        t: GpsTime,
-        clk_prod: &Option<std::sync::Arc<gneiss_parsers::rinex_clk::RinexClock>>,
-    ) -> f64 {
-        clk_prod
-            .as_ref()
-            .and_then(|c| c.get_clock_bias(sv, t))
-            .unwrap_or(f64::NAN)
+    /// Print the one-shot spread-gate warning (latched per engine instance
+    /// via an atomic flag, so concurrent epochs cannot double-print).
+    fn latch_clk_gate_warning(
+        &self,
+        sat_id: gneiss_core::sat::SatelliteId,
+        ref_sv: gneiss_core::sat::SatelliteId,
+    ) {
+        use std::sync::atomic::Ordering;
+        if self
+            .clk_gate_warned
+            .compare_exchange(false, true, Ordering::Relaxed, Ordering::Relaxed)
+            .is_ok()
+        {
+            eprintln!(
+                "CLK-GATE: precise-clock DD correction disabled: centered \
+                 inter-satellite spread exceeded {:.0} us (pathological \
+                 clock-product epoch); all further corrections on this \
+                 engine are suppressed [first trip: {:?}{:02}-{:02}, tow {:.0}]",
+                gneiss_parsers::clk_centering::MAX_CENTERED_SPREAD_S * 1e6,
+                sat_id.constellation,
+                sat_id.prn,
+                ref_sv.prn,
+                self.state.time.tow
+            );
+        }
     }
 
     /// Phase innovations with sensitivity to the rover ZWD residual.
@@ -1374,6 +1451,132 @@ mod tests {
         let expected = compute_dd_pcv_correction(&trm, &ash, "G01", el_s, el_r);
         assert!(dd.abs() > 1e-6, "cross-family correction must be non-zero: {dd}");
         assert!((dd - expected).abs() < 1e-12, "dd={dd} expected={expected}");
+    }
+
+    // ---- GNEISS_CLK: constellation-median centering + spread gate -------
+
+    use gneiss_parsers::clk_centering::CenteredClock;
+    use gneiss_parsers::rinex_clk::{ClockRecord, RinexClock};
+
+    fn centered(bias_us: f64, spread_us: f64) -> Option<CenteredClock> {
+        Some(CenteredClock { bias_s: bias_us * 1e-6, spread_s: spread_us * 1e-6 })
+    }
+
+    #[test]
+    fn centered_pair_correction_healthy_pair_applies_centered_delta() {
+        let (corr, tripped) =
+            centered_pair_correction(centered(10.0, 5.0), centered(-14.0, 6.0));
+        assert!(!tripped);
+        assert!((corr - SPEED_OF_LIGHT_M_S * 24e-6).abs() < 1e-9);
+    }
+
+    #[test]
+    fn centered_pair_correction_gates_when_either_side_spread_trips() {
+        for (a, b) in [
+            (centered(1.0, 150.0), centered(2.0, 5.0)),
+            (centered(1.0, 5.0), centered(2.0, 150.0)),
+        ] {
+            let (corr, tripped) = centered_pair_correction(a, b);
+            assert!(tripped, "pathological side must trip the gate");
+            assert_eq!(corr, 0.0, "gated correction must be suppressed");
+        }
+    }
+
+    #[test]
+    fn centered_pair_correction_threshold_is_strictly_greater() {
+        // Exactly at the 100 us threshold the product is still trusted;
+        // a hair above it trips.
+        let ok = centered_pair_correction(centered(1.0, 100.0), centered(2.0, 99.999));
+        assert!(!ok.1);
+        assert!(ok.0.abs() > 0.0);
+        let bad = centered_pair_correction(centered(1.0, 100.001), centered(2.0, 5.0));
+        assert!(bad.1 && bad.0 == 0.0);
+    }
+
+    #[test]
+    fn centered_pair_correction_missing_side_stays_silent_zero() {
+        assert_eq!(centered_pair_correction(None, centered(2.0, 5.0)), (0.0, false));
+        assert_eq!(centered_pair_correction(centered(1.0, 5.0), None), (0.0, false));
+        assert_eq!(centered_pair_correction(None, None), (0.0, false));
+    }
+
+    /// Synthetic product helper: one record per satellite at tow = 100
+    /// (matching the engine time below), biases in microseconds.
+    fn clk_product(biases_us: &[(u8, f64)]) -> Arc<RinexClock> {
+        let mut rc = RinexClock::default();
+        for (prn, us) in biases_us {
+            rc.satellites.insert(
+                gneiss_core::sat::SatelliteId {
+                    constellation: gneiss_core::sat::Constellation::Gps,
+                    prn: *prn,
+                },
+                vec![ClockRecord { time: GpsTime::new(2200, 100.0), bias: us * 1e-6 }],
+            );
+        }
+        Arc::new(rc)
+    }
+
+    fn dd_probe(eng: &GnssRtkIekf, sat: u8, reference: u8) -> f64 {
+        let rx = Vector3::zeros();
+        eng.precise_clock_dd_m(
+            gneiss_core::sat::SatelliteId {
+                constellation: gneiss_core::sat::Constellation::Gps,
+                prn: sat,
+            },
+            u16::from(reference),
+            rx,
+            Vector3::new(2.0e7, 0.0, 0.0),
+            Vector3::new(2.4e7, 0.0, 0.0),
+        )
+    }
+
+    #[test]
+    fn precise_clock_dd_m_without_product_is_zero() {
+        let eng = test_engine(GpsTime::new(2200, 100.0));
+        assert!(eng.precise_clocks.is_none());
+        assert_eq!(dd_probe(&eng, 5, 9), 0.0);
+    }
+
+    /// Healthy product under a big common mode: the correction equals the
+    /// RAW pairwise delta exactly — centering removes only the datum and
+    /// must leave the differential untouched through the full wiring.
+    #[test]
+    fn precise_clock_dd_m_healthy_product_preserves_raw_delta() {
+        let mut eng = test_engine(GpsTime::new(2200, 100.0));
+        eng.precise_clocks = Some(clk_product(&[
+            (27, 500.0),
+            (28, 520.0),
+            (5, 480.0),
+            (10, 510.0),
+        ]));
+        let corr = dd_probe(&eng, 28, 27);
+        let raw = SPEED_OF_LIGHT_M_S * 20e-6; // 520 - 500 us
+        assert!((corr - raw).abs() < 1e-9, "corr {corr} vs raw {raw}");
+        assert!(!eng.clk_gate_warned.load(std::sync::atomic::Ordering::Relaxed));
+    }
+
+    /// Pathological product: correction disabled (0.0) and the warning
+    /// flag latches on the first gated call.
+    #[test]
+    fn precise_clock_dd_m_pathological_product_returns_zero_and_latches() {
+        let mut eng = test_engine(GpsTime::new(2200, 100.0));
+        eng.precise_clocks = Some(clk_product(&[
+            (1, 600.0),
+            (2, -600.0),
+            (3, 590.0),
+            (4, -590.0),
+        ]));
+        assert_eq!(dd_probe(&eng, 1, 3), 0.0);
+        assert!(
+            eng.clk_gate_warned.load(std::sync::atomic::Ordering::Relaxed),
+            "gate trip must latch the warning flag"
+        );
+
+        // Fewer than three valid mates: silently zero, no new behaviour.
+        let mut eng = test_engine(GpsTime::new(2200, 100.0));
+        eng.precise_clocks = Some(clk_product(&[(1, 600.0), (2, -600.0)]));
+        assert_eq!(dd_probe(&eng, 1, 2), 0.0);
+        assert!(!eng.clk_gate_warned.load(std::sync::atomic::Ordering::Relaxed));
     }
 
 }

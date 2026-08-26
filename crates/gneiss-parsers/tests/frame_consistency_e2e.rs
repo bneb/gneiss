@@ -15,14 +15,23 @@ use nalgebra::Vector3;
 use gneiss_core::gnss_time::TimeSystem;
 use gneiss_core::sat::Constellation;
 
-const NAV_PATH: &str = concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/../../datasets/multignss_2025d160/station_mixed_nav.rnx"
-);
+/// Locate the cached mixed nav RINEX across checkout layouts: the main
+/// tree keeps `datasets/` at the repo root, while worktrees expose the
+/// shared store through a nested `datasets/datasets` symlink.
+fn nav_path() -> std::path::PathBuf {
+    [
+        "../../datasets/multignss_2025d160/station_mixed_nav.rnx",
+        "../../datasets/datasets/multignss_2025d160/station_mixed_nav.rnx",
+    ]
+    .iter()
+    .map(|rel| std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(rel))
+    .find(|p| p.exists())
+    .expect("mixed nav RINEX must be cached under datasets/")
+}
 
 #[test]
 fn e2e_nav_parse_all_constellations_present() {
-    let f = std::fs::File::open(NAV_PATH).expect("mixed nav file must exist");
+    let f = std::fs::File::open(nav_path()).expect("mixed nav file must exist");
     let r = std::io::BufReader::new(f);
     let (ephems, _klob) = gneiss_parsers::rinex::parse_rinex_nav(r)
         .expect("must parse RINEX 3.04 mixed nav");
