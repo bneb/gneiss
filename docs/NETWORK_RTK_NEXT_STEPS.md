@@ -625,3 +625,24 @@ SAME-BINARY REVALIDATION RESULTS (binary 90d90353b904):
 
 STILL OPEN: P222 fix-rate gap vs budget (80.3 vs 86.0) predates this
 audit; requires guarded bisect with forced rebuilds to attribute.
+
+## Sprint 2 clock-datum experiment #1 LANDED: median centering + spread gate
+
+Worktree exp/clk-median-centering, commit bfce486, independently
+verified (paired runs reproduced every reported number; guards green
+in-worktree and on main post-merge @ 49d44acd6bbf).
+
+Shipped value: GNEISS_CLK is now FAIL-SAFE. Pathological products
+(spread > 100 µs after constellation-median centering) suppress the
+correction with a latched warning instead of exploding the filter
+(control reproduced 35–72 km explosions; gated run healthy).
+
+Empirical findings:
+- DOY160 GFZ rapid spread = 1399.6 µs constant all day → correction
+  suppressed everywhere on this product.
+- SP3 ORBITS alone now improve P181: 99.0% fix, h_p50 101 mm,
+  h_p95 125 mm, fused h_p95 −12 mm vs broadcast. Orbit quality helps
+  short baselines once TX-time + Sagnac physics are correct.
+- OPEN: P222 path never receives dd_clk_m (0 trace hits vs ≥10 for
+  P181) — bit-identical across all runs incl. exploding control.
+  Root-cause before any clock-dependent tuning on that base.
