@@ -31,7 +31,7 @@ use gneiss_core::obs::EpochObs;
 use gneiss_core::time::GpsTime;
 use gneiss_rtk::estimators::rtk_iekf::DoubleDiffKey;
 use gneiss_rtk::post_process::forward;
-use gneiss_rtk::post_process::{execute_post_process, network, PostProcessOptions, ReceiverPcvPair, SmoothedEpoch};
+use gneiss_rtk::post_process::{execute_post_process, network, sidereal, PostProcessOptions, ReceiverPcvPair, SmoothedEpoch};
 use gneiss_rtk::swfg::config::EngineConfig;
 
 const ROVER_FILE: &str = "p2241350.20o";
@@ -282,6 +282,12 @@ fn run_pass(
             gneiss_rtk::post_process::network::CONTINUITY_MAX_DT_S,
         );
     }
+    // Sidereal stacking (GNEISS_SIDEREAL=1): diagnostic fold + strictly
+    // causal first-half mitigation on the smoothed product, before any
+    // error collection. Default OFF keeps the legacy path bit-identical.
+    if std::env::var("GNEISS_SIDEREAL").is_ok() {
+        traj = apply_sidereal_option(traj, ctx, base.id, label);
+    }
     let (h, d3, up_errs, fix, fixed_errs) = collect_errors(&traj, ctx.truth);
     if std::env::var("WL_DUMP").is_ok() {
         // Full per-epoch error dump for cross-base correlation studies.
@@ -322,6 +328,40 @@ fn run_pass(
     let stats = print_stats(&format!("{} RTK [{}] ({:.1} km)", label, base.id, base.baseline_km), h, d3, up_errs, fix, traj.len());
     print_fixed_stats(label, fixed_errs);
     (stats, traj)
+}
+
+/// Sidereal stacking option (GNEISS_SIDEREAL=1): fold truth-referenced
+/// E/N/U errors of the smoothed trajectory onto sidereal phase bins,
+/// print the per-channel verdict, dump a per-bin CSV, and subtract
+/// causally-fitted first-half mean corrections from second-half epochs.
+/// Knobs: GNEISS_SIDEREAL_BINS (default 240), GNEISS_SIDEREAL_MINCNT
+/// (default 2), GNEISS_SIDEREAL_DIAG_DIR (default /tmp).
+fn apply_sidereal_option(
+    traj: Vec<SmoothedEpoch>,
+    ctx: &RunContext,
+    base_id: &str,
+    label: &str,
+) -> Vec<SmoothedEpoch> {
+    let n_bins = std::env::var("GNEISS_SIDEREAL_BINS")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .filter(|&n| n > 0)
+        .unwrap_or(sidereal::DEFAULT_BINS);
+    let min_cnt = std::env::var("GNEISS_SIDEREAL_MINCNT")
+        .ok()
+        .and_then(|v| v.parse::<u32>().ok())
+        .unwrap_or(sidereal::MIN_BIN_COUNT_DEFAULT);
+    let truth_at = |tow: u32| ctx.truth.get(&tow).map(|t| truth_in_solution_frame(*t, 2025.5));
+    let target = format!("{label}/{base_id}");
+    let (traj, report) = sidereal::apply_to_trajectory(traj, truth_at, n_bins, min_cnt);
+    println!("{}", report.summary(&target));
+    let dir = std::env::var("GNEISS_SIDEREAL_DIAG_DIR").unwrap_or_else(|_| "/tmp".into());
+    let path = Path::new(&dir).join(format!("sidereal_diag_{base_id}_{label}.csv"));
+    match sidereal::write_diag_csv(&path, &target, &report.channels, n_bins, report.split_index) {
+        Ok(_) => println!("SIDEREAL CSV -> {}", path.display()),
+        Err(e) => eprintln!("SIDEREAL CSV write failed {}: {}", path.display(), e),
+    }
+    traj
 }
 
 /// Antenna family + radome from a RINEX observation header (`ANT # / TYPE`),
