@@ -2,6 +2,7 @@
 
 pub mod ar;
 pub mod ar_gate;
+pub mod clk_datum;
 pub mod iono_free;
 pub mod mw;
 pub mod predict;
@@ -154,6 +155,16 @@ pub struct GnssRtkIekf {
     /// states accumulate across epochs.
     pub base_slip_detector: crate::post_process::screening::CycleSlipDetector,
     pub prev_arcs: HashMap<DoubleDiffKey, u32>,
+    /// Per-DD-key precise-clock datum (metres): the value of
+    /// `c·(dt_sat − dt_ref)` in force when that arc's ambiguity was last
+    /// (re)seeded or reference-switched. Maintained by [`clk_datum`];
+    /// stays empty (inert) unless a precise-clock product is loaded.
+    ///
+    /// [`clk_datum`]: self::clk_datum
+    pub(crate) clk_datum_m: HashMap<DoubleDiffKey, f64>,
+    /// Reference-switch transfers handled by THIS filter instance
+    /// (diagnostic; one stderr line per event under GNEISS_CLK_TRACE).
+    pub clk_ref_switches: usize,
     /// When set, IekfSnapshot.amb_keys records the DD key list at each
     /// epoch, enabling offline ambiguity-trajectory analysis. Zero-cost
     /// when off (empty Vec).
@@ -245,6 +256,8 @@ impl GnssRtkIekf {
             slip_detector: crate::post_process::screening::CycleSlipDetector::new(),
             base_slip_detector: crate::post_process::screening::CycleSlipDetector::new(),
             prev_arcs: HashMap::new(),
+            clk_datum_m: HashMap::new(),
+            clk_ref_switches: 0,
             track_ambiguity_keys: false,
             min_ar_lock_epochs: 0,
             pair_epochs: HashMap::new(),
@@ -747,6 +760,10 @@ impl GnssRtkIekf {
         );
         let dd_pr = dd_pr - dd_clk_m;
         let dd_cp = dd_cp.map(|cp| cp - dd_clk_m / lambda);
+
+        // Clock-datum bookkeeping must precede the ambiguity update so a
+        // reference-switch transfer is in place BEFORE innovations form.
+        self.apply_clock_datum(key, dd_clk_m, lambda, lli_slip);
 
         let dd_pcv_m = self.receiver_dd_pcv_m(sat_id, freq_band, sat_pos, ref_pos);
         let meas = DoubleDiffMeasurement {

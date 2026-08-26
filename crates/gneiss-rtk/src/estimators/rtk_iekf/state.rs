@@ -277,6 +277,25 @@ impl RtkState {
         self.cov = new_cov;
     }
 
+    /// Add a deterministic offset (cycles) to a stored float ambiguity.
+    ///
+    /// Used by clock-datum bookkeeping (see [`clk_datum`]) to keep an
+    /// arc's float continuous across a reference-satellite switch: the
+    /// datum step is a known model correction, not new measurement
+    /// information, so the covariance is deliberately untouched.
+    /// Returns `false` when the key holds no ambiguity (nothing moved).
+    ///
+    /// [`clk_datum`]: super::clk_datum
+    pub fn adjust_ambiguity(&mut self, key: &DoubleDiffKey, delta_cycles: f64) -> bool {
+        match self.ambiguities.iter_mut().find(|(k, _)| k == key) {
+            Some((_, val)) => {
+                *val += delta_cycles;
+                true
+            }
+            None => false,
+        }
+    }
+
     /// Reset an ambiguity variance (e.g. after detected cycle slip).
     pub fn reset_ambiguity(&mut self, key: &DoubleDiffKey, initial_val: f64, initial_var: f64) {
         if let Some(idx) = self.get_amb_idx(key) {
