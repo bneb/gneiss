@@ -24,3 +24,4 @@ bench_output.txt
 eval_odaiba_errors.csv
 .licenses/
 scratch/target/
+.worktrees/
