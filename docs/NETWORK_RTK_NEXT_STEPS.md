@@ -672,3 +672,22 @@ model-side term everywhere. Makes every consumer structurally
 consistent; makes datum bookkeeping well-defined afterwards; median-
 centering logic relocates with it. Until then: SP3-WITHOUT-CLK is the
 shippable precise-products configuration.
+
+## GLONASS ICB track: FAILED mid-debug, valuable diagnostic left
+
+Agent implementing glomodear-2-style ICB estimation hit a wall: with
+GLONASS enabled at P181, the phase model persistently mismatches by
+>500 cycles EVERY epoch (`slip-gate: re-seeded sat=4` repeatedly) —
+far beyond any plausible code-bias magnitude. This is NOT an ICB-
+scale problem; it indicates a broken FDMA fundamental in our GLONASS
+path when it participates in DD:
+
+Suspects ranked (for future investigation):
+1. λ per k-channel: glo_freq_num may return 0/wrong slot → nominal-freq
+   λ applied to wrong-channel carrier → cycle counts off by k·Δλ/λ.
+2. GLONASS time system: PZ-90→GPST offset handling in nav parsing vs
+   observation epochs (gnss_time.rs exists; is the DD path using it?).
+3. L1 FDMA offset sign convention (FREQ_GLO_L1_DELTA = +562.5 kHz?).
+
+Branch exp/glonass-icb retains partial WIP (uncommitted); main tree
+untouched. GLONASS stays gated OFF — no regression risk.
