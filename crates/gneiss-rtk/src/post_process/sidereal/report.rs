@@ -17,6 +17,9 @@ pub struct ChannelDump {
 }
 
 /// Result of [`super::apply_to_trajectory`] for logging and CSV dumps.
+///
+/// `before`/`after` are both computed over the SECOND half of the session
+/// (the only part mitigation touches): pre-correction vs post-correction.
 #[derive(Debug, Clone, Default)]
 pub struct SiderealReport {
     pub period_s: f64,
@@ -38,7 +41,7 @@ impl SiderealReport {
         );
         let chans: String = self.channels.iter().map(fmt_channel).collect();
         let tail = format!(
-            " | 2nd-half(N={}): h_p50 {:.3}->{:.3} h_p95 {:.3}->{:.3} v_p50 {:+.3}->{:+.3} v_rms {:.3}->{:.3}",
+            " | 2nd-half pre->post(N={}): h_p50 {:.3}->{:.3} h_p95 {:.3}->{:.3} v_p50 {:+.3}->{:+.3} v_rms {:.3}->{:.3}",
             self.after.n,
             self.before.h_p50, self.after.h_p50,
             self.before.h_p95, self.after.h_p95,

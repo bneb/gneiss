@@ -173,7 +173,7 @@ pub fn apply_to_trajectory(
     min_bin_count: u32,
 ) -> (Vec<SmoothedEpoch>, SiderealReport) {
     let mid = traj.len() / 2;
-    let before = half_metrics(&traj[..mid], &truth_at);
+    let before = half_metrics(&traj[mid..], &truth_at);
     let sample_sets = channel_samples(&traj, &truth_at);
     let (channels, corrs) = fit_channels(&sample_sets, n_bins, min_bin_count);
     shift_second_half(&mut traj[mid..], &corrs, &truth_at);
@@ -317,5 +317,7 @@ mod tests {
         }
         assert!(changed <= original.len() / 100, "too many moved: {changed}");
         assert!(report.channels.iter().all(|c| c.active_bins == swept));
+        // With (almost) no corrections applied, pre/post metrics coincide.
+        assert_eq!(report.before.h_p50, report.after.h_p50);
     }
 }
