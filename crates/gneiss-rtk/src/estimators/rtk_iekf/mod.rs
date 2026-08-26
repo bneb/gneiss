@@ -544,13 +544,23 @@ impl GnssRtkIekf {
         let dd_pr = (pr_rs - pr_rr) - (pr_bs - pr_br);
 
         let glo_k = glo_freq_num(ephems, sat_id);
-        let sig = if freq_band == 1 {
-            gneiss_core::frequencies::primary_signal(sat_id.constellation)
-        } else {
-            gneiss_core::frequencies::secondary_signal(sat_id.constellation)
-                .map(|(_, s)| s)
-        };
-        let freq_hz = match sig {
+        // Authoritative band->signal resolution. Policy functions
+        // (secondary_signal etc.) choose WHICH band to prefer; they must
+        // never override the frequency of a band actually observed.
+        if std::env::var("GNEISS_FREQ_TRACE").is_ok() {
+            static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+            let n = N.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            if n < 12 {
+                eprintln!(
+                    "FREQ[{}] {:?} band={} glo_k={}",
+                    n, sat_id.constellation, freq_band, glo_k
+                );
+            }
+        }
+        let freq_hz = match gneiss_core::frequencies::signal_for_band(
+            sat_id.constellation,
+            freq_band,
+        ) {
             Some(sig) => gneiss_core::frequencies::frequency_for(sat_id.constellation, sig, glo_k),
             None => gneiss_core::signal::get_frequency(sat_id, freq_band, glo_k),
         };

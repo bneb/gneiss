@@ -283,8 +283,11 @@ pub fn signal_for_band(c: crate::sat::Constellation, band: u8) -> Option<Signal>
         (Constellation::Glonass, 2) => Some(Signal::GloL2Of),
         (Constellation::Galileo, 1) => Some(Signal::GalE1Os),
         (Constellation::Galileo, 5) => Some(Signal::GalE5a),
-        (Constellation::Galileo, 6) => Some(Signal::GalE5b),
-        (Constellation::Galileo, 7) => Some(Signal::GalE6Cs),
+        // RINEX 3 Galileo band numbering: 5=E5a, 6=E6, 7=E5b.
+        // These two were swapped once already (ledger row 11); pinned by
+        // frequency_parity tests across ALL observed bands.
+        (Constellation::Galileo, 6) => Some(Signal::GalE6Cs),
+        (Constellation::Galileo, 7) => Some(Signal::GalE5b),
         (Constellation::Beidou, 1) => Some(Signal::BdsB1i),
         (Constellation::Beidou, 5) => Some(Signal::BdsB3i),
         _ => None,

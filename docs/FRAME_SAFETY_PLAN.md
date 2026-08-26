@@ -15,6 +15,7 @@ Every bug we've encountered maps to a missing frame distinction:
 | OHLN coastal v_p50 | Physical-model: ocean tide loading absent |
 | Gradient sign | Azimuthal-frame: az from North CW vs from East CCW |
 | Relational coupling (PCV) | Cross-station zenith angles passed as independent floats, allowing physically impossible geometry; caught in minutes by review, not weeks by benchmark anomaly (3 orders of magnitude cheaper detection) |
+| Galileo E5b/E6 band swap | Frequency-frame: registry mapped RINEX band 6→E5b, 7→E6Cs (inverted); band 7 carries ~23.5k Galileo phases in benchmark data → 5.9% wavelength error corrupted MW/IF on every E-sat arc; P222 fix rate 88.4→80.3%. Caught by frequency-parity test ONLY after matrix extended to enumerate all empirically observed bands — lesson: parity matrices must be derived from data inventories, not hand-picked subsets |
 
 ## Three-Track Solution (parallel implementation)
 

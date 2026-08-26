@@ -65,9 +65,11 @@ fn track_c_freq(
     use gneiss_core::frequencies::{frequency_for, signal_for_band};
     match signal_for_band(c, if primary { 1 } else { band }) {
         Some(sig) => frequency_for(c, sig, glo_k),
-        None => {
-            if primary { 1_575_420_000.0 } else { 1_227_600_000.0 }
-        }
+        None => gneiss_core::signal::get_frequency(
+            gneiss_core::sat::SatelliteId { constellation: c, prn: 0 },
+            if primary { 1 } else { band },
+            glo_k,
+        ),
     }
 }
 
