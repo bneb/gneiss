@@ -54,6 +54,27 @@ pub struct IonoFreeMeasurement {
 
 /// Form the iono-free DD phase for a pair when both L1 and L2 are observed.
 #[allow(clippy::too_many_arguments)] // same obs bundle as build_single_dd_pair
+
+/// Track C signal-registry frequency lookup (see mw.rs for policy).
+fn track_c_freq(
+    c: gneiss_core::sat::Constellation,
+    primary: bool,
+    glo_k: i8,
+) -> f64 {
+    use gneiss_core::frequencies::{frequency_for, primary_signal, secondary_signal};
+    let sig = if primary {
+        primary_signal(c)
+    } else {
+        secondary_signal(c).map(|(_, s)| s)
+    };
+    match sig {
+        Some(sig) => frequency_for(c, sig, glo_k),
+        None => {
+            if primary { 1_575_420_000.0 } else { 1_227_600_000.0 }
+        }
+    }
+}
+
 pub fn form_iono_free_dd(
     sat_id: SatelliteId,
     rov_s: &SatObs,
@@ -67,7 +88,7 @@ pub fn form_iono_free_dd(
     key: DoubleDiffKey,
     glo_k: i8,
 ) -> Option<IonoFreeMeasurement> {
-    let f1 = gneiss_core::signal::get_frequency(sat_id, 1, glo_k);
+    let f1 = track_c_freq(sat_id.constellation, true, glo_k);
     // Secondary band: L2 for GPS/GLONASS; E5a (band 5) for Galileo
     // exports that carry no L2 slot. All four stations must have it.
     let b2 = if rov_s.get_observable_phase(2).is_some()
@@ -79,7 +100,7 @@ pub fn form_iono_free_dd(
     } else {
         5
     };
-    let f2 = gneiss_core::signal::get_frequency(sat_id, b2, glo_k);
+    let f2 = track_c_freq(sat_id.constellation, false, glo_k);
 
     if f1 <= 0.0 || f2 <= 0.0 || (f1 - f2).abs() < 1e6 {
         return None;

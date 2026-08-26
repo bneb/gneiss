@@ -239,6 +239,34 @@ fn sbas_signal(band: u8) -> Option<Signal> {
     }
 }
 
+
+/// Engine policy for the secondary (dual-frequency) band per constellation.
+///
+/// Resolves the historical E5a/E5b ambiguity at the type level: callers
+/// receive an explicit `(rinex_band, Signal)` pair instead of guessing.
+/// GPS/GLONASS use RINEX band 2; Galileo exports carry E5a on band 5.
+pub fn secondary_signal(c: crate::sat::Constellation) -> Option<(u8, Signal)> {
+    use crate::sat::Constellation;
+    match c {
+        Constellation::Gps | Constellation::Qzss => Some((2, Signal::GpsL2Cm)),
+        Constellation::Glonass => Some((2, Signal::GloL2Of)),
+        Constellation::Galileo => Some((5, Signal::GalE5a)),
+        _ => None,
+    }
+}
+
+/// Primary-band (band 1) signal for a constellation.
+pub fn primary_signal(c: crate::sat::Constellation) -> Option<Signal> {
+    use crate::sat::Constellation;
+    match c {
+        Constellation::Gps | Constellation::Qzss => Some(Signal::GpsL1Ca),
+        Constellation::Glonass => Some(Signal::GloL1Of),
+        Constellation::Galileo => Some(Signal::GalE1Os),
+        Constellation::Beidou => Some(Signal::BdsB1i),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -488,5 +516,23 @@ mod tests {
         assert_maps(Constellation::Navic, "C1", None);
         assert_maps(Constellation::Beidou, "C2", Some(Signal::BdsB1i));
         assert_maps(Constellation::Sbas, "C2", None);
+    #[test]
+    fn test_secondary_signal_policy_resolves_e5a_e5b() {
+        use crate::sat::Constellation;
+        // Galileo secondary is E5a on band 5 — never E5b.
+        assert_eq!(secondary_signal(Constellation::Galileo), Some((5, Signal::GalE5a)));
+        // GPS secondary is L2 on band 2.
+        assert_eq!(secondary_signal(Constellation::Gps), Some((2, Signal::GpsL2Cm)));
+        assert_eq!(secondary_signal(Constellation::Glonass), Some((2, Signal::GloL2Of)));
+    }
+
+    #[test]
+    fn test_primary_signal_covers_all_supported() {
+        use crate::sat::Constellation;
+        for c in [Constellation::Gps, Constellation::Glonass, Constellation::Galileo, Constellation::Beidou] {
+            assert!(primary_signal(c).is_some(), "{:?} missing primary", c);
+        }
+    }
+
     }
 }

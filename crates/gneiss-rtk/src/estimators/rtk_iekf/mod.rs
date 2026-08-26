@@ -49,6 +49,27 @@ fn recv_pcv_gate_enabled(env_value: Option<&str>) -> bool {
 }
 
 /// Process-wide gate state, read from the environment once.
+
+/// Track C signal-registry frequency lookup (same policy as mw.rs).
+fn track_c_freq_mod(
+    c: gneiss_core::sat::Constellation,
+    primary: bool,
+    glo_k: i8,
+) -> f64 {
+    use gneiss_core::frequencies::{frequency_for, primary_signal, secondary_signal};
+    let sig = if primary {
+        primary_signal(c)
+    } else {
+        secondary_signal(c).map(|(_, s)| s)
+    };
+    match sig {
+        Some(sig) => frequency_for(c, sig, glo_k),
+        None => {
+            if primary { 1_575_420_000.0 } else { 1_227_600_000.0 }
+        }
+    }
+}
+
 fn recv_pcv_enabled() -> bool {
     *RECV_PCV_ENABLED.get_or_init(|| {
         recv_pcv_gate_enabled(std::env::var("GNEISS_RECV_PCV").ok().as_deref())
@@ -521,11 +542,17 @@ impl GnssRtkIekf {
         let pr_br = bas_ref.get_observable(freq_band)?;
         let dd_pr = (pr_rs - pr_rr) - (pr_bs - pr_br);
 
-        let freq_hz = gneiss_core::signal::get_frequency(
-            sat_id,
-            freq_band,
-            glo_freq_num(ephems, sat_id),
-        );
+        let glo_k = glo_freq_num(ephems, sat_id);
+        let sig = if freq_band == 1 {
+            gneiss_core::frequencies::primary_signal(sat_id.constellation)
+        } else {
+            gneiss_core::frequencies::secondary_signal(sat_id.constellation)
+                .map(|(_, s)| s)
+        };
+        let freq_hz = match sig {
+            Some(sig) => gneiss_core::frequencies::frequency_for(sat_id.constellation, sig, glo_k),
+            None => gneiss_core::signal::get_frequency(sat_id, freq_band, glo_k),
+        };
         let lambda = SPEED_OF_LIGHT_M_S / freq_hz;
         let (cp_rs, cp_rr, cp_bs, cp_br) = (
             rov_s.get_observable_phase(freq_band),
@@ -716,8 +743,8 @@ impl GnssRtkIekf {
         let base_dd =
             (sat_pos - base_pos).norm() - (ref_pos - base_pos).norm();
         let tropo = update::compute_tropo_dd(sat_pos, ref_pos, base_pos, cur);
-        let f1 = gneiss_core::signal::get_frequency(sat_id, 1, glo_k);
-        let f2 = gneiss_core::signal::get_frequency(sat_id, b2, glo_k);
+        let f1 = track_c_freq_mod(sat_id.constellation, true, glo_k);
+        let f2 = track_c_freq_mod(sat_id.constellation, false, glo_k);
         let lambda_wl = SPEED_OF_LIGHT_M_S / (f1 - f2);
         let pwl_cycles = dd_cp1 - dd_cp2;
         let pw = pwl_cycles - ((rs - rr) - base_dd + tropo) / lambda_wl;

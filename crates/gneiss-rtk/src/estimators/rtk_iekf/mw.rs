@@ -245,6 +245,26 @@ mod tests {
 
 /// Phase and code observables for one frequency band across a satellite pair
 /// on both receivers, order `[rov_sat, rov_ref, bas_sat, bas_ref]`.
+
+/// Track C signal-registry frequency lookup.
+///
+/// `primary=true` → band-1 signal; `false` → engine-policy secondary
+/// (GPS/GLO L2 on band 2; Galileo E5a on band 5 per frequencies.rs).
+fn track_c_freq(
+    c: gneiss_core::sat::Constellation,
+    primary: bool,
+    glo_k: i8,
+) -> f64 {
+    use gneiss_core::frequencies::{frequency_for, primary_signal, secondary_signal};
+    let sig_and_band = if primary { primary_signal(c).map(|s| s) } else { secondary_signal(c).map(|(_, s)| s) };
+    match sig_and_band {
+        Some(sig) => frequency_for(c, sig, glo_k),
+        None => {
+            if primary { 1_575_420_000.0 } else { 1_227_600_000.0 }
+        }
+    }
+}
+
 fn band_quad(rov_s: &SatObs, rov_ref: &SatObs, bas_s: &SatObs, bas_ref: &SatObs, band: u8) -> Option<([f64; 4], [f64; 4])> {
     Some((
         [
@@ -297,8 +317,8 @@ pub fn update_tracker_from_obs(
     } else {
         5
     };
-    let f1 = gneiss_core::signal::get_frequency(sat_id, 1, glo_k);
-    let f2 = gneiss_core::signal::get_frequency(sat_id, b2, glo_k);
+    let f1 = track_c_freq(sat_id.constellation, true, glo_k);
+    let f2 = track_c_freq(sat_id.constellation, false, glo_k);
     let band1 = band_quad(rov_s, rov_ref, bas_s, bas_ref, 1);
     let band2 = band_quad(rov_s, rov_ref, bas_s, bas_ref, b2);
     let slip = [rov_s, rov_ref, bas_s, bas_ref].iter().any(|o| {
