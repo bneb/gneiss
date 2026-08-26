@@ -363,3 +363,61 @@ mod tests {
         assert!(clk.satellites.is_empty());
     }
 }
+
+#[cfg(test)]
+mod gfz_real_file_tests {
+    use super::*;
+
+    const CLK_PATH: &str = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../datasets/precise/2025/160/GFZ0MGXRAP_20250609.clk"
+    );
+
+    fn load() -> RinexClock {
+        let content = std::fs::read_to_string(CLK_PATH).expect("GFZ CLK cached");
+        RinexClock::parse(&content)
+    }
+
+    /// Contract: real 30-s GFZ rapid clocks parse into many GPS+Galileo
+    /// records with physically sane biases (|bias| < 2 ms).
+    #[test]
+    fn gfz_clk_parses_multi_gnss_with_sane_biases() {
+        let clk = load();
+        let g_count = clk
+            .satellites
+            .keys()
+            .filter(|s| s.constellation == Constellation::Gps)
+            .count();
+        let e_count = clk
+            .satellites
+            .keys()
+            .filter(|s| s.constellation == Constellation::Galileo)
+            .count();
+        assert!(g_count >= 20, "GPS satellites parsed: {g_count}");
+        assert!(e_count >= 10, "Galileo satellites parsed: {e_count}");
+        // Empirical: healthy GPS biases stay within ±1 ms; a few Galileo
+        // spacecraft (e.g. E05 in this product) carry multi-ms genuine
+        // offsets — precisely why DD needs precise-clock correction.
+        for (sat, recs) in &clk.satellites {
+            let limit = if sat.constellation == Constellation::Gps { 1e-3 } else { 6e-3 };
+            for r in recs {
+                assert!(r.bias.abs() < limit, "{sat:?} bias {} s", r.bias);
+            }
+        }
+    }
+
+    /// Interpolation between adjacent records stays within their envelope.
+    #[test]
+    fn gfz_clk_interpolation_bounded_by_neighbours() {
+        let clk = load();
+        let sv = *clk.satellites.keys().find(|s| s.constellation == Constellation::Gps).unwrap();
+        let recs = &clk.satellites[&sv];
+        assert!(recs.len() >= 100, "30 s records expected");
+        let mid = recs.len() / 2;
+        let t = GpsTime::new(recs[mid].time.week, (recs[mid - 1].time.tow + recs[mid].time.tow) / 2.0);
+        let b = clk.get_clock_bias(sv, t).expect("midpoint must interpolate");
+        let lo = recs[mid - 1].bias.min(recs[mid].bias);
+        let hi = recs[mid - 1].bias.max(recs[mid].bias);
+        assert!((lo..=hi).contains(&b), "interpolant {b} outside [{lo}, {hi}]");
+    }
+}

@@ -44,6 +44,8 @@ pub struct DoubleDiffMeasurement {
     pub dgrad_e_rov: f64,
     /// Solid Earth tide DD correction (metres, LOS-projected).
     pub tide_dd_m: f64,
+    /// Precise satellite-clock DD correction (metres): c·(dt_sat − dt_ref).
+    pub dd_clk_m: f64,
     /// Differential receiver-antenna PCV embedded in this DD pair
     /// (metres): `[PCV_rov(z_sat) - PCV_rov(z_ref)] -
     /// [PCV_base(z_sat) - PCV_base(z_ref)]`. Subtracted from the carrier
@@ -179,7 +181,11 @@ fn append_dd_meas_rows(
     let r_sat = (m.sat_pos - cur_pos).norm();
     let r_ref = (m.ref_pos - cur_pos).norm();
     let trop_dd = compute_tropo_dd(m.sat_pos, m.ref_pos, m.base_pos, cur_pos);
-    let geom_dd = (r_sat - r_ref) - base_dd + trop_dd + m.tide_dd_m;
+    // Precise satellite-clock DD term rides on the geometry: the raw
+    // observation contains +c·(dt_sat − dt_ref) in BOTH code and phase,
+    // so adding it to the model cancels it in every innovation exactly
+    // once. Zero when no precise clock product is loaded.
+    let geom_dd = (r_sat - r_ref) - base_dd + trop_dd + m.tide_dd_m + m.dd_clk_m;
 
     let los_sat = (m.sat_pos - cur_pos) / r_sat.max(1e-3);
     let los_ref = (m.ref_pos - cur_pos) / r_ref.max(1e-3);
@@ -393,6 +399,7 @@ mod tests {
             dgrad_n_rov: 0.0,
             dgrad_e_rov: 0.0,
                 tide_dd_m: 0.0,
+                dd_clk_m: 0.0,
             dm_wet_rov: 0.0,
             dd_pcv_m: 0.0,
         }];
@@ -440,6 +447,7 @@ mod tests {
                 dgrad_n_rov: 0.0,
                 dgrad_e_rov: 0.0,
                 tide_dd_m: 0.0,
+                dd_clk_m: 0.0,
                 dd_pcv_m: 0.0,
             });
         }
@@ -519,6 +527,7 @@ mod tests {
                     dgrad_n_rov: 0.0,
                     dgrad_e_rov: 0.0,
                 tide_dd_m: 0.0,
+                dd_clk_m: 0.0,
                 dd_pcv_m: 0.0,
                 });
             }
@@ -592,6 +601,7 @@ mod tests {
             dgrad_n_rov: 0.0,
             dgrad_e_rov: 0.0,
             tide_dd_m: 0.0,
+            dd_clk_m: 0.0,
             dd_pcv_m,
         };
         (state, m)

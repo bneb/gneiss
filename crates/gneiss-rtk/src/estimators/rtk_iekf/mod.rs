@@ -635,6 +635,14 @@ impl GnssRtkIekf {
             || rov_ref.get_lli(freq_band).is_some_and(|l| (l & 1) != 0)
             || arc_changed;
 
+        let dd_clk_m = self.precise_clock_dd_m(
+            sat_id,
+            ref_sat_id,
+            self.state.pos_ecef,
+            sat_pos,
+            ref_pos,
+        );
+
         // Receiver antenna PCV: the differential signature travels on the
         // measurement and is removed by every consumer through
         // pcv_corrected_cp, including the ambiguity seed below.
@@ -654,6 +662,7 @@ impl GnssRtkIekf {
             dgrad_n_rov,
             dgrad_e_rov,
             tide_dd_m,
+            dd_clk_m,
             dd_pcv_m,
         };
 
@@ -698,6 +707,67 @@ impl GnssRtkIekf {
             eprintln!("PCV [{}]: {:.4} mm (el_s={:.1} el_r={:.1})", sat_id, corr*1000.0, el_s.to_degrees(), el_r.to_degrees());
         }
         corr
+    }
+
+
+    /// Differential precise-satellite-clock correction (metres of range).
+    ///
+    /// Evaluates each satellite's precise clock bias at its approximate
+    /// transmit time and returns `c · (dt_sat − dt_ref)`. Returns 0.0 when
+    /// no precise clock product is loaded or either bias is unavailable.
+    fn precise_clock_dd_m(
+        &self,
+        sat_id: gneiss_core::sat::SatelliteId,
+        ref_sat_id: u16,
+        rx_pos: Vector3<f64>,
+        sat_pos: Vector3<f64>,
+        ref_pos: Vector3<f64>,
+    ) -> f64 {
+        const C: f64 = gneiss_core::constants::SPEED_OF_LIGHT_M_S;
+        let Some(clk_prod) = &self.precise_clocks else {
+            return 0.0;
+        };
+        let tau_s = (rx_pos - sat_pos).norm() / C;
+        let tau_r = (rx_pos - ref_pos).norm() / C;
+        let t_s = GpsTime::new(self.state.time.week, self.state.time.tow - tau_s);
+        let t_r = GpsTime::new(self.state.time.week, self.state.time.tow - tau_r);
+        let ref_sv = gneiss_core::sat::SatelliteId {
+            constellation: sat_id.constellation,
+            prn: ref_sat_id as u8,
+        };
+        let r = match (
+            clk_prod.get_clock_bias(sat_id, t_s),
+            clk_prod.get_clock_bias(ref_sv, t_r),
+        ) {
+            (Some(a), Some(b)) => C * (a - b),
+            _ => 0.0,
+        };
+        if std::env::var("GNEISS_CLK_TRACE").is_ok() {
+            static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+            let n = N.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            if n < 10 {
+                let bs = clk_prod.get_clock_bias(sat_id, t_s).unwrap_or(f64::NAN);
+                let br = clk_prod.get_clock_bias(ref_sv, t_r).unwrap_or(f64::NAN);
+                eprintln!(
+                    "CLKDD[{n}] tow={:.0} {:?}{:02}-{:02} bs={:+.1} br={:+.1} -> {:+.3} m",
+                    self.state.time.tow, sat_id.constellation, sat_id.prn, ref_sv.prn,
+                    bs * 1e6, br * 1e6, r
+                );
+            }
+        }
+        r
+    }
+
+    /// Trace helper: raw bias or NaN.
+    fn a_or_none(
+        sv: gneiss_core::sat::SatelliteId,
+        t: GpsTime,
+        clk_prod: &Option<std::sync::Arc<gneiss_parsers::rinex_clk::RinexClock>>,
+    ) -> f64 {
+        clk_prod
+            .as_ref()
+            .and_then(|c| c.get_clock_bias(sv, t))
+            .unwrap_or(f64::NAN)
     }
 
     /// Phase innovations with sensitivity to the rover ZWD residual.
@@ -1093,6 +1163,7 @@ mod tests {
         let mk_meas = |k: DoubleDiffKey, dir: Vector3<f64>| update::DoubleDiffMeasurement {
             key: k,
             dd_pr_m: 0.0,
+            dd_clk_m: 0.0,
             dd_cp_cycles: None,
             sat_pos: eng.state.pos_ecef + dir * 2.4e7,
             ref_pos: eng.state.pos_ecef + up * 2.6e7,
