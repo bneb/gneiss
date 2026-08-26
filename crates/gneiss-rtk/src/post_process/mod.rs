@@ -12,6 +12,7 @@ pub mod forward;
 pub mod network;
 pub mod quality;
 pub mod screening;
+pub mod sidereal;
 
 use nalgebra::Vector3;
 
