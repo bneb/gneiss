@@ -7,6 +7,8 @@ use std::collections::BTreeMap;
 use nalgebra::{Matrix3, Vector3};
 
 use gneiss_core::time::GpsTime;
+use crate::post_process::dynamics;
+use crate::post_process::dynamics::ProcessingDynamics;
 use crate::post_process::forward::FilteredEpoch;
 
 /// A fully smoothed post-processed epoch.
@@ -28,12 +30,16 @@ pub struct SmoothedEpoch {
 /// Combine forward and backward trajectories using covariance intersection.
 ///
 /// `strict_disagreement` enables the long-baseline honesty rule: when the
-/// two passes disagree by more than [`STRICT_DISAGREE_M`], neither fixed
-/// claim is trusted and the product is downgraded to float quality.
+/// two passes disagree by more than the profile's disagreement limit,
+/// neither fixed claim is trusted and the product is downgraded to float
+/// quality. The limit is [`STRICT_DISAGREE_M`] for static monuments and
+/// sigma-scaled (see [`dynamics::kinematic_sep_limit_m`]) for kinematic
+/// rovers, where absolute metres would flag legitimate motion as fraud.
 pub fn combine_trajectories(
     forward: &[FilteredEpoch],
     backward: &BTreeMap<u64, FilteredEpoch>,
     strict_disagreement: bool,
+    prof: ProcessingDynamics,
 ) -> Vec<SmoothedEpoch> {
     let mut smoothed = Vec::with_capacity(forward.len());
 
@@ -42,7 +48,7 @@ pub fn combine_trajectories(
         let bwd_opt = backward.get(&tow_ms);
 
         let epoch_res = match bwd_opt {
-            Some(bwd) => combine_bidirectional_epoch(fwd, bwd, strict_disagreement),
+            Some(bwd) => combine_bidirectional_epoch(fwd, bwd, strict_disagreement, prof),
             None => single_pass_epoch(fwd),
         };
         smoothed.push(epoch_res);
@@ -54,24 +60,66 @@ pub fn combine_trajectories(
 /// monument: whichever side wins, a fixed claim would be dishonest.
 pub const STRICT_DISAGREE_M: f64 = 0.50;
 
+/// Formal (1-sigma) position magnitude of one pass, from the trace of
+/// its ECEF covariance: sqrt(trace/3) of an isotropic-equivalent error.
+fn formal_sigma_m(cov: &Matrix3<f64>) -> f64 {
+    (cov.trace().max(0.0) / 3.0).sqrt()
+}
+
+/// Profile-dependent separation limits for one epoch pair.
+struct SepLimits {
+    /// Honesty gate: beyond this, fixed claims are downgraded.
+    strict_m: f64,
+    /// Fuse window when only one pass claims a fix.
+    cross_fix_fuse_m: f64,
+    /// Fuse window when both passes claim fixes.
+    both_fixed_fuse_m: f64,
+}
+
+impl SepLimits {
+    fn for_profile(prof: ProcessingDynamics, fwd: &FilteredEpoch, bwd: &FilteredEpoch) -> Self {
+        match prof {
+            ProcessingDynamics::Static => SepLimits {
+                strict_m: STRICT_DISAGREE_M,
+                cross_fix_fuse_m: 0.50,
+                both_fixed_fuse_m: 0.20,
+            },
+            ProcessingDynamics::Kinematic => {
+                let (sf, sb) = (formal_sigma_m(&fwd.cov_position), formal_sigma_m(&bwd.cov_position));
+                SepLimits {
+                    strict_m: dynamics::kinematic_sep_limit_m(dynamics::KIN_DISAGREE_K_SIGMA, sf, sb),
+                    cross_fix_fuse_m: dynamics::kinematic_sep_limit_m(dynamics::KIN_FUSE_CROSS_K_SIGMA, sf, sb),
+                    both_fixed_fuse_m: dynamics::kinematic_sep_limit_m(dynamics::KIN_FUSE_BOTH_FIXED_K_SIGMA, sf, sb),
+                }
+            }
+        }
+    }
+}
+
 /// Helper to fuse forward and backward estimates for a single epoch.
-fn combine_bidirectional_epoch(fwd: &FilteredEpoch, bwd: &FilteredEpoch, strict: bool) -> SmoothedEpoch {
+fn combine_bidirectional_epoch(
+    fwd: &FilteredEpoch,
+    bwd: &FilteredEpoch,
+    strict: bool,
+    prof: ProcessingDynamics,
+) -> SmoothedEpoch {
     let sep = (fwd.position_ecef - bwd.position_ecef).norm();
+    let limits = SepLimits::for_profile(prof, fwd, bwd);
 
     let (pos, cov, mut q) = if fwd.is_fixed && !bwd.is_fixed {
-        if sep < 0.50 {
+        if sep < limits.cross_fix_fuse_m {
             fuse_covariances(fwd, bwd, 1)
         } else {
             (fwd.position_ecef, fwd.cov_position, 1)
         }
     } else if bwd.is_fixed && !fwd.is_fixed {
-        if sep < 0.50 {
+        if sep < limits.cross_fix_fuse_m {
             fuse_covariances(fwd, bwd, 1)
         } else {
             (bwd.position_ecef, bwd.cov_position, 1)
         }
     } else if fwd.is_fixed && bwd.is_fixed {
-        if sep < 0.20 {
+        if sep < limits.both_fixed_fuse_m {
             fuse_covariances(fwd, bwd, 1)
         } else if fwd.cov_position.trace() <= bwd.cov_position.trace() {
             (fwd.position_ecef, fwd.cov_position, 1)
@@ -89,10 +137,10 @@ fn combine_bidirectional_epoch(fwd: &FilteredEpoch, bwd: &FilteredEpoch, strict:
         }
     };
 
-    // Long-baseline honesty: when the passes disagree beyond the static
+    // Long-baseline honesty: when the passes disagree beyond the profile
     // threshold, whichever side was picked cannot be trusted as fixed.
     // Cap quality to float so downstream consumers see the uncertainty.
-    if strict && sep > STRICT_DISAGREE_M && q == 1 {
+    if strict && sep > limits.strict_m && q == 1 {
         q = 2;
     }
 
@@ -183,5 +231,78 @@ mod tests {
         let (pos, cov, _) = fuse_covariances(&ep1, &ep2, 2);
         assert!((pos.x - 100.1).abs() < 1e-6);
         assert!(cov[(0, 0)] < cov1[(0, 0)]);
+    }
+
+    /// Synthetic fixed-claim epoch pair at `sep_m` separation with both
+    /// passes reporting isotropic formal sigma `sigma_m`.
+    fn fixed_pair(sep_m: f64, sigma_m: f64) -> (FilteredEpoch, FilteredEpoch) {
+        let mk = |x: f64| FilteredEpoch {
+            time: GpsTime::new(2000, 100.0),
+            position_ecef: Vector3::new(x, 0.0, 0.0),
+            velocity_ecef: None,
+            attitude: None,
+            cov_position: Matrix3::identity() * (sigma_m * sigma_m),
+            n_satellites: 8,
+            quality: 1,
+            is_fixed: true,
+        };
+        (mk(0.0), mk(sep_m))
+    }
+
+    fn combined_quality(sep_m: f64, sigma_m: f64, prof: ProcessingDynamics) -> u8 {
+        let (fwd, bwd) = fixed_pair(sep_m, sigma_m);
+        let mut map = BTreeMap::new();
+        map.insert(100_000_u64, bwd);
+        combine_trajectories(&[fwd], &map, true, prof).remove(0).quality
+    }
+
+    #[test]
+    fn static_profile_keeps_legacy_absolute_rule() {
+        // Legacy behaviour: 0.60 m disagreement downgrades a static fix.
+        assert_eq!(combined_quality(0.60, 0.01, ProcessingDynamics::Static), 2);
+        // Just inside stays fixed.
+        assert_eq!(combined_quality(0.40, 0.01, ProcessingDynamics::Static), 1);
+    }
+
+    #[test]
+    fn kinematic_threshold_scales_with_reported_sigma() {
+        // Same 0.60 m separation as the failing static case, but the
+        // passes report formal sigma 0.20 m: limit = 6*0.20 = 1.2 m,
+        // so honest agreement tracking motion stays fixed.
+        assert_eq!(combined_quality(0.60, 0.20, ProcessingDynamics::Kinematic), 1);
+        // Scale-up property: larger reported sigma, wider tolerance.
+        assert_eq!(combined_quality(1.00, 0.30, ProcessingDynamics::Kinematic), 1);
+        // Tiny sigmas hit the floor (5 cm): sub-floor disagreement is
+        // still dishonest for a well-constrained pair.
+        assert_eq!(combined_quality(0.06, 1e-4, ProcessingDynamics::Kinematic), 2);
+        // Huge sigmas hit the cap (10 m): divergence cannot excuse fraud.
+        assert_eq!(combined_quality(11.0, 1e3, ProcessingDynamics::Kinematic), 2);
+    }
+
+    #[test]
+    fn kinematic_downgrades_where_static_would_and_more() {
+        // For identical epochs, kinematic must never be STRICTER than
+        // static beyond the floor: its limit is >= floor and grows with
+        // sigma, so any sep the static rule forgives is forgiven too
+        // whenever sigma >= ~8.3 cm (floor/6).
+        for sigma in [0.10_f64, 0.15, 0.30, 1.0] {
+            for sep in [0.05_f64, 0.45, 0.49] {
+                let qs = combined_quality(sep, sigma, ProcessingDynamics::Static);
+                let qk = combined_quality(sep, sigma, ProcessingDynamics::Kinematic);
+                assert!(
+                    qk <= qs,
+                    "kinematic (sigma={sigma}) must not downgrade sep={sep} that static forgives"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn strict_off_never_downgrades() {
+        let (fwd, bwd) = fixed_pair(50.0, 0.01);
+        let mut map = BTreeMap::new();
+        map.insert(100_000_u64, bwd);
+        let mut out = combine_trajectories(&[fwd], &map, false, ProcessingDynamics::Static);
+        assert_eq!(out.remove(0).quality, 1);
     }
 }

@@ -26,6 +26,7 @@ use nalgebra::{Matrix3, Vector3};
 use gneiss_core::time::GpsTime;
 
 use super::combiner::SmoothedEpoch;
+use crate::post_process::dynamics::ProcessingDynamics;
 
 /// Minimum agreeing fixed candidates required to claim quality=1.
 pub const MIN_FIXED_CONSENSUS: usize = 3;
@@ -42,6 +43,15 @@ const FLOAT_VETO_M: f64 = f64::INFINITY;
 /// between adjacent epochs within the max time delta.
 pub const CONTINUITY_JUMP_M: f64 = 0.20;
 pub const CONTINUITY_MAX_DT_S: f64 = 90.0;
+
+/// Kinematic continuity-gate velocity factor: the allowed jump grows
+/// with the smoothed velocity magnitude times dt, inflated by this
+/// factor for turn/acceleration slack between gated epochs.
+pub const KIN_CONTINUITY_VEL_FACTOR: f64 = 1.5;
+/// Kinematic continuity-gate sigma term: uncertainty-aware slack added
+/// to the velocity allowance (same steepness as the combiner honesty
+/// gate).
+pub const KIN_CONTINUITY_K_SIGMA: f64 = 6.0;
 
 /// Per-epoch consensus configuration knobs.
 #[derive(Debug, Clone)]
@@ -107,6 +117,48 @@ pub fn apply_continuity_gate(
         anchor = Some((ep.time.tow, ep.position_ecef));
     }
     traj
+}
+
+/// [`apply_continuity_gate`] with profile-dependent allowances.
+///
+/// Static keeps the fixed [`CONTINUITY_JUMP_M`] rule bit-for-bit.
+/// Kinematic scales each epoch's allowed jump with its own reported
+/// motion and uncertainty — `max(0.20 m, 1.5*|v|*dt + 6*sigma)` — so
+/// legitimate rover movement is not punished as temporal corruption,
+/// while jumps inconsistent with BOTH the claimed velocity and the
+/// formal sigma are still downgraded to float.
+pub fn apply_continuity_gate_dynamics(
+    mut traj: Vec<SmoothedEpoch>,
+    max_dt_s: f64,
+    prof: ProcessingDynamics,
+) -> Vec<SmoothedEpoch> {
+    match prof {
+        ProcessingDynamics::Static => apply_continuity_gate(traj, CONTINUITY_JUMP_M, max_dt_s),
+        ProcessingDynamics::Kinematic => {
+            // Same accept-anchoring policy as the static gate: a
+            // downgraded stretch cannot re-bless itself by drifting.
+            let mut anchor: Option<(f64, Vector3<f64>)> = None;
+            for ep in traj.iter_mut() {
+                if let Some((at, ap)) = anchor {
+                    let dt = ep.time.tow - at;
+                    if dt > 0.0 && dt <= max_dt_s {
+                        let sigma = (ep.cov_position.trace().max(0.0) / 3.0).sqrt();
+                        let vel_slack = ep
+                            .velocity_ecef
+                            .map_or(0.0, |v| v.norm() * dt * KIN_CONTINUITY_VEL_FACTOR);
+                        let allow =
+                            (CONTINUITY_JUMP_M).max(KIN_CONTINUITY_K_SIGMA * sigma + vel_slack);
+                        if (ep.position_ecef - ap).norm() > allow {
+                            ep.quality = 2;
+                            continue;
+                        }
+                    }
+                }
+                anchor = Some((ep.time.tow, ep.position_ecef));
+            }
+            traj
+        }
+    }
 }
 
 fn consensus_epoch(cands: &[&SmoothedEpoch], cfg: &NetworkConsensusConfig) -> Option<SmoothedEpoch> {
@@ -336,5 +388,62 @@ mod tests {
         assert_eq!(fused.len(), 2);
         assert_eq!(tow_key(&fused[0].time), 400);
         assert_eq!(tow_key(&fused[1].time), 430);
+    }
+
+    /// `ep` with a reported ECEF velocity (kinematic continuity tests).
+    fn ep_v(tow: f64, x: f64, vx: f64, sigma: f64, quality: u8) -> SmoothedEpoch {
+        let mut e = ep(tow, x, sigma, quality);
+        e.velocity_ecef = Some(Vector3::new(vx, 0.0, 0.0));
+        e
+    }
+
+    #[test]
+    fn kinematic_continuity_static_mode_matches_legacy_gate() {
+        // A 5 m jump: legacy downgrade in Static mode.
+        let traj = vec![
+            ep(1000.0, 0.0, 0.02, 1),
+            ep(1030.0, 5.0, 0.02, 1),
+        ];
+        let gated = apply_continuity_gate_dynamics(traj, CONTINUITY_MAX_DT_S, ProcessingDynamics::Static);
+        assert_eq!(gated[1].quality, 2);
+    }
+
+    #[test]
+    fn kinematic_continuity_allows_motion_consistent_travel() {
+        // 5 m/s for 30 s => 150 m of travel; the epoch claims that
+        // velocity and tight sigmas, so the gate must keep it fixed.
+        let traj = vec![
+            ep_v(1000.0, 0.0, 5.0, 0.02, 1),
+            ep_v(1030.0, 150.0, 5.0, 0.02, 1),
+        ];
+        let gated = apply_continuity_gate_dynamics(traj, CONTINUITY_MAX_DT_S, ProcessingDynamics::Kinematic);
+        assert_eq!(gated[1].quality, 1, "motion-consistent jump must survive");
+    }
+
+    #[test]
+    fn kinematic_continuity_still_catches_inconsistent_jumps() {
+        // Same claimed velocity, but the position jumped 10x farther
+        // than velocity+sigma can explain: downgrade, and the anchor
+        // policy keeps the next epoch downgraded too.
+        let traj = vec![
+            ep_v(1000.0, 0.0, 5.0, 0.02, 1),
+            ep_v(1030.0, 1500.0, 5.0, 0.02, 1),
+            ep_v(1060.0, 1650.0, 5.0, 0.02, 1),
+        ];
+        let gated = apply_continuity_gate_dynamics(traj, CONTINUITY_MAX_DT_S, ProcessingDynamics::Kinematic);
+        assert_eq!(gated[1].quality, 2);
+        assert_eq!(gated[2].quality, 2, "anchored: excursion cannot self-recover");
+    }
+
+    #[test]
+    fn kinematic_continuity_floor_preserves_static_rule_when_idle() {
+        // Zero reported velocity and tiny sigma: allowance falls back to
+        // the static 0.20 m floor.
+        let traj = vec![
+            ep_v(1000.0, 0.0, 0.0, 0.001, 1),
+            ep_v(1030.0, 0.50, 0.0, 0.001, 1),
+        ];
+        let gated = apply_continuity_gate_dynamics(traj, CONTINUITY_MAX_DT_S, ProcessingDynamics::Kinematic);
+        assert_eq!(gated[1].quality, 2);
     }
 }

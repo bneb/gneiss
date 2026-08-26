@@ -11,6 +11,7 @@ use gneiss_core::ephemeris::Ephemeris;
 use gneiss_core::obs::EpochObs;
 
 use crate::estimators::rtk_iekf::GnssRtkIekf;
+use crate::post_process::dynamics::{ProcessingDynamics, Q_ACCEL_UNSET_FALLBACK};
 use crate::post_process::forward::{estimate_epoch_covariance, find_matched_base, FilteredEpoch};
 use crate::swfg::config::EngineConfig;
 use crate::swfg::engine::SwfgEngine;
@@ -28,6 +29,7 @@ pub fn run_backward_pass(
     imu_samples: Option<&[ImuSample]>,
     initial_rover_pos: Option<Vector3<f64>>,
     q_accel: Option<f64>,
+    dynamics: ProcessingDynamics,
     widelane_ar: bool,
     tropo_grad: bool,
     sat_upd: Option<std::collections::HashMap<u16, f64>>,
@@ -38,7 +40,9 @@ pub fn run_backward_pass(
             let init_p = initial_rover_pos.unwrap_or_else(|| {
                 compute_initial_position(rover_epochs, ephemerides, bp)
             });
-            return run_backward_iekf(ephemerides, rover_epochs, base_epochs.unwrap_or(&[]), bp, init_p, q_accel.unwrap_or(1.0), widelane_ar, tropo_grad, sat_upd, receiver_pcv);
+            // Same fallback rule as the forward pass: explicit wins,
+            // `None` keeps the legacy 1.0 in both profiles.
+            return run_backward_iekf(ephemerides, rover_epochs, base_epochs.unwrap_or(&[]), bp, init_p, q_accel.unwrap_or(Q_ACCEL_UNSET_FALLBACK), dynamics, widelane_ar, tropo_grad, sat_upd, receiver_pcv);
         }
     }
 
@@ -74,6 +78,7 @@ fn run_backward_iekf(
     base_pos: Vector3<f64>,
     initial_rover_pos: Vector3<f64>,
     q_accel: f64,
+    dynamics: ProcessingDynamics,
     widelane_ar: bool,
     tropo_grad: bool,
     sat_upd: Option<std::collections::HashMap<u16, f64>>,
@@ -89,12 +94,14 @@ fn run_backward_iekf(
 
     let mut iekf = GnssRtkIekf::new(initial_rover_pos, rev_epochs[0].time, q_accel);
     iekf.widelane_ar = widelane_ar;
+    iekf.robust_innov_scale = dynamics.innovation_gate_scale();
     if let Some(pair) = receiver_pcv {
         iekf.receiver_pcv = Some((pair.rover.clone(), pair.base.clone()));
     }
-    if widelane_ar {
+    if widelane_ar && !dynamics.is_kinematic() {
         // Two-phase static Q (mirrors forward pass): the backward session
         // anchor is end-of-day, so elapsed time counts symmetrically.
+        // Suppressed for kinematic rovers — no monument to lock.
         iekf.static_lock_after_s = Some(900.0);
         iekf.static_lock_q_accel = 1e-8;
     }
@@ -294,7 +301,7 @@ mod tests {
     #[test]
     fn test_empty_backward_pass_runs() {
         let config = EngineConfig::Spp(Default::default());
-        let results = run_backward_pass(&config, &[], None, &[], None, None, None, None, None, false, false, None, None);
+        let results = run_backward_pass(&config, &[], None, &[], None, None, None, None, None, ProcessingDynamics::Static, false, false, None, None);
         assert!(results.is_empty());
     }
 }

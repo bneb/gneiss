@@ -10,6 +10,7 @@ use gneiss_core::obs::EpochObs;
 use gneiss_core::time::GpsTime;
 
 use crate::estimators::rtk_iekf::GnssRtkIekf;
+use crate::post_process::dynamics::{ProcessingDynamics, Q_ACCEL_UNSET_FALLBACK};
 use crate::swfg::config::EngineConfig;
 use crate::swfg::engine::SwfgEngine;
 use crate::swfg::imu_preintegration::{ImuPreintegration, ImuSample};
@@ -45,6 +46,7 @@ pub fn run_forward_pass(
     imu_samples: Option<&[ImuSample]>,
     initial_rover_pos: Option<Vector3<f64>>,
     q_accel: Option<f64>,
+    dynamics: ProcessingDynamics,
     widelane_ar: bool,
     tropo_grad: bool,
     sat_upd: Option<std::collections::HashMap<u16, f64>>,
@@ -52,7 +54,12 @@ pub fn run_forward_pass(
 ) -> Vec<FilteredEpoch> {
     if imu_samples.is_none() && base_pos.is_some() && base_epochs.is_some() {
         if let Some(bp) = base_pos {
-            let (epochs, _wl, _pw) = run_forward_iekf(ephemerides, rover_epochs, base_epochs.unwrap_or(&[]), bp, initial_rover_pos, q_accel.unwrap_or(1.0), widelane_ar, tropo_grad, sat_upd.clone(), receiver_pcv);
+            // An explicit q_accel always wins; `None` keeps the legacy
+            // 1.0 fallback in BOTH profiles so unset behaviour stays
+            // byte-identical. Profiles choose their Q at the options
+            // level (eval binaries pass STATIC/KINEMATIC_Q_ACCEL).
+            let q_eff = q_accel.unwrap_or(Q_ACCEL_UNSET_FALLBACK);
+            let (epochs, _wl, _pw) = run_forward_iekf(ephemerides, rover_epochs, base_epochs.unwrap_or(&[]), bp, initial_rover_pos, q_eff, dynamics, widelane_ar, tropo_grad, sat_upd.clone(), receiver_pcv);
             return epochs;
         }
     }
@@ -68,6 +75,7 @@ fn run_forward_iekf(
     base_pos: Vector3<f64>,
     initial_rover_pos: Option<Vector3<f64>>,
     q_accel: f64,
+    dynamics: ProcessingDynamics,
     widelane_ar: bool,
     tropo_grad: bool,
     sat_upd: Option<std::collections::HashMap<u16, f64>>,
@@ -84,6 +92,8 @@ fn run_forward_iekf(
         compute_initial_position(rover_epochs, ephemerides, base_pos)
     });
     let mut iekf = GnssRtkIekf::new(init_pos, rover_epochs[0].time, q_accel);
+    // Profile-gated robust weighting: 1.0 (Static) is bit-identical legacy.
+    iekf.robust_innov_scale = dynamics.innovation_gate_scale();
     if let Ok(deg) = std::env::var("GNEISS_ELEV_DEG") {
         if let Ok(rad) = deg.parse::<f64>() {
             iekf.min_elevation_rad = rad.to_radians();
@@ -94,8 +104,10 @@ fn run_forward_iekf(
     if let Some(pair) = receiver_pcv {
         iekf.receiver_pcv = Some((pair.rover.clone(), pair.base.clone()));
     }
-    if widelane_ar {
+    if widelane_ar && !dynamics.is_kinematic() {
         // Two-phase static Q: converge loosely, then lock the monument.
+        // Kinematic rovers have no monument to lock; the loose phase Q
+        // stays for the whole session.
         iekf.static_lock_after_s = Some(900.0);
         iekf.static_lock_q_accel = 1e-8;
     }
@@ -262,6 +274,10 @@ pub fn run_forward_pass_collecting(
         base_pos,
         None,
         q_accel,
+        // UPD pre-pass stays STATIC regardless of the run profile:
+        // satellite wide-lane biases are receiver-motion independent,
+        // and static Q maximises arc-mean convergence.
+        ProcessingDynamics::Static,
         true,
         false,
         None,
