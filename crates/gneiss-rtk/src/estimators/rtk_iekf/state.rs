@@ -254,6 +254,16 @@ impl RtkState {
             }
         }
 
+        // Iono states live after ambiguities; they must compact with the
+        // same key set or dim() and cov desync (storm-day crash).
+        let iono_base = self.iono_offset();
+        for (i, (key, val)) in self.ionos.iter().enumerate() {
+            if active_keys.contains(key) {
+                keep_indices.push(iono_base + i);
+            }
+        }
+        self.ionos.retain(|(k, _)| active_keys.contains(k));
+
         if keep_indices.len() == self.cov.nrows() {
             return;
         }
@@ -418,5 +428,41 @@ mod iono_tests {
         st.ensure_iono(dd_key(5, 1), 4.0); // second call no-op
         assert_eq!(st.ionos.len(), 1);
         assert_eq!(st.dim(), 7);
+    }
+}
+
+#[cfg(test)]
+mod iono_retain_tests {
+    use super::*;
+
+    fn key(sat: u16) -> DoubleDiffKey {
+        DoubleDiffKey { constellation_id: 0, sat, ref_sat: 1, freq_band: 1 }
+    }
+
+    /// Ledger row 12 candidate: retain_active_ambiguities must compact
+    /// iono states alongside ambiguities. Storm-day crash reproduced here:
+    /// dim() counted stale ionos while cov dropped them -> gemm mismatch.
+    #[test]
+    fn retain_compacts_iono_states_and_keeps_cov_consistent() {
+        let t = GpsTime::new(2100, 0.0);
+        let mut st = RtkState::new(Vector3::zeros(), t);
+        st.iono_enabled = true;
+        st.ensure_ambiguity(key(5), 10.0, 100.0);
+        st.ensure_ambiguity(key(7), 20.0, 100.0);
+        st.ensure_iono(key(5), 4.0);
+        st.ensure_iono(key(7), 4.0);
+        assert_eq!(st.dim(), st.cov.nrows(), "pre-condition");
+
+        // Satellite 7 sets; only key(5) remains active.
+        st.retain_active_ambiguities(&[key(5)]);
+
+        assert_eq!(
+            st.dim(),
+            st.cov.nrows(),
+            "dim/cov desync after retain — the storm-day crash"
+        );
+        assert_eq!(st.ambiguities.len(), 1);
+        assert_eq!(st.ionos.len(), 1, "ionos must compact with ambs");
+        assert_eq!(st.get_iono_idx(&key(5)), Some(st.iono_offset()));
     }
 }

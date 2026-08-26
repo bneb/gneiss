@@ -362,7 +362,7 @@ impl GnssRtkIekf {
                 .filter(|(_, &age)| age >= min_ep)
                 .map(|(k, _)| *k)
                 .collect();
-            self.state.ambiguities.retain(|(k, _)| eligible.contains(k));
+            self.state.retain_active_ambiguities(&eligible);
         }
         // Opt-in AR elevation mask (GNEISS_AR_GATE): resolve integers only
         // from pairs whose both members sit above the higher AR cut-off.

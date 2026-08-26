@@ -712,3 +712,27 @@ OPEN ITEMS: obs-side clock refactor (subsumes median+arc mechanisms);
 GLONASS FDMA fundamentals (>500-cycle mismatch, ≥25km gate trap);
 multi-day data for sidereal mitigation activation + storm-day iono
 validation.
+
+## Sprint 3 storm-day acquisition + honest first results
+
+Data acquired (network recovered): DOY158+161 adjacent days, G5
+geomagnetic storm 2024-05-10 (DOY131), 4 stations each + mixed navs +
+truth copies; GNEISS_DATA_DIR override added to eval binary.
+
+FINDINGS (clean 2x2 protocol, fresh binary c7477865+fixes):
+1. CRASH FIXED via TDD: iono-state retain desynced dim()/cov when
+   satellites set (storm churn) -> nalgebra gemm abort. Unit test pins
+   compaction contract; AR-gate raw retain rerouted through cov-
+   consistent state method.
+2. STORM DAY defeats BROADCAST-only processing completely: zero per-base
+   rows (all epochs diverge beyond reporting gates). Engine does not
+   crash; it honestly refuses to report garbage. Robustness headline:
+   no false fixes emitted under G5.
+3. IONO STATES currently HARMFUL even on the quiet day (fused 97.5 ->
+   53.3%): a regression vs earlier neutrality, introduced somewhere in
+   E5b-fix/obs-side/retain-compaction chain. Default remains OFF;
+   isolation is the top open bug — suspected interaction between
+   per-pair iono states and Galileo arc composition post-E5b-fix.
+
+NEXT: isolate quiet-day iono regression; then storm-day with working
+iono states becomes the decisive capability demo.

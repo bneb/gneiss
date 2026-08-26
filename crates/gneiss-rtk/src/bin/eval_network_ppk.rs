@@ -652,8 +652,15 @@ fn main() {
     }
 
     let multi2025 = std::env::var("GNEISS_DATASET").as_deref() == Ok("multi2025");
+    // Generic acquisition override: point at any directory laid out like
+    // multignss_2025d160 (P224 rover + truth + mixed nav + per-base obs).
+    // Base filenames are expected under their DOY160 names — acquisition
+    // scripts provide day->canonical symlinks.
+    let custom_dir = std::env::var("GNEISS_DATA_DIR").ok();
     let (dir, rover_file, truth_file, nav_file, bases): (&Path, &str, &str, &str, &[NetworkBase]) =
-        if multi2025 {
+        if let Some(d) = &custom_dir {
+            (Path::new(d), M25_ROVER, M25_TRUTH, M25_NAV, M25_BASES)
+        } else if multi2025 {
             (Path::new(M25_DIR), M25_ROVER, M25_TRUTH, M25_NAV, M25_BASES)
         } else {
             (Path::new("datasets/cors_short_baseline"), ROVER_FILE, TRUTH_FILE, NAV_FILE, BASES)
