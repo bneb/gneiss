@@ -72,7 +72,10 @@ const BASES: &[NetworkBase] = &[
     NetworkBase { id: "SLAC", base_file: "slac1350.20o", base_pos: Vector3::new(-2703116.3008, -4291766.8064, 3854248.0730), baseline_km: 49.67 },
 ];
 
-type Truth = BTreeMap<u32, Vector3<f64>>;
+/// Truth coordinates in the UNR/IGS20 reference frame. Type-tagged so
+/// that comparison against broadcast-frame solutions requires an
+/// explicit conversion (FRAME_SAFETY_PLAN ledger row 6).
+type Truth = BTreeMap<u32, gneiss_core::frames::EcefPos<gneiss_core::frames::Igs20>>;
 
 fn parse_truth(path: &Path) -> Truth {
     let mut truth = Truth::new();
@@ -97,7 +100,10 @@ fn parse_truth(path: &Path) -> Truth {
             _ => continue,
         };
         let gps_time = GpsTime::from_calendar(y, m, d, hr, min, sec);
-        truth.insert(gps_time.tow.round() as u32, Vector3::new(px, py, pz));
+        truth.insert(
+            gps_time.tow.round() as u32,
+            gneiss_core::frames::EcefPos::new(Vector3::new(px, py, pz)),
+        );
     }
     truth
 }
@@ -161,6 +167,21 @@ fn print_fixed_stats(name: &str, mut h_errs: Vec<f64>) -> f64 {
     p50
 }
 
+/// Express an IGS20 truth coordinate in the solution (broadcast) frame.
+///
+/// Both frames are ITRF2020-aligned to first order, so the Helmert is
+/// near-identity; the documented ~50 mm vertical residual between UNR
+/// IGS20 medians and broadcast-frame solutions is NOT captured by these
+/// parameters and remains as a systematic offset in reported errors.
+fn truth_in_solution_frame(
+    t: gneiss_core::frames::EcefPos<gneiss_core::frames::Igs20>,
+    epoch_yr: f64,
+) -> Vector3<f64> {
+    t.convert_to::<gneiss_core::frames::Wgs84Broadcast>(epoch_yr)
+        .vector()
+        .clone()
+}
+
 fn collect_errors(traj: &[SmoothedEpoch], truth: &Truth) -> (Vec<f64>, Vec<f64>, Vec<f64>, usize, Vec<f64>) {
     let mut h_errs = Vec::new();
     let mut d3_errs = Vec::new();
@@ -174,6 +195,7 @@ fn collect_errors(traj: &[SmoothedEpoch], truth: &Truth) -> (Vec<f64>, Vec<f64>,
             fix += 1;
         }
         if let Some(&t) = truth.get(&tow) {
+            let t = truth_in_solution_frame(t, 2025.5);
             let h = horizontal_error(ep.position_ecef, t);
             if h < 100.0 {
                 h_errs.push(h);
@@ -269,6 +291,7 @@ fn run_pass(
             let _ = writeln!(f, "tow,h,v,q,sep,nsat");
             for ep in &traj {
                 if let Some(&t) = ctx.truth.get(&(ep.time.tow.round() as u32)) {
+                    let t = truth_in_solution_frame(t, 2025.5);
                     let _ = writeln!(
                         f, "{:.0},{:.4},{:+.4},{},{:.3},{}",
                         ep.time.tow,
@@ -283,6 +306,7 @@ fn run_pass(
     if std::env::var("WL_OUTLIERS").is_ok() {
         for ep in &traj {
             if let Some(&t) = ctx.truth.get(&(ep.time.tow.round() as u32)) {
+                let t = truth_in_solution_frame(t, 2025.5);
                 let herr = horizontal_error(ep.position_ecef, t);
                 let verr = vertical_error(ep.position_ecef, t);
                 if herr > 1.0 || verr.abs() > 0.30 {
@@ -392,7 +416,8 @@ fn run_base(
         match (
             base_recv_pco_ecef(&dir.join(base.base_file), &antex, base.base_pos),
             rover_arp.and_then(|arp| {
-                base_recv_pco_ecef(Path::new("datasets/cors_short_baseline/p2241350.20o"), &antex, arp)
+                let v = truth_in_solution_frame(arp, 2025.5);
+                base_recv_pco_ecef(Path::new("datasets/cors_short_baseline/p2241350.20o"), &antex, v)
             }),
         ) {
             (Some(d_base), Some(d_rover)) => {
