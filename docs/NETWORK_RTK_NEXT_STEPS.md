@@ -736,3 +736,22 @@ FINDINGS (clean 2x2 protocol, fresh binary c7477865+fixes):
 
 NEXT: isolate quiet-day iono regression; then storm-day with working
 iono states becomes the decisive capability demo.
+
+## Iono-regression isolation complete: mis-parameterization, not wiring
+
+Discriminator result: GPS-ONLY + IONO=1 collapses identically to GE
+(P181 34.6% fix). Eliminates Galileo/E5b interaction -> the per-pair
+iono-state PARAMETERIZATION itself is flawed, exactly as the original
+design red-team warned ("iono and ambiguity states are correlated
+through the phase equation").
+
+Mechanism: independent per-pair constant iono states are rank-deficient
+against ambiguities — code noise (±3 m) cannot resolve the mm-level
+N/I split, so LAMBDA inherits inflated covariance along the degenerate
+direction and fix rates collapse. Earlier "metric-neutral" reading is
+now suspected a stale-binary-era artifact (pre-hardening).
+
+CORRECT DESIGN (next sprint): estimate per-SATELLITE slant iono mapped
+through a thin-shell/zenith model (RTKLIB ionmapf style) so geometry
+couples satellites and breaks the rank deficiency — NOT independent
+per-pair constants. Default stays OFF until reimplemented.
