@@ -112,6 +112,31 @@ fn run_forward_iekf(
             iekf.state.enable_gradients(crate::estimators::rtk_iekf::update::GRAD_INIT_VAR_M2);
         }
         iekf.enable_glonass = std::env::var("GNEISS_GLONASS").is_ok();
+        // Precise orbits: loaded when GNEISS_SP3 points to a valid SP3 file.
+        if let Ok(sp3_path) = std::env::var("GNEISS_SP3") {
+            let result = std::fs::File::open(&sp3_path)
+                .map_err(|e| format!("open failed: {}", e))
+                .and_then(|f| gneiss_parsers::sp3::parse_sp3(std::io::BufReader::new(f)));
+            match result {
+                Ok(epochs) => {
+                    let store = gneiss_parsers::precise_orbit::PreciseOrbit::new(epochs);
+                    println!("PRECISE: {} sats from {}", store.len(), sp3_path);
+                    iekf.precise_orbits = Some(std::sync::Arc::new(store));
+                }
+                Err(e) => eprintln!("SP3: {}", e),
+            }
+        }
+        // Precise clock products (RINEX CLK), used with precise orbits.
+        if let Ok(clk_path) = std::env::var("GNEISS_CLK") {
+            match std::fs::read_to_string(&clk_path) {
+                Ok(content) => {
+                    let rc = gneiss_parsers::rinex_clk::RinexClock::parse(&content);
+                    println!("PRECISE-CLK: {} satellites tracked", rc.satellites.len());
+                    iekf.precise_clocks = Some(std::sync::Arc::new(rc));
+                }
+                Err(e) => eprintln!("CLK: {}", e),
+            }
+        }
         iekf.track_ambiguity_keys =
             std::env::var("GNEISS_AMB_DUMP").is_ok();
     }

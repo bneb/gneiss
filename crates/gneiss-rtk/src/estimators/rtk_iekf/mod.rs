@@ -5,6 +5,8 @@ pub mod ar_gate;
 pub mod iono_free;
 pub mod mw;
 pub mod predict;
+pub mod sat_pco;
+pub mod satpos;
 pub mod smoother;
 pub mod state;
 pub mod update;
@@ -105,6 +107,8 @@ pub struct GnssRtkIekf {
     /// Eliminates ~1-2 m orbit error that only partially cancels in DD
     /// at >20 km baselines.
     pub precise_orbits: Option<std::sync::Arc<gneiss_parsers::precise_orbit::PreciseOrbit>>,
+    /// Precise clock products (RINEX CLK) paired with SP3 orbits.
+    pub precise_clocks: Option<std::sync::Arc<gneiss_parsers::rinex_clk::RinexClock>>,
     /// Opt-in FDMA GLONASS phase participation (own reference satellite and
     /// per-satellite ambiguities absorb phase inter-channel biases). MW
     /// wide-lane stays GPS/Galileo-only: code inter-channel biases do not
@@ -175,6 +179,7 @@ impl GnssRtkIekf {
             min_ar_lock_epochs: 0,
             pair_epochs: HashMap::new(),
             precise_orbits: None,
+            precise_clocks: None,
             enable_glonass: false,
             widelane_ar: false,
             start_tow: start_time.tow,
@@ -864,7 +869,31 @@ fn extract_sat_positions(
                 _ => 'G',
             };
             let sv_name = format!("{}{:02}", sys_char, s.sat.prn);
-            if let Some((pos, _clk)) = precise.position_at(&sv_name, rover.time) {
+            if std::env::var("GNEISS_SP3_PROBE").is_ok() {
+                static FIRST: std::sync::atomic::AtomicUsize =
+                    std::sync::atomic::AtomicUsize::new(0);
+                let n = FIRST.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                if n < 4 {
+                    let hit = precise.position_at(&sv_name, rover.time).is_some();
+                    eprintln!("SP3-PROBE[{}] {} -> {}", n, sv_name, hit);
+                }
+            }
+            if let Some((pos_com, _clk)) =
+                precise.position_at_with_hint(&sv_name, rover.time, Some(rx_pos))
+            {
+                // Transmit-time + Sagnac: rotate into receive-epoch ECEF
+                // using signal travel time (mirrors compute_signal_sat_pos).
+                let tau = (rx_pos - pos_com).norm()
+                    / gneiss_core::constants::SPEED_OF_LIGHT_M_S;
+                let wt = gneiss_core::constants::EARTH_ROTATION_RATE_RAD_S * tau;
+                let (sw, cw) = libm::sincos(wt);
+                let rotated = Vector3::new(
+                    pos_com.x * cw + pos_com.y * sw,
+                    -pos_com.x * sw + pos_com.y * cw,
+                    pos_com.z,
+                );
+                // CoM -> L1 phase centre via nadir projection, after rotation.
+                let pos = sat_pco::apply_sat_pco_z(rotated, s.sat.prn as u16);
                 let (_az, el) = gneiss_core::coords::az_el(rx_llh, rx_pos, pos);
                 if el >= min_el {
                     out.push((s.sat, pos));
@@ -892,6 +921,38 @@ fn extract_sat_positions(
         }
     }
     out
+}
+
+
+/// Nearest-TOE broadcast position for a satellite (pipeline delegate).
+pub fn broadcast_position_for(
+    ephems: &[Ephemeris],
+    sv: &gneiss_core::sat::SatelliteId,
+    t: GpsTime,
+) -> Option<(Vector3<f64>, f64)> {
+    let mut best: Option<(&Ephemeris, f64)> = None;
+    for cand in ephems {
+        if cand.sat().constellation != sv.constellation || cand.sat().prn != sv.prn {
+            continue;
+        }
+        let toe = match cand {
+            Ephemeris::Gps(g) => g.toe,
+            Ephemeris::Galileo(g) => g.toe,
+            Ephemeris::Glonass(_) => return None, // FDMA handled separately
+            _ => continue,
+        };
+        let dt = if toe.week == t.week { (toe.tow - t.tow).abs() } else { f64::INFINITY };
+        if best.map_or(true, |(_, d)| dt < d) {
+            best = Some((cand, dt));
+        }
+    }
+    let (eph, _) = best?;
+    let (p, _, clk, _) = match eph {
+        Ephemeris::Gps(g) => g.position(t),
+        Ephemeris::Galileo(g) => g.position(t),
+        _ => return None,
+    };
+    Some((p, clk))
 }
 
 fn compute_signal_sat_pos(s: &SatObs, eph: &Ephemeris, time: gneiss_core::time::GpsTime) -> Vector3<f64> {
