@@ -646,3 +646,29 @@ Empirical findings:
 - OPEN: P222 path never receives dd_clk_m (0 trace hits vs ≥10 for
   P181) — bit-identical across all runs incl. exploding control.
   Root-cause before any clock-dependent tuning on that base.
+
+## Sprint 2 clock-datum experiment #2: NO-SHIP (diagnosis gold, mechanism moot)
+
+Worktree exp/clk-arc-datum (07df0bc). Bookkeeping implemented exactly as
+specified — 6 tests, 348 ref-switches handled, guards green — but the
+explosion it targeted pre-exists at base commit. Isolation evidence:
+base-commit clone explodes identically; bookkeeping-disabled build
+explodes identically; CLK-only reproduces bit-identically; SP3-only is
+HEALTHY and beats broadcast (P181 99.0% fix / 101 mm — independently
+reproduced on their binary).
+
+ROOT CAUSE FOUND (verified on main): dd_clk_m is applied ONLY in
+update.rs geom_dd. iono_free.rs has ZERO handling; ar_gate.rs zero in
+production. Every fixed position re-estimated from iono-free phase
+against a clock-free model → constant tens-of-m displacement.
+
+MYSTERY SOLVED: P222 bit-identical across all runs because precise
+products load inside the <25 km ZWD baseline gate (forward.rs:21) —
+38 km P222 never loads them at all.
+
+ARCHITECTURE DECISION (next sprint): move clock correction OBS-SIDE at
+DD formation (subtract c·Δdt_est from DD code+phase once), delete
+model-side term everywhere. Makes every consumer structurally
+consistent; makes datum bookkeeping well-defined afterwards; median-
+centering logic relocates with it. Until then: SP3-WITHOUT-CLK is the
+shippable precise-products configuration.
