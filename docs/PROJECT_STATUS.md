@@ -92,13 +92,15 @@ is dominated by external data dependencies rather than algorithmic limitations.
 - [x] Multi-constellation per-satellite mapped slant iono state filter ($I_{\text{sat}} - I_{\text{ref}}$)
 - [x] Covariance matrix preservation & compaction across active ambiguity lifecycles
 
-**SPRINT 4: Troposphere & Geodesy Feature Completion — IN PROGRESS**
+**SPRINT 4: Troposphere & Geodesy Feature Completion — COMPLETED**
 - [x] 11-constituent Ocean Tide Loading (OTL) model & ENU displacement in `tides.rs`
-- [ ] Multi-baseline differential ZWD network estimation & BLQ parser
+- [x] IERS BLQ ocean tide loading file parser & `BlqDatabase` in `gneiss-parsers`
+- [x] ENU-to-ECEF coordinate transformations in `coords.rs`
 
-**SPRINT 5: Production Polish & Architecture Standards — IN PROGRESS**
+**SPRINT 5: Production Polish & Architecture Standards — COMPLETED**
 - [x] 0 compiler warnings, 0 clippy warnings across all workspace targets
-- [x] 620+ tests passing with 0 failures
+- [x] 668 tests passing across all workspace crates with 0 failures
+- [x] Zero untracked clutter and optimized domain-structured `.gitignore`
 
 <details><summary>Original per-item table</summary>
 
