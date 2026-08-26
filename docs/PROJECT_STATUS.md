@@ -76,7 +76,26 @@ is dominated by external data dependencies rather than algorithmic limitations.
 | Ocean tide loading at coastal sites | mm–cm vertical | yes, BLQ data available |
 | Inter-system bias not modeled | affects multi-GNSS DD | yes, add ISB state |
 
-### Prioritized roadmap
+### Prioritized roadmap (Sprint structure, updated)
+
+**SPRINT 1: Frame-Safety Bug Bash — IN PROGRESS**
+- [x] S1.1+S1.2 GLONASS/BeiDou time offsets → TimeSystem (7f3f782)
+- [x] S1.3 All frequency lookups → Track C Signal registry (95a56fe)
+- [ ] S1.4 EcefPos<F> at API boundaries (14 bare Vector3 sites audited)
+- [ ] S1.5 End-to-end frame-consistency test
+
+**SPRINT 2: Precise Products Full Chain**
+- Wire RinexClock + SP3 + PCO together; A/B vs broadcast
+
+**SPRINT 3: Storm-Day Validation** — fetch high-iono day; exercise
+iono states/gradients under stress.
+
+**SPRINT 4: Feature Completion** — GLONASS ICB, ocean tide loading,
+cross-epoch ambiguity detection.
+
+**SPRINT 5: Production Polish.**
+
+<details><summary>Original per-item table</summary>
 
 | priority | item | expected impact | effort | dependency |
 |---|---|---|---|---|
