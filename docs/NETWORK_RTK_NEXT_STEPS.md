@@ -691,3 +691,24 @@ Suspects ranked (for future investigation):
 
 Branch exp/glonass-icb retains partial WIP (uncommitted); main tree
 untouched. GLONASS stays gated OFF — no regression risk.
+
+## Five-track fan-out consolidated results (all independently verified)
+
+| track | verdict | landed | key evidence |
+|---|---|---|---|
+| median-centering | SHIP | bfce486 | GNEISS_CLK fail-safe; SP3-orbits beat broadcast at P181 |
+| arc-datum | NO-SHIP | branch kept | root cause = partial dd_clk_m wiring; obs-side refactor mandated |
+| sidereal | SHIP (diagnostics) | 3846dd7 merged | all channels phase-STRUCTURED p≈0; mitigation inert <2 sweeps by design |
+| kinematic | SHIP (behind flag) | 4e40f22 merged | bitwise static parity; sim: 26.2 km divergence -> 0.74 m |
+| glonass-icb | INCOMPLETE/FAILED | WIP on branch | >500-cycle FDMA mismatch — deeper than ICB |
+
+Red team: independent byte-compares, own parser, own baseline runs;
+caught + got fixed a reporting-semantics bug mid-review (307b7bb).
+
+Combined main @ merge: BOTH guards green, walkthrough bit-identical,
+759 tests / 0 failures. Binary be42c55d4a97.
+
+OPEN ITEMS: obs-side clock refactor (subsumes median+arc mechanisms);
+GLONASS FDMA fundamentals (>500-cycle mismatch, ≥25km gate trap);
+multi-day data for sidereal mitigation activation + storm-day iono
+validation.
