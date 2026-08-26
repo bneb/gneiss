@@ -267,6 +267,30 @@ pub fn primary_signal(c: crate::sat::Constellation) -> Option<Signal> {
     }
 }
 
+
+/// Resolve a RINEX band number to its Signal for a constellation.
+///
+/// This is the authoritative band→signal mapping; callers reading phase
+/// from band N MUST pair it with this signal's wavelength, independent
+/// of any preferred-secondary policy.
+pub fn signal_for_band(c: crate::sat::Constellation, band: u8) -> Option<Signal> {
+    use crate::sat::Constellation;
+    match (c, band) {
+        (Constellation::Gps | Constellation::Qzss, 1) => Some(Signal::GpsL1Ca),
+        (Constellation::Gps | Constellation::Qzss, 2) => Some(Signal::GpsL2Cm),
+        (Constellation::Gps | Constellation::Qzss, 5) => Some(Signal::GpsL5),
+        (Constellation::Glonass, 1) => Some(Signal::GloL1Of),
+        (Constellation::Glonass, 2) => Some(Signal::GloL2Of),
+        (Constellation::Galileo, 1) => Some(Signal::GalE1Os),
+        (Constellation::Galileo, 5) => Some(Signal::GalE5a),
+        (Constellation::Galileo, 6) => Some(Signal::GalE5b),
+        (Constellation::Galileo, 7) => Some(Signal::GalE6Cs),
+        (Constellation::Beidou, 1) => Some(Signal::BdsB1i),
+        (Constellation::Beidou, 5) => Some(Signal::BdsB3i),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -532,6 +556,19 @@ mod tests {
         for c in [Constellation::Gps, Constellation::Glonass, Constellation::Galileo, Constellation::Beidou] {
             assert!(primary_signal(c).is_some(), "{:?} missing primary", c);
         }
+    }
+
+    #[test]
+    fn test_signal_for_band_resolves_each_observed_band() {
+        use crate::sat::Constellation;
+        assert_eq!(signal_for_band(Constellation::Gps, 1), Some(Signal::GpsL1Ca));
+        assert_eq!(signal_for_band(Constellation::Gps, 2), Some(Signal::GpsL2Cm));
+        // Galileo: whichever band an arc actually uses gets its own signal.
+        assert_eq!(signal_for_band(Constellation::Galileo, 5), Some(Signal::GalE5a));
+        assert_ne!(
+            signal_for_band(Constellation::Galileo, 5),
+            signal_for_band(Constellation::Galileo, 6)
+        );
     }
 
     }

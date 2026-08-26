@@ -254,10 +254,10 @@ fn track_c_freq(
     c: gneiss_core::sat::Constellation,
     primary: bool,
     glo_k: i8,
+    band: u8,
 ) -> f64 {
-    use gneiss_core::frequencies::{frequency_for, primary_signal, secondary_signal};
-    let sig_and_band = if primary { primary_signal(c).map(|s| s) } else { secondary_signal(c).map(|(_, s)| s) };
-    match sig_and_band {
+    use gneiss_core::frequencies::{frequency_for, signal_for_band};
+    match signal_for_band(c, if primary { 1 } else { band }) {
         Some(sig) => frequency_for(c, sig, glo_k),
         None => {
             if primary { 1_575_420_000.0 } else { 1_227_600_000.0 }
@@ -317,8 +317,8 @@ pub fn update_tracker_from_obs(
     } else {
         5
     };
-    let f1 = track_c_freq(sat_id.constellation, true, glo_k);
-    let f2 = track_c_freq(sat_id.constellation, false, glo_k);
+    let f1 = track_c_freq(sat_id.constellation, true, glo_k, 1);
+    let f2 = track_c_freq(sat_id.constellation, false, glo_k, b2);
     let band1 = band_quad(rov_s, rov_ref, bas_s, bas_ref, 1);
     let band2 = band_quad(rov_s, rov_ref, bas_s, bas_ref, b2);
     let slip = [rov_s, rov_ref, bas_s, bas_ref].iter().any(|o| {

@@ -599,3 +599,29 @@ binary output is deterministic (two runs byte-identical).
 
 Remediation: reference regenerated from current verified-green tree;
 protection remains active for future changes.
+
+## Benchmark-integrity incident + remediation (binary staleness)
+
+DISCOVERY: guards executed target/release binaries without rebuilding;
+`cargo test` does NOT build release. With repeated `git checkout <sha> -- .`
+cycles, guard results depended on stale-binary lottery. Several A/B
+decisions compared binaries from different code states.
+
+HARDENING (permanent):
+1. Both guards now force `cargo build --release --bin eval_network_ppk`
+   before evaluating, and print sha256[:12] of the binary.
+2. All future A/Bs: SAME binary, env-gate toggled only. Paired baselines
+   generated fresh per session.
+
+SAME-BINARY REVALIDATION RESULTS (binary 90d90353b904):
+- Receiver PCV on dataset A: CAPO v_p50 -54 -> -45 mm (+9 mm) CONFIRMED
+  with clean discipline; P181/OHLN exactly zero delta as physics predicts.
+- Dataset B PCV: exact zero effect (all-family overlap) — earlier
+  "no effect" conclusion CONFIRMED.
+- SP3 full-physics chain: no collapse; P181 vp50 -12mm improvement,
+  P225 vp50 +13mm regression, P222 unchanged. Mixed/marginal —
+  broadcast remains default; SP3 stays opt-in pending clock wiring.
+- Elevation 15°: P181 -3.2pp / P225 +3.8pp tradeoff CONFIRMED.
+
+STILL OPEN: P222 fix-rate gap vs budget (80.3 vs 86.0) predates this
+audit; requires guarded bisect with forced rebuilds to attribute.

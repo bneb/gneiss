@@ -26,7 +26,28 @@ BUDGETS = {
 NETWORK_FIX_MIN = 96.5
 
 
+def _binary_hash() -> str:
+    import hashlib
+    h = hashlib.sha256(BIN.read_bytes()).hexdigest()[:12]
+    return h
+
+
+def _ensure_fresh_binary() -> int:
+    """Rebuild the release binary; guards must never evaluate stale code."""
+    r = subprocess.run(
+        ["cargo", "build", "--release", "--bin", BIN.name],
+        capture_output=True, text=True,
+    )
+    if r.returncode != 0:
+        print("FAIL: build errors\n" + r.stderr[-2000:])
+        return 1
+    return 0
+
+
 def main() -> int:
+    if _ensure_fresh_binary() != 0:
+        return 1
+    print(f"binary sha256[:12] = {_binary_hash()}")
     env = dict(os.environ,
                GNEISS_DATASET="multi2025",
                GNEISS_SYSTEMS="GE")
