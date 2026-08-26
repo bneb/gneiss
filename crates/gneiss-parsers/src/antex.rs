@@ -152,12 +152,12 @@ impl AntexDatabase {
                     }
                     _ => {
                         if let Some(freq) = current_frequency.as_mut() {
-                            if line.starts_with("   NOAZI") {
+                            if let Some(rest) = line.strip_prefix("   NOAZI") {
                                 // NOAZI records extend past the fixed 60-col
                                 // label boundary (up to ~152 chars); parse
                                 // the whole remainder or the grid is
                                 // silently truncated to ~6 nodes.
-                                let values: Vec<f64> = line[8..]
+                                let values: Vec<f64> = rest
                                     .split_whitespace()
                                     .filter_map(|s| s.parse().ok())
                                     .collect();

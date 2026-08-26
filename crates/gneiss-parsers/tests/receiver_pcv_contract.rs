@@ -85,23 +85,10 @@ mod receiver_pcv_contract {
     fn contract_ash_pcv_grid_values() {
         let db = load_db();
         let ant = find_antenna(&db, "ASH701945B_M", "SCIT").unwrap();
-        
-        // ASH701945B_M SCIT: zenith 0-80° step 5° → 17 NOAZI values
-        // From igs14.atx: NOAZI values start with 0.00 then go negative
-        // Expected: index 0 = 0.00, some values negative, last ~+3
-        
-        // Find all frequencies' noazi for G01 specifically
-        for (name, freq) in &ant.frequencies {
-            if name == "G01" {
-                assert!(
-                    !freq.noazi.is_empty(),
-                    "G01 NOAZI grid must be non-empty"
-                );
-                assert_eq!(freq.noazi[0], 0.00, "zenith 0 PCV must be 0");
-                return;
-            }
-        }
-        panic!("G01 frequency not found in ASH701945B_M SCIT");
+        let (noazi, dzen) = get_l1_pcv_grid(&ant).expect("G01 frequency required");
+        assert!(!noazi.is_empty(), "G01 NOAZI grid must be non-empty");
+        assert_eq!(noazi[0], 0.00, "zenith 0 PCV must be 0");
+        assert!(dzen > 0.0, "dzen must be positive");
     }
 
     #[test]

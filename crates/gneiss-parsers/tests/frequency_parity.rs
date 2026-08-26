@@ -11,7 +11,7 @@ fn sv(c: Constellation, prn: u8) -> SatelliteId {
 }
 
 /// Legacy table (verbatim pre-migration semantics from signal.rs).
-fn legacy_get_frequency(sat: SatelliteId, freq_band: u8, glo_k: i8) -> f64 {
+fn legacy_get_frequency(sat: SatelliteId, freq_band: u8, _glo_k: i8) -> f64 {
     const L1: f64 = 1575.42e6;
     const L2: f64 = 1227.60e6;
     const L5: f64 = 1176.45e6;

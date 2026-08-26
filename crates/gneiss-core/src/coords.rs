@@ -226,6 +226,28 @@ pub fn ecef_to_ned_matrix(llh: Vector3<f64>) -> nalgebra::Matrix3<f64> {
     )
 }
 
+/// Converts an ENU (East, North, Up) offset vector to ECEF displacement at a given ECEF origin.
+pub fn enu_to_ecef(origin_ecef: Vector3<f64>, enu: Vector3<f64>) -> Vector3<f64> {
+    let llh = ecef_to_llh(origin_ecef);
+    let lat = llh.x;
+    let lon = llh.y;
+
+    let sin_lat = libm::sin(lat);
+    let cos_lat = libm::cos(lat);
+    let sin_lon = libm::sin(lon);
+    let cos_lon = libm::cos(lon);
+
+    let e = enu.x;
+    let n = enu.y;
+    let u = enu.z;
+
+    let dx = -sin_lon * e - sin_lat * cos_lon * n + cos_lat * cos_lon * u;
+    let dy = cos_lon * e - sin_lat * sin_lon * n + cos_lat * sin_lon * u;
+    let dz = cos_lat * n + sin_lat * u;
+
+    Vector3::new(dx, dy, dz)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -1,5 +1,4 @@
 //! Diagnostic: broadcast vs SP3 satellite position agreement.
-use gneiss_core::time::GpsTime;
 use gneiss_parsers::{precise_orbit::PreciseOrbit, rinex::parse_rinex_nav, sp3::parse_sp3};
 
 fn main() {

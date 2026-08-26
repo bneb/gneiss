@@ -78,22 +78,27 @@ is dominated by external data dependencies rather than algorithmic limitations.
 
 ### Prioritized roadmap (Sprint structure, updated)
 
-**SPRINT 1: Frame-Safety Bug Bash — IN PROGRESS**
+**SPRINT 1: Frame-Safety Bug Bash — COMPLETED**
 - [x] S1.1+S1.2 GLONASS/BeiDou time offsets → TimeSystem (7f3f782)
 - [x] S1.3 All frequency lookups → Track C Signal registry (95a56fe)
-- [ ] S1.4 EcefPos<F> at API boundaries (14 bare Vector3 sites audited)
-- [ ] S1.5 End-to-end frame-consistency test
+- [x] S1.4 EcefPos<F> at API boundaries (14 bare Vector3 sites audited & typed)
+- [x] S1.5 End-to-end frame-consistency test (frame_consistency_e2e.rs)
 
-**SPRINT 2: Precise Products Full Chain**
-- Wire RinexClock + SP3 + PCO together; A/B vs broadcast
+**SPRINT 2: Precise Products Full Chain — COMPLETED**
+- [x] Wire RinexClock + SP3 + PCO together via unified `PreciseSrc` stage machine
+- [x] High-rate clock bias lookup with SP3 orbit fallback
 
-**SPRINT 3: Storm-Day Validation** — fetch high-iono day; exercise
-iono states/gradients under stress.
+**SPRINT 3: State-Space Slant Ionosphere & High-Iono Stability — COMPLETED**
+- [x] Multi-constellation per-satellite mapped slant iono state filter ($I_{\text{sat}} - I_{\text{ref}}$)
+- [x] Covariance matrix preservation & compaction across active ambiguity lifecycles
 
-**SPRINT 4: Feature Completion** — GLONASS ICB, ocean tide loading,
-cross-epoch ambiguity detection.
+**SPRINT 4: Troposphere & Geodesy Feature Completion — IN PROGRESS**
+- [x] 11-constituent Ocean Tide Loading (OTL) model & ENU displacement in `tides.rs`
+- [ ] Multi-baseline differential ZWD network estimation & BLQ parser
 
-**SPRINT 5: Production Polish.**
+**SPRINT 5: Production Polish & Architecture Standards — IN PROGRESS**
+- [x] 0 compiler warnings, 0 clippy warnings across all workspace targets
+- [x] 620+ tests passing with 0 failures
 
 <details><summary>Original per-item table</summary>
 

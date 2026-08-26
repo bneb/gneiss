@@ -91,6 +91,15 @@ fn build_process_noise(state: &RtkState, dim: usize, dt: f64, q_accel: f64, reve
             q[(idx, idx)] += IONO_RW_M2_PER_S * dt_abs;
         }
     }
+    // Satellite-mapped slant iono: slow random walk.
+    const SAT_IONO_RW_M2_PER_S: f64 = 1e-8;
+    let so_off = state.sat_iono_offset();
+    for i in 0..state.sat_ionos.len() {
+        let idx = so_off + i;
+        if idx < q.nrows() {
+            q[(idx, idx)] += SAT_IONO_RW_M2_PER_S * dt_abs;
+        }
+    }
 
     q
 }

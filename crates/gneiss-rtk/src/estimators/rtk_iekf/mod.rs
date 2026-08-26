@@ -50,8 +50,6 @@ fn recv_pcv_gate_enabled(env_value: Option<&str>) -> bool {
     env_value.is_some_and(|v| v.trim() == "1")
 }
 
-/// Process-wide gate state, read from the environment once.
-
 /// Track C signal-registry frequency lookup (same policy as mw.rs).
 fn track_c_freq_mod(
     c: gneiss_core::sat::Constellation,
@@ -68,6 +66,7 @@ fn track_c_freq_mod(
     }
 }
 
+/// Process-wide gate state, read from the environment once.
 fn recv_pcv_enabled() -> bool {
     *RECV_PCV_ENABLED.get_or_init(|| {
         recv_pcv_gate_enabled(std::env::var("GNEISS_RECV_PCV").ok().as_deref())
@@ -726,7 +725,7 @@ impl GnssRtkIekf {
         let dd_cp = dd_cp.map(|cp| cp - dd_clk_m / lambda);
 
         let dd_pcv_m =
-            self.receiver_dd_pcv_m(sat_id, freq_band, sat_pos, ref_pos.into(), recv_pcv_enabled());
+            self.receiver_dd_pcv_m(sat_id, freq_band, sat_pos, ref_pos, recv_pcv_enabled());
         let meas = DoubleDiffMeasurement {
             key,
             dd_pr_m: dd_pr,
@@ -970,7 +969,11 @@ impl GnssRtkIekf {
             self.code_phase_div.push((key.freq_band, offset));
         }
         self.state.ensure_ambiguity(key, init_amb - offset, 100.0);
-        self.state.ensure_iono(key, 4.0); // 2m sigma iono residual
+        self.state.ensure_iono(key, 4.0); // 2m sigma iono residual (legacy)
+        if self.state.sat_iono_enabled {
+            self.state.ensure_sat_iono_key(key.constellation_id, key.sat);
+            self.state.ensure_sat_iono_key(key.constellation_id, key.ref_sat);
+        }
     }
 
     /// Record one per-epoch coherency sample when the gate is active.
@@ -1077,7 +1080,7 @@ fn extract_sat_positions(
                     .unwrap_or(std::cmp::Ordering::Equal)
             });
         if let Some(eph) = eph_opt {
-            let mut sat_p = compute_signal_sat_pos(s, eph, rover.time);
+            let sat_p = compute_signal_sat_pos(s, eph, rover.time);
             let (_az, el) = gneiss_core::coords::az_el(rx_llh, rx_pos, sat_p);
             if el >= min_el {
                 out.push((s.sat, sat_p));
@@ -1106,7 +1109,7 @@ pub fn broadcast_position_for(
             _ => continue,
         };
         let dt = if toe.week == t.week { (toe.tow - t.tow).abs() } else { f64::INFINITY };
-        if best.map_or(true, |(_, d)| dt < d) {
+        if best.is_none_or(|(_, d)| dt < d) {
             best = Some((cand, dt));
         }
     }

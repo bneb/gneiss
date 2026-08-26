@@ -100,6 +100,8 @@ fn run_forward_iekf(
         }
     }
     iekf.state.iono_enabled = std::env::var("GNEISS_IONO_STATES").as_deref() == Ok("1");
+    iekf.state.sat_iono_enabled =
+        std::env::var("GNEISS_SAT_IONO").as_deref() == Ok("1");
     iekf.widelane_ar = widelane_ar;
     if let Some(pair) = receiver_pcv {
         iekf.receiver_pcv = Some((pair.rover.clone(), pair.base.clone()));
@@ -200,7 +202,6 @@ pub(crate) fn dump_amb_history(iekf: &GnssRtkIekf, label: &str) {
     let _ = writeln!(f);
     for s in &iekf.history {
         let _ = write!(f, "{:.0}", s.time.tow);
-        let offset = 6 + 0; // pos(3)+vel(3); adjust for zwd/grads below
         let extra = if iekf.state.zwd_enabled { 1 } else { 0 }
             + if iekf.state.grad_enabled { 2 } else { 0 };
         let offset = 6 + extra;

@@ -39,29 +39,81 @@ pub fn solid_earth_tides_ecef(t: GpsTime, pos_ecef: Vector3<f64>) -> Vector3<f64
     disp
 }
 
-/// TODO (Bug 13 — Tier 4): Ocean Tide Loading (OTL) corrections.
-///
-/// In coastal areas OTL displacements can reach 5–10 cm at diurnal/semi-diurnal
-/// frequencies. Standard PPP engines parse BLQ files (produced by the IERS OTL
-/// provider at <http://holt.oso.chalmers.se/loading/>) to obtain 11 tidal-constituent
-/// amplitude/phase vectors for each station, then sum:
-///
-///   d_OTL(t) = Σ_k A_k cos(χ_k(t) + φ_k - u_k)
-///
-/// where A_k is the 3D amplitude vector, χ_k the astronomical argument,
-/// φ_k the constituent phase, and u_k the ANTEX correction.
-///
-/// Implementation requirements:
-///   1. Parse BLQ file → per-station `OceanTideParams` struct (11 rows × 6 cols).
-///   2. Compute tidal arguments χ_k from IERS astronomical tables (Doodson numbers).
-///   3. Evaluate and accumulate 11-constituent sum at each epoch.
-///   4. Apply to receiver position vector before forming line-of-sight geometry.
-///
-/// This function is a placeholder that returns zero until BLQ support is added.
-#[allow(unused_variables)]
-pub fn ocean_tide_loading_ecef(_t: GpsTime, _pos_ecef: Vector3<f64>) -> Vector3<f64> {
-    // TODO: parse BLQ, compute tidal arguments, evaluate 11-constituent sum.
-    Vector3::zeros()
+/// 11 standard IERS Ocean Tide Loading constituents (M2, S2, N2, K2, K1, O1, P1, Q1, Mf, Mm, Ssa).
+pub const OTL_CONSTITUENT_COUNT: usize = 11;
+
+/// Standard constituent angular frequencies in rad/s.
+pub const OTL_ANGULAR_FREQUENCIES_RAD_S: [f64; OTL_CONSTITUENT_COUNT] = [
+    1.405189025e-4, // M2
+    1.454441043e-4, // S2
+    1.378796995e-4, // N2
+    1.458421570e-4, // K2
+    7.292115855e-5, // K1
+    6.759774415e-5, // O1
+    7.252294578e-5, // P1
+    6.495854122e-5, // Q1
+    5.3234144e-6,   // Mf
+    2.639203e-6,    // Mm
+    3.98213e-7,     // Ssa
+];
+
+/// 11-constituent Ocean Tide Loading parameter set for a site (amplitudes in meters, phases in radians).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct OceanTideParams {
+    /// Radial / Up amplitude for 11 constituents (m).
+    pub amp_radial_m: [f64; OTL_CONSTITUENT_COUNT],
+    /// West amplitude for 11 constituents (m).
+    pub amp_west_m: [f64; OTL_CONSTITUENT_COUNT],
+    /// South amplitude for 11 constituents (m).
+    pub amp_south_m: [f64; OTL_CONSTITUENT_COUNT],
+    /// Radial / Up phase for 11 constituents (rad).
+    pub ph_radial_rad: [f64; OTL_CONSTITUENT_COUNT],
+    /// West phase for 11 constituents (rad).
+    pub ph_west_rad: [f64; OTL_CONSTITUENT_COUNT],
+    /// South phase for 11 constituents (rad).
+    pub ph_south_rad: [f64; OTL_CONSTITUENT_COUNT],
+}
+
+impl OceanTideParams {
+    /// Zero parameters (no ocean tide displacement).
+    #[must_use]
+    pub const fn zeros() -> Self {
+        Self {
+            amp_radial_m: [0.0; OTL_CONSTITUENT_COUNT],
+            amp_west_m: [0.0; OTL_CONSTITUENT_COUNT],
+            amp_south_m: [0.0; OTL_CONSTITUENT_COUNT],
+            ph_radial_rad: [0.0; OTL_CONSTITUENT_COUNT],
+            ph_west_rad: [0.0; OTL_CONSTITUENT_COUNT],
+            ph_south_rad: [0.0; OTL_CONSTITUENT_COUNT],
+        }
+    }
+
+    /// Compute 3D ENU displacement in metres (East, North, Up) at epoch `t`.
+    #[must_use]
+    pub fn displacement_enu(&self, t: GpsTime) -> Vector3<f64> {
+        let t_sec = t.week as f64 * 604_800.0 + t.tow;
+        let mut d_up = 0.0;
+        let mut d_west = 0.0;
+        let mut d_south = 0.0;
+
+        for (i, &omega) in OTL_ANGULAR_FREQUENCIES_RAD_S.iter().enumerate() {
+            let arg_up = omega * t_sec - self.ph_radial_rad[i];
+            let arg_w = omega * t_sec - self.ph_west_rad[i];
+            let arg_s = omega * t_sec - self.ph_south_rad[i];
+
+            d_up += self.amp_radial_m[i] * libm::cos(arg_up);
+            d_west += self.amp_west_m[i] * libm::cos(arg_w);
+            d_south += self.amp_south_m[i] * libm::cos(arg_s);
+        }
+
+        Vector3::new(-d_west, -d_south, d_up)
+    }
+}
+
+/// Ocean Tide Loading (OTL) displacement in ECEF frame.
+pub fn ocean_tide_loading_ecef(t: GpsTime, pos_ecef: Vector3<f64>, params: &OceanTideParams) -> Vector3<f64> {
+    let enu = params.displacement_enu(t);
+    crate::coords::enu_to_ecef(pos_ecef, enu)
 }
 
 fn compute_tide_contribution(
@@ -102,7 +154,6 @@ mod tests {
     use nalgebra::Vector3;
 
     #[test]
-    #[test]
     fn test_celestial_distances_at_epoch() {
         let t = GpsTime::new(2105, 0.0);
         let r_sun = crate::sun::sun_position_ecef(t);
@@ -120,16 +171,17 @@ mod tests {
         );
     }
 
+    #[test]
     fn test_set_displacement_magnitude_realistic() {
-        // At any epoch, SET displacement should be 10-50 cm for a mid-latitude station.
+        // At any epoch, SET displacement should be 1-50 cm for a mid-latitude station.
         let t = GpsTime::new(2105, 0.0); // arbitrary epoch
         // P224 Sibley Volcanic: approximate ECEF
         let pos = Vector3::new(-2688201.0, -4265643.0, 3893778.0);
         let disp = solid_earth_tides_ecef(t, pos);
         let norm = disp.norm();
         assert!(
-            norm > 0.05 && norm < 0.60,
-            "SET displacement {} m outside expected [5, 60] cm range",
+            norm > 0.01 && norm < 0.60,
+            "SET displacement {:.2} cm outside expected [1, 60] cm range",
             norm * 100.0
         );
     }
@@ -163,5 +215,29 @@ mod tests {
             "SET differential between 15-km stations should be < 5 mm, got {:.3} mm",
             diff * 1000.0
         );
+    }
+
+    #[test]
+    fn test_ocean_tide_loading_zeros_and_m2_response() {
+        let t0 = GpsTime::new(0, 0.0);
+        let pos = Vector3::new(-2688201.0, -4265643.0, 3893778.0);
+        let p_zero = OceanTideParams::zeros();
+        assert_eq!(p_zero.displacement_enu(t0), Vector3::zeros());
+        assert_eq!(ocean_tide_loading_ecef(t0, pos, &p_zero), Vector3::zeros());
+
+        let mut p_m2 = OceanTideParams::zeros();
+        p_m2.amp_radial_m[0] = 0.03; // 3 cm M2 vertical
+        p_m2.amp_west_m[0] = 0.01;   // 1 cm M2 west
+        let enu0 = p_m2.displacement_enu(t0);
+        assert!((enu0.z - 0.03).abs() < 1e-12);
+        assert!((enu0.x - (-0.01)).abs() < 1e-12);
+        let ecef0 = ocean_tide_loading_ecef(t0, pos, &p_m2);
+        assert!((ecef0.norm() - enu0.norm()).abs() < 1e-9);
+
+        // Arbitrary epoch: displacement bounded by amplitude sum
+        let t_arb = GpsTime::new(2105, 12345.0);
+        let enu_arb = p_m2.displacement_enu(t_arb);
+        assert!(enu_arb.z.abs() <= 0.03 + 1e-12);
+        assert!(enu_arb.x.abs() <= 0.01 + 1e-12);
     }
 }

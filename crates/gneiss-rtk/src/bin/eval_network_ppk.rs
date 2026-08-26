@@ -178,9 +178,8 @@ fn truth_in_solution_frame(
     t: gneiss_core::frames::EcefPos<gneiss_core::frames::Igs20>,
     epoch_yr: f64,
 ) -> Vector3<f64> {
-    t.convert_to::<gneiss_core::frames::Wgs84Broadcast>(epoch_yr)
+    *t.convert_to::<gneiss_core::frames::Wgs84Broadcast>(epoch_yr)
         .vector()
-        .clone()
 }
 
 fn collect_errors(traj: &[SmoothedEpoch], truth: &Truth) -> (Vec<f64>, Vec<f64>, Vec<f64>, usize, Vec<f64>) {
@@ -235,7 +234,6 @@ struct RunContext<'a> {
 }
 
 #[allow(clippy::too_many_arguments)]
-
 fn run_pass(
     config: &EngineConfig,
     ctx: &RunContext,

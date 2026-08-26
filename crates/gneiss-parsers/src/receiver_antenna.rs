@@ -501,7 +501,7 @@ mod tests {
     fn dd_correction_zero_for_same_antenna() {
         let db = db_from(&ramp_block("SAME", "NONE", -1.0, &[]));
         let a = ReceiverAntenna::from_antex(&db, "SAME", "NONE").unwrap();
-        let corr = compute_dd_pcv_correction(&a, &a, "G01", 0.2618, 0.7854);
+        let corr = compute_dd_pcv_correction(&a, &a, "G01", 0.2618, std::f64::consts::FRAC_PI_4);
         assert!(corr.abs() < 1e-12);
     }
 
@@ -542,7 +542,7 @@ mod tests {
         let db = db_from(&content);
         let a = ReceiverAntenna::from_antex(&db, "ANT_A", "NONE").unwrap();
         let b = ReceiverAntenna::from_antex(&db, "ANT_B", "NONE").unwrap();
-        assert_eq!(compute_dd_pcv_correction(&a, &b, "G02", 0.2618, 0.7854), 0.0);
+        assert_eq!(compute_dd_pcv_correction(&a, &b, "G02", 0.2618, std::f64::consts::FRAC_PI_4), 0.0);
     }
 
     // ------------------------------------------------------------------

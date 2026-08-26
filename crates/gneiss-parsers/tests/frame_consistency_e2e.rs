@@ -77,5 +77,5 @@ fn e2e_truth_frame_type_distinct_from_solution() {
     let truth = EcefPos::<Igs20>::new(nalgebra::Vector3::new(1.0, 2.0, 3.0));
     // takes_solution(truth); // ← would NOT compile: frame distinction works
     let converted = truth.convert_to::<gneiss_core::frames::Wgs84Broadcast>(2025.5);
-    takes_solution(converted.vector().clone());
+    takes_solution(*converted.vector());
 }

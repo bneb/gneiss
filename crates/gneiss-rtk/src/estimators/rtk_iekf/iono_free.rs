@@ -52,9 +52,6 @@ pub struct IonoFreeMeasurement {
     pub dgrad_e_rov: f64,
 }
 
-/// Form the iono-free DD phase for a pair when both L1 and L2 are observed.
-#[allow(clippy::too_many_arguments)] // same obs bundle as build_single_dd_pair
-
 /// Track C signal-registry frequency lookup (see mw.rs for policy).
 fn track_c_freq(
     c: gneiss_core::sat::Constellation,
@@ -73,6 +70,8 @@ fn track_c_freq(
     }
 }
 
+/// Form the iono-free DD phase for a pair when both L1 and L2 are observed.
+#[allow(clippy::too_many_arguments)] // same obs bundle as build_single_dd_pair
 pub fn form_iono_free_dd(
     sat_id: SatelliteId,
     rov_s: &SatObs,

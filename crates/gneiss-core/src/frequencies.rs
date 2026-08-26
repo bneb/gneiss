@@ -543,6 +543,8 @@ mod tests {
         assert_maps(Constellation::Navic, "C1", None);
         assert_maps(Constellation::Beidou, "C2", Some(Signal::BdsB1i));
         assert_maps(Constellation::Sbas, "C2", None);
+    }
+
     #[test]
     fn test_secondary_signal_policy_resolves_e5a_e5b() {
         use crate::sat::Constellation;
@@ -572,7 +574,5 @@ mod tests {
             signal_for_band(Constellation::Galileo, 5),
             signal_for_band(Constellation::Galileo, 6)
         );
-    }
-
     }
 }

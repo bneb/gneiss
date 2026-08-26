@@ -1,27 +1,83 @@
-/target/
+# ==============================================================================
+# Gneiss — Git Ignore Configuration
+# ==============================================================================
+
+# --- Rust & Cargo Build Artifacts ---
+**/target/
+**/*.rs.bk
+*.orig
+*.rej
+Cargo.lock.back
+
+# --- Coverage, Profiling & Mutation Testing ---
+*.profraw
+*.profdata
+coverage/
+cobertura.xml
+mutants*
+doppler_out*
+
+# --- GNSS Data & Ephemeris Products (Large / External Downloads) ---
+/datasets/**
+!/datasets/README.md
+!/datasets/**/README.md
+*.rnx
+*.crx
+*.obs
+*.nav
+*.sp3
+*.clk
+*.atx
+*.blq
+*.ionex
+*.snx
+*.rtcm3
+
+# --- Solution Dumps, Logs & Benchmark Outputs ---
 *.log
 *.pos
-*.rtcm3
-test_parse
-test_parse.rs
-.DS_Store
-
-# Ignore all downloaded data and archives
-datasets/*
-!datasets/README.md
-evaluate_static
-evaluate_static.rs
-find_errors
-find_errors.rs
-.env
-build_rs_cov.profraw
-
-# Debug output and scratch artifacts
+*.nmea
+*.kml
+*.geojson
+*.pid
 log*.txt
 bench_output.txt
+test_log.txt
+trace_log*.txt
+eval_*_errors.csv
+sweep_*
+
+# --- Archives & Compressed Stores ---
 *.tar.gz
-*.pid
-eval_odaiba_errors.csv
-.licenses/
-scratch/target/
+*.tar.bz2
+*.tar.xz
+*.zip
+*.7z
+
+# --- Python Environment & Bytecode (Analysis & Sweeps) ---
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+
+# --- Scratch, Diagnostics & Worktrees ---
+scratch/
+!scratch/README.md
 .worktrees/
+.licenses/
+.env
+
+# --- OS & Editor Artifacts ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+*.bak
+.claude/
+

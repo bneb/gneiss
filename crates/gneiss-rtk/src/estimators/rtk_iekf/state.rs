@@ -35,9 +35,15 @@ pub struct RtkState {
     pub grad_n_m: f64,
     pub grad_e_m: f64,
     /// Per-DD-pair ionosphere residual states (metres of L1 slant delay).
-    /// Enabled as a set; keys mirror band-1 ambiguity keys.
+    /// DEPRECATED for production use — rank-deficient against ambiguities
+    /// (see NETWORK_RTK_NEXT_STEPS.md). Kept behind its legacy gate.
     pub iono_enabled: bool,
     pub ionos: Vec<(DoubleDiffKey, f64)>,
+    /// Per-SATELLITE slant iono states (metres at L1). A DD pair's H row
+    /// uses I_sat − I_ref so the shared reference couples all satellites:
+    /// rank-deficiency broken. Replaces per-pair ionos when enabled.
+    pub sat_iono_enabled: bool,
+    pub sat_ionos: Vec<((u8, u16), f64)>,
     pub cov: DMatrix<f64>,
 }
 
@@ -64,6 +70,8 @@ impl RtkState {
             grad_e_m: 0.0,
             iono_enabled: false,
             ionos: Vec::new(),
+            sat_iono_enabled: false,
+            sat_ionos: Vec::new(),
             cov,
         }
     }
@@ -74,6 +82,42 @@ impl RtkState {
             + self.zwd_enabled as usize
             + 2 * self.grad_enabled as usize
             + self.ionos.len()
+            + self.sat_ionos.len()
+    }
+
+    /// Column offset of first per-satellite iono state.
+    pub fn sat_iono_offset(&self) -> usize {
+        self.iono_offset() + self.ionos.len()
+    }
+
+    /// Column index of a satellite's slant-iono state (for constellation and PRN).
+    pub fn get_sat_iono_key_idx(&self, cid: u8, prn: u16) -> Option<usize> {
+        self.sat_ionos.iter().position(|(k, _)| *k == (cid, prn))
+            .map(|i| self.sat_iono_offset() + i)
+    }
+
+    /// Column index of a satellite's slant-iono state (defaults to primary GPS/Galileo constellation cid=0).
+    pub fn get_sat_iono_idx(&self, prn: u16) -> Option<usize> {
+        self.get_sat_iono_key_idx(0, prn)
+    }
+
+    /// Ensure a satellite's slant-iono state exists for specific constellation.
+    pub fn ensure_sat_iono_key(&mut self, cid: u8, prn: u16) {
+        if !self.sat_iono_enabled || self.get_sat_iono_key_idx(cid, prn).is_some() {
+            return;
+        }
+        self.sat_ionos.push(((cid, prn), 0.0));
+        let old_dim = self.cov.nrows();
+        let new_dim = old_dim + 1;
+        let mut nc = DMatrix::zeros(new_dim, new_dim);
+        nc.view_range_mut(0..old_dim, 0..old_dim).copy_from(&self.cov);
+        nc[(old_dim, old_dim)] = 4.0;
+        self.cov = nc;
+    }
+
+    /// Ensure a satellite's slant-iono state exists.
+    pub fn ensure_sat_iono(&mut self, prn: u16) {
+        self.ensure_sat_iono_key(0, prn);
     }
 
     /// Column offset of the first iono state (after all ambiguities).
@@ -187,6 +231,10 @@ impl RtkState {
         for (i, (_, val)) in self.ionos.iter().enumerate() {
             vec[io + i] = *val;
         }
+        let so = self.sat_iono_offset();
+        for (i, (_, val)) in self.sat_ionos.iter().enumerate() {
+            vec[so + i] = *val;
+        }
         vec
     }
 
@@ -208,6 +256,10 @@ impl RtkState {
         let io = self.iono_offset();
         for (i, (_, val)) in self.ionos.iter_mut().enumerate() {
             *val = vec[io + i];
+        }
+        let so = self.sat_iono_offset();
+        for (i, (_, val)) in self.sat_ionos.iter_mut().enumerate() {
+            *val = vec[so + i];
         }
     }
 
@@ -257,12 +309,17 @@ impl RtkState {
         // Iono states live after ambiguities; they must compact with the
         // same key set or dim() and cov desync (storm-day crash).
         let iono_base = self.iono_offset();
-        for (i, (key, val)) in self.ionos.iter().enumerate() {
+        for (i, (key, _)) in self.ionos.iter().enumerate() {
             if active_keys.contains(key) {
                 keep_indices.push(iono_base + i);
             }
         }
         self.ionos.retain(|(k, _)| active_keys.contains(k));
+
+        let so_base = self.sat_iono_offset();
+        for (i, _) in self.sat_ionos.iter().enumerate() {
+            keep_indices.push(so_base + i);
+        }
 
         if keep_indices.len() == self.cov.nrows() {
             return;
@@ -464,5 +521,42 @@ mod iono_retain_tests {
         assert_eq!(st.ambiguities.len(), 1);
         assert_eq!(st.ionos.len(), 1, "ionos must compact with ambs");
         assert_eq!(st.get_iono_idx(&key(5)), Some(st.iono_offset()));
+    }
+}
+
+#[cfg(test)]
+mod sat_iono_tests {
+    use super::*;
+
+    /// Per-satellite mapped-iono contract: states keyed by SATELLITE, not
+    /// DD pair; a pair's H row uses I_sat − I_ref so geometry couples all
+    /// satellites through the shared reference — rank deficiency broken.
+    #[test]
+    fn sat_iono_states_keyed_by_satellite_and_shared_across_pairs() {
+        let t = GpsTime::new(2100, 0.0);
+        let mut st = RtkState::new(Vector3::zeros(), t);
+        st.sat_iono_enabled = true;
+        st.ensure_sat_iono(5);
+        st.ensure_sat_iono(7);
+        st.ensure_sat_iono(9); // reference candidate
+        assert_eq!(st.dim(), 6 + 3);
+        // Pairs (5,9) and (7,9) both draw from sat 9's single state.
+        assert_eq!(st.get_sat_iono_idx(9), Some(8));
+        assert_ne!(st.get_sat_iono_idx(5), st.get_sat_iono_idx(7));
+    }
+
+    #[test]
+    fn sat_iono_multi_constellation_keys() {
+        let t = GpsTime::new(2100, 0.0);
+        let mut st = RtkState::new(Vector3::zeros(), t);
+        st.sat_iono_enabled = true;
+        st.ensure_sat_iono_key(0, 10); // GPS PRN 10
+        st.ensure_sat_iono_key(2, 10); // Galileo PRN 10
+        assert_eq!(st.dim(), 6 + 2);
+        let idx_gps = st.get_sat_iono_key_idx(0, 10);
+        let idx_gal = st.get_sat_iono_key_idx(2, 10);
+        assert!(idx_gps.is_some());
+        assert!(idx_gal.is_some());
+        assert_ne!(idx_gps, idx_gal);
     }
 }

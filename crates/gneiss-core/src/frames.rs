@@ -383,6 +383,12 @@ impl<F: ReferenceFrame> EcefPos<F> {
         &self.0
     }
 
+    /// Extract inner coordinates vector.
+    #[must_use]
+    pub const fn into_vector(self) -> Vector3<f64> {
+        self.0
+    }
+
     /// Converts to frame `F2` via the ITRF2014 hub; both Helmert sets are
     /// propagated to observation epoch `t_epoch_yr` (fractional years).
     pub fn convert_to<F2: ReferenceFrame>(&self, t_epoch_yr: f64) -> EcefPos<F2> {
@@ -394,6 +400,25 @@ impl<F: ReferenceFrame> EcefPos<F> {
 
 fn params_at(p: Option<HelmertParams>, t_yr: f64) -> HelmertParams {
     p.map_or_else(|| HelmertParams::identity_at(t_yr), |params| params.at(t_yr))
+}
+
+impl<F: ReferenceFrame> core::ops::Deref for EcefPos<F> {
+    type Target = Vector3<f64>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<F: ReferenceFrame> From<Vector3<f64>> for EcefPos<F> {
+    fn from(v: Vector3<f64>) -> Self {
+        Self::new(v)
+    }
+}
+
+impl<F: ReferenceFrame> From<EcefPos<F>> for Vector3<f64> {
+    fn from(p: EcefPos<F>) -> Self {
+        p.0
+    }
 }
 
 impl<F: ReferenceFrame> Clone for EcefPos<F> {

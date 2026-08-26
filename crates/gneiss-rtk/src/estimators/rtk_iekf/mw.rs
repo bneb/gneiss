@@ -243,9 +243,6 @@ mod tests {
 }
 
 
-/// Phase and code observables for one frequency band across a satellite pair
-/// on both receivers, order `[rov_sat, rov_ref, bas_sat, bas_ref]`.
-
 /// Track C signal-registry frequency lookup.
 ///
 /// `primary=true` → band-1 signal; `false` → engine-policy secondary
@@ -267,6 +264,8 @@ fn track_c_freq(
     }
 }
 
+/// Phase and code observables for one frequency band across a satellite pair
+/// on both receivers, order `[rov_sat, rov_ref, bas_sat, bas_ref]`.
 fn band_quad(rov_s: &SatObs, rov_ref: &SatObs, bas_s: &SatObs, bas_ref: &SatObs, band: u8) -> Option<([f64; 4], [f64; 4])> {
     Some((
         [

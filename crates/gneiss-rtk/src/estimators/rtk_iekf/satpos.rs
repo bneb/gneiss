@@ -11,7 +11,7 @@
 //!
 //! Stages:
 //!   1. [`RawAtRx`]        – position evaluated at receive time; only used
-//!                           to seed the signal-travel-time estimate.
+//!      to seed the signal-travel-time estimate.
 //!   2. [`TxTimeKnown`]    – transmit time solved from τ + satellite clock.
 //!   3. [`PosAtTx`]        – position re-evaluated at transmit time.
 //!   4. [`SagnacApplied`]  – rotated into receive-epoch ECEF by ω·τ.
@@ -80,6 +80,7 @@ impl EphSource for BroadcastSrc<'_> {
 /// Precise-product source (SP3 orbits, optional CLK clocks).
 pub struct PreciseSrc<'a> {
     pub orbits: &'a gneiss_parsers::precise_orbit::PreciseOrbit,
+    pub clocks: Option<&'a gneiss_parsers::rinex_clk::RinexClock>,
 }
 
 impl EphSource for PreciseSrc<'_> {
@@ -91,7 +92,9 @@ impl EphSource for PreciseSrc<'_> {
             gneiss_core::sat::Constellation::Beidou => 'C',
             _ => return None,
         };
-        self.orbits.position_at(&format!("{}{:02}", sys_char, sv.prn), t)
+        let (pos, sp3_clk) = self.orbits.position_at(&format!("{}{:02}", sys_char, sv.prn), t)?;
+        let clk = self.clocks.and_then(|c| c.get_clock_bias(*sv, t)).unwrap_or(sp3_clk);
+        Some((pos, clk))
     }
     fn com_referenced(&self) -> bool {
         true
@@ -119,7 +122,7 @@ pub fn compute_phase_centre(
     pco_z_m: f64,
 ) -> Result<PhaseCentre, PipeErr> {
     // Stage 1 → 2: τ from receive-time position seed.
-    let (p0, clk0) = src.position_at(sv, t_rx).ok_or(PipeErr::NoPosition)?;
+    let (p0, _clk0) = src.position_at(sv, t_rx).ok_or(PipeErr::NoPosition)?;
     let _raw = RawAtRx(p0);
     let tau0 = (rx_pos - p0).norm() / SPEED_OF_LIGHT_M_S;
 
@@ -234,5 +237,28 @@ mod tests {
         let pc0 = compute_phase_centre(&FakeSrc, &sv, t, rx, 0.0).unwrap();
         let pc15 = compute_phase_centre(&FakeSrc, &sv, t, rx, 1.5).unwrap();
         assert!(pc0.0.norm() > pc15.0.norm(), "PCO must shorten radius");
+    }
+
+    #[test]
+    fn test_precise_src_fallback_and_clock_override() {
+        use gneiss_parsers::sp3::{Sp3Epoch, Sp3Record};
+        use gneiss_parsers::precise_orbit::PreciseOrbit;
+        use std::collections::HashMap;
+
+        let t0 = GpsTime::new(2300, 0.0);
+        let mut recs = HashMap::new();
+        recs.insert("G01".to_string(), Sp3Record {
+            position: Vector3::new(15_000_000.0, 15_000_000.0, 15_000_000.0),
+            clock_offset: 10.0e-6,
+        });
+        let ep = Sp3Epoch { time: t0, records: recs };
+        let orbits = PreciseOrbit::new(vec![ep]);
+        let src_no_clk = PreciseSrc { orbits: &orbits, clocks: None };
+        let sv = SatelliteId { constellation: gneiss_core::sat::Constellation::Gps, prn: 1 };
+        assert!(src_no_clk.com_referenced());
+        let pos_opt = src_no_clk.position_at(&sv, t0);
+        assert!(pos_opt.is_some());
+        let (_, clk) = pos_opt.unwrap();
+        assert!((clk - 10.0e-6).abs() < 1e-12);
     }
 }

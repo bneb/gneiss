@@ -216,6 +216,16 @@ fn append_dd_meas_rows(
     let iono_val = state.get_iono_idx(&m.key)
         .map(|ii| x_current[ii])
         .unwrap_or(0.0);
+    // Per-satellite mapped iono: pair value = I_sat − I_ref. Shared
+    // reference couples satellites, breaking N/I rank deficiency.
+    let si_is = state.get_sat_iono_key_idx(m.key.constellation_id, m.key.sat)
+        .or_else(|| state.get_sat_iono_idx(m.key.sat));
+    let si_ir = state.get_sat_iono_key_idx(m.key.constellation_id, m.key.ref_sat)
+        .or_else(|| state.get_sat_iono_idx(m.key.ref_sat));
+    let sat_iono_dd = match (si_is, si_ir) {
+        (Some(a), Some(b)) => x_current[a] - x_current[b],
+        _ => 0.0,
+    };
 
     let mut pr_h = DVector::zeros(state_dim);
     pr_h[0] = d_geom_dpos.x;
@@ -236,7 +246,7 @@ fn append_dd_meas_rows(
     }
     h_rows.push(pr_h);
     let grad_pr = m.dgrad_n_rov * grad_n_val + m.dgrad_e_rov * grad_e_val;
-    let pr_y = m.dd_pr_m - geom_dd - m.dm_wet_rov * zwd_val - grad_pr - iono_val;
+    let pr_y = m.dd_pr_m - geom_dd - m.dm_wet_rov * zwd_val - grad_pr - iono_val - sat_iono_dd;
     let pr_r = m.pr_var_m2.max(0.01);
     y_vals.push(pr_y);
     r_diag.push(robust_inflate(pr_y, pr_r, innov_gate_scale));
@@ -245,15 +255,20 @@ fn append_dd_meas_rows(
         let amb_val = x_current[amb_idx];
         let pred_cp = geom_dd / m.lambda + amb_val
             + (m.dm_wet_rov * zwd_val + grad_pr) / m.lambda
-            - iono_val / m.lambda;
+            - iono_val / m.lambda
+            - sat_iono_dd / m.lambda;
         let mut cp_h = DVector::zeros(state_dim);
         cp_h[0] = d_geom_dpos.x / m.lambda;
         cp_h[1] = d_geom_dpos.y / m.lambda;
         cp_h[2] = d_geom_dpos.z / m.lambda;
         cp_h[amb_idx] = 1.0;
-        // Iono state: DD phase includes -I_DD/λ
+        // Iono state: DD phase includes -I_DD/λ; satellite-mapped likewise
         if let Some(ii) = state.get_iono_idx(&m.key) {
             cp_h[ii] = -1.0 / m.lambda;
+        }
+        if let (Some(a), Some(b)) = (si_is, si_ir) {
+            cp_h[a] -= 1.0 / m.lambda;
+            cp_h[b] += 1.0 / m.lambda;
         }
         if let Some(zi) = zwd_idx {
             cp_h[zi] = m.dm_wet_rov / m.lambda;
@@ -559,7 +574,6 @@ mod tests {
     fn if_meas_fixture(
         slip_cycles: Option<f64>,
     ) -> (Vec<DoubleDiffMeasurement>, Vector3<f64>, HashMap<DoubleDiffKey, f64>, HashMap<DoubleDiffKey, f64>) {
-        use gneiss_core::time::GpsTime;
         use super::super::state::DoubleDiffKey;
         let true_pos = Vector3::new(0.0, 0.0, 0.0);
         let base_pos = Vector3::new(4_000_000.0, 500_000.0, 1_000_000.0);
@@ -614,7 +628,7 @@ mod tests {
         // Truth integers for every pair on both bands.
         let mut n1 = HashMap::new();
         let mut n2 = HashMap::new();
-        for (i, dir) in dirs.iter().enumerate().skip(1) {
+        for (i, _) in dirs.iter().enumerate().skip(1) {
             let key = DoubleDiffKey { constellation_id: 0, sat: 1 + i as u16, ref_sat: 1, freq_band: 1 };
             let key2 = DoubleDiffKey { freq_band: 2, ..key };
             let n = 10.0 + i as f64;
