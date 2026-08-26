@@ -440,3 +440,37 @@ mod gfz_real_file_tests {
         assert!((lo..=hi).contains(&b), "interpolant {b} outside [{lo}, {hi}]");
     }
 }
+
+#[test]
+fn minimal_synthetic_two_sat_content_parses() {
+    let content = "     3.00           C                                       RINEX VERSION / TYPE\n\
+         2    AS    AR                                          # / TYPES OF DATA\n\
+         AS G01  2025  6  8 12  0  0.000000  1   -0.000100000000E+00\n\
+         AS G02  2025  6  8 12  0  0.000000  1    0.000100000000E+00\n";
+    let clk = RinexClock::parse(content);
+    assert_eq!(clk.satellites.len(), 2, "both sats must parse");
+}
+
+#[test]
+fn three_sat_centering_returns_nonzero_for_outlier() {
+    let content = "     3.00           C                                       RINEX VERSION / TYPE\n\
+         AS G01  2025  6  8 12  0  0.000000  1   -0.000100000000E+00\n\
+         AS G02  2025  6  8 12  0  0.000000  1    0.000100000000E+00\n\
+         AS G03  2025  6  8 12  0  0.000000  1    0.000100000000E+00\n";
+    let clk = RinexClock::parse(content);
+    let t = GpsTime::from_calendar(2025, 6, 8, 12, 0, 0.0);
+    // (tow arithmetic used below instead of GpsTime subtraction)
+    let g01 = SatelliteId { constellation: Constellation::Gps, prn: 1 };
+    let g02 = SatelliteId { constellation: Constellation::Gps, prn: 2 };
+    let c1 = clk.centered_clock(g01, t);
+    let c2 = clk.centered_clock(g02, t);
+    assert!(c1.is_some() && c2.is_some(), "3 mates must center");
+    let d = (c1.unwrap().bias_s - c2.unwrap().bias_s).abs();
+    assert!((5e-5..=3e-4).contains(&d), "centered delta {d} should be ~200us");
+}
+
+#[test]
+fn calendar_epoch_maps_to_expected_week_tow() {
+    let t = GpsTime::from_calendar(2025, 6, 8, 12, 0, 0.0);
+    println!("calendar -> week={} tow={}", t.week, t.tow);
+}

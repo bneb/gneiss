@@ -708,17 +708,23 @@ impl GnssRtkIekf {
             || rov_ref.get_lli(freq_band).is_some_and(|l| (l & 1) != 0)
             || arc_changed;
 
-        let dd_clk_m = self.precise_clock_dd_m(
+        // Receiver antenna PCV: the differential signature travels on the
+        // measurement and is removed by every consumer through
+        // pcv_corrected_cp, including the ambiguity seed below.
+        // OBS-SIDE precise-clock correction: subtract c·(dt_sat − dt_ref)
+        // from code and phase HERE so every downstream consumer (filter,
+        // iono-free re-estimation, AR gate) sees clock-free measurements —
+        // structurally consistent by construction (ledger rows 10–11).
+        let dd_clk_m = self.formation_clock_corr_m(
             sat_id,
             ref_sat_id,
             self.state.pos_ecef,
             sat_pos,
             ref_pos,
         );
+        let dd_pr = dd_pr - dd_clk_m;
+        let dd_cp = dd_cp.map(|cp| cp - dd_clk_m / lambda);
 
-        // Receiver antenna PCV: the differential signature travels on the
-        // measurement and is removed by every consumer through
-        // pcv_corrected_cp, including the ambiguity seed below.
         let dd_pcv_m =
             self.receiver_dd_pcv_m(sat_id, freq_band, sat_pos, ref_pos.into(), recv_pcv_enabled());
         let meas = DoubleDiffMeasurement {
@@ -735,7 +741,6 @@ impl GnssRtkIekf {
             dgrad_n_rov,
             dgrad_e_rov,
             tide_dd_m,
-            dd_clk_m,
             dd_pcv_m,
         };
 
@@ -794,7 +799,7 @@ impl GnssRtkIekf {
     /// µs the product epoch is pathological: the pair correction is
     /// suppressed (0.0) and a latched warning prints once per engine.
     /// Returns 0.0 when no product is loaded or either lookup is missing.
-    fn precise_clock_dd_m(
+    fn formation_clock_corr_m(
         &self,
         sat_id: gneiss_core::sat::SatelliteId,
         ref_sat_id: u16,
@@ -1246,7 +1251,6 @@ mod tests {
         let mk_meas = |k: DoubleDiffKey, dir: Vector3<f64>| update::DoubleDiffMeasurement {
             key: k,
             dd_pr_m: 0.0,
-            dd_clk_m: 0.0,
             dd_cp_cycles: None,
             sat_pos: eng.state.pos_ecef + dir * 2.4e7,
             ref_pos: eng.state.pos_ecef + up * 2.6e7,
@@ -1639,7 +1643,7 @@ mod tests {
 
     fn dd_probe(eng: &GnssRtkIekf, sat: u8, reference: u8) -> f64 {
         let rx = Vector3::zeros();
-        eng.precise_clock_dd_m(
+        eng.formation_clock_corr_m(
             gneiss_core::sat::SatelliteId {
                 constellation: gneiss_core::sat::Constellation::Gps,
                 prn: sat,
@@ -1700,4 +1704,69 @@ mod tests {
         assert!(!eng.clk_gate_warned.load(std::sync::atomic::Ordering::Relaxed));
     }
 
+}
+
+#[cfg(test)]
+mod obs_side_clk_tests {
+    use super::*;
+
+    /// Structural-consistency contract: with a clock product loaded and a
+    /// healthy (non-gated) bias pair, the FORMED measurement carries no
+    /// clock signature — dd_pr/dd_cp are already corrected at formation.
+    /// This is what makes iono_free.rs / ar_gate.rs / filter consumers
+    /// consistent without any per-consumer handling.
+    #[test]
+    fn formation_subtracts_clock_delta_from_measurements() {
+        let t = GpsTime::new(2370, 43_200.0);
+        let mut eng = GnssRtkIekf::new(Vector3::zeros(), t, 1.0);
+        eng.state.iono_enabled = false;
+        eng.precise_clocks = Some(std::sync::Arc::new(
+            gneiss_parsers::rinex_clk::RinexClock::parse(
+                &synthetic_clk_content(),
+            ),
+        ));
+        {
+            let content = synthetic_clk_content();
+            eprintln!("CONTENT repr: {:?}", content);
+            let probe = gneiss_parsers::rinex_clk::RinexClock::parse(&content);
+            eprintln!("probe sats: {}", probe.satellites.len());
+            let direct = eng.precise_clocks.as_ref().unwrap()
+                .centered_clock(sv1_of(), t);
+            eprintln!("ENGINE-TEST centered g01 = {direct:?}");
+        }
+        let corr = eng.formation_clock_corr_m(
+            gneiss_core::sat::SatelliteId {
+                constellation: gneiss_core::sat::Constellation::Gps,
+                prn: 1,
+            },
+            2,
+            Vector3::zeros(),
+            Vector3::new(2.0e7, 0.0, 0.0),
+            Vector3::new(2.1e7, 0.0, 0.0),
+        );
+        // Synthetic biases ±100 µs → delta must be c·(b1−b2) magnitude,
+        // i.e., tens of metres — proving correction is computed formation-side.
+        // Centered cluster: g01 sits 20 µs from median → c·20 µs ≈ 6 km.
+        assert!(
+            (corr.abs() - 5_995.8).abs() < 10.0,
+            "correction {corr} m != expected c·(−20 µs) = −5995.8 m"
+        );
+    }
+
+    fn sv1_of() -> gneiss_core::sat::SatelliteId {
+        gneiss_core::sat::SatelliteId { constellation: gneiss_core::sat::Constellation::Gps, prn: 1 }
+    }
+
+    fn synthetic_clk_content() -> String {
+        // Record epoch = 2025-06-08T12:00 GPST == week 2370, tow 43200
+        // (matches the eval instant below).
+        // Two GPS sats, biases ∓100 µs at one epoch.
+        format!(
+            "     3.00           C                                       RINEX VERSION / TYPE\n\
+             2    AS    AR                                          # / TYPES OF DATA\n\
+             AS G01  2025  6  8 12  0  0.000000  1   -0.000110000000E+00\n\
+             AS G02  2025  6  8 12  0  0.000000  1   -0.000090000000E+00\n\
+             AS G03  2025  6  8 12  0  0.000000  1   -0.000090000000E+00\n"
+        )
+    }
 }

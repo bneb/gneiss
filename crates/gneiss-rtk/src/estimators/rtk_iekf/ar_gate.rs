@@ -137,7 +137,6 @@ mod tests {
             dgrad_n_rov: 0.0,
             dgrad_e_rov: 0.0,
             tide_dd_m: 0.0,
-                dd_clk_m: 0.0,
             dd_pcv_m: 0.0,
         }
     }
