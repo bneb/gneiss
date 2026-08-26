@@ -86,10 +86,23 @@ impl SepLimits {
             },
             ProcessingDynamics::Kinematic => {
                 let (sf, sb) = (formal_sigma_m(&fwd.cov_position), formal_sigma_m(&bwd.cov_position));
+                // Floors equal the audited static constants, so the
+                // sigma-scaled rule only ever WIDENS the validated
+                // tolerances (measured: formal sigmas are >10x
+                // optimistic vs realized fwd/bwd disagreement).
                 SepLimits {
-                    strict_m: dynamics::kinematic_sep_limit_m(dynamics::KIN_DISAGREE_K_SIGMA, sf, sb),
-                    cross_fix_fuse_m: dynamics::kinematic_sep_limit_m(dynamics::KIN_FUSE_CROSS_K_SIGMA, sf, sb),
-                    both_fixed_fuse_m: dynamics::kinematic_sep_limit_m(dynamics::KIN_FUSE_BOTH_FIXED_K_SIGMA, sf, sb),
+                    strict_m: dynamics::kinematic_sep_limit_m(
+                        dynamics::KIN_DISAGREE_K_SIGMA, sf, sb,
+                        dynamics::KIN_THRESHOLD_FLOOR_M, dynamics::KIN_THRESHOLD_CAP_M,
+                    ),
+                    cross_fix_fuse_m: dynamics::kinematic_sep_limit_m(
+                        dynamics::KIN_FUSE_CROSS_K_SIGMA, sf, sb,
+                        dynamics::KIN_THRESHOLD_FLOOR_M, dynamics::KIN_THRESHOLD_CAP_M,
+                    ),
+                    both_fixed_fuse_m: dynamics::kinematic_sep_limit_m(
+                        dynamics::KIN_FUSE_BOTH_FIXED_K_SIGMA, sf, sb,
+                        dynamics::KIN_BOTH_FIXED_FLOOR_M, dynamics::KIN_BOTH_FIXED_CAP_M,
+                    ),
                 }
             }
         }
@@ -272,9 +285,11 @@ mod tests {
         assert_eq!(combined_quality(0.60, 0.20, ProcessingDynamics::Kinematic), 1);
         // Scale-up property: larger reported sigma, wider tolerance.
         assert_eq!(combined_quality(1.00, 0.30, ProcessingDynamics::Kinematic), 1);
-        // Tiny sigmas hit the floor (5 cm): sub-floor disagreement is
-        // still dishonest for a well-constrained pair.
-        assert_eq!(combined_quality(0.06, 1e-4, ProcessingDynamics::Kinematic), 2);
+        // Tiny sigmas bind at the audited 0.50 m floor: the kinematic
+        // rule is never stricter than the validated static bound.
+        assert_eq!(combined_quality(0.45, 1e-4, ProcessingDynamics::Kinematic), 1);
+        // Just beyond the floor it still bites even with tiny sigmas.
+        assert_eq!(combined_quality(0.55, 1e-4, ProcessingDynamics::Kinematic), 2);
         // Huge sigmas hit the cap (10 m): divergence cannot excuse fraud.
         assert_eq!(combined_quality(11.0, 1e3, ProcessingDynamics::Kinematic), 2);
     }

@@ -122,19 +122,38 @@ pub const KIN_FUSE_CROSS_K_SIGMA: f64 = 6.0;
 /// sigmas should not be averaged).
 pub const KIN_FUSE_BOTH_FIXED_K_SIGMA: f64 = 2.0;
 
-/// Floor (m) for sigma-scaled separation limits. Formal sigmas can be
-/// over-optimistic after long fix streaks; below this floor a moving
-/// rover's passes may legitimately disagree by centimetres.
-pub const KIN_THRESHOLD_FLOOR_M: f64 = 0.05;
+/// Floor (m) for the sigma-scaled honesty and one-sided-fusion limits,
+/// set EQUAL to the audited static bound (0.50 m, justified for
+/// monuments and measured against CORS day sets where honest fwd/bwd
+/// separations reach p99 ~ 0.41 m). Measured on the multi2025 replay:
+/// formal sigmas are >10x optimistic versus realized pass-to-pass
+/// disagreement, so a lower floor rejected ~60% of honest epochs. The
+/// kinematic rule therefore only ever WIDENS the audited tolerance;
+/// tightening below it awaits covariance recalibration on true moving
+/// data.
+pub const KIN_THRESHOLD_FLOOR_M: f64 = 0.50;
 
-/// Cap (m) for sigma-scaled separation limits. A diverged covariance
-/// must not be allowed to excuse arbitrary disagreement.
+/// Cap (m) for the sigma-scaled honesty and one-sided-fusion limits: a
+/// diverged covariance must not excuse arbitrary disagreement.
 pub const KIN_THRESHOLD_CAP_M: f64 = 10.0;
 
-/// Sigma-scaled separation limit (m) for the kinematic profile:
-/// `clamp(k * max(sigma_a, sigma_b), floor, cap)`.
-pub fn kinematic_sep_limit_m(k_sigma: f64, sigma_a: f64, sigma_b: f64) -> f64 {
-    (k_sigma * sigma_a.max(sigma_b)).clamp(KIN_THRESHOLD_FLOOR_M, KIN_THRESHOLD_CAP_M)
+/// Floor (m) for the both-sides-fixed fusion window: averaging two
+/// integer sets farther apart than the audited 0.20 m bound
+/// manufactures a position that neither pass claims.
+pub const KIN_BOTH_FIXED_FLOOR_M: f64 = 0.20;
+/// Cap (m) for the both-sides-fixed fusion window.
+pub const KIN_BOTH_FIXED_CAP_M: f64 = 2.0;
+
+/// Sigma-scaled separation limit (m):
+/// `clamp(k * max(sigma_a, sigma_b), floor_m, cap_m)`.
+pub fn kinematic_sep_limit_m(
+    k_sigma: f64,
+    sigma_a: f64,
+    sigma_b: f64,
+    floor_m: f64,
+    cap_m: f64,
+) -> f64 {
+    (k_sigma * sigma_a.max(sigma_b)).clamp(floor_m, cap_m)
 }
 
 #[cfg(test)]
@@ -191,7 +210,7 @@ mod tests {
         let mut prev = 0.0;
         for i in 0..20 {
             let s = 0.01 * (1 << i) as f64;
-            let lim = kinematic_sep_limit_m(KIN_DISAGREE_K_SIGMA, s, s);
+            let lim = kinematic_sep_limit_m(KIN_DISAGREE_K_SIGMA, s, s, KIN_THRESHOLD_FLOOR_M, KIN_THRESHOLD_CAP_M);
             assert!(lim >= prev, "limit must grow with sigma: {s} -> {lim}");
             assert!(
                 (KIN_THRESHOLD_FLOOR_M..=KIN_THRESHOLD_CAP_M).contains(&lim),
@@ -201,15 +220,26 @@ mod tests {
         }
         // Exact values at representative points.
         assert!(
-            (kinematic_sep_limit_m(6.0, 0.2, 0.1) - 1.2).abs() < 1e-12,
+            (kinematic_sep_limit_m(6.0, 0.2, 0.1, KIN_THRESHOLD_FLOOR_M, KIN_THRESHOLD_CAP_M) - 1.2).abs() < 1e-12,
             "6 sigma of the larger sigma"
         );
-        assert_eq!(kinematic_sep_limit_m(6.0, 1e-6, 1e-6).to_bits(), KIN_THRESHOLD_FLOOR_M.to_bits());
-        assert_eq!(kinematic_sep_limit_m(6.0, 1e3, 1.0).to_bits(), KIN_THRESHOLD_CAP_M.to_bits());
+        // Floor equals the audited static bound: tiny sigmas never make
+        // the kinematic rule stricter than the validated tolerance.
+        assert_eq!(
+            kinematic_sep_limit_m(6.0, 1e-6, 1e-6, KIN_THRESHOLD_FLOOR_M, KIN_THRESHOLD_CAP_M)
+                .to_bits(),
+            KIN_THRESHOLD_FLOOR_M.to_bits()
+        );
+        assert_eq!(
+            kinematic_sep_limit_m(6.0, 1e3, 1.0, KIN_THRESHOLD_FLOOR_M, KIN_THRESHOLD_CAP_M)
+                .to_bits(),
+            KIN_THRESHOLD_CAP_M.to_bits()
+        );
         // Larger of the two sigmas drives the limit.
         assert_eq!(
-            kinematic_sep_limit_m(6.0, 0.05, 0.30).to_bits(),
-            kinematic_sep_limit_m(6.0, 0.30, 0.05).to_bits()
+            kinematic_sep_limit_m(6.0, 0.05, 0.30, 0.02, 10.0)
+                .to_bits(),
+            kinematic_sep_limit_m(6.0, 0.30, 0.05, 0.02, 10.0).to_bits()
         );
     }
 
