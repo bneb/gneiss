@@ -355,4 +355,16 @@ mod tests {
         let single = diagnose(&fold(&[Sample { tow_s: 5.0, value: 1.0 }], 240));
         assert!(!single.is_structured());
     }
+
+    #[test]
+    fn structure_threshold_is_strictly_less_than() {
+        let mk = |p: f64| Diagnostics { chi2: 42.0, dof: 10, p_value: p };
+        assert!(mk(STRUCTURE_P_THRESHOLD - 1e-12).is_structured());
+        // Exactly AT the threshold does NOT count (strict comparison).
+        assert!(!mk(STRUCTURE_P_THRESHOLD).is_structured());
+        assert!(!mk(STRUCTURE_P_THRESHOLD + 1e-3).is_structured());
+        // Non-finite p never claims structure.
+        assert!(!mk(f64::NAN).is_structured());
+        assert!(!Diagnostics { chi2: 1.0, dof: 0, p_value: 0.0 }.is_structured());
+    }
 }
