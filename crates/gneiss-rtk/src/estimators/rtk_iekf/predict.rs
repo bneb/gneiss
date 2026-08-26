@@ -99,6 +99,55 @@ fn build_process_noise(state: &RtkState, dim: usize, dt: f64, q_accel: f64, reve
 mod tests {
     use super::*;
     use nalgebra::Vector3;
+    use crate::post_process::dynamics::{ProcessingDynamics, STATIC_Q_ACCEL, KINEMATIC_Q_ACCEL};
+
+    fn q_for(q_accel: f64, dt: f64) -> DMatrix<f64> {
+        let state = RtkState::new(Vector3::zeros(), GpsTime::new(2000, 0.0));
+        build_process_noise(&state, 6, dt, q_accel, false)
+    }
+
+    #[test]
+    fn env_unset_profile_selects_static_legacy_q_bitwise() {
+        // Env unset -> Static -> the exact legacy constants, so every
+        // Q element produced through profile resolution is bitwise
+        // identical to the historical hard-coded path.
+        let dynamics = ProcessingDynamics::from_env_value(None);
+        assert_eq!(dynamics, ProcessingDynamics::Static);
+        let via_profile = q_for(dynamics.q_accel_default(), 30.0);
+        let legacy_binary = q_for(1e-6_f64, 30.0);
+        for i in 0..6 {
+            for j in 0..6 {
+                assert_eq!(
+                    via_profile[(i, j)].to_bits(),
+                    legacy_binary[(i, j)].to_bits(),
+                    "Q[{i}][{j}] must be bit-identical when env unset"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn kinematic_q_position_at_least_100x_static_and_velocity_nonzero() {
+        let dt = 30.0;
+        let q_static = q_for(STATIC_Q_ACCEL, dt);
+        let q_kin = q_for(KINEMATIC_Q_ACCEL, dt);
+        for i in 0..3 {
+            assert!(
+                q_kin[(i, i)] >= 100.0 * q_static[(i, i)],
+                "position process noise axis {i}: kin {} vs static {}",
+                q_kin[(i, i)], q_static[(i, i)]
+            );
+            // Velocity states carry live random-walk noise under both
+            // profiles, but only kinematic makes them meaningful.
+            assert!(q_static[(i + 3, i + 3)] > 0.0);
+            assert!(q_kin[(i + 3, i + 3)] > 100.0 * q_static[(i + 3, i + 3)]);
+            assert!((q_kin[(i + 3, i + 3)] - dt * KINEMATIC_Q_ACCEL).abs() < 1e-12,
+                "velocity Q must equal dt*q_accel");
+        }
+        // Documented magnitude: dt^3/3 * q at 30 s epochs ~ 55 m std.
+        let expected_pos_q = dt * dt * dt / 3.0 * KINEMATIC_Q_ACCEL;
+        assert!((q_kin[(0, 0)] - expected_pos_q).abs() < 1e-9);
+    }
 
     #[test]
     fn test_prediction_forward_and_backward() {

@@ -8,6 +8,7 @@
 
 pub mod backward;
 pub mod combiner;
+pub mod dynamics;
 pub mod forward;
 pub mod network;
 pub mod quality;
@@ -23,6 +24,7 @@ use crate::swfg::config::EngineConfig;
 use crate::swfg::imu_preintegration::ImuSample;
 
 pub use combiner::SmoothedEpoch;
+pub use dynamics::ProcessingDynamics;
 pub use quality::QualityReport;
 pub use screening::ScreeningReport;
 
@@ -69,6 +71,11 @@ pub struct PostProcessOptions {
     /// differential receiver PCV is removed from DD carrier phase before
     /// ambiguity estimation. Arc-wrapped so cloning options stays cheap.
     pub receiver_pcv: Option<std::sync::Arc<ReceiverPcvPair>>,
+    /// Rover motion model. Default [`ProcessingDynamics::Static`] keeps
+    /// every legacy behaviour byte-identical; [`ProcessingDynamics::
+    /// Kinematic`] selects mobile Q, no monument lock, widened
+    /// innovation gates, and sigma-scaled combiner thresholds.
+    pub dynamics: ProcessingDynamics,
 }
 
 /// Paired receiver antenna PCV models consumed by the DD engine.
@@ -102,7 +109,7 @@ pub fn execute_post_process(
 
     // Pass 2: Forward Pass
     let forward_traj = forward::run_forward_pass(
-        config, ephemerides, klob, rover_epochs, base_epochs, base_pos, imu_samples, options.initial_rover_position, options.q_accel, options.widelane_ar, options.tropo_gradients,
+        config, ephemerides, klob, rover_epochs, base_epochs, base_pos, imu_samples, options.initial_rover_position, options.q_accel, options.dynamics, options.widelane_ar, options.tropo_gradients,
         options.network_sat_upd.clone(),
         options.receiver_pcv.clone(),
     );
@@ -111,7 +118,7 @@ pub fn execute_post_process(
     let backward_map = if options.enable_bidirectional {
         let initial_rover_pos = forward_traj.last().map(|e| e.position_ecef);
         backward::run_backward_pass(
-            config, ephemerides, klob, rover_epochs, base_epochs, base_pos, imu_samples, initial_rover_pos, options.q_accel, options.widelane_ar, options.tropo_gradients,
+            config, ephemerides, klob, rover_epochs, base_epochs, base_pos, imu_samples, initial_rover_pos, options.q_accel, options.dynamics, options.widelane_ar, options.tropo_gradients,
             options.network_sat_upd.clone(),
             options.receiver_pcv.clone(),
         )
@@ -124,6 +131,7 @@ pub fn execute_post_process(
         &forward_traj,
         &backward_map,
         options.widelane_ar,
+        options.dynamics,
     );
     let quality_rep = quality::generate_quality_report(&smoothed_traj);
 

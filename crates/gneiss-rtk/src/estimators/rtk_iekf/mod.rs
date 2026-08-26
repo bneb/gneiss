@@ -191,6 +191,11 @@ pub struct GnssRtkIekf {
     pub static_lock_after_s: Option<f64>,
     /// Post-lock acceleration process noise (m/s^2).
     pub static_lock_q_accel: f64,
+    /// Multiplier on the robust-innovation gate (Huber knee) inside the
+    /// measurement update. 1.0 = legacy static behaviour; the kinematic
+    /// profile widens it so coherent model mismatch during acceleration
+    /// does not deweight genuine measurements.
+    pub robust_innov_scale: f64,
     /// Rover ZWD residual (m zenith wet) scalar random-walk estimate.
     pub zwd_est_m: f64,
     pub zwd_var_m2: f64,
@@ -248,6 +253,7 @@ impl GnssRtkIekf {
             start_tow: start_time.tow,
             static_lock_after_s: None,
             static_lock_q_accel: 1e-9,
+            robust_innov_scale: 1.0,
             zwd_est_m: 0.0,
             zwd_var_m2: update::ZWD_INIT_VAR_M2,
             prev_zwd_tow: start_time.tow,
@@ -330,7 +336,7 @@ impl GnssRtkIekf {
             }
         }
 
-        update::iekf_update(&mut self.state, &meas)?;
+        update::iekf_update_gated(&mut self.state, &meas, self.robust_innov_scale)?;
         let (x_post, p_post) = (self.state.to_dvector(), self.state.cov.clone());
 
         // Long-baseline mode: track the rover ZWD residual from post-update
@@ -1309,6 +1315,121 @@ mod tests {
             }
         }
         assert!(fixed >= 5, "gate on with defaults should still fix, got {fixed}");
+    }
+
+    // ---- ProcessingDynamics: kinematic profile vs static profile --------
+
+    /// Mean 3D tracking error of one engine over the converged tail
+    /// (epochs after `skip`) of a simulated trajectory.
+    fn mean_tail_error(
+        engine: &mut GnssRtkIekf,
+        sim: &crate::sim::generator::SimulationDataset,
+        base: Vector3<f64>,
+        skip: usize,
+    ) -> f64 {
+        let mut sum = 0.0;
+        let mut n = 0;
+        for i in 0..sim.rover_epochs.len() {
+            let sol = engine
+                .process_epoch(&sim.rover_epochs[i], &sim.base_epochs[i], base, &sim.ephemerides)
+                .expect("epoch must process");
+            if i >= skip {
+                sum += (sol.position_ecef - sim.truth_positions[i].1).norm();
+                n += 1;
+            }
+        }
+        sum / n.max(1) as f64
+    }
+
+    #[test]
+    fn kinematic_profile_tracks_linear_ramp_and_velocity_states_stay_live() {
+        use crate::post_process::dynamics::{
+            KINEMATIC_INNOV_GATE_SCALE, KINEMATIC_Q_ACCEL, STATIC_Q_ACCEL,
+        };
+        use crate::sim::generator::{TrajectoryProfile};
+        // PPK cadence (30 s epochs): a 5 m/s rover covers 150 m between
+        // epochs. Constant-velocity ramp: even the static profile survives
+        // here because robust variance inflation lets strong phase
+        // measurements drag the frozen prior along; the kinematic profile
+        // must also stay bounded AND keep live velocity states.
+        let cfg = SimulationConfig {
+            duration_s: 1800.0,
+            epoch_rate_hz: 1.0 / 30.0,
+            profile: TrajectoryProfile::Linear {
+                start_offset_ned: Vector3::new(100.0, 100.0, 0.0),
+                velocity_ned: Vector3::new(4.0, 3.0, 0.0),
+            },
+            ..Default::default()
+        };
+        let sim = generate_simulation_dataset(&cfg);
+        let true_speed = Vector3::new(4.0_f64, 3.0, 0.0).norm();
+
+        let mut static_eng =
+            GnssRtkIekf::new(cfg.base_ecef, sim.rover_epochs[0].time, STATIC_Q_ACCEL);
+        let mut kin_eng = GnssRtkIekf::new(cfg.base_ecef, sim.rover_epochs[0].time, KINEMATIC_Q_ACCEL);
+        kin_eng.robust_innov_scale = KINEMATIC_INNOV_GATE_SCALE;
+
+        let err_static = mean_tail_error(&mut static_eng, &sim, cfg.base_ecef, 10);
+        let err_kin = mean_tail_error(&mut kin_eng, &sim, cfg.base_ecef, 10);
+        let speed_kin = kin_eng.state.vel_ecef.norm();
+        let speed_static = static_eng.state.vel_ecef.norm();
+        eprintln!(
+            "KIN-SIM linear ramp @30s: err static={err_static:.3} m kin={err_kin:.3} m | \
+             final speed est static={speed_static:.2} kin={speed_kin:.2} (true {true_speed:.2}) m/s"
+        );
+        // No crash/divergence for either profile on steady motion.
+        assert!(err_kin < 3.0, "kinematic must track the ramp, got {err_kin:.3} m");
+        assert!(err_static < 3.0, "static+Huber also tracks steady ramps, got {err_static:.3} m");
+        // Differential signal: kinematic velocity states stay live
+        // (within 25% of the true 5 m/s). NOTE (measured): the STATIC
+        // profile's velocity state ALSO converges on a clean constant-
+        // velocity ramp — sequential position updates make velocity
+        // observable through the F coupling even with monument Q — so
+        // no frozenness assertion is possible here; the profiles
+        // separate under ACCELERATION (next test).
+        assert!(
+            (speed_kin - true_speed).abs() < 0.25 * true_speed,
+            "kinematic velocity state must track true speed, got {speed_kin:.2}"
+        );
+    }
+
+    #[test]
+    fn kinematic_profile_outperforms_static_under_acceleration() {
+        use crate::post_process::dynamics::{
+            KINEMATIC_INNOV_GATE_SCALE, KINEMATIC_Q_ACCEL, STATIC_Q_ACCEL,
+        };
+        use crate::sim::generator::{TrajectoryProfile};
+        // Accelerating frame: 15 m/s on a 500 m radius circle is
+        // 0.45 m/s^2 of sustained acceleration — a constant-velocity
+        // model with monument Q must lag every epoch.
+        let cfg = SimulationConfig {
+            duration_s: 3600.0,
+            epoch_rate_hz: 1.0 / 30.0,
+            profile: TrajectoryProfile::Circular {
+                center_offset_ned: Vector3::new(200.0, 200.0, 0.0),
+                radius_m: 500.0,
+                speed_m_s: 15.0,
+            },
+            ..Default::default()
+        };
+        let sim = generate_simulation_dataset(&cfg);
+
+        let mut static_eng =
+            GnssRtkIekf::new(cfg.base_ecef, sim.rover_epochs[0].time, STATIC_Q_ACCEL);
+        let mut kin_eng = GnssRtkIekf::new(cfg.base_ecef, sim.rover_epochs[0].time, KINEMATIC_Q_ACCEL);
+        kin_eng.robust_innov_scale = KINEMATIC_INNOV_GATE_SCALE;
+
+        let err_static = mean_tail_error(&mut static_eng, &sim, cfg.base_ecef, 12);
+        let err_kin = mean_tail_error(&mut kin_eng, &sim, cfg.base_ecef, 12);
+        eprintln!(
+            "KIN-SIM circular @30s: err static={err_static:.3} m kinematic={err_kin:.3} m"
+        );
+        assert!(err_kin < 3.0, "kinematic must track the turn, got {err_kin:.3} m");
+        assert!(
+            err_static > 2.0 * err_kin,
+            "static-tuned Q must lag under sustained acceleration \
+             (static={err_static:.3}, kin={err_kin:.3})"
+        );
     }
 
     // ---- GNEISS_AR_GATE: technique 2, phase-code coherency bias init ------

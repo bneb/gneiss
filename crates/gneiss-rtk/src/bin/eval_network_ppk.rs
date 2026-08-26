@@ -30,6 +30,7 @@ use gneiss_core::ephemeris::Ephemeris;
 use gneiss_core::obs::EpochObs;
 use gneiss_core::time::GpsTime;
 use gneiss_rtk::estimators::rtk_iekf::DoubleDiffKey;
+use gneiss_rtk::post_process::dynamics::{KINEMATIC_Q_ACCEL, STATIC_Q_ACCEL, ProcessingDynamics};
 use gneiss_rtk::post_process::forward;
 use gneiss_rtk::post_process::{execute_post_process, network, sidereal, PostProcessOptions, ReceiverPcvPair, SmoothedEpoch};
 use gneiss_rtk::swfg::config::EngineConfig;
@@ -229,6 +230,8 @@ struct RunContext<'a> {
     rover_init: Option<Vector3<f64>>,
     klob: Option<([f64; 4], [f64; 4])>,
     tropo_gradients: bool,
+    /// Rover motion model (GNEISS_DYNAMICS=kinematic opts in).
+    dynamics: ProcessingDynamics,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -252,17 +255,23 @@ fn run_pass(
         initial_rover_position: ctx.rover_init,
         klobuchar_alpha: ctx.klob.map(|k| k.0),
         klobuchar_beta: ctx.klob.map(|k| k.1),
-        // Static monuments: q=1.0 re-randomizes position ~55 m per 30 s
-        // epoch and keeps the float solution from converging. Loose phase
-        // (1e-6) lets float ambiguities converge; the engine's two-phase
-        // lock tightens to 1e-8 after 15 min so wrong fixes cannot hide.
-        q_accel: Some(1e-6),
+        // Static monuments (legacy): q=1e-6 — 1.0 re-randomizes position
+        // ~55 m per 30 s epoch and keeps the float solution from
+        // converging; the engine's two-phase lock tightens to 1e-8 after
+        // 15 min so wrong fixes cannot hide. Kinematic profile: q=1.0
+        // (correct mobile prior) and no monument lock.
+        q_accel: Some(if ctx.dynamics.is_kinematic() {
+            KINEMATIC_Q_ACCEL
+        } else {
+            STATIC_Q_ACCEL
+        }),
         network_sat_upd: network_upd.clone(),
         // Long baselines need iono-immune fixing: MW wide-lane cascade AR
         // unlocks the iono-free stage beyond ~20 km.
         widelane_ar: std::env::var("WL_DISABLE").is_err(),
         tropo_gradients: ctx.tropo_gradients,
         receiver_pcv,
+        dynamics: ctx.dynamics,
     };
     let res = match execute_post_process(config, ctx.ephemerides, rover, Some(base_epochs), None, &options) {
         Ok(r) => r,
@@ -271,15 +280,16 @@ fn run_pass(
             return ([0.0; 4], Vec::new());
         }
     };
-    // Honesty gating on the fused bidirectional product: an excursion that
-    // jumps beyond what a static monument can do is reported as float, both
-    // in these stats and downstream in network consensus.
+    // Honesty gating on the fused bidirectional product: an excursion
+    // that jumps beyond what the motion model allows is reported as
+    // float — fixed 0.20 m/90 s for monuments, velocity+sigma-scaled
+    // for kinematic rovers.
     let mut traj = res.trajectory;
     if bidir && options.widelane_ar {
-        traj = gneiss_rtk::post_process::network::apply_continuity_gate(
+        traj = gneiss_rtk::post_process::network::apply_continuity_gate_dynamics(
             traj,
-            gneiss_rtk::post_process::network::CONTINUITY_JUMP_M,
             gneiss_rtk::post_process::network::CONTINUITY_MAX_DT_S,
+            ctx.dynamics,
         );
     }
     // Sidereal stacking (GNEISS_SIDEREAL=1): diagnostic fold + strictly
@@ -630,6 +640,17 @@ fn main() {
         .try_init()
         .ok();
 
+    // Processing-dynamics profile: GNEISS_DYNAMICS=kinematic opts in;
+    // unset keeps the legacy static-monument path byte-identical.
+    let dynamics = ProcessingDynamics::from_env();
+    if dynamics.is_kinematic() {
+        println!(
+            "DYNAMICS: kinematic (q_accel={KINEMATIC_Q_ACCEL}, no monument lock, \
+             innov gate x{:.0}, sigma-scaled combiner)",
+            dynamics.innovation_gate_scale(),
+        );
+    }
+
     let multi2025 = std::env::var("GNEISS_DATASET").as_deref() == Ok("multi2025");
     let (dir, rover_file, truth_file, nav_file, bases): (&Path, &str, &str, &str, &[NetworkBase]) =
         if multi2025 {
@@ -648,7 +669,7 @@ fn main() {
     // Rover filter init is left to the SPP in broadcast frame (None): the
     // RINEX header approx is NAD83 and must not seed the filter.
     let tropo_gradients = multi2025 && std::env::var("GNEISS_TROPO_GRAD").as_deref() != Ok("0");
-    let ctx = RunContext { ephemerides: &data.ephemerides, truth: &data.truth, rover_init: None, klob: data.klob, tropo_gradients };
+    let ctx = RunContext { ephemerides: &data.ephemerides, truth: &data.truth, rover_init: None, klob: data.klob, tropo_gradients, dynamics };
     let selected_rover = select_rover_epochs(&data.rover_epochs);
     let mut results = Vec::new();
     let mut base_trajs: Vec<Vec<SmoothedEpoch>> = Vec::new();
@@ -710,7 +731,10 @@ fn main() {
         let fused = network::fuse_network_solutions(
             &base_trajs, &network::NetworkConsensusConfig::default(),
         );
-        let gated = network::apply_continuity_gate(fused, 0.20, 90.0);
+        // Network consensus continuity gate: profile-aware (static
+        // 0.20 m rule vs kinematic velocity+sigma allowance).
+        let fused_dyn = if dynamics.is_kinematic() { dynamics } else { ProcessingDynamics::Static };
+        let gated = network::apply_continuity_gate_dynamics(fused, 90.0, fused_dyn);
         let (h, d3, up_errs, fix, fixed_errs) = collect_errors(&gated, ctx.truth);
         print_stats(&format!("NETWORK FUSED [{} bases]", base_trajs.len()), h, d3, up_errs, fix, gated.len());
         print_fixed_stats("Network", fixed_errs);

@@ -66,6 +66,19 @@ pub(crate) fn pcv_corrected_cp(m: &DoubleDiffMeasurement) -> Option<f64> {
 
 /// Perform Iterated Extended Kalman Filter (IEKF) update with double-differenced measurements.
 pub fn iekf_update(state: &mut RtkState, measurements: &[DoubleDiffMeasurement]) -> Result<f64, String> {
+    iekf_update_gated(state, measurements, 1.0)
+}
+
+/// [`iekf_update`] with a profile-dependent robust-gate scale: the
+/// Huber knee sits at `ROBUST_INNOVATION_THRESHOLD * innov_gate_scale`.
+/// `1.0` reproduces the legacy filter bit-for-bit; the kinematic
+/// profile widens it so coherent model mismatch during acceleration
+/// does not deweight genuine measurements.
+pub fn iekf_update_gated(
+    state: &mut RtkState,
+    measurements: &[DoubleDiffMeasurement],
+    innov_gate_scale: f64,
+) -> Result<f64, String> {
     if measurements.is_empty() {
         return Ok(0.0);
     }
@@ -76,7 +89,7 @@ pub fn iekf_update(state: &mut RtkState, measurements: &[DoubleDiffMeasurement])
     let mut last_rms = 0.0;
 
     for _iter in 0..4 {
-        let (h, y, r) = build_measurement_system(state, &x, measurements);
+        let (h, y, r) = build_measurement_system(state, &x, measurements, innov_gate_scale);
         if y.is_empty() {
             return Ok(0.0);
         }
@@ -91,7 +104,7 @@ pub fn iekf_update(state: &mut RtkState, measurements: &[DoubleDiffMeasurement])
         }
     }
 
-    apply_joseph_update(state, &p0, &x, measurements);
+    apply_joseph_update(state, &p0, &x, measurements, innov_gate_scale);
     state.update_from_dvector(&x);
     Ok(last_rms)
 }
@@ -116,8 +129,9 @@ fn apply_joseph_update(
     p0: &DMatrix<f64>,
     x: &DVector<f64>,
     measurements: &[DoubleDiffMeasurement],
+    innov_gate_scale: f64,
 ) {
-    let (h_final, y_final, r_final) = build_measurement_system(state, x, measurements);
+    let (h_final, y_final, r_final) = build_measurement_system(state, x, measurements, innov_gate_scale);
     if y_final.is_empty() {
         return;
     }
@@ -134,6 +148,7 @@ fn build_measurement_system(
     state: &RtkState,
     x_current: &DVector<f64>,
     measurements: &[DoubleDiffMeasurement],
+    innov_gate_scale: f64,
 ) -> (DMatrix<f64>, DVector<f64>, DMatrix<f64>) {
     let mut h_rows = Vec::new();
     let mut y_vals = Vec::new();
@@ -143,7 +158,7 @@ fn build_measurement_system(
     let state_dim = state.dim();
 
     for m in measurements {
-        append_dd_meas_rows(m, cur_pos, state, x_current, state_dim, &mut h_rows, &mut y_vals, &mut r_diag);
+        append_dd_meas_rows(m, cur_pos, state, x_current, state_dim, &mut h_rows, &mut y_vals, &mut r_diag, innov_gate_scale);
     }
 
     assemble_matrices(h_rows, y_vals, r_diag, state_dim)
@@ -176,6 +191,7 @@ fn append_dd_meas_rows(
     h_rows: &mut Vec<DVector<f64>>,
     y_vals: &mut Vec<f64>,
     r_diag: &mut Vec<f64>,
+    innov_gate_scale: f64,
 ) {
     let base_dd = (m.sat_pos - m.base_pos).norm() - (m.ref_pos - m.base_pos).norm();
     let r_sat = (m.sat_pos - cur_pos).norm();
@@ -225,7 +241,7 @@ fn append_dd_meas_rows(
     let pr_y = m.dd_pr_m - geom_dd - m.dm_wet_rov * zwd_val - grad_pr - iono_val;
     let pr_r = m.pr_var_m2.max(0.01);
     y_vals.push(pr_y);
-    r_diag.push(robust_inflate(pr_y, pr_r));
+    r_diag.push(robust_inflate(pr_y, pr_r, innov_gate_scale));
 
     if let (Some(cp_obs), Some(amb_idx)) = (pcv_corrected_cp(m), state.get_amb_idx(&m.key)) {
         let amb_val = x_current[amb_idx];
@@ -252,16 +268,18 @@ fn append_dd_meas_rows(
         let cp_y = cp_obs - pred_cp;
         let cp_r = m.cp_var_cycles2.max(1e-4);
         y_vals.push(cp_y);
-        r_diag.push(robust_inflate(cp_y, cp_r));
+        r_diag.push(robust_inflate(cp_y, cp_r, innov_gate_scale));
     }
 }
 
 /// Huber-style variance inflation: keep nominal R below the normalized
-/// innovation threshold, decay weight smoothly above it.
-fn robust_inflate(innovation: f64, variance: f64) -> f64 {
+/// innovation threshold, decay weight smoothly above it. `gate_scale`
+/// widens the knee for the kinematic profile (1.0 = legacy).
+fn robust_inflate(innovation: f64, variance: f64, gate_scale: f64) -> f64 {
+    let threshold = ROBUST_INNOVATION_THRESHOLD * gate_scale;
     let nis = innovation * innovation / variance;
-    if nis > ROBUST_INNOVATION_THRESHOLD {
-        variance * (nis / ROBUST_INNOVATION_THRESHOLD)
+    if nis > threshold {
+        variance * (nis / threshold)
     } else {
         variance
     }
@@ -370,6 +388,73 @@ fn assemble_matrices(
 mod tests {
     use super::*;
     use gneiss_core::time::GpsTime;
+
+    #[test]
+    fn robust_gate_scale_one_is_bitwise_legacy() {
+        let var = 0.04;
+        // Below the knee: nominal weight, any scale.
+        for scale in [1.0_f64, 3.0] {
+            assert_eq!(robust_inflate(0.1, var, scale).to_bits(), var.to_bits());
+        }
+        // At exactly the legacy knee the inflation factor is 1.0.
+        // var=1.0, innov=3.0 -> NIS = 9.0 exactly representable.
+        assert_eq!(robust_inflate(3.0_f64, 1.0_f64, 1.0).to_bits(), 1.0_f64.to_bits());
+    }
+
+    #[test]
+    fn kinematic_gate_keeps_nominal_weight_between_legacy_and_widened_knee() {
+        let var = 0.04_f64;
+        // NIS = 18: between legacy knee (9) and kinematic knee (27).
+        let innov = (18.0_f64 * var).sqrt();
+        let inflated_static = robust_inflate(innov, var, 1.0);
+        assert!(inflated_static > var, "static profile must inflate at NIS=18");
+        assert_eq!(
+            robust_inflate(innov, var, 3.0).to_bits(),
+            var.to_bits(),
+            "kinematic profile keeps nominal weight below its widened knee"
+        );
+        // Far above both knees both profiles inflate, kinematic less.
+        let gross = (1000.0 * var).sqrt();
+        assert!(robust_inflate(gross, var, 3.0) < robust_inflate(gross, var, 1.0));
+        assert!(robust_inflate(gross, var, 3.0) > var);
+    }
+
+    #[test]
+    fn gated_update_matches_legacy_update_with_unit_scale() {
+        // Same inputs, iekf_update vs iekf_update_gated(1.0): identical state.
+        let build = || {
+            let mut s = RtkState::new(Vector3::new(101.0, 198.0, 301.0), GpsTime::new(2000, 100.0));
+            s.ensure_ambiguity(DoubleDiffKey { constellation_id: 0, sat: 2, ref_sat: 1, freq_band: 1 }, 0.0, 100.0);
+            s
+        };
+        let meas = vec![DoubleDiffMeasurement {
+            key: DoubleDiffKey { constellation_id: 0, sat: 2, ref_sat: 1, freq_band: 1 },
+            dd_pr_m: 1.5,
+            dd_cp_cycles: Some(8.0),
+            sat_pos: Vector3::new(10_000.0, 20_000.0, 20_000.0),
+            ref_pos: Vector3::new(5_000.0, 25_000.0, 20_000.0),
+            base_pos: Vector3::zeros(),
+            lambda: 0.190,
+            pr_var_m2: 0.04,
+            cp_var_cycles2: 0.0001,
+            dm_wet_rov: 0.0,
+            dgrad_n_rov: 0.0,
+            dgrad_e_rov: 0.0,
+            tide_dd_m: 0.0,
+            dd_clk_m: 0.0,
+            dd_pcv_m: 0.0,
+        }];
+        let mut a = build();
+        let mut b = build();
+        iekf_update(&mut a, &meas).expect("legacy update ok");
+        iekf_update_gated(&mut b, &meas, 1.0).expect("gated update ok");
+        assert_eq!(a.pos_ecef, b.pos_ecef);
+        for i in 0..a.cov.nrows() {
+            for j in 0..a.cov.ncols() {
+                assert_eq!(a.cov[(i, j)].to_bits(), b.cov[(i, j)].to_bits());
+            }
+        }
+    }
 
     #[test]
     fn test_iekf_update_reduces_position_error() {
@@ -639,8 +724,8 @@ mod tests {
         let (state_off, m_off) = pcv_fixture(0.0);
         let (state_on, m_on) = pcv_fixture(pcv_m);
         let x = |s: &RtkState| s.to_dvector();
-        let (_, y_off, _) = build_measurement_system(&state_off, &x(&state_off), &[m_off]);
-        let (_, y_on, _) = build_measurement_system(&state_on, &x(&state_on), &[m_on]);
+        let (_, y_off, _) = build_measurement_system(&state_off, &x(&state_off), &[m_off], 1.0);
+        let (_, y_on, _) = build_measurement_system(&state_on, &x(&state_on), &[m_on], 1.0);
         assert_eq!(y_off.len(), 2, "code + phase rows expected");
         assert_eq!(y_on.len(), 2);
         let shift = y_off[1] - y_on[1];
