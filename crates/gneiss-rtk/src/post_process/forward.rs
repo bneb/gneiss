@@ -330,6 +330,16 @@ fn process_single_fwd(
         (Some(b), Some(bp)) => engine.process_rtk_epoch_with_imu(epoch, b, bp, preint),
         _ => engine.process_epoch(epoch),
     };
+    // Per-epoch SWFG outcome trace (docs/SOLVER_MODE_MATRIX.md): the
+    // rover-only/PPP path silently drops every failed epoch with no log
+    // line anywhere, which is how the IfbGlonass orphan-variable crash
+    // went unnoticed as "0 epochs processed" instead of a visible error.
+    if std::env::var("GNEISS_SWFG_DEBUG").is_ok() {
+        match &sol_res {
+            Ok(s) => eprintln!("SWFG tow={:.0} n_sat={} err={:?}", epoch.time.tow, s.n_satellites, s.error),
+            Err(e) => eprintln!("SWFG tow={:.0} ERR={}", epoch.time.tow, e),
+        }
+    }
     let sol = sol_res.ok()?;
     if sol.n_satellites < 4 && !has_imu {
         return None;
