@@ -44,19 +44,12 @@ pub async fn run_process(
     let mut trajectory = Vec::new();
     if _enable_backward_smoothing {
         info!("Running Qinertia-grade 4-pass offline post-processing pipeline...");
-        let post_options = gneiss_rtk::post_process::PostProcessOptions {
-            enable_bidirectional: true,
-            base_position: parsed_base_pos.map(|p| nalgebra::Vector3::new(p[0], p[1], p[2])),
-            initial_rover_position: _rover_approx_pos.map(|p| nalgebra::Vector3::new(p[0], p[1], p[2])),
-            klobuchar_alpha: klobuchar.as_ref().map(|k| k.alpha),
-            klobuchar_beta: klobuchar.as_ref().map(|k| k.beta),
-            q_accel: None,
-            widelane_ar: false,
-            tropo_gradients: false,
-            network_sat_upd: None,
-        receiver_pcv: None,
-            dynamics: gneiss_rtk::post_process::ProcessingDynamics::from_env(),
-        };
+        let post_options = backward_smoothing_options(
+            parsed_base_pos,
+            _rover_approx_pos,
+            klobuchar.as_ref().map(|k| k.alpha),
+            klobuchar.as_ref().map(|k| k.beta),
+        );
         let post_res = gneiss_rtk::post_process::execute_post_process(
             &swfg_config,
             &ephemerides,
@@ -174,4 +167,48 @@ async fn write_results(
     }
     info!("Wrote SWFG result ({} epochs processed) to {}", n_processed, output);
     Ok(())
+}
+
+/// Options for the `--enable-backward-smoothing` (4-pass DD-RTK) path.
+///
+/// `widelane_ar` is fixed on: cadence-aware slip gating, reverse-safe
+/// process noise and innovation-gated slip re-seeding are measured
+/// strictly positive with no regressions across every CORS baseline on
+/// record (see docs/NETWORK_RTK_NEXT_STEPS.md). `eval_network_ppk`
+/// already defaults this on; the CLI must match its validated behavior
+/// rather than silently running the legacy path.
+fn backward_smoothing_options(
+    base_position: Option<[f64; 3]>,
+    rover_approx_pos: Option<[f64; 3]>,
+    klobuchar_alpha: Option<[f64; 4]>,
+    klobuchar_beta: Option<[f64; 4]>,
+) -> gneiss_rtk::post_process::PostProcessOptions {
+    gneiss_rtk::post_process::PostProcessOptions {
+        enable_bidirectional: true,
+        base_position: base_position.map(|p| nalgebra::Vector3::new(p[0], p[1], p[2])),
+        initial_rover_position: rover_approx_pos.map(|p| nalgebra::Vector3::new(p[0], p[1], p[2])),
+        klobuchar_alpha,
+        klobuchar_beta,
+        q_accel: None,
+        widelane_ar: true,
+        tropo_gradients: false,
+        network_sat_upd: None,
+        receiver_pcv: None,
+        dynamics: gneiss_rtk::post_process::ProcessingDynamics::from_env(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn backward_smoothing_enables_widelane_ar_by_default() {
+        let opts = backward_smoothing_options(None, None, None, None);
+        assert!(
+            opts.widelane_ar,
+            "gneiss-cli must use the validated widelane_ar default, not the legacy off-path"
+        );
+        assert!(opts.enable_bidirectional);
+    }
 }
