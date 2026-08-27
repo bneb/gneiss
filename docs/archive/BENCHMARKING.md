@@ -1,3 +1,5 @@
+> **Superseded.** This document describes an earlier architecture (pre network-RTK/PPK pivot) and is kept for historical record only. For current status and roadmap, see `docs/PROJECT_STATUS.md` and `docs/NETWORK_RTK_NEXT_STEPS.md`.
+
 # Gneiss Benchmarking Guide
 
 This document outlines the standard operating procedure for evaluating the Gneiss navigation engine. We rely on a centralized benchmarking infrastructure to ensure empirical, regression-proof development across various challenging environments (urban canyons, static datasets, varying hardware).

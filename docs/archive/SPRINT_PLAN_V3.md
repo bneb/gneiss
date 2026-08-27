@@ -1,3 +1,5 @@
+> **Superseded.** This document describes an earlier architecture (pre network-RTK/PPK pivot) and is kept for historical record only. For current status and roadmap, see `docs/PROJECT_STATUS.md` and `docs/NETWORK_RTK_NEXT_STEPS.md`.
+
 # Sprint Plan v11 — Merged Architecture
 
 **Sources**: Dellaert/Teunissen/Humphreys/Molteno/Dampf/Bisnath conference + type-state/Forster/AR refinement

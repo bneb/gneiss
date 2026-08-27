@@ -1,3 +1,5 @@
+> **Superseded.** This document describes an earlier architecture (pre network-RTK/PPK pivot) and is kept for historical record only. For current status and roadmap, see `docs/PROJECT_STATUS.md` and `docs/NETWORK_RTK_NEXT_STEPS.md`.
+
 # Gneiss Session Summary — 2026-07-25
 
 ## Overview

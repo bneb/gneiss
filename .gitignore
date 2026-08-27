@@ -81,3 +81,37 @@ Thumbs.db
 *.bak
 .claude/
 
+# --- Debug / alternate build directories (beyond **/target/) ---
+target_*/
+
+# --- Compressed GNSS product downloads (sp3.gz, bia.gz, obs.Z, etc.) ---
+*.gz
+*.Z
+
+# --- Patch/diff scratch files ---
+*.diff
+*.patch
+
+# --- Mutation testing outputs not caught by the mutants* prefix rule ---
+*mutants*.txt
+*mutants*.json
+mutants.out*/
+
+# --- Credential / session files ---
+.urs_cookies
+.netrc
+cookie.txt
+*.cookies
+
+# --- Unexplained large generated state file (repeatedly seen as repo bloat) ---
+.stat
+
+# --- Root-level one-off scripts, scratch source, and text dumps ---
+# Real, maintained tooling lives in scripts/; real crate source lives under
+# crates/, bin/, tests/. Anything loose at repo root is a one-off dev script
+# or a debug dump and should never be committed from here again.
+/*.py
+/*.sh
+/*.rs
+/*.txt
+/tmp*
