@@ -372,73 +372,7 @@ fn apply_sidereal_option(
     traj
 }
 
-/// Antenna family + radome from a RINEX observation header (`ANT # / TYPE`),
-/// radome defaulting to NONE when absent.
-fn rinex_ant_type(rinex_path: &Path) -> Option<(String, String)> {
-    use std::io::BufRead;
-    let f = File::open(rinex_path).ok()?;
-    for line in BufReader::new(f).lines().take(80).flatten() {
-        if line.len() >= 60 && line[60..].trim() == "ANT # / TYPE" {
-            let fields: Vec<&str> = line[20..40].split_whitespace().collect();
-            let fam = fields.first()?.to_string();
-            let rad = fields.get(1).copied().unwrap_or("NONE").to_string();
-            return Some((fam, rad));
-        }
-    }
-    None
-}
-
-#[allow(clippy::too_many_arguments)]
-/// Receiver L1 PCO (ECEF, m) for a base station: RINEX header antenna
-/// type/radome looked up in an ANTEX file. Opt-in via GNEISS_RECV_PCO=1
-/// (file via GNEISS_ANTEX, default datasets/igs14.atx).
-fn base_recv_pco_ecef(rinex_path: &Path, antex_path: &str, arp: Vector3<f64>) -> Option<Vector3<f64>> {
-    use gneiss_parsers::antex::AntexDatabase;
-
-    // 1. antenna type + radome from the RINEX2 header
-    let (fam, rad) = rinex_ant_type(rinex_path)?;
-
-    // 2. ANTEX receiver entry for that family/radome
-    let db = match AntexDatabase::parse(antex_path) { Ok(d) => d, Err(e) => { eprintln!("DEBUG: ANTEX parse failed: {:?}", e); return None; } };
-    let ant = gneiss_parsers::receiver_antenna::ReceiverAntenna::lookup(&db, &fam, &rad)?;
-    // Parser reorders the ANTEX north/east/up columns to east/north/up.
-    let [east_mm, north_mm, up_mm] = ant.pco_enu_mm;
-
-    // 3. ENU -> ECEF at the ARP
-    let llh = gneiss_core::coords::ecef_to_llh(arp);
-    let (lat, lon) = (llh.x, llh.y);
-    let (slat, clat) = (lat.sin(), lat.cos());
-    let (slon, clon) = (lon.sin(), lon.cos());
-    let east = Vector3::new(-slon, clon, 0.0);
-    let north = Vector3::new(-slat * clon, -slat * slon, clat);
-    let up = Vector3::new(clat * clon, clat * slon, slat);
-    let m = 1e-3;
-    Some(north * (north_mm * m) + east * (east_mm * m) + up * (up_mm * m))
-}
-
-/// Receiver antenna PCV models (rover, base) from the ANTEX database,
-/// opt-in via GNEISS_PCV=1. Both headers must resolve to calibrations;
-/// otherwise None keeps the legacy uncorrected path.
-fn load_receiver_pcv(rover_path: &Path, base_path: &Path, antex_path: &str) -> Option<std::sync::Arc<ReceiverPcvPair>> {
-    use gneiss_parsers::antex::AntexDatabase;
-    use gneiss_parsers::receiver_antenna::ReceiverAntenna;
-
-    let db = match AntexDatabase::parse(antex_path) { Ok(d) => d, Err(e) => { eprintln!("DEBUG: ANTEX parse failed: {:?}", e); return None; } };
-    let (rfam, rrad) = match rinex_ant_type(rover_path) { Some(x) => x, None => { eprintln!("DEBUG: ant type not found in {}", rover_path.display()); return None; } };
-    let rover = ReceiverAntenna::lookup(&db, &rfam, &rrad)?;
-    let (bfam, brad) = rinex_ant_type(base_path)?;
-    let base = ReceiverAntenna::lookup(&db, &bfam, &brad)?;
-    println!(
-        "RECV-PCV enabled: rover [{}] base [{}] ({})",
-        rover.antenna_type(),
-        base.antenna_type(),
-        antex_path
-    );
-    Some(std::sync::Arc::new(ReceiverPcvPair {
-        rover: std::sync::Arc::new(rover),
-        base: std::sync::Arc::new(base),
-    }))
-}
+use gneiss_rtk::post_process::antenna::{load_receiver_pcv, station_recv_pco_ecef};
 
 fn run_base(
     base: &NetworkBase,
@@ -452,7 +386,10 @@ fn run_base(
     // phase centre so DD geometry references real antenna positions. The
     // rover stays ARP-referenced (truth datum), so this corrects the
     // cross-family differential without introducing an evaluation offset.
-    let recv_pco_on = std::env::var("GNEISS_RECV_PCO").is_ok();
+    // Graduated from opt-in to on-by-default: measured strictly positive
+    // on cross-family baselines (CAPO v_p50 -54 -> -14mm) and exactly
+    // zero-effect on same-family ones, on both datasets A and B.
+    let recv_pco_on = std::env::var("GNEISS_RECV_PCO_DISABLE").is_err();
     let base_pos_eff = if recv_pco_on {
         // Differential datum correction: subtract the rover antenna's own
         // PCO so same-family baselines stay put and only cross-family
@@ -462,10 +399,10 @@ fn run_base(
         let antex = std::env::var("GNEISS_ANTEX")
             .unwrap_or_else(|_| "datasets/igs14.atx".into());
         match (
-            base_recv_pco_ecef(&dir.join(base.base_file), &antex, base.base_pos),
+            station_recv_pco_ecef(&dir.join(base.base_file), &antex, base.base_pos),
             rover_arp.and_then(|arp| {
                 let v = truth_in_solution_frame(arp, 2025.5);
-                base_recv_pco_ecef(Path::new("datasets/cors_short_baseline/p2241350.20o"), &antex, v)
+                station_recv_pco_ecef(Path::new("datasets/cors_short_baseline/p2241350.20o"), &antex, v)
             }),
         ) {
             (Some(d_base), Some(d_rover)) => {

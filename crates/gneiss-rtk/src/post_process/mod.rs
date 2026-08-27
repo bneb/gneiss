@@ -6,6 +6,7 @@
 //! 3. Backward Trajectory Filtering + AR
 //! 4. Optimal Bidirectional Fusion + Covariance Intersection Smoothing
 
+pub mod antenna;
 pub mod backward;
 pub mod combiner;
 pub mod dynamics;

@@ -11,7 +11,7 @@ pub async fn run_process(
     _lever_arm: String, _calibrate_imu: bool,
     _raim_outlier_m: Option<f64>, _chi_square_pr: Option<f64>, _chi_square_cp: Option<f64>, _nominal_snr: Option<f64>,
     _base_position: Option<String>, _systems: Option<String>, _sp3: Option<String>, _clk: Option<String>,
-    _antex: Option<String>, _clock_jump_threshold: Option<f64>, _disable_doppler: bool, _bia: Option<String>
+    antex: Option<String>, _clock_jump_threshold: Option<f64>, _disable_doppler: bool, _bia: Option<String>
 ) -> Result<(), Box<dyn std::error::Error>> {
     info!("Starting SWFG Processing Pipeline...");
 
@@ -44,11 +44,26 @@ pub async fn run_process(
     let mut trajectory = Vec::new();
     if _enable_backward_smoothing {
         info!("Running Qinertia-grade 4-pass offline post-processing pipeline...");
+        let antex_path = antex.unwrap_or_else(|| "datasets/igs14.atx".to_string());
+        let receiver_pcv = base.as_deref().and_then(|base_path| {
+            gneiss_rtk::post_process::antenna::load_receiver_pcv(
+                std::path::Path::new(&rover),
+                std::path::Path::new(base_path),
+                &antex_path,
+            )
+        });
+        let pco_base_pos = match (base.as_deref(), parsed_base_pos) {
+            (Some(base_path), Some(bp)) => Some(pco_corrected_base_position(
+                bp, _rover_approx_pos, &rover, base_path, &antex_path,
+            )),
+            _ => parsed_base_pos,
+        };
         let post_options = backward_smoothing_options(
-            parsed_base_pos,
+            pco_base_pos,
             _rover_approx_pos,
             klobuchar.as_ref().map(|k| k.alpha),
             klobuchar.as_ref().map(|k| k.beta),
+            receiver_pcv,
         );
         let post_res = gneiss_rtk::post_process::execute_post_process(
             &swfg_config,
@@ -169,6 +184,37 @@ async fn write_results(
     Ok(())
 }
 
+/// Differential receiver PCO: shift the base ARP by `(base_pco - rover_pco)`
+/// so a cross-family baseline (e.g. a Leica base against a Trimble rover)
+/// references real antenna phase centres instead of ARPs. Same-family
+/// pairs move by ~0mm (the two corrections cancel; this is physics, not a
+/// special case). Falls back to the raw ARP when either antenna's
+/// calibration can't be resolved (unlisted type, missing ANTEX file) —
+/// this measurably fixed a -54mm vertical bias on a real cross-family
+/// baseline in docs/NETWORK_RTK_NEXT_STEPS.md ("Receiver PCO").
+fn pco_corrected_base_position(
+    base_arp: [f64; 3],
+    rover_arp: Option<[f64; 3]>,
+    rover_path: &str,
+    base_path: &str,
+    antex_path: &str,
+) -> [f64; 3] {
+    use gneiss_rtk::post_process::antenna::station_recv_pco_ecef;
+    let to_v3 = |p: [f64; 3]| nalgebra::Vector3::new(p[0], p[1], p[2]);
+
+    let base_pco = station_recv_pco_ecef(std::path::Path::new(base_path), antex_path, to_v3(base_arp));
+    let rover_pco = rover_arp.and_then(|rp| {
+        station_recv_pco_ecef(std::path::Path::new(rover_path), antex_path, to_v3(rp))
+    });
+    match (base_pco, rover_pco) {
+        (Some(bp), Some(rp)) => {
+            let corrected = to_v3(base_arp) + bp - rp;
+            [corrected.x, corrected.y, corrected.z]
+        }
+        _ => base_arp,
+    }
+}
+
 /// Options for the `--enable-backward-smoothing` (4-pass DD-RTK) path.
 ///
 /// `widelane_ar` is fixed on: cadence-aware slip gating, reverse-safe
@@ -182,6 +228,7 @@ fn backward_smoothing_options(
     rover_approx_pos: Option<[f64; 3]>,
     klobuchar_alpha: Option<[f64; 4]>,
     klobuchar_beta: Option<[f64; 4]>,
+    receiver_pcv: Option<std::sync::Arc<gneiss_rtk::post_process::ReceiverPcvPair>>,
 ) -> gneiss_rtk::post_process::PostProcessOptions {
     gneiss_rtk::post_process::PostProcessOptions {
         enable_bidirectional: true,
@@ -193,7 +240,7 @@ fn backward_smoothing_options(
         widelane_ar: true,
         tropo_gradients: false,
         network_sat_upd: None,
-        receiver_pcv: None,
+        receiver_pcv,
         dynamics: gneiss_rtk::post_process::ProcessingDynamics::from_env(),
     }
 }
@@ -204,11 +251,67 @@ mod tests {
 
     #[test]
     fn backward_smoothing_enables_widelane_ar_by_default() {
-        let opts = backward_smoothing_options(None, None, None, None);
+        let opts = backward_smoothing_options(None, None, None, None, None);
         assert!(
             opts.widelane_ar,
             "gneiss-cli must use the validated widelane_ar default, not the legacy off-path"
         );
         assert!(opts.enable_bidirectional);
+        assert!(opts.receiver_pcv.is_none());
+    }
+
+    /// Real CORS data end-to-end: a cross-family pair (P224 rover, Trimble;
+    /// CAPO base, Leica) must resolve through the CLI's own antex wiring,
+    /// gated on the dataset being checked out.
+    #[test]
+    fn receiver_pcv_resolves_for_real_cross_family_pair() {
+        let antex = std::path::PathBuf::from("../../datasets/igs14.atx");
+        let rover = std::path::PathBuf::from("../../datasets/cors_short_baseline/p2241350.20o");
+        let base = std::path::PathBuf::from("../../datasets/cors_short_baseline/capo1350.20o");
+        if !antex.exists() || !rover.exists() || !base.exists() {
+            return;
+        }
+        let pair = gneiss_rtk::post_process::antenna::load_receiver_pcv(
+            &rover, &base, antex.to_str().unwrap(),
+        ).expect("CAPO (LEIAR20) vs the Trimble rover must resolve against igs14.atx");
+        assert_eq!(pair.base.ant_type, "LEIAR20");
+
+        let opts = backward_smoothing_options(None, None, None, None, Some(pair));
+        assert!(opts.receiver_pcv.is_some());
+    }
+
+    /// The actual bias fix (docs/NETWORK_RTK_NEXT_STEPS.md: CAPO v_p50
+    /// -54 -> -14mm) lives in this shift, not in `receiver_pcv` above.
+    #[test]
+    fn pco_corrected_base_position_moves_for_real_cross_family_pair() {
+        let antex = std::path::PathBuf::from("../../datasets/igs14.atx");
+        let rover_path = "../../datasets/cors_short_baseline/p2241350.20o";
+        let base_path = "../../datasets/cors_short_baseline/capo1350.20o";
+        if !antex.exists()
+            || !std::path::Path::new(rover_path).exists()
+            || !std::path::Path::new(base_path).exists()
+        {
+            return;
+        }
+        let base_arp = [-2693675.7831, -4273829.9413, 3880383.2888];
+        let rover_arp = Some([-2688181.50, -4265663.45, 3893784.80]);
+        let corrected = pco_corrected_base_position(
+            base_arp, rover_arp, rover_path, base_path, antex.to_str().unwrap(),
+        );
+        let shift = ((corrected[0] - base_arp[0]).powi(2)
+            + (corrected[1] - base_arp[1]).powi(2)
+            + (corrected[2] - base_arp[2]).powi(2))
+        .sqrt();
+        assert!(shift > 1e-4, "cross-family (Leica/Trimble) shift should be non-trivial, got {shift} m");
+        assert!(shift < 1.0, "shift should be centimetre-scale, not metres, got {shift} m");
+    }
+
+    #[test]
+    fn pco_corrected_base_position_falls_back_when_antex_missing() {
+        let base_arp = [-2693675.7831, -4273829.9413, 3880383.2888];
+        let corrected = pco_corrected_base_position(
+            base_arp, Some([0.0, 0.0, 0.0]), "rover.obs", "base.obs", "/nonexistent.atx",
+        );
+        assert_eq!(corrected, base_arp);
     }
 }

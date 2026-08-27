@@ -18,10 +18,30 @@
 //! **subtracted** from the DD phase observation.
 
 use std::collections::HashMap;
+use std::io::BufRead;
+use std::path::Path;
 
 use gneiss_core::sat::Constellation;
 
 use crate::antex::{AntennaPcv, AntexDatabase};
+
+/// Read a station's antenna family + radome from a RINEX (2 or 3)
+/// observation header's `ANT # / TYPE` line, for ANTEX lookup.
+///
+/// Returns `None` if the file can't be opened or has no such line in its
+/// first 80 lines (the header always precedes any observation record).
+pub fn rinex_ant_type(rinex_path: &Path) -> Option<(String, String)> {
+    let f = std::fs::File::open(rinex_path).ok()?;
+    for line in std::io::BufReader::new(f).lines().take(80).map_while(Result::ok) {
+        if line.len() >= 60 && line[60..].trim() == "ANT # / TYPE" {
+            let fields: Vec<&str> = line[20..40].split_whitespace().collect();
+            let fam = fields.first()?.to_string();
+            let rad = fields.get(1).copied().unwrap_or("NONE").to_string();
+            return Some((fam, rad));
+        }
+    }
+    None
+}
 
 /// One receiver-antenna calibration extracted from an [`AntexDatabase`].
 #[derive(Debug, Clone)]
@@ -476,6 +496,60 @@ mod tests {
     // ------------------------------------------------------------------
     // Frequency-code mapping and DD correction math
     // ------------------------------------------------------------------
+
+    #[test]
+    fn rinex_ant_type_parses_synthetic_header() {
+        let content = "\
+     2.11           OBSERVATION DATA    G (GPS)             RINEX VERSION / TYPE
+0220366860          TRM59800.80     SCIT                    ANT # / TYPE
+                                                            END OF HEADER
+";
+        let dir = std::env::temp_dir();
+        let path = dir.join(format!("test_ant_type_{}.20o", std::process::id()));
+        std::fs::write(&path, content).unwrap();
+        let result = rinex_ant_type(&path);
+        std::fs::remove_file(&path).ok();
+        assert_eq!(result, Some(("TRM59800.80".to_string(), "SCIT".to_string())));
+    }
+
+    #[test]
+    fn rinex_ant_type_defaults_radome_to_none_for_single_token() {
+        let content = "\
+                                                            RINEX VERSION / TYPE
+0220366860          AOAD/M_T                                ANT # / TYPE
+                                                            END OF HEADER
+";
+        let dir = std::env::temp_dir();
+        let path = dir.join(format!("test_ant_type_none_{}.20o", std::process::id()));
+        std::fs::write(&path, content).unwrap();
+        let result = rinex_ant_type(&path);
+        std::fs::remove_file(&path).ok();
+        assert_eq!(result, Some(("AOAD/M_T".to_string(), "NONE".to_string())));
+    }
+
+    #[test]
+    fn rinex_ant_type_missing_file_or_header_is_none() {
+        assert!(rinex_ant_type(Path::new("/nonexistent/path.20o")).is_none());
+
+        let dir = std::env::temp_dir();
+        let path = dir.join(format!("test_ant_type_missing_{}.20o", std::process::id()));
+        std::fs::write(&path, "no antenna header here\nEND OF HEADER\n").unwrap();
+        let result = rinex_ant_type(&path);
+        std::fs::remove_file(&path).ok();
+        assert!(result.is_none());
+    }
+
+    /// Real CORS RINEX2 header, gated on the dataset being checked out.
+    #[test]
+    fn rinex_ant_type_reads_real_cors_header() {
+        let path = PathBuf::from("../../datasets/cors_short_baseline/p1811350.20o");
+        if !path.exists() {
+            return;
+        }
+        let (fam, rad) = rinex_ant_type(&path).expect("real CORS file must have ANT # / TYPE");
+        assert_eq!(fam, "TRM59800.80");
+        assert_eq!(rad, "SCIT");
+    }
 
     #[test]
     fn frequency_code_mapping() {
