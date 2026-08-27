@@ -38,6 +38,10 @@ cargo clippy --workspace         # Must pass with 0 warnings
 
 ## Project Architecture
 
-See [ARCHITECTURE.md](./ARCHITECTURE.md) for the full architecture document.
-See [POST_MORTEM.md](./POST_MORTEM.md) for the PPP accuracy investigation.
-See [SPRINT_PLAN.md](./SPRINT_PLAN.md) for the current sprint plan.
+See [ARCHITECTURE.md](./ARCHITECTURE.md) for the full architecture document (note: describes an
+earlier engine generation; current engine is network RTK/PPK, see docs/PROJECT_STATUS.md).
+See [docs/archive/SPRINT_PLAN_V2.md](./docs/archive/SPRINT_PLAN_V2.md) for the historical PPP accuracy
+investigation that motivated the SWFG rewrite (POST_MORTEM.md never existed; this was the closest
+equivalent and is archived, not current).
+See [docs/PROJECT_STATUS.md](./docs/PROJECT_STATUS.md) and [docs/NETWORK_RTK_NEXT_STEPS.md](./docs/NETWORK_RTK_NEXT_STEPS.md)
+for the current sprint plan and roadmap.

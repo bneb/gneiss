@@ -136,12 +136,19 @@ These are built and tested but NOT yet integrated into estimator call
 sites. Integration should happen atomically per-module.
 
 ### Known limitations
-- mod.rs exceeds 500-line target (~750 lines) — split recommended
-- receiver_antenna.rs WIP quarantined in scratch/wip/
-- Ocean tide loading stub returns zeros
-- Precise ephemeris module complete but unwired (needs PCV first)
-- No kinematic processing mode
-- No RTCM/RTK real-time input
+(Updated Sprint 6 -- the bullets below were stale relative to shipped work; see docs/archive/ for
+the superseded docs that caused the drift.)
+- `estimators/rtk_iekf/mod.rs` is 1,775 lines (not ~750 as previously noted) -- split is overdue, tracked in Sprint 13
+- `receiver_antenna.rs` still WIP, quarantined in `scratch/wip/` -- differential receiver PCV rollout across
+  antenna families beyond CAPO is open, tracked in Sprint 10
+- Ocean tide loading: **implemented** (Sprint 4 -- 11-constituent OTL model + IERS BLQ parser); this line
+  previously said "stub returns zeros" in error
+- Precise ephemeris: wired (Sprint 2 -- RinexClock + SP3 + PCO via unified `PreciseSrc`)
+- Kinematic mode: **landed behind a flag** (commit `4e40f22`) but explicitly NOT production-ready -- validated
+  only against synthetic/replayed-static data, no real moving-truth dataset yet. See
+  `docs/KINEMATIC_MODE_REPORT.md`. Tracked in Sprint 13.
+- No RTCM/RTK real-time input -- still true. `gneiss-ntrip`'s NTRIP client and the RTCM3 MSM4/MSM7 decoder
+  both exist but aren't wired to the estimator. Tracked in Sprint 12.
 
 ## Testing Infrastructure
 

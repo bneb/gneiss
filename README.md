@@ -4,38 +4,52 @@
 
 # Gneiss Navigation Engine
 
-Gneiss is a tightly-coupled GNSS and Inertial Navigation System (INS) engine written in Rust. It fuses raw satellite observations (pseudorange, carrier phase, and Doppler) with high-rate inertial sensors (accelerometer and gyroscope) using an Extended Kalman Filter (EKF).
+Gneiss is a GNSS post-processing engine written in Rust, built around a double-difference Extended
+Kalman Filter (EKF) with LAMBDA integer ambiguity resolution. The flagship target is post-processed
+RTK for commercial hardware (u-blox); the estimator core is currently being hardened against
+survey-grade CORS baseline data before being re-validated on consumer receiver hardware (tracked in
+the roadmap's Sprint 11).
 
-The engine is designed for robust operation in multi-path environments, utilizing empirical statistical methods for outlier rejection and variance scaling.
+**This README describes the current (network RTK/PPK) engine as of Sprint 5.** Two earlier engine
+generations exist in this repository's history -- a tightly-coupled GNSS+INS EKF, and a sliding-window
+factor graph -- both superseded. Their docs are preserved under `docs/archive/` for historical record
+only; do not treat them as current. See `docs/PROJECT_STATUS.md` for the authoritative status and
+`docs/NETWORK_RTK_NEXT_STEPS.md` for the live findings log and roadmap.
 
 ## Features
 
-- **Tightly-Coupled Integration**: Direct fusion of raw GNSS observations and IMU data within the primary state vector.
-- **Adaptive Estimation**: Implements Innovation-based Adaptive Estimation (IAE) and Median Absolute Deviation (MAD) RAIM to scale observation variances dynamically.
-- **Ambiguity Resolution**: LAMBDA integer ambiguity resolution with partial AR (ILS subset selection) for GPS, Galileo, and BeiDou. GLONASS excluded (IFB calibration not yet implemented).
-- **Precise Point Positioning (PPP)**: Iterated EKF solver with cascade wide-lane/narrow-lane ambiguity resolution, solid earth tides, phase wind-up, and receiver antenna PCO correction. UDUC mode available when precise products (SP3/CLK/SINEX) are provided.
-- **Protection Levels & ARAIM**: Employs Solution Separation to rigorously calculate Horizontal and Vertical Protection Levels (HPL/VPL) bounding faults to target integrity risks.
-- **Hardware-Agnostic Calibrations**: Supports injection of custom Temperature-Calibrated IMU misalignments and Antenna Phase Center (APC) models.
-- **Post-Processing (PPK)**: Supports forward-backward Rauch-Tung-Striebel (RTS) smoothing to produce continuous trajectories from static files.
-- **Real-Time Streaming**: `#![no_std]` compatible core engine, with a `tokio`-based `live` subcommand for streaming data via local UART and NTRIP casters.
+- **Double-difference RTK/PPK**: Iterated EKF over DD pseudorange/carrier-phase observations, forward
+  + backward RTS smoothing with a measured-agreement combiner.
+- **Ambiguity Resolution**: LAMBDA integer AR with partial AR (ILS subset selection) and FFRT validation
+  for GPS, Galileo, and BeiDou. GLONASS is implemented but gated off by default -- a >500-cycle-per-epoch
+  FDMA phase mismatch is root-caused but not yet fixed (see `docs/NETWORK_RTK_NEXT_STEPS.md`, roadmap Sprint 9).
+- **Frame safety**: Typed `TimeSystem`, `EcefPos<F>`, and `Signal` primitives prevent an entire class of
+  silent GNSS/BeiDou time-offset and frequency-mixing bugs that were the majority of real defects found
+  during development (see `docs/FRAME_SAFETY_PLAN.md`).
+- **Atmospheric modeling**: Per-satellite mapped slant ionosphere state filter; NS-gradient troposphere
+  states; 11-constituent Ocean Tide Loading via an IERS BLQ parser.
+- **Precise products**: SP3 + RINEX clock + PCO wired via a unified staged pipeline, with broadcast-ephemeris
+  fallback.
+- **Robust estimation**: Huber-weighted IEKF update; validated to substantially reduce fix-rate tail error
+  versus a naive least-squares update.
+- **Real-time plumbing (not yet wired end-to-end)**: An async NTRIP client (`gneiss-ntrip`) and RTCM3
+  MSM4/MSM7 decoder both exist; live-correction streaming into the estimator is tracked in roadmap Sprint 12.
 
 ## Project Status & Roadmap
 
-The engine's architecture provides a mathematical scaffold for multiple GNSS processing modes. Currently, the project is heavily focused on optimizing **RTK + INS** workflows for urban canyon and challenging multipath environments.
+The project has gone through three architecture generations; the current one (documented here) is
+**network RTK/PPK against a network of CORS reference baselines** (15-50km), used to harden the
+double-difference estimator core against clean, well-characterized truth data before it is
+re-validated against the flagship target: commercial u-blox receiver hardware.
 
-**Supported Modes:**
-  - Single Point Positioning (SPP)
-  - Real-Time Kinematic (RTK)
-  - RTK + INS (Tightly-Coupled)
-  - Precise Point Positioning (PPP)
-  - PPP + INS
+Sprints 1-5 (frame safety, precise products, slant ionosphere, troposphere/geodesy, production polish)
+are complete. The active roadmap (sprints 6-13 -- tropospheric observability, obs-side clock refactor,
+long-baseline ambiguity resolution, antenna/datum precision, Tier-1 and u-blox-hardware validation,
+real-time path, production hardening) lives in `docs/NETWORK_RTK_NEXT_STEPS.md` and the project's
+sprint roadmap artifact.
 
-**Features Included:**
-  - Ionosphere-Free Linear Combinations for multi-frequency correction.
-  - Zenith Wet Delay (ZWD) tropospheric estimation.
-  - Geophysical corrections (Solid Earth Tides, Satellite Phase Wind-Up).
-  - BKG and CDDIS automated downloading for SP3, Clock (.clk), and Phase Bias (.bia) SINEX files via 10th-order Lagrange interpolation.
-  - Clock Jump State Preservation algorithms to prevent EKF divergence during TCXO adjustments.
+**Supported modes:** Single Point Positioning (SPP), Real-Time Kinematic / PPK (double-difference,
+static and -- behind a flag, not yet production-validated -- kinematic).
 
 ## Architecture
 
@@ -126,36 +140,33 @@ cargo run --release -p gneiss-cli -- live \
 
 ## Accuracy Benchmarks
 
-All claims below are reproducible against RTKLIB demo5 (2.4.3 b34) on public datasets.
-See [COMPARISON.md](./COMPARISON.md) for the full head-to-head matrix and reproduction commands.
+**Current engine (network RTK/PPK), vs RTKLIB 2.4.3 b34, six CORS baselines, same raw data:**
 
-### RTK (Shinjuku UrbanNav, u-blox F9P rover)
+| Metric | RTKLIB (default config) | Gneiss | Improvement |
+|--------|--------------------------|--------|-------------|
+| Average fix rate (6 baselines) | 43.9% | **83.5%** | 1.9x |
+| P181 (15km) horizontal RMS | 119mm | **33mm** | 3.6x |
+| P181 horizontal median | 113mm | **24mm** | 4.7x |
 
-| Solver | Median Horizontal | Median Vertical | Source |
-|--------|-------------------|-----------------|--------|
-| **Gneiss** | **1.34 m** | **2.04 m** | `--mode rtk` on Shinjuku u-blox dataset |
-| RTKLIB demo5 | 2.21 m | 4.12 m | Same rover/base/nav files |
+Caveat stated in `docs/PROJECT_STATUS.md`: RTKLIB was run with default options only, not fully tuned.
+Beating it is necessary-but-not-sufficient evidence the estimator core is sound -- it is **not** a
+Tier-1 (Leica / NovAtel / Qinertia) comparison, and no current-engine Tier-1 comparison exists yet
+(roadmap Sprint 11 exists specifically to produce one). Full current tables, including the longer
+38-50km baselines where atmospheric decorrelation dominates, are in `docs/PROJECT_STATUS.md` and
+`docs/NETWORK_RTK_NEXT_STEPS.md`.
 
-Reproduce: `./scripts/reproduce_shinjuku_rtk.sh`
-
-### SPP (all datasets)
-
-Gneiss SPP beats RTKLIB on all 5 tested datasets (GSDC, Shinjuku, Odaiba, f9p_ppp, PPP_f9p). Typical advantage: 1.4× to 6× better horizontal median. See COMPARISON.md.
-
-### PPP-AR (WTZR IGS Static, 24-hour)
-
-| Mode | Ambiguity Fix Rate | Median 3D Error |
-| :--- | :--- | :--- |
-| `ppp-ar` (UDUC, cascade WL/NL) | 79.72% | 0.476 m |
-
-Note: 79.72% fix rate on a static IGS station with known coordinates and open sky is below the >95% achieved by production PPP-AR engines (PRIDE-PPPAR, GipsyX, NRCAN PPP). This is an active area of improvement — see [Phase 2 roadmap](./COMPARISON.md).
+Numbers from the two earlier engine generations (RTK+INS urban-canyon benchmarks, PPP-AR fix rates)
+are preserved in `docs/archive/` but describe superseded architectures -- do not cite them as current.
 
 ## Documentation
 
-For technical implementation details, see the following documents:
-- [Architecture Details](./ARCHITECTURE.md)
-- [Benchmark Methodology](./BENCHMARKS.md)
-- [Precise Point Positioning (PPP-AR) Explained](./docs/PPP_AR_EXPLAINED.md)
+- [Current project status & sprint history](./docs/PROJECT_STATUS.md)
+- [Live findings log & architecture roadmap](./docs/NETWORK_RTK_NEXT_STEPS.md)
+- [Round-by-round development process](./RUNBOOK.md)
+- [Frame-safety architecture](./docs/FRAME_SAFETY_PLAN.md)
+- [Architecture details](./ARCHITECTURE.md) *(describes an earlier engine generation -- read with that in mind)*
+- [Precise Point Positioning (PPP-AR) explained](./docs/PPP_AR_EXPLAINED.md) *(background/theory, still accurate)*
+- Superseded planning docs: [docs/archive/](./docs/archive/)
 
 ## Workspace Structure
 

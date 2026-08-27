@@ -1,2 +1,0 @@
-sed -i '' 's/pub windup: std::collections::HashMap<SatelliteId, f64>,/pub windup: std::collections::HashMap<SatelliteId, f64>,\n    pub base_windup: std::collections::HashMap<SatelliteId, f64>,/' crates/gneiss-rtk/src/filter.rs
-sed -i '' 's/windup: std::collections::HashMap::new(),/windup: std::collections::HashMap::new(),\n            base_windup: std::collections::HashMap::new(),/' crates/gneiss-rtk/src/filter.rs
