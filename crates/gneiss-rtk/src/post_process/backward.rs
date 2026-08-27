@@ -10,9 +10,8 @@ use nalgebra::Vector3;
 use gneiss_core::ephemeris::Ephemeris;
 use gneiss_core::obs::EpochObs;
 
-use crate::estimators::rtk_iekf::GnssRtkIekf;
 use crate::post_process::dynamics::{ProcessingDynamics, Q_ACCEL_UNSET_FALLBACK};
-use crate::post_process::forward::{estimate_epoch_covariance, find_matched_base, FilteredEpoch};
+use crate::post_process::forward::{configure_iekf, estimate_epoch_covariance, find_matched_base, FilteredEpoch};
 use crate::swfg::config::EngineConfig;
 use crate::swfg::engine::SwfgEngine;
 use crate::swfg::imu_preintegration::{ImuPreintegration, ImuSample};
@@ -94,47 +93,20 @@ fn run_backward_iekf(
     let mut rev_epochs = rover_epochs.to_vec();
     rev_epochs.reverse();
 
-    let mut iekf = GnssRtkIekf::new(initial_rover_pos, rev_epochs[0].time, q_accel);
-    iekf.widelane_ar = widelane_ar;
-    // Independent of widelane_ar and baseline length; matches the forward
-    // pass exactly now. See PostProcessOptions::enable_glonass.
-    iekf.enable_glonass = enable_glonass;
-    iekf.robust_innov_scale = dynamics.innovation_gate_scale();
-    if let Some(pair) = receiver_pcv {
-        iekf.receiver_pcv = Some((pair.rover.clone(), pair.base.clone()));
-    }
-    if widelane_ar && !dynamics.is_kinematic() {
-        // Two-phase static Q (mirrors forward pass): the backward session
-        // anchor is end-of-day, so elapsed time counts symmetrically.
-        // Suppressed for kinematic rovers — no monument to lock.
-        iekf.static_lock_after_s = Some(900.0);
-        iekf.static_lock_q_accel = 1e-8;
-    }
-    if widelane_ar {
-        // Rover-side ZWD random walk: gate by baseline length (same as
-        // forward pass) so only correlated-atmosphere short baselines get it.
-        let baseline_m = (initial_rover_pos - base_pos).norm();
-        if baseline_m < super::forward::ZWD_BASELINE_GATE_M {
-            iekf.state.enable_zwd(0.0225);
-            // Experimental tropo gradients: opt-in via env while the
-            // OHLN interaction is unresolved (v_p95 -6mm pooled, but
-            // OHLN h_p95 degrades when unconditional).
-            if tropo_grad {
-                iekf.state.enable_gradients(crate::estimators::rtk_iekf::update::GRAD_INIT_VAR_M2);
-            }
-        }
-        iekf.track_ambiguity_keys =
-            std::env::var("GNEISS_AMB_DUMP").is_ok();
-        let cadence_hint =
-            crate::post_process::screening::infer_cadence_hint(rover_epochs);
-        iekf.slip_detector.cadence_hint_s = cadence_hint;
-        iekf.base_slip_detector.cadence_hint_s = cadence_hint;
-    } else {
-        let cadence_hint =
-            crate::post_process::screening::infer_cadence_hint(rover_epochs);
-        iekf.slip_detector.cadence_hint_s = cadence_hint;
-        iekf.base_slip_detector.cadence_hint_s = cadence_hint;
-    }
+    // Same construction and env/option-driven configuration as the forward
+    // pass -- see configure_iekf's doc comment for why this is shared
+    // rather than duplicated (it wasn't, until it drifted).
+    let mut iekf = configure_iekf(
+        initial_rover_pos, rev_epochs[0].time, q_accel, base_pos, dynamics,
+        widelane_ar, tropo_grad, enable_glonass, receiver_pcv,
+    );
+    // ZWD/gradients, precise orbits/clocks, and the ambiguity-dump toggle
+    // are already handled inside configure_iekf. What's left here (cadence
+    // hint, wl_tracker.sat_upd below) is deliberately NOT unified with the
+    // forward pass yet -- see configure_iekf's doc comment.
+    let cadence_hint = crate::post_process::screening::infer_cadence_hint(rover_epochs);
+    iekf.slip_detector.cadence_hint_s = cadence_hint;
+    iekf.base_slip_detector.cadence_hint_s = cadence_hint;
     iekf.wl_tracker.sat_upd = sat_upd.clone();
 
     for epoch in &rev_epochs {

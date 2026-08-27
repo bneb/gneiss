@@ -93,7 +93,67 @@ fn run_forward_iekf(
     let init_pos = initial_rover_pos.unwrap_or_else(|| {
         compute_initial_position(rover_epochs, ephemerides, base_pos)
     });
-    let mut iekf = GnssRtkIekf::new(init_pos, rover_epochs[0].time, q_accel);
+    let mut iekf = configure_iekf(
+        init_pos, rover_epochs[0].time, q_accel, base_pos, dynamics,
+        widelane_ar, tropo_grad, enable_glonass, receiver_pcv,
+    );
+    if widelane_ar {
+        let cadence_hint =
+            crate::post_process::screening::infer_cadence_hint(rover_epochs);
+        iekf.slip_detector.cadence_hint_s = cadence_hint;
+        iekf.base_slip_detector.cadence_hint_s = cadence_hint;
+        iekf.wl_tracker.sat_upd = sat_upd.clone();
+    } else {
+        iekf.wl_tracker.sat_upd = None;
+    }
+
+    let mut results = Vec::with_capacity(rover_epochs.len());
+
+    for epoch in rover_epochs {
+        if let Some(base_ep) = find_matched_base(epoch.time.tow, Some(base_epochs)) {
+            if let Ok(filtered) = iekf.process_epoch(epoch, base_ep, base_pos, ephemerides) {
+                results.push(filtered);
+            }
+        }
+    }
+    if iekf.track_ambiguity_keys && !iekf.history.is_empty() {
+        dump_amb_history(&iekf, "Forward");
+    }
+    (results, iekf.wl_tracker.clone(), iekf.pw_tracker.clone())
+}
+
+/// Shared `GnssRtkIekf` construction and configuration for both directional
+/// passes. Extracted after finding five settings -- elevation mask, iono
+/// states, per-satellite iono, precise orbits, precise clocks -- that were
+/// wired into the forward pass only, via bare env-var reads inside what
+/// used to be forward-only setup code. They silently never reached the
+/// backward pass at all: the same independently-drifting-duplicate-setup
+/// shape as the `enable_glonass` and `GNEISS_PCV`/`GNEISS_RECV_PCV` bugs
+/// fixed earlier (docs/NETWORK_RTK_NEXT_STEPS.md). All five are read from
+/// unset-by-default env vars, so this refactor is behavior-preserving
+/// whenever none of them are set.
+///
+/// Deliberately NOT unified here: the slip-detector cadence hint and
+/// `wl_tracker.sat_upd`'s gating on `widelane_ar`. Both differ between
+/// the two passes today (backward sets them unconditionally; forward
+/// only when `widelane_ar` is on), but unifying them would change
+/// `eval_qinertia_ppk.rs`'s bit-identical walkthrough output (it runs
+/// both passes with `widelane_ar: false`), which needs its own
+/// deliberate round with reference regeneration, not a side effect of
+/// this one. See docs/NETWORK_RTK_NEXT_STEPS.md.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn configure_iekf(
+    init_pos: Vector3<f64>,
+    start_time: GpsTime,
+    q_accel: f64,
+    base_pos: Vector3<f64>,
+    dynamics: ProcessingDynamics,
+    widelane_ar: bool,
+    tropo_grad: bool,
+    enable_glonass: bool,
+    receiver_pcv: Option<std::sync::Arc<super::ReceiverPcvPair>>,
+) -> GnssRtkIekf {
+    let mut iekf = GnssRtkIekf::new(init_pos, start_time, q_accel);
     // Profile-gated robust weighting: 1.0 (Static) is bit-identical legacy.
     iekf.robust_innov_scale = dynamics.innovation_gate_scale();
     if let Ok(deg) = std::env::var("GNEISS_ELEV_DEG") {
@@ -133,57 +193,47 @@ fn run_forward_iekf(
         if tropo_grad {
             iekf.state.enable_gradients(crate::estimators::rtk_iekf::update::GRAD_INIT_VAR_M2);
         }
-        // Precise orbits: loaded when GNEISS_SP3 points to a valid SP3 file.
-        if let Ok(sp3_path) = std::env::var("GNEISS_SP3") {
-            let result = std::fs::File::open(&sp3_path)
-                .map_err(|e| format!("open failed: {}", e))
-                .and_then(|f| gneiss_parsers::sp3::parse_sp3(std::io::BufReader::new(f)));
-            match result {
-                Ok(epochs) => {
-                    let store = gneiss_parsers::precise_orbit::PreciseOrbit::new(epochs);
-                    println!("PRECISE: {} sats from {}", store.len(), sp3_path);
-                    iekf.precise_orbits = Some(std::sync::Arc::new(store));
-                }
-                Err(e) => eprintln!("SP3: {}", e),
-            }
-        }
-        // Precise clock products (RINEX CLK), used with precise orbits.
-        if let Ok(clk_path) = std::env::var("GNEISS_CLK") {
-            match std::fs::read_to_string(&clk_path) {
-                Ok(content) => {
-                    let rc = gneiss_parsers::rinex_clk::RinexClock::parse(&content);
-                    println!("PRECISE-CLK: {} satellites tracked", rc.satellites.len());
-                    iekf.precise_clocks = Some(std::sync::Arc::new(rc));
-                }
-                Err(e) => eprintln!("CLK: {}", e),
-            }
-        }
-        iekf.track_ambiguity_keys =
-            std::env::var("GNEISS_AMB_DUMP").is_ok();
+        load_precise_orbits(&mut iekf);
+        load_precise_clocks(&mut iekf);
     }
+    // Debug-dump toggle: previously also required baseline < 25km in the
+    // forward pass only (accidental -- it was just physically nested
+    // inside the ZWD-gate block above, not a principled restriction) and
+    // required nothing from the backward pass beyond widelane_ar. Now
+    // matches backward's (correct) gating in both passes.
     if widelane_ar {
-        let cadence_hint =
-            crate::post_process::screening::infer_cadence_hint(rover_epochs);
-        iekf.slip_detector.cadence_hint_s = cadence_hint;
-        iekf.base_slip_detector.cadence_hint_s = cadence_hint;
-        iekf.wl_tracker.sat_upd = sat_upd.clone();
-    } else {
-        iekf.wl_tracker.sat_upd = None;
+        iekf.track_ambiguity_keys = std::env::var("GNEISS_AMB_DUMP").is_ok();
     }
+    iekf
+}
 
-    let mut results = Vec::with_capacity(rover_epochs.len());
-
-    for epoch in rover_epochs {
-        if let Some(base_ep) = find_matched_base(epoch.time.tow, Some(base_epochs)) {
-            if let Ok(filtered) = iekf.process_epoch(epoch, base_ep, base_pos, ephemerides) {
-                results.push(filtered);
-            }
+/// Precise orbits: loaded when `GNEISS_SP3` points to a valid SP3 file.
+fn load_precise_orbits(iekf: &mut GnssRtkIekf) {
+    let Ok(sp3_path) = std::env::var("GNEISS_SP3") else { return };
+    let result = std::fs::File::open(&sp3_path)
+        .map_err(|e| format!("open failed: {}", e))
+        .and_then(|f| gneiss_parsers::sp3::parse_sp3(std::io::BufReader::new(f)));
+    match result {
+        Ok(epochs) => {
+            let store = gneiss_parsers::precise_orbit::PreciseOrbit::new(epochs);
+            println!("PRECISE: {} sats from {}", store.len(), sp3_path);
+            iekf.precise_orbits = Some(std::sync::Arc::new(store));
         }
+        Err(e) => eprintln!("SP3: {}", e),
     }
-    if iekf.track_ambiguity_keys && !iekf.history.is_empty() {
-        dump_amb_history(&iekf, "Forward");
+}
+
+/// Precise clock products (RINEX CLK), used with precise orbits.
+fn load_precise_clocks(iekf: &mut GnssRtkIekf) {
+    let Ok(clk_path) = std::env::var("GNEISS_CLK") else { return };
+    match std::fs::read_to_string(&clk_path) {
+        Ok(content) => {
+            let rc = gneiss_parsers::rinex_clk::RinexClock::parse(&content);
+            println!("PRECISE-CLK: {} satellites tracked", rc.satellites.len());
+            iekf.precise_clocks = Some(std::sync::Arc::new(rc));
+        }
+        Err(e) => eprintln!("CLK: {}", e),
     }
-    (results, iekf.wl_tracker.clone(), iekf.pw_tracker.clone())
 }
 
 /// Write per-key float DD ambiguity trajectories from engine history.

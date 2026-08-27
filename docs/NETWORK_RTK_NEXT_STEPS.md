@@ -922,3 +922,56 @@ each drop 0.2-0.4pp while OHLN's rises 0.3pp. Left opt-in (default
 unchanged, both guards verified byte-identical) rather than graduating
 to default-on like widelane_ar/GNEISS_RECV_PCO — the effect size here
 doesn't clear that bar either way.
+
+## Architecture: run_forward_iekf and run_backward_iekf's setup had drifted in 7 places
+
+Auditing every field the enable_glonass fix (above) touches, side by
+side between the two passes, found the same duplicate-setup-drift shape
+in six more places -- `GNEISS_ELEV_DEG`, `GNEISS_IONO_STATES`,
+`GNEISS_SAT_IONO`, `GNEISS_SP3`, `GNEISS_CLK` were read inside
+`run_forward_iekf` only and never reached the backward pass at all
+(silently -- no error, the backward `GnssRtkIekf` just kept
+`GnssRtkIekf::new()`'s defaults regardless of what the caller asked
+for). A seventh, `GNEISS_AMB_DUMP`'s `track_ambiguity_keys`, was gated
+by `widelane_ar && baseline < 25km` in forward but just `widelane_ar` in
+backward -- the baseline check was never a real requirement for a debug
+dump, just accidental proximity to the ZWD-state setup block it happened
+to be written next to.
+
+Fixed by extracting `post_process::forward::configure_iekf` -- one
+function both passes call to construct and configure their
+`GnssRtkIekf`, so the two can no longer independently drift. All six
+fixes are behavior-preserving whenever the corresponding env var is
+unset (the normal case): reading an absent env var gives the same
+"off" result whether it's read once in a shared function or twice in
+duplicated ones. Verified via both guard scripts (byte-identical) and a
+full run of `eval_qinertia_ppk`'s three-dataset bit-identical walkthrough
+(no saved reference existed to diff against -- this project's
+walkthrough check is an ad hoc "compare against yesterday's /tmp file"
+process, not something checked into the repo -- but every changed line
+is gated behind an env var unset in that binary's invocation, so the
+walkthrough's own `widelane_ar: false` runs are provably unaffected by
+inspection of exactly which lines changed).
+
+Two asymmetries found but deliberately NOT unified:
+- `slip_detector`/`base_slip_detector`'s `cadence_hint_s`: forward only
+  sets it when `widelane_ar` is on; backward sets it unconditionally.
+  Confirmed NOT dead (screening.rs's gap-threshold computation reads it),
+  so unifying this would be a real behavior change for anyone running
+  `widelane_ar: false` with backward smoothing -- exactly
+  `eval_qinertia_ppk.rs`'s own configuration. That walkthrough's output
+  would change, which needs a deliberate round (reference regeneration,
+  explicit sign-off) matching this project's own precedent ("Walkthrough
+  reference refresh (incident report)"), not a side effect of a
+  refactor aimed at something else.
+- `wl_tracker.sat_upd`: forward clears it to `None` when `widelane_ar`
+  is off; backward sets it regardless of `widelane_ar`. Likely inert
+  (network_sat_upd is documented as "consumed... when widelane_ar is
+  on", and the only reader found, `WidelaneTracker::fixed_widelane`, is
+  only reachable from widelane_ar-gated call sites) but not proven
+  inert to the same standard as the six fixed above, so left alone
+  pending the same deliberate-round treatment as cadence_hint_s.
+
+Recommend addressing both together in one round, specifically because
+fixing them requires regenerating the walkthrough reference either way
+-- no reason to pay that cost twice.
