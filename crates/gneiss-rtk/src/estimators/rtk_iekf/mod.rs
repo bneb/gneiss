@@ -24,7 +24,7 @@ use gneiss_core::time::GpsTime;
 use gneiss_parsers::receiver_antenna::{compute_dd_pcv_correction, frequency_code, ReceiverAntenna};
 
 use crate::post_process::combiner::SmoothedEpoch;
-use crate::post_process::forward::FilteredEpoch;
+use crate::post_process::iekf_pass::FilteredEpoch;
 
 pub use ar::{resolve_ambiguities, ArResult};
 pub use smoother::{run_rts_smoother, IekfSnapshot};

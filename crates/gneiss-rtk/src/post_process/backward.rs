@@ -11,7 +11,9 @@ use gneiss_core::ephemeris::Ephemeris;
 use gneiss_core::obs::EpochObs;
 
 use crate::post_process::dynamics::{ProcessingDynamics, Q_ACCEL_UNSET_FALLBACK};
-use crate::post_process::forward::{configure_iekf, estimate_epoch_covariance, find_matched_base, FilteredEpoch};
+use crate::post_process::iekf_pass::{
+    configure_iekf, dump_amb_history, estimate_epoch_covariance, find_matched_base, FilteredEpoch,
+};
 use crate::swfg::config::EngineConfig;
 use crate::swfg::engine::SwfgEngine;
 use crate::swfg::imu_preintegration::{ImuPreintegration, ImuSample};
@@ -111,7 +113,7 @@ fn run_backward_iekf(
         }
     }
     if iekf.track_ambiguity_keys && !iekf.history.is_empty() {
-        crate::post_process::forward::dump_amb_history(&iekf, "Backward");
+        dump_amb_history(&iekf, "Backward");
     }
     results
 }

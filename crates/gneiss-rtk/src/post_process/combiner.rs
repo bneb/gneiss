@@ -9,7 +9,7 @@ use nalgebra::{Matrix3, Vector3};
 use gneiss_core::time::GpsTime;
 use crate::post_process::dynamics;
 use crate::post_process::dynamics::ProcessingDynamics;
-use crate::post_process::forward::FilteredEpoch;
+use crate::post_process::iekf_pass::FilteredEpoch;
 
 /// A fully smoothed post-processed epoch.
 #[derive(Debug, Clone)]

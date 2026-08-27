@@ -11,6 +11,7 @@ pub mod backward;
 pub mod combiner;
 pub mod dynamics;
 pub mod forward;
+pub mod iekf_pass;
 pub mod network;
 pub mod quality;
 pub mod screening;
