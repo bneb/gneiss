@@ -96,16 +96,8 @@ fn run_forward_iekf(
     let mut iekf = configure_iekf(
         init_pos, rover_epochs[0].time, q_accel, base_pos, dynamics,
         widelane_ar, tropo_grad, enable_glonass, receiver_pcv,
+        rover_epochs, sat_upd,
     );
-    if widelane_ar {
-        let cadence_hint =
-            crate::post_process::screening::infer_cadence_hint(rover_epochs);
-        iekf.slip_detector.cadence_hint_s = cadence_hint;
-        iekf.base_slip_detector.cadence_hint_s = cadence_hint;
-        iekf.wl_tracker.sat_upd = sat_upd.clone();
-    } else {
-        iekf.wl_tracker.sat_upd = None;
-    }
 
     let mut results = Vec::with_capacity(rover_epochs.len());
 
@@ -133,14 +125,23 @@ fn run_forward_iekf(
 /// unset-by-default env vars, so this refactor is behavior-preserving
 /// whenever none of them are set.
 ///
-/// Deliberately NOT unified here: the slip-detector cadence hint and
-/// `wl_tracker.sat_upd`'s gating on `widelane_ar`. Both differ between
-/// the two passes today (backward sets them unconditionally; forward
-/// only when `widelane_ar` is on), but unifying them would change
-/// `eval_qinertia_ppk.rs`'s bit-identical walkthrough output (it runs
-/// both passes with `widelane_ar: false`), which needs its own
-/// deliberate round with reference regeneration, not a side effect of
-/// this one. See docs/NETWORK_RTK_NEXT_STEPS.md.
+/// The slip-detector cadence hint and `wl_tracker.sat_upd` were also found
+/// drifted (backward set them unconditionally; forward only when
+/// `widelane_ar` was on) and are now folded in here too, unconditionally:
+/// - `cadence_hint_s` reflects the *data stream's* sampling rate
+///   (screening.rs's gap-detection threshold) and has no principled
+///   dependence on `widelane_ar` at all -- forward's gating was the actual
+///   bug, not a deliberate restriction.
+/// - `wl_tracker.sat_upd` is proven inert whenever `widelane_ar` is off:
+///   its only reader, `WidelaneTracker::fixed_widelane`, is reachable
+///   solely through `far_matches_widelanes` and `resolve_cascade`, both
+///   called only from `if self.widelane_ar` in `process_epoch`. Setting it
+///   when `widelane_ar` is false cannot change any output.
+///
+/// This does change `eval_qinertia_ppk.rs`'s walkthrough output for the
+/// forward pass specifically (it runs `widelane_ar: false`, so forward
+/// previously never received a cadence hint even on slow-cadence
+/// streams) -- see docs/NETWORK_RTK_NEXT_STEPS.md for the measured delta.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn configure_iekf(
     init_pos: Vector3<f64>,
@@ -152,19 +153,15 @@ pub(crate) fn configure_iekf(
     tropo_grad: bool,
     enable_glonass: bool,
     receiver_pcv: Option<std::sync::Arc<super::ReceiverPcvPair>>,
+    rover_epochs: &[EpochObs],
+    sat_upd: Option<std::collections::HashMap<u16, f64>>,
 ) -> GnssRtkIekf {
     let mut iekf = GnssRtkIekf::new(init_pos, start_time, q_accel);
     // Profile-gated robust weighting: 1.0 (Static) is bit-identical legacy.
     iekf.robust_innov_scale = dynamics.innovation_gate_scale();
-    if let Ok(deg) = std::env::var("GNEISS_ELEV_DEG") {
-        if let Ok(rad) = deg.parse::<f64>() {
-            iekf.min_elevation_rad = rad.to_radians();
-        }
-    }
-    iekf.state.iono_enabled = std::env::var("GNEISS_IONO_STATES").as_deref() == Ok("1");
-    iekf.state.sat_iono_enabled =
-        std::env::var("GNEISS_SAT_IONO").as_deref() == Ok("1");
+    apply_env_overrides(&mut iekf);
     iekf.widelane_ar = widelane_ar;
+    apply_cadence_and_upd(&mut iekf, rover_epochs, sat_upd);
     // Independent of widelane_ar and baseline length -- previously nested
     // inside the ZWD baseline gate below (env-var read), which meant a
     // >25km baseline never got GLONASS regardless of the caller's
@@ -174,28 +171,8 @@ pub(crate) fn configure_iekf(
     if let Some(pair) = receiver_pcv {
         iekf.receiver_pcv = Some((pair.rover.clone(), pair.base.clone()));
     }
-    if widelane_ar && !dynamics.is_kinematic() {
-        // Two-phase static Q: converge loosely, then lock the monument.
-        // Kinematic rovers have no monument to lock; the loose phase Q
-        // stays for the whole session.
-        iekf.static_lock_after_s = Some(900.0);
-        iekf.static_lock_q_accel = 1e-8;
-    }
-    // Rover-side ZWD random walk helps short baselines (atmosphere correlated)
-    // but hurts long baselines (>25 km) where rover/base wet delay decouples.
-    // Gate by baseline length so only correlated-atmosphere cases get the state.
-    let baseline_m = (init_pos - base_pos).norm();
-    if widelane_ar && baseline_m < ZWD_BASELINE_GATE_M {
-        iekf.state.enable_zwd(0.0225); // ~15 cm zenith wet init uncertainty
-        // Experimental tropo gradients: opt-in via env while the
-        // OHLN interaction is unresolved (v_p95 -6mm pooled, but
-        // OHLN h_p95 degrades when unconditional).
-        if tropo_grad {
-            iekf.state.enable_gradients(crate::estimators::rtk_iekf::update::GRAD_INIT_VAR_M2);
-        }
-        load_precise_orbits(&mut iekf);
-        load_precise_clocks(&mut iekf);
-    }
+    configure_static_lock(&mut iekf, dynamics, widelane_ar);
+    configure_atmosphere_and_precise_products(&mut iekf, init_pos, base_pos, widelane_ar, tropo_grad);
     // Debug-dump toggle: previously also required baseline < 25km in the
     // forward pass only (accidental -- it was just physically nested
     // inside the ZWD-gate block above, not a principled restriction) and
@@ -205,6 +182,68 @@ pub(crate) fn configure_iekf(
         iekf.track_ambiguity_keys = std::env::var("GNEISS_AMB_DUMP").is_ok();
     }
     iekf
+}
+
+/// Debug/experimental env-var overrides: elevation mask and per-satellite
+/// / global ionosphere state estimation. All default off.
+fn apply_env_overrides(iekf: &mut GnssRtkIekf) {
+    if let Ok(deg) = std::env::var("GNEISS_ELEV_DEG") {
+        if let Ok(rad) = deg.parse::<f64>() {
+            iekf.min_elevation_rad = rad.to_radians();
+        }
+    }
+    iekf.state.iono_enabled = std::env::var("GNEISS_IONO_STATES").as_deref() == Ok("1");
+    iekf.state.sat_iono_enabled = std::env::var("GNEISS_SAT_IONO").as_deref() == Ok("1");
+}
+
+/// Unconditional: `cadence_hint_s` reflects the data stream's own sampling
+/// rate, not an AR setting, and `wl_tracker.sat_upd` is proven inert
+/// whenever `widelane_ar` is off (see `configure_iekf`'s doc comment) --
+/// so setting both the same way regardless of `widelane_ar` is safe.
+fn apply_cadence_and_upd(
+    iekf: &mut GnssRtkIekf,
+    rover_epochs: &[EpochObs],
+    sat_upd: Option<std::collections::HashMap<u16, f64>>,
+) {
+    let cadence_hint = crate::post_process::screening::infer_cadence_hint(rover_epochs);
+    iekf.slip_detector.cadence_hint_s = cadence_hint;
+    iekf.base_slip_detector.cadence_hint_s = cadence_hint;
+    iekf.wl_tracker.sat_upd = sat_upd;
+}
+
+/// Two-phase static Q: converge loosely, then lock the monument. Kinematic
+/// rovers have no monument to lock; the loose phase Q stays for the whole
+/// session.
+fn configure_static_lock(iekf: &mut GnssRtkIekf, dynamics: ProcessingDynamics, widelane_ar: bool) {
+    if widelane_ar && !dynamics.is_kinematic() {
+        iekf.static_lock_after_s = Some(900.0);
+        iekf.static_lock_q_accel = 1e-8;
+    }
+}
+
+/// Rover-side ZWD random walk helps short baselines (atmosphere correlated)
+/// but hurts long baselines (>25 km) where rover/base wet delay decouples,
+/// so gate it -- and the tropo gradients and precise orbit/clock products
+/// that only make sense alongside it -- by baseline length.
+fn configure_atmosphere_and_precise_products(
+    iekf: &mut GnssRtkIekf,
+    init_pos: Vector3<f64>,
+    base_pos: Vector3<f64>,
+    widelane_ar: bool,
+    tropo_grad: bool,
+) {
+    let baseline_m = (init_pos - base_pos).norm();
+    if widelane_ar && baseline_m < ZWD_BASELINE_GATE_M {
+        iekf.state.enable_zwd(0.0225); // ~15 cm zenith wet init uncertainty
+        // Experimental tropo gradients: opt-in via env while the
+        // OHLN interaction is unresolved (v_p95 -6mm pooled, but
+        // OHLN h_p95 degrades when unconditional).
+        if tropo_grad {
+            iekf.state.enable_gradients(crate::estimators::rtk_iekf::update::GRAD_INIT_VAR_M2);
+        }
+        load_precise_orbits(iekf);
+        load_precise_clocks(iekf);
+    }
 }
 
 /// Precise orbits: loaded when `GNEISS_SP3` points to a valid SP3 file.

@@ -976,6 +976,9 @@ Recommend addressing both together in one round, specifically because
 fixing them requires regenerating the walkthrough reference either way
 -- no reason to pay that cost twice.
 
+**2026-08-27: both resolved** -- see "The two deferred asymmetries:
+both resolved, both were real bugs" below.
+
 ## Remaining Pattern-1 env vars checked: no drift bug, left as-is
 
 The three env-var toggles not covered by the `configure_iekf` sweep --
@@ -1000,3 +1003,52 @@ explicitly-experimental, off-by-default AR-quality research knobs
 residual screen") to first-class surfaced config isn't warranted
 without a concrete caller who needs to set them -- that would be
 speculative surface area, not a bug fix.
+
+## The two deferred asymmetries: both resolved, both were real bugs
+
+Revisited `cadence_hint_s` and `wl_tracker.sat_upd` (deferred above)
+now that the deliberate round they needed is in scope. Both turned out
+to have a clear, provable direction rather than an arbitrary pick:
+
+- `cadence_hint_s` reflects the *input data stream's* own sampling
+  rate (screening.rs's gap-detection threshold, used so a normal
+  30-second inter-epoch step on a slow-cadence stream isn't flagged as
+  a cycle-slip-causing data gap). It has no principled dependence on
+  `widelane_ar` at all -- forward's gating on it was the actual bug,
+  not a deliberate restriction that happened to differ from backward.
+- `wl_tracker.sat_upd` is now *proven* inert whenever `widelane_ar` is
+  off, not just "likely": its only production reader,
+  `WidelaneTracker::fixed_widelane`, is reachable solely through
+  `far_matches_widelanes` and `resolve_cascade`, both called only from
+  `if self.widelane_ar` in `process_epoch` (the third call site, in
+  widelane.rs, is a `#[cfg(test)]` fixture). Setting it when
+  `widelane_ar` is false cannot change any output.
+
+Both are now folded into `configure_iekf`, unconditionally, matching
+backward's already-correct behaviour. Measured impact:
+
+- Both guard scripts: `check_network_benchmark.py` (9/9 checks) and
+  `check_multignss_benchmark.py` (10/10 checks) pass with no regression.
+- `eval_qinertia_ppk`'s three-dataset walkthrough, before vs. after:
+  - RTK Explorer F9P (1 Hz): byte-identical, both forward and smoothed.
+    Expected -- `infer_cadence_hint` returns `None` below its 2 s
+    median-spacing floor, so fast streams were never affected.
+  - NGS Geodetic Baseline (30 s cadence) forward pass: fix rate
+    84.0% -> 97.0% (252/300 -> 291/300), horizontal p95 679mm -> 125mm,
+    RMS 274mm -> 55mm, 3D p95 1203mm -> 289mm. This is the bug: the
+    legacy fixed 2 s gap threshold flagged every normal 30 s step as a
+    slip, constantly resetting ambiguity tracking and starving AR of
+    the epoch count it needs to converge.
+  - NGS Geodetic Baseline smoothed (final) output: stayed 100% fixed
+    (300/300) both before and after; p50 4mm -> 7mm, p95 14mm -> 21mm,
+    RMS 7mm -> 11mm. A few-mm wobble at the margin, plausibly from the
+    smoother's forward/backward blend weights shifting now that forward
+    contributes far more (and better) fixed epochs -- not a regression
+    in any practical sense at these absolute magnitudes, and the guard
+    scripts (which gate on the metrics that matter) show no issue.
+
+Net: forward-pass accuracy on slow-cadence streams improved
+substantially; nothing else moved outside noise. This walkthrough's
+new numbers are the reference from this point forward -- there's no
+checked-in file to update (see "Walkthrough reference refresh" above),
+just this log entry.

@@ -99,15 +99,8 @@ fn run_backward_iekf(
     let mut iekf = configure_iekf(
         initial_rover_pos, rev_epochs[0].time, q_accel, base_pos, dynamics,
         widelane_ar, tropo_grad, enable_glonass, receiver_pcv,
+        rover_epochs, sat_upd,
     );
-    // ZWD/gradients, precise orbits/clocks, and the ambiguity-dump toggle
-    // are already handled inside configure_iekf. What's left here (cadence
-    // hint, wl_tracker.sat_upd below) is deliberately NOT unified with the
-    // forward pass yet -- see configure_iekf's doc comment.
-    let cadence_hint = crate::post_process::screening::infer_cadence_hint(rover_epochs);
-    iekf.slip_detector.cadence_hint_s = cadence_hint;
-    iekf.base_slip_detector.cadence_hint_s = cadence_hint;
-    iekf.wl_tracker.sat_upd = sat_upd.clone();
 
     for epoch in &rev_epochs {
         let tow_ms = (epoch.time.tow * 1000.0).round() as u64;
