@@ -1,24 +1,45 @@
 # Network RTK — Verified State & Next Architecture Steps
 
-Status as of branch `network-rtk-long-baseline` (@ 696657d). All numbers
-below are reproducible via `scripts/check_network_benchmark.py` (full-day
-CORS set: rover P224 + bases P181/OHLN/CAPO/P225/P222/SLAC, 15–50 km).
+Status as of branch `sprint7/tropo-zwd` (@ 2315af6, forked from
+`network-rtk-long-baseline`). All numbers below are reproducible via
+`scripts/check_network_benchmark.py` (full-day CORS set: rover P224 +
+bases P181/OHLN/CAPO/P225/P222/SLAC, 15–50 km).
 
 ## Verified results (smoothed, full day)
 
+**Refreshed 2026-08-26** — the table below was stale for at least two
+rounds' worth of unconditional fixes (this file's own findings below it
+document them; the header simply never got re-rolled after `696657d`).
+Measured fresh via `./target/release/eval_network_ppk`, no env vars,
+zero code changes from HEAD: P222 and SLAC vertical RMS are 6–7x better
+than this table previously claimed (749→102mm, 779→209mm) — the
+tropospheric-ceiling premise that once motivated a two-ZWD-state design
+no longer holds at HEAD. OHLN and CAPO drifted the other way (worse vert RMS than previously
+recorded). CAPO's p50 bias fix (below, "Receiver PCO") is on record and
+is now default-on, but the table's older 60mm CAPO vert RMS predates
+that fix entirely and the full 60→101mm chain across intervening commits
+hasn't been re-traced here — flagged, not explained. OHLN is likewise
+unexplained; see "Known benign anomalies" below, now the network's
+single worst vertical number and worth a fresh look rather than assuming
+the old "environmental, not a defect" read still applies at 430mm.
+
 | base | km | horiz p50 | fixed-only p50 | fix rate | vert RMS |
 |------|----|-----------|----------------|----------|----------|
-| P181 | 15.0 | 24 mm | 23 mm | 96.9% | 106 mm |
-| OHLN | 16.5 | 23 mm | 22 mm | 95.1% | 323 mm |
-| CAPO | 16.6 | 33 mm | 32 mm | 96.9% | 60 mm |
-| P225 | 21.9 | 38 mm | 37 mm | 97.8% | 130 mm |
-| P222 | 38.0 | 72 mm | 68 mm | 89.5% | 749 mm |
-| SLAC | 49.7 | 101 mm | 94 mm | 82.5% | 779 mm |
-| **NETWORK** | — | **28 mm** | **28 mm** | **97.6%** | **79 mm** |
+| P181 | 15.0 | 24 mm | 24 mm | 86.6% | 86 mm |
+| OHLN | 16.5 | 23 mm | 22 mm | 80.7% | 430 mm |
+| CAPO | 16.6 | 32 mm | 31 mm | 93.7% | 101 mm |
+| P225 | 21.9 | 37 mm | 36 mm | 86.1% | 117 mm |
+| P222 | 38.0 | 72 mm | 68 mm | 83.2% | 102 mm |
+| SLAC | 49.7 | 108 mm | 92 mm | 70.7% | 208 mm |
+| **NETWORK** | — | **31 mm** | **31 mm** | **99.8%** | **59 mm** |
 
 Regression guard: `scripts/check_network_benchmark.py` (nine budgets,
 fails closed on parse errors; vertical budget would have caught the
-round-7 ZWD divergence at product level).
+round-7 ZWD divergence at product level). Note the guard's own checked
+budgets don't include most of this table (only network fused h_p50/
+h_RMS/v_RMS, three bases' fixed-only p50, three bases' fix rate) — the
+per-base vertical RMS column above is real but currently unguarded;
+regressing it wouldn't fail CI today.
 
 ## What produced the gains (all opt-in via `widelane_ar`)
 
@@ -755,3 +776,41 @@ CORRECT DESIGN (next sprint): estimate per-SATELLITE slant iono mapped
 through a thin-shell/zenith model (RTKLIB ionmapf style) so geometry
 couples satellites and breaks the rank deficiency — NOT independent
 per-pair constants. Default stays OFF until reimplemented.
+
+## Measured dead end: lowering the iono-free engagement floor (6 -> 3)
+
+Tried the roadmap's stated Sprint 7/9 approach literally: `apply_fixed_
+iono_free`'s `h_rows.len() < 6` floor dropped to 3 (matching `if_residual_
+outliers`'s own minimum), plus two new boundary tests. Rationale looked
+solid going in: debug tracing shows enormous call volume with exactly
+3-5 both-band-fixed pairs (tens of thousands of calls across a full-day
+run), which the old floor of 6 always sent to `NotEngaged`.
+
+RESULT: zero measurable effect. P222/SLAC smoothed vertical RMS, p50,
+p95 and all nine `check_network_benchmark.py` budgets were unchanged to
+the millimetre before and after, despite the new code path firing
+constantly per the trace.
+
+ROOT CAUSE: `solve_position_lsq` is a correct Bayesian MAP estimate —
+`N_plus = H^T R^-1 H + prior_information`, weighted by the filter's own
+current position covariance as the prior. At 3-5 pairs, `H^T R^-1 H`
+(new-geometry information) is small relative to a filter that's already
+converged confidently (if wrongly, due to unmodelled systematic iono
+bias — covariance doesn't capture unmodelled bias, only random noise),
+so `dx` collapses toward zero and the "solution" reproduces the input
+AR-fixed position almost exactly. This is not a bug; the function's own
+existing comment already said as much ("the prior pulls the estimate
+toward the float position") — it just wasn't clear until measured that
+this holds strongly enough to make engagement functionally inert in the
+3-5 pair regime specifically, not merely "less confident."
+
+IMPLICATION: "soften the floor" cannot work at ANY threshold under the
+current MAP formulation — a floor of 1 would be even more prior-
+dominated than 3, not less. The roadmap's second-listed option, "partial-
+set IF solving using whichever both-band pairs exist," needs a
+genuinely different formulation (one that doesn't re-weight new
+information against the filter's own confident-but-potentially-biased
+covariance) to have a chance of mattering, not a threshold tweak on the
+existing one. Change reverted (`iono_free.rs`, `widelane.rs` back to
+floor=6 / original comments); nothing shipped from this round except
+this note.
