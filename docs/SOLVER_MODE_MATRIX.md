@@ -24,9 +24,9 @@ Baseline data: P224 rover, real CORS RINEX (`datasets/cors_short_baseline/`), GL
 | # | Engine | Base | Temporal | Constellation | Result | Evidence |
 |---|---|---|---|---|---|---|
 | 1 | SWFG | rover-only | forward-only | GPS-only (`--systems G`) | **Works** | 5/5 epochs, n_sat=7, no error |
-| 2 | SWFG | rover-only | forward-only | +GLONASS (default) | **BROKEN** | `OrphanVariable("IfbGlonass")` on every epoch, 0/2880 processed |
+| 2 | SWFG | rover-only | forward-only | +GLONASS (default) | **FIXED** (was BROKEN) | Was `OrphanVariable("IfbGlonass")` on every epoch, 0/2880 processed, whenever a GLONASS satellite is tracked with no matching ephemeris (e.g. GPS-only nav file). Fixed 2647bd3: `ensure_ifb_glonass()` now creates the variable lazily at the exact point a factor references it, instead of pre-emptively from raw satellite tracking. Real GLONASS ephemerides still get real IFB factors (verified against `multignss_2025d160`, unaffected) |
 | 3 | SWFG | rover-only | forward+backward | GPS-only | **Works** | Same as #1 — `execute_post_process` falls back to the same SWFG call when there's no base |
-| 4 | SWFG | rover-only | forward+backward | +GLONASS | **BROKEN** | Identical crash to #2 (same underlying `SwfgEngine::process_epoch` call; `--enable-backward-smoothing` doesn't change which engine or method runs when there's no base) |
+| 4 | SWFG | rover-only | forward+backward | +GLONASS | **FIXED** (was BROKEN) | Same root cause and fix as #2 (identical underlying `SwfgEngine::process_epoch` call) |
 | 5 | SWFG | rover+base | forward-only | +GLONASS | **Works, but bad accuracy** | This is the CLI's actual **default** with no flags: h_p50=100mm, v_p50=219mm, h_p95=**998mm**, on data where the properly-wired path (row 8) gets h_p50=24mm |
 | 6 | SWFG | rover+base | forward+backward | any | **Not a real cell** | `run_forward_pass` unconditionally upgrades to rtk_iekf whenever base+base_position are both present and no IMU — this configuration can't execute; it silently becomes row 8/9 instead |
 | 7 | rtk_iekf | rover-only | (any) | (any) | **N/A by construction** | Double-difference is definitionally base-relative; there's no rover-only DD mode, this isn't a gap |
@@ -38,9 +38,9 @@ Baseline data: P224 rover, real CORS RINEX (`datasets/cors_short_baseline/`), GL
 
 ## What this means, ranked by how much it matters
 
-1. **Row 5 is the actual product risk.** A brand-new user runs `gneiss-cli process -r rover.obs -b base.obs -n nav.rnx -o out.pos` — the single most obvious command — and silently gets ~1m-class accuracy from a tool capable of 24mm, with zero indication a 5-10x-better mode exists behind an undiscoverable flag.
-2. **Row 2/4 is a real, reproducible bug**, not a design gap. `IfbGlonass` (GLONASS inter-frequency bias) is being added to the SWFG factor graph without a factor connecting it, making the graph unsolvable outright — for *every* epoch, not a degraded mode. Anyone processing real multi-GNSS rover-only or PPP data through the default CLI path gets zero output.
-3. **Rows 8 and 11** are capability gaps, not bugs: real, working functionality (forward-only rtk_iekf; IMU coupling) that exists at the library/eval-binary level but was never exposed as CLI options.
-4. **Row 10** is not a bug — the current behavior (silently exclude GLONASS from AR) is the *correct*, evidence-backed choice — but it's also not a choice a `gneiss-cli` user can currently override even deliberately.
+1. **Row 5 is the actual product risk, still open.** A brand-new user runs `gneiss-cli process -r rover.obs -b base.obs -n nav.rnx -o out.pos` — the single most obvious command — and silently gets ~1m-class accuracy from a tool capable of 24mm, with zero indication a 5-10x-better mode exists behind an undiscoverable flag.
+2. ~~Row 2/4 is a real, reproducible bug~~ **Fixed (2647bd3).** `IfbGlonass` was being added to the SWFG factor graph from a different, looser check than the one deciding which factors get built, so it could end up with zero factors connecting it whenever GLONASS ephemeris was missing/partial — an unconditional crash, not a degraded mode. Root cause and fix in the row-2 entry above.
+3. **Rows 8 and 11 are still open** capability gaps, not bugs: real, working functionality (forward-only rtk_iekf; IMU coupling) that exists at the library/eval-binary level but was never exposed as CLI options.
+4. **Row 10 is still open, and isn't a bug** — the current behavior (silently exclude GLONASS from AR) is the *correct*, evidence-backed choice — but it's also not a choice a `gneiss-cli` user can currently override even deliberately.
 
-None of this is fixed yet. This document is the map; next step is deciding which cells to close and in what order.
+Row 2/4 closed; the rest of this document is still the map for what's left.
