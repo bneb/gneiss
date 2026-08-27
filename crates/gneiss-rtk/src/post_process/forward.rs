@@ -51,6 +51,7 @@ pub fn run_forward_pass(
     tropo_grad: bool,
     sat_upd: Option<std::collections::HashMap<u16, f64>>,
     receiver_pcv: Option<std::sync::Arc<super::ReceiverPcvPair>>,
+    enable_glonass: bool,
 ) -> Vec<FilteredEpoch> {
     if imu_samples.is_none() && base_pos.is_some() && base_epochs.is_some() {
         if let Some(bp) = base_pos {
@@ -59,7 +60,7 @@ pub fn run_forward_pass(
             // byte-identical. Profiles choose their Q at the options
             // level (eval binaries pass STATIC/KINEMATIC_Q_ACCEL).
             let q_eff = q_accel.unwrap_or(Q_ACCEL_UNSET_FALLBACK);
-            let (epochs, _wl, _pw) = run_forward_iekf(ephemerides, rover_epochs, base_epochs.unwrap_or(&[]), bp, initial_rover_pos, q_eff, dynamics, widelane_ar, tropo_grad, sat_upd.clone(), receiver_pcv);
+            let (epochs, _wl, _pw) = run_forward_iekf(ephemerides, rover_epochs, base_epochs.unwrap_or(&[]), bp, initial_rover_pos, q_eff, dynamics, widelane_ar, tropo_grad, sat_upd.clone(), receiver_pcv, enable_glonass);
             return epochs;
         }
     }
@@ -80,6 +81,7 @@ fn run_forward_iekf(
     tropo_grad: bool,
     sat_upd: Option<std::collections::HashMap<u16, f64>>,
     receiver_pcv: Option<std::sync::Arc<super::ReceiverPcvPair>>,
+    enable_glonass: bool,
 ) -> (Vec<FilteredEpoch>, crate::estimators::rtk_iekf::mw::WidelaneTracker, crate::estimators::rtk_iekf::mw::WidelaneTracker) {
     if rover_epochs.is_empty() {
         return (
@@ -103,6 +105,12 @@ fn run_forward_iekf(
     iekf.state.sat_iono_enabled =
         std::env::var("GNEISS_SAT_IONO").as_deref() == Ok("1");
     iekf.widelane_ar = widelane_ar;
+    // Independent of widelane_ar and baseline length -- previously nested
+    // inside the ZWD baseline gate below (env-var read), which meant a
+    // >25km baseline never got GLONASS regardless of the caller's
+    // request, and diverged from the backward pass's own (different)
+    // gating. See PostProcessOptions::enable_glonass.
+    iekf.enable_glonass = enable_glonass;
     if let Some(pair) = receiver_pcv {
         iekf.receiver_pcv = Some((pair.rover.clone(), pair.base.clone()));
     }
@@ -125,7 +133,6 @@ fn run_forward_iekf(
         if tropo_grad {
             iekf.state.enable_gradients(crate::estimators::rtk_iekf::update::GRAD_INIT_VAR_M2);
         }
-        iekf.enable_glonass = std::env::var("GNEISS_GLONASS").is_ok();
         // Precise orbits: loaded when GNEISS_SP3 points to a valid SP3 file.
         if let Ok(sp3_path) = std::env::var("GNEISS_SP3") {
             let result = std::fs::File::open(&sp3_path)
@@ -283,6 +290,12 @@ pub fn run_forward_pass_collecting(
         false,
         None,
         None,
+        // GLONASS pairs are excluded from MW wide-lane arcs by design
+        // (code inter-channel biases don't cancel between receivers,
+        // docs/NETWORK_RTK_NEXT_STEPS.md "GLONASS: FDMA plumbing landed")
+        // -- this pre-pass computes exactly those arcs, independent of
+        // the caller's own enable_glonass setting for DD formation.
+        false,
     );
     (epochs, wl, pw)
 }

@@ -43,6 +43,11 @@ enum Commands {
         base_position: Option<String>,
         #[arg(long, help = "Path to ANTEX file for receiver antenna PCV correction (default: datasets/igs14.atx)")]
         antex: Option<String>,
+        #[arg(long, help = "Include GLONASS in double-difference formation (default: excluded \
+            entirely, GPS/Galileo/BeiDou only). Measured small cost on at least one real \
+            baseline (receiver code inter-channel biases don't fully cancel between phase \
+            and code); see docs/NETWORK_RTK_NEXT_STEPS.md.")]
+        glonass: bool,
     },
 
     /// Evaluate error CDFs against ground truth
@@ -67,13 +72,13 @@ async fn main() {
     match cli.command {
         Commands::Process {
             rover, base, nav, output, config, single_pass, mode,
-            max_epochs, systems, sp3, clk, base_position, antex,
+            max_epochs, systems, sp3, clk, base_position, antex, glonass,
         } => {
             if let Err(e) = process::run_process(
                 rover, base, nav, output, config,
                 !single_pass, mode, max_epochs,
                 base_position, systems, sp3, clk,
-                antex,
+                antex, glonass,
             ).await {
                 eprintln!("Error: {}", e);
                 std::process::exit(1);

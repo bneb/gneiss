@@ -8,7 +8,7 @@ pub async fn run_process(
     rover: String, base: Option<String>, nav: Option<String>, output: String, config: Option<String>,
     _enable_backward_smoothing: bool, mode: Option<String>, max_epochs: Option<usize>,
     _base_position: Option<String>, systems: Option<String>, _sp3: Option<String>, _clk: Option<String>,
-    antex: Option<String>,
+    antex: Option<String>, glonass: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     if _sp3.is_some() || _clk.is_some() {
         return Err("--sp3/--clk are not yet wired into gneiss-cli: precise ephemeris \
@@ -74,6 +74,7 @@ pub async fn run_process(
             klobuchar.as_ref().map(|k| k.alpha),
             klobuchar.as_ref().map(|k| k.beta),
             receiver_pcv,
+            glonass,
         );
         let post_res = gneiss_rtk::post_process::execute_post_process(
             &swfg_config,
@@ -228,7 +229,7 @@ fn pco_corrected_base_position(
     }
 }
 
-/// Options for the `--enable-backward-smoothing` (4-pass DD-RTK) path.
+/// Options for the default (non-`--single-pass`) 4-pass DD-RTK path.
 ///
 /// `widelane_ar` is fixed on: cadence-aware slip gating, reverse-safe
 /// process noise and innovation-gated slip re-seeding are measured
@@ -242,6 +243,7 @@ fn backward_smoothing_options(
     klobuchar_alpha: Option<[f64; 4]>,
     klobuchar_beta: Option<[f64; 4]>,
     receiver_pcv: Option<std::sync::Arc<gneiss_rtk::post_process::ReceiverPcvPair>>,
+    enable_glonass: bool,
 ) -> gneiss_rtk::post_process::PostProcessOptions {
     gneiss_rtk::post_process::PostProcessOptions {
         enable_bidirectional: true,
@@ -255,6 +257,7 @@ fn backward_smoothing_options(
         network_sat_upd: None,
         receiver_pcv,
         dynamics: gneiss_rtk::post_process::ProcessingDynamics::from_env(),
+        enable_glonass,
     }
 }
 
@@ -264,13 +267,14 @@ mod tests {
 
     #[test]
     fn backward_smoothing_enables_widelane_ar_by_default() {
-        let opts = backward_smoothing_options(None, None, None, None, None);
+        let opts = backward_smoothing_options(None, None, None, None, None, false);
         assert!(
             opts.widelane_ar,
             "gneiss-cli must use the validated widelane_ar default, not the legacy off-path"
         );
         assert!(opts.enable_bidirectional);
         assert!(opts.receiver_pcv.is_none());
+        assert!(!opts.enable_glonass, "GLONASS must stay opt-in (--glonass), not default-on");
     }
 
     /// Real CORS data end-to-end: a cross-family pair (P224 rover, Trimble;
@@ -289,8 +293,14 @@ mod tests {
         ).expect("CAPO (LEIAR20) vs the Trimble rover must resolve against igs14.atx");
         assert_eq!(pair.base.ant_type, "LEIAR20");
 
-        let opts = backward_smoothing_options(None, None, None, None, Some(pair));
+        let opts = backward_smoothing_options(None, None, None, None, Some(pair), false);
         assert!(opts.receiver_pcv.is_some());
+    }
+
+    #[test]
+    fn backward_smoothing_options_threads_glonass_flag() {
+        let opts = backward_smoothing_options(None, None, None, None, None, true);
+        assert!(opts.enable_glonass);
     }
 
     /// The actual bias fix (docs/NETWORK_RTK_NEXT_STEPS.md: CAPO v_p50

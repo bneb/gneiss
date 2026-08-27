@@ -77,6 +77,18 @@ pub struct PostProcessOptions {
     /// Kinematic`] selects mobile Q, no monument lock, widened
     /// innovation gates, and sigma-scaled combiner thresholds.
     pub dynamics: ProcessingDynamics,
+    /// Opt-in GLONASS participation in DD formation and AR. Default off:
+    /// code inter-channel biases don't cancel between receivers, so phase
+    /// ambiguities absorb per-satellite constants but code ICBs still
+    /// leak via float seeding (docs/NETWORK_RTK_NEXT_STEPS.md). Applied
+    /// unconditionally regardless of baseline length or `widelane_ar` --
+    /// previously this was set independently inside each of the forward
+    /// and backward passes, nested inside unrelated baseline-length
+    /// gating that differed between the two, so a >25km baseline with
+    /// widelane_ar on could silently run forward and backward with
+    /// DIFFERENT constellation sets. This field is now the single source
+    /// of truth for both passes.
+    pub enable_glonass: bool,
 }
 
 /// Paired receiver antenna PCV models consumed by the DD engine.
@@ -113,6 +125,7 @@ pub fn execute_post_process(
         config, ephemerides, klob, rover_epochs, base_epochs, base_pos, imu_samples, options.initial_rover_position, options.q_accel, options.dynamics, options.widelane_ar, options.tropo_gradients,
         options.network_sat_upd.clone(),
         options.receiver_pcv.clone(),
+        options.enable_glonass,
     );
 
     // Pass 3: Backward Pass (if enabled)
@@ -122,6 +135,7 @@ pub fn execute_post_process(
             config, ephemerides, klob, rover_epochs, base_epochs, base_pos, imu_samples, initial_rover_pos, options.q_accel, options.dynamics, options.widelane_ar, options.tropo_gradients,
             options.network_sat_upd.clone(),
             options.receiver_pcv.clone(),
+            options.enable_glonass,
         )
     } else {
         std::collections::BTreeMap::new()

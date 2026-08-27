@@ -34,6 +34,7 @@ pub fn run_backward_pass(
     tropo_grad: bool,
     sat_upd: Option<std::collections::HashMap<u16, f64>>,
     receiver_pcv: Option<std::sync::Arc<super::ReceiverPcvPair>>,
+    enable_glonass: bool,
 ) -> BTreeMap<u64, FilteredEpoch> {
     if imu_samples.is_none() && base_pos.is_some() && base_epochs.is_some() {
         if let Some(bp) = base_pos {
@@ -42,7 +43,7 @@ pub fn run_backward_pass(
             });
             // Same fallback rule as the forward pass: explicit wins,
             // `None` keeps the legacy 1.0 in both profiles.
-            return run_backward_iekf(ephemerides, rover_epochs, base_epochs.unwrap_or(&[]), bp, init_p, q_accel.unwrap_or(Q_ACCEL_UNSET_FALLBACK), dynamics, widelane_ar, tropo_grad, sat_upd, receiver_pcv);
+            return run_backward_iekf(ephemerides, rover_epochs, base_epochs.unwrap_or(&[]), bp, init_p, q_accel.unwrap_or(Q_ACCEL_UNSET_FALLBACK), dynamics, widelane_ar, tropo_grad, sat_upd, receiver_pcv, enable_glonass);
         }
     }
 
@@ -83,6 +84,7 @@ fn run_backward_iekf(
     tropo_grad: bool,
     sat_upd: Option<std::collections::HashMap<u16, f64>>,
     receiver_pcv: Option<std::sync::Arc<super::ReceiverPcvPair>>,
+    enable_glonass: bool,
 ) -> BTreeMap<u64, FilteredEpoch> {
     let mut results = BTreeMap::new();
     if rover_epochs.is_empty() {
@@ -94,6 +96,9 @@ fn run_backward_iekf(
 
     let mut iekf = GnssRtkIekf::new(initial_rover_pos, rev_epochs[0].time, q_accel);
     iekf.widelane_ar = widelane_ar;
+    // Independent of widelane_ar and baseline length; matches the forward
+    // pass exactly now. See PostProcessOptions::enable_glonass.
+    iekf.enable_glonass = enable_glonass;
     iekf.robust_innov_scale = dynamics.innovation_gate_scale();
     if let Some(pair) = receiver_pcv {
         iekf.receiver_pcv = Some((pair.rover.clone(), pair.base.clone()));
@@ -118,7 +123,6 @@ fn run_backward_iekf(
                 iekf.state.enable_gradients(crate::estimators::rtk_iekf::update::GRAD_INIT_VAR_M2);
             }
         }
-        iekf.enable_glonass = std::env::var("GNEISS_GLONASS").is_ok();
         iekf.track_ambiguity_keys =
             std::env::var("GNEISS_AMB_DUMP").is_ok();
         let cadence_hint =
@@ -301,7 +305,7 @@ mod tests {
     #[test]
     fn test_empty_backward_pass_runs() {
         let config = EngineConfig::Spp(Default::default());
-        let results = run_backward_pass(&config, &[], None, &[], None, None, None, None, None, ProcessingDynamics::Static, false, false, None, None);
+        let results = run_backward_pass(&config, &[], None, &[], None, None, None, None, None, ProcessingDynamics::Static, false, false, None, None, false);
         assert!(results.is_empty());
     }
 }

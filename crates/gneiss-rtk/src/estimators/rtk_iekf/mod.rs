@@ -479,6 +479,12 @@ impl GnssRtkIekf {
         let mut if_meas = Vec::new();
         let mut active_keys = Vec::new();
 
+        if std::env::var("GNEISS_GLO_DEBUG").is_ok() {
+            let glo_in_sat_info = sat_info.iter().filter(|(s, _)| s.constellation == gneiss_core::sat::Constellation::Glonass).count();
+            let selected = Self::select_constellations(sat_info.as_slice(), self.enable_glonass);
+            eprintln!("GLO-DEBUG enable_glonass={} sat_info_total={} glo_in_sat_info={} selected_constellations={:?}",
+                self.enable_glonass, sat_info.len(), glo_in_sat_info, selected);
+        }
         for const_id in Self::select_constellations(sat_info.as_slice(), self.enable_glonass) {
 
             let const_sats: Vec<(gneiss_core::sat::SatelliteId, Vector3<f64>)> = sat_info

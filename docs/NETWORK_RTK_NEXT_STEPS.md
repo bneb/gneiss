@@ -295,6 +295,44 @@ absorb per-satellite constants but code ICBs still leak via float
 seeding and code rows. Kept opt-in until per-receiver code ICB handling
 (e.g. between-satellite-differenced code or estimated ICB states).
 
+**2026-08-27 correction: the measurement above was itself corrupted by
+an architecture bug, and the true cost is worse.** `enable_glonass` was
+being set independently inside each of the forward and backward passes,
+nested inside a >25km-excluding baseline-length gate that existed for
+an unrelated feature (ZWD state) — and the backward pass's copy of that
+nesting didn't match the forward pass's. Consequence: `GNEISS_GLONASS=1`
+silently never reached P222 (38km, over the gate) or SLAC at all, and
+could disagree between forward/backward on baselines near the boundary.
+"P181/P222 identical" above wasn't evidence GLONASS is safe at long
+baselines — P222 simply never received it.
+
+Fixed: `enable_glonass` is now a top-level `PostProcessOptions` field,
+applied unconditionally in both passes, independent of baseline length
+or `widelane_ar` (`gneiss-rtk` commit series ending in the `--glonass`
+CLI flag). Re-measured GE -> GER on the same 2025 DOY160 day with the
+fix in place:
+
+| base | fix rate | v_RMS | v_p95 |
+|---|---|---|---|
+| P181 (15km) | unchanged | unchanged | unchanged |
+| P225 (21.9km, under the old gate) | 73.4% -> 70.2% (same direction as before) | **236 -> 796mm** | 334 -> 377mm |
+| P222 (38km, previously never received it) | unchanged | unchanged | unchanged |
+
+P225's real cost is far worse than previously documented (RMS more than
+triples, not the mild "+92mm p95" the buggy measurement showed) — this
+was previously masked by the same bug in a way that happened to look
+mild. P222 is confirmed to actually receive GLONASS now (verified via
+`GNEISS_GLO_DEBUG=1`: `enable_glonass=true` correctly produces
+`selected_constellations=[0,1,2]`, both bases have identical
+simultaneous-GLONASS-satellite counts at the epochs checked) yet shows
+*zero* measurable change — a genuine, uninvestigated difference in how
+P222 responds to the same input, not a lingering wiring bug. Not chased
+further this round.
+
+Net effect on the recommendation: unchanged (stay opt-in), but now for
+a stronger reason — the true measured cost at P225 is significantly
+worse than what justified "opt-in" the first time.
+
 Also fixed en route: Galileo secondary-band fallback (L2 absent ->
 E5a band 5) now reaches the MW tracker and iono-free stage — metric-
 neutral on the benign-day dataset, hardening for degraded conditions.

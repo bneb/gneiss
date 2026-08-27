@@ -271,6 +271,13 @@ fn run_pass(
         tropo_gradients: ctx.tropo_gradients,
         receiver_pcv,
         dynamics: ctx.dynamics,
+        // Moved from inside run_forward_iekf/run_backward_iekf, where it
+        // was nested in a baseline-length gate meant for ZWD state (so
+        // >25km baselines never got GLONASS regardless of this env var)
+        // and, in the backward pass, gated differently than forward.
+        // Same env var, now applies uniformly to both passes and all
+        // baseline lengths -- see PostProcessOptions::enable_glonass.
+        enable_glonass: std::env::var("GNEISS_GLONASS").is_ok(),
     };
     let res = match execute_post_process(config, ctx.ephemerides, rover, Some(base_epochs), None, &options) {
         Ok(r) => r,

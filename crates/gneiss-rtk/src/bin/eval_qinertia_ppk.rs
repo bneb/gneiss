@@ -209,6 +209,7 @@ fn evaluate_dataset_spec(spec: &DatasetSpec) {
         network_sat_upd: None,
         receiver_pcv: None,
         dynamics: Default::default(),
+        enable_glonass: false,
     };
     let fwd_res = match execute_post_process(&config, &ephemerides, selected_rover, Some(&base_epochs), imu_samples.as_deref(), &fwd_options) {
         Ok(r) => r,
@@ -242,6 +243,7 @@ fn evaluate_dataset_spec(spec: &DatasetSpec) {
         network_sat_upd: None,
         receiver_pcv: None,
         dynamics: Default::default(),
+        enable_glonass: false,
     };
     let smooth_res = match execute_post_process(&config, &ephemerides, selected_rover, Some(&base_epochs), imu_samples.as_deref(), &smooth_options) {
         Ok(r) => r,
