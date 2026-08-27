@@ -814,3 +814,40 @@ covariance) to have a chance of mattering, not a threshold tweak on the
 existing one. Change reverted (`iono_free.rs`, `widelane.rs` back to
 floor=6 / original comments); nothing shipped from this round except
 this note.
+
+## Bug found and fixed: GNEISS_PCV was never actually applying anything
+
+The "opt-in via GNEISS_PCV=1" elevation-dependent receiver-PCV correction
+(`eval_network_ppk.rs`'s `load_receiver_pcv`, documented and referenced
+several times in this file) has been dead in practice since it was
+written. Root cause: `mod.rs`'s `receiver_dd_pcv_m` gated actually
+*applying* the loaded correction behind a SEPARATE env var,
+`GNEISS_RECV_PCV`, which nothing in any caller, comment, or this doc ever
+told a user to set. `GNEISS_PCV=1` alone (the only thing anyone was ever
+told to do) loaded the calibrations successfully — the confirmation
+print fires, calibrations resolve — and then applied a correction of
+exactly 0.0 to every single observation, silently, for the entire
+history of this flag.
+
+Verified with a debug counter (`GNEISS_PCV_DEBUG=1`, prints every
+non-trivial correction): `GNEISS_PCV=1` alone -> 0 non-zero corrections
+across a full-day six-base run. `GNEISS_PCV=1 GNEISS_RECV_PCV=1` together
+-> 482,337, millimetre-scale, physically sensible (sub-mm to ~1mm at
+20-46 deg elevations).
+
+This means any prior "GNEISS_PCV metric-neutral / empirically inert"
+read anywhere in this project's history was measuring a feature that
+could not possibly have done anything, not a genuine physical null
+result on this dataset. Fixed by deleting the redundant gate entirely —
+`self.receiver_pcv.is_some()` already IS the caller's opt-in signal;
+there was never a legitimate case for wanting calibrations loaded but
+the correction withheld. `GNEISS_PCV=1` alone now does the whole job, as
+every comment already claimed.
+
+Measured real effect now that it's genuinely reachable (dataset A, full
+day): small and mixed, not a clear win. Network fused vertical RMS
+59->57mm and SLAC v_p95 178->169mm improve; CAPO/P225/SLAC fix rates
+each drop 0.2-0.4pp while OHLN's rises 0.3pp. Left opt-in (default
+unchanged, both guards verified byte-identical) rather than graduating
+to default-on like widelane_ar/GNEISS_RECV_PCO — the effect size here
+doesn't clear that bar either way.

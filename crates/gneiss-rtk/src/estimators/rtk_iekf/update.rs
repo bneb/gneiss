@@ -48,7 +48,8 @@ pub struct DoubleDiffMeasurement {
     /// (metres): `[PCV_rov(z_sat) - PCV_rov(z_ref)] -
     /// [PCV_base(z_sat) - PCV_base(z_ref)]`. Subtracted from the carrier
     /// phase by [`pcv_corrected_cp`] before any model comparison; zero
-    /// unless receiver calibrations are loaded and `GNEISS_RECV_PCV=1`.
+    /// unless receiver calibrations are loaded (the caller's own
+    /// `GNEISS_PCV=1` opt-in via `load_receiver_pcv`).
     pub dd_pcv_m: f64,
 }
 

@@ -14,7 +14,6 @@ pub mod widelane;
 
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::OnceLock;
 
 use nalgebra::Vector3;
 
@@ -40,16 +39,6 @@ struct DdMeasurements {
     pub active_keys: Vec<DoubleDiffKey>,
 }
 
-/// Opt-in gate for the differential receiver-PCV correction: set
-/// `GNEISS_RECV_PCV=1` (exactly `1` after trimming; loading calibrations
-/// separately stays gated by `GNEISS_PCV` in the eval binaries).
-static RECV_PCV_ENABLED: OnceLock<bool> = OnceLock::new();
-
-/// Pure mapping of the `GNEISS_RECV_PCV` env value to the gate state.
-fn recv_pcv_gate_enabled(env_value: Option<&str>) -> bool {
-    env_value.is_some_and(|v| v.trim() == "1")
-}
-
 /// Track C signal-registry frequency lookup (same policy as mw.rs).
 fn track_c_freq_mod(
     c: gneiss_core::sat::Constellation,
@@ -64,13 +53,6 @@ fn track_c_freq_mod(
             if primary { 1_575_420_000.0 } else { 1_227_600_000.0 }
         }
     }
-}
-
-/// Process-wide gate state, read from the environment once.
-fn recv_pcv_enabled() -> bool {
-    *RECV_PCV_ENABLED.get_or_init(|| {
-        recv_pcv_gate_enabled(std::env::var("GNEISS_RECV_PCV").ok().as_deref())
-    })
 }
 
 /// Pure pair decision for the centered precise-clock DD correction.
@@ -724,8 +706,7 @@ impl GnssRtkIekf {
         let dd_pr = dd_pr - dd_clk_m;
         let dd_cp = dd_cp.map(|cp| cp - dd_clk_m / lambda);
 
-        let dd_pcv_m =
-            self.receiver_dd_pcv_m(sat_id, freq_band, sat_pos, ref_pos, recv_pcv_enabled());
+        let dd_pcv_m = self.receiver_dd_pcv_m(sat_id, freq_band, sat_pos, ref_pos);
         let meas = DoubleDiffMeasurement {
             key,
             dd_pr_m: dd_pr,
@@ -757,19 +738,15 @@ impl GnssRtkIekf {
     /// computed in the rover frame and reused for both stations:
     /// baseline << orbit altitude keeps station-to-station elevation
     /// differences sub-mm in PCV terms. Returns 0.0 — a no-op correction
-    /// — unless calibrations are loaded, the gate is on, and the
-    /// frequency is known.
+    /// — unless calibrations are loaded (`self.receiver_pcv.is_some()`,
+    /// the caller's own opt-in signal) and the frequency is known.
     fn receiver_dd_pcv_m(
         &self,
         sat_id: gneiss_core::sat::SatelliteId,
         freq_band: u8,
         sat_pos: Vector3<f64>,
         ref_pos: Vector3<f64>,
-        gate_enabled: bool,
     ) -> f64 {
-        if !gate_enabled {
-            return 0.0;
-        }
         let Some((rov, bas)) = &self.receiver_pcv else {
             return 0.0;
         };
@@ -1522,29 +1499,17 @@ mod tests {
         assert!(base_out.iter().filter(|(f, _)| *f).count() >= 5);
     }
 
-    // ---- GNEISS_RECV_PCV: gate parsing and correction wiring ------------
+    // ---- receiver_dd_pcv_m: correction wiring ---------------------------
 
+    /// Zero unless calibrations are loaded; otherwise equal to the raw
+    /// differential PCV at the rover-frame elevations. `self.receiver_pcv`
+    /// being `Some` IS the caller's opt-in signal — no separate env gate
+    /// (a prior GNEISS_RECV_PCV/GNEISS_PCV split silently required both
+    /// to be set for the documented "opt-in via GNEISS_PCV=1" to actually
+    /// apply anything; see docs/NETWORK_RTK_NEXT_STEPS.md). Skipped when
+    /// igs14 is absent.
     #[test]
-    fn recv_pcv_gate_parses_env_value() {
-        assert!(recv_pcv_gate_enabled(Some("1")));
-        assert!(recv_pcv_gate_enabled(Some(" 1 "))); // trimmed
-        assert!(!recv_pcv_gate_enabled(Some("0")));
-        assert!(!recv_pcv_gate_enabled(Some("")));
-        assert!(!recv_pcv_gate_enabled(Some("true")));
-        assert!(!recv_pcv_gate_enabled(None));
-    }
-
-    /// Gate/pair matrix for the differential PCV: zero unless the env
-    /// gate is on AND both calibrations are loaded; otherwise equal to
-    /// the raw differential PCV at the rover-frame elevations. Skipped
-    /// when igs14 is absent or the process already runs with
-    /// GNEISS_RECV_PCV set (the OnceLock cache is order-sensitive under
-    /// parallel tests).
-    #[test]
-    fn receiver_dd_pcv_m_requires_gate_and_loaded_pair() {
-        if std::env::var("GNEISS_RECV_PCV").is_ok() {
-            return;
-        }
+    fn receiver_dd_pcv_m_requires_loaded_pair() {
         let Ok(db) = gneiss_parsers::antex::AntexDatabase::parse("../../datasets/igs14.atx")
         else {
             return;
@@ -1563,16 +1528,13 @@ mod tests {
             prn: 3,
         };
 
-        // Gate off with calibrations loaded -> no correction.
-        eng.receiver_pcv = Some((trm.clone(), ash.clone()));
-        assert_eq!(eng.receiver_dd_pcv_m(sid, 1, sat_pos, ref_pos, false), 0.0);
-        // Gate on without calibrations -> no correction.
+        // No calibrations loaded -> no correction.
         eng.receiver_pcv = None;
-        assert_eq!(eng.receiver_dd_pcv_m(sid, 1, sat_pos, ref_pos, true), 0.0);
-        // Gate on with calibrations -> raw differential PCV (non-zero for
-        // this cross-family pair at distinct elevations).
+        assert_eq!(eng.receiver_dd_pcv_m(sid, 1, sat_pos, ref_pos), 0.0);
+        // Calibrations loaded -> raw differential PCV (non-zero for this
+        // cross-family pair at distinct elevations).
         eng.receiver_pcv = Some((trm.clone(), ash.clone()));
-        let dd = eng.receiver_dd_pcv_m(sid, 1, sat_pos, ref_pos, true);
+        let dd = eng.receiver_dd_pcv_m(sid, 1, sat_pos, ref_pos);
         let llh = gneiss_core::coords::ecef_to_llh(eng.state.pos_ecef);
         let (_, el_s) = gneiss_core::coords::az_el(llh, eng.state.pos_ecef, sat_pos);
         let (_, el_r) = gneiss_core::coords::az_el(llh, eng.state.pos_ecef, ref_pos);

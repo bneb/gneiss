@@ -246,7 +246,8 @@ fn run_pass(
     base_pos_eff: Vector3<f64>,
     receiver_pcv: Option<std::sync::Arc<ReceiverPcvPair>>,
 ) -> ([f64; 4], Vec<SmoothedEpoch>) {
-    // Receiver antenna PCV loading (gated by GNEISS_RECV_PCV=1).
+    // receiver_pcv is already Some/None per the caller's GNEISS_PCV=1 gate
+    // (load_receiver_pcv); the engine applies it whenever it's Some.
     let options = PostProcessOptions {
         enable_bidirectional: bidir,
         base_position: Some(base_pos_eff),
