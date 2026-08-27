@@ -94,7 +94,7 @@ fn build_single_smoothed_epoch(
         }
     }
 
-    let (std_e, std_n, std_u) = compute_enu_stds(pos, cov_pos);
+    let (std_e, std_n, std_u) = gneiss_core::coords::ecef_cov_to_enu_std(pos, cov_pos);
 
     SmoothedEpoch {
         time: snap.time,
@@ -109,17 +109,6 @@ fn build_single_smoothed_epoch(
         quality: snap.quality,
         n_satellites: snap.n_sats,
     }
-}
-
-fn compute_enu_stds(pos_ecef: Vector3<f64>, cov_ecef: Matrix3<f64>) -> (f64, f64, f64) {
-    let llh = gneiss_core::coords::ecef_to_llh(pos_ecef);
-    let r_enu = gneiss_core::coords::ecef_to_ned_matrix(llh);
-    let cov_enu = r_enu * cov_ecef * r_enu.transpose();
-    (
-        cov_enu[(1, 1)].max(0.0).sqrt(),
-        cov_enu[(0, 0)].max(0.0).sqrt(),
-        cov_enu[(2, 2)].max(0.0).sqrt(),
-    )
 }
 
 #[cfg(test)]

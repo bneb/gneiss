@@ -157,7 +157,7 @@ fn combine_bidirectional_epoch(
         q = 2;
     }
 
-    let (std_e, std_n, std_u) = compute_enu_stds(pos, cov);
+    let (std_e, std_n, std_u) = gneiss_core::coords::ecef_cov_to_enu_std(pos, cov);
     let vel = match (fwd.velocity_ecef, bwd.velocity_ecef) {
         (Some(vf), Some(vb)) => Some(0.5 * vf + 0.5 * vb),
         (Some(vf), None) => Some(vf),
@@ -182,7 +182,7 @@ fn combine_bidirectional_epoch(
 
 /// Helper for epochs present in only one filter direction.
 fn single_pass_epoch(fwd: &FilteredEpoch) -> SmoothedEpoch {
-    let (std_e, std_n, std_u) = compute_enu_stds(fwd.position_ecef, fwd.cov_position);
+    let (std_e, std_n, std_u) = gneiss_core::coords::ecef_cov_to_enu_std(fwd.position_ecef, fwd.cov_position);
     SmoothedEpoch {
         time: fwd.time,
         position_ecef: fwd.position_ecef,
@@ -207,18 +207,6 @@ fn fuse_covariances(fwd: &FilteredEpoch, bwd: &FilteredEpoch, q: u8) -> (Vector3
 
     let pos = cov * (inv_fwd * fwd.position_ecef + inv_bwd * bwd.position_ecef);
     (pos, cov, q)
-}
-
-/// Converts ECEF position covariance to ENU standard deviations.
-fn compute_enu_stds(pos_ecef: Vector3<f64>, cov_ecef: Matrix3<f64>) -> (f64, f64, f64) {
-    let llh = gneiss_core::coords::ecef_to_llh(pos_ecef);
-    let r_enu_ecef = gneiss_core::coords::ecef_to_ned_matrix(llh);
-    let cov_enu = r_enu_ecef * cov_ecef * r_enu_ecef.transpose();
-
-    let std_e = cov_enu[(1, 1)].max(0.0).sqrt();
-    let std_n = cov_enu[(0, 0)].max(0.0).sqrt();
-    let std_u = cov_enu[(2, 2)].max(0.0).sqrt();
-    (std_e, std_n, std_u)
 }
 
 #[cfg(test)]

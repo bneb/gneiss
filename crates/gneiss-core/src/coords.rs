@@ -248,6 +248,22 @@ pub fn enu_to_ecef(origin_ecef: Vector3<f64>, enu: Vector3<f64>) -> Vector3<f64>
     Vector3::new(dx, dy, dz)
 }
 
+/// Projects an ECEF position covariance into local East/North/Up standard
+/// deviations. Reuses the NED rotation matrix -- variance is insensitive
+/// to the Down-vs-Up sign flip, only the East/North axis order matters
+/// (index 1 = East, 0 = North in the NED convention `ecef_to_ned_matrix`
+/// returns).
+pub fn ecef_cov_to_enu_std(pos_ecef: Vector3<f64>, cov_ecef: nalgebra::Matrix3<f64>) -> (f64, f64, f64) {
+    let llh = ecef_to_llh(pos_ecef);
+    let r_ned = ecef_to_ned_matrix(llh);
+    let cov_enu = r_ned * cov_ecef * r_ned.transpose();
+    (
+        cov_enu[(1, 1)].max(0.0).sqrt(),
+        cov_enu[(0, 0)].max(0.0).sqrt(),
+        cov_enu[(2, 2)].max(0.0).sqrt(),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -275,5 +291,25 @@ mod tests {
         // Epoch mismatch
         let c5 = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, t3);
         assert_eq!(c1.ensure_aligned(&c5).unwrap_err(), "Epoch mismatch");
+    }
+
+    #[test]
+    fn ecef_cov_to_enu_std_isotropic_is_rotation_invariant() {
+        // An isotropic covariance (sigma^2 * I) is unchanged by any
+        // orthonormal rotation, so every ENU std must equal sigma exactly
+        // regardless of position -- a position-independent correctness
+        // check that doesn't require hand-computing a specific rotation.
+        let sigma = 0.5;
+        let cov = nalgebra::Matrix3::identity() * sigma * sigma;
+        for pos in [
+            llh_to_ecef(Vector3::new(0.0, 0.0, 0.0)),
+            llh_to_ecef(Vector3::new(45f64.to_radians(), 30f64.to_radians(), 100.0)),
+            llh_to_ecef(Vector3::new((-60f64).to_radians(), 170f64.to_radians(), -20.0)),
+        ] {
+            let (std_e, std_n, std_u) = ecef_cov_to_enu_std(pos, cov);
+            assert!((std_e - sigma).abs() < 1e-9, "east std: {std_e}");
+            assert!((std_n - sigma).abs() < 1e-9, "north std: {std_n}");
+            assert!((std_u - sigma).abs() < 1e-9, "up std: {std_u}");
+        }
     }
 }
