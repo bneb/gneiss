@@ -210,11 +210,13 @@ mod tests {
         -8.82, -7.97, -6.45, -4.33, -1.74, 1.26, 4.82, 9.34, 15.24,
     ];
 
-    fn load_db() -> AntexDatabase {
-        let Some(path) = igs14_path() else {
-            panic!("igs14.atx not cached locally under datasets/");
-        };
-        AntexDatabase::parse(path).expect("igs14.atx must parse")
+    /// `None` when igs14.atx isn't cached locally -- callers skip (matches
+    /// `igs14_path`'s own documented contract, which this used to violate
+    /// by panicking instead: every real-data test here hard-failed on a
+    /// fresh checkout with no `datasets/` present, e.g. a CI runner).
+    fn load_db() -> Option<AntexDatabase> {
+        let path = igs14_path()?;
+        Some(AntexDatabase::parse(path).expect("igs14.atx must parse"))
     }
 
     fn assert_near(actual: f64, expected: f64, tol: f64, what: &str) {
@@ -280,7 +282,7 @@ mod tests {
 
     #[test]
     fn loads_ash701945b_scit_with_ground_truth() {
-        let db = load_db();
+        let Some(db) = load_db() else { return };
         let pcv = ReceiverPcv::from_antex(&db, "ASH701945B_M", "SCIT")
             .expect("ASH701945B_M SCIT must exist in igs14.atx");
         assert_eq!(pcv.ant_type, "ASH701945B_M");
@@ -298,7 +300,7 @@ mod tests {
 
     #[test]
     fn loads_leiar20_leim_with_ground_truth() {
-        let db = load_db();
+        let Some(db) = load_db() else { return };
         let pcv = ReceiverPcv::from_antex(&db, "LEIAR20", "LEIM")
             .expect("LEIAR20 LEIM must exist in igs14.atx");
         assert_eq!(pcv.ant_type, "LEIAR20");
@@ -316,7 +318,7 @@ mod tests {
 
     #[test]
     fn loads_trm59800_scit_variants_with_ground_truth() {
-        let db = load_db();
+        let Some(db) = load_db() else { return };
         for family in ["TRM59800.00", "TRM59800.80"] {
             let pcv = ReceiverPcv::from_antex(&db, family, "SCIT")
                 .unwrap_or_else(|| panic!("{family} SCIT must exist in igs14.atx"));
@@ -336,7 +338,7 @@ mod tests {
 
     #[test]
     fn interpolation_is_exact_at_every_grid_node() {
-        let db = load_db();
+        let Some(db) = load_db() else { return };
         let cases = [
             ("ASH701945B_M", "SCIT"), ("LEIAR20", "LEIM"),
             ("TRM59800.00", "SCIT"), ("TRM59800.80", "SCIT"),
@@ -367,7 +369,7 @@ mod tests {
 
     #[test]
     fn fractional_interpolation_on_real_nodes_matches_hand_calc() {
-        let db = load_db();
+        let Some(db) = load_db() else { return };
         let leiar = ReceiverPcv::from_antex(&db, "LEIAR20", "LEIM").expect("LEIAR20");
         // Between -2.26 mm (z=30) and -2.90 mm (z=35): midpoint -2.58 mm.
         assert_near(leiar.interpolate(32.5), -2.58, TOL, "LEIAR20 @32.5 deg");
@@ -384,7 +386,7 @@ mod tests {
         assert_eq!(pcv.interpolate(-40.0), 1.0, "far below clamps to node 0");
         assert_eq!(pcv.interpolate(9.999), 1.0, "just below start clamps");
         assert_eq!(pcv.interpolate(1234.0), -5.0, "far above clamps to last");
-        let db = load_db();
+        let Some(db) = load_db() else { return };
         let ash = ReceiverPcv::from_antex(&db, "ASH701945B_M", "SCIT").expect("ASH");
         assert_eq!(ash.interpolate(-1.0), 0.00, "below ASH grid");
         assert_eq!(ash.interpolate(85.0), 3.03, "ASH grid ends at 80 deg");
@@ -403,7 +405,7 @@ mod tests {
 
     #[test]
     fn dd_correction_same_type_is_zero() {
-        let db = load_db();
+        let Some(db) = load_db() else { return };
         let rov = ReceiverPcv::from_antex(&db, "TRM59800.80", "SCIT").expect("rover");
         let bas = ReceiverPcv::from_antex(&db, "TRM59800.80", "SCIT").expect("base");
         // Both stations observe the SAME satellite pair, so the sat/ref
@@ -432,7 +434,7 @@ mod tests {
 
     #[test]
     fn dd_correction_cross_type_hand_calculated() {
-        let db = load_db();
+        let Some(db) = load_db() else { return };
         let leiar = ReceiverPcv::from_antex(&db, "LEIAR20", "LEIM").expect("LEIAR20");
         let ash = ReceiverPcv::from_antex(&db, "ASH701945B_M", "SCIT").expect("ASH");
         // All four angles sit on 5-deg nodes, so this is pure arithmetic:
@@ -463,7 +465,7 @@ mod tests {
 
     #[test]
     fn missing_antenna_returns_none() {
-        let db = load_db();
+        let Some(db) = load_db() else { return };
         assert!(
             ReceiverPcv::from_antex(&db, "NO_SUCH_ANTENNA_XY", "NONE").is_none(),
             "unknown family must return None"
@@ -480,7 +482,7 @@ mod tests {
 
     #[test]
     fn none_radome_and_single_token_entries_resolve() {
-        let db = load_db();
+        let Some(db) = load_db() else { return };
         let none_entry =
             ReceiverPcv::from_antex(&db, "ASH701945B_M", "NONE").expect("NONE entry");
         assert_eq!(none_entry.radome, "NONE");
