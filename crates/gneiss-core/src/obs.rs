@@ -175,10 +175,76 @@ pub struct EpochObs {
     pub satellites: Vec<SatObs>,
 }
 
+/// Retain only satellites whose constellation appears in `allowed`
+/// (single-letter codes: `G`=GPS, `R`=GLONASS, `E`=Galileo, `C`=BeiDou).
+/// Shared by constellation-mix experiments and CLI `--systems` filtering
+/// so both apply the exact same set semantics.
+pub fn filter_constellations(epochs: &mut [EpochObs], allowed: &str) {
+    let keep = |c: crate::sat::Constellation| match c {
+        crate::sat::Constellation::Gps => allowed.contains('G'),
+        crate::sat::Constellation::Glonass => allowed.contains('R'),
+        crate::sat::Constellation::Galileo => allowed.contains('E'),
+        crate::sat::Constellation::Beidou => allowed.contains('C'),
+        _ => false,
+    };
+    for e in epochs.iter_mut() {
+        e.satellites.retain(|s| keep(s.sat.constellation));
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::sat::{Constellation, SatelliteId};
+    use crate::time::GpsTime;
     use alloc::string::ToString;
+    use alloc::vec;
+
+    fn epoch_with(constellations: &[Constellation]) -> EpochObs {
+        EpochObs {
+            time: GpsTime::new(2000, 0.0),
+            satellites: constellations
+                .iter()
+                .enumerate()
+                .map(|(i, &constellation)| SatObs {
+                    sat: SatelliteId { constellation, prn: i as u8 + 1 },
+                    observations: Vec::new(),
+                })
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn filter_constellations_keeps_only_allowed_letters() {
+        let mut epochs = vec![epoch_with(&[
+            Constellation::Gps,
+            Constellation::Glonass,
+            Constellation::Galileo,
+            Constellation::Beidou,
+        ])];
+        filter_constellations(&mut epochs, "GE");
+        let kept: alloc::vec::Vec<Constellation> =
+            epochs[0].satellites.iter().map(|s| s.sat.constellation).collect();
+        assert_eq!(kept, alloc::vec![Constellation::Gps, Constellation::Galileo]);
+    }
+
+    #[test]
+    fn filter_constellations_empty_allowed_drops_everything() {
+        let mut epochs = vec![epoch_with(&[Constellation::Gps, Constellation::Glonass])];
+        filter_constellations(&mut epochs, "");
+        assert!(epochs[0].satellites.is_empty());
+    }
+
+    #[test]
+    fn filter_constellations_applies_across_all_epochs() {
+        let mut epochs = vec![
+            epoch_with(&[Constellation::Gps, Constellation::Glonass]),
+            epoch_with(&[Constellation::Glonass, Constellation::Galileo]),
+        ];
+        filter_constellations(&mut epochs, "G");
+        assert_eq!(epochs[0].satellites.len(), 1);
+        assert_eq!(epochs[1].satellites.len(), 0);
+    }
 
     #[test]
     fn test_obs_code_parsing() {

@@ -69,12 +69,9 @@ async fn main() {
         } => {
             if let Err(e) = process::run_process(
                 rover, base, nav, output, config,
-                enable_backward_smoothing, mode,
-                None, None, max_epochs,
-                "0,0,0".into(), false,
-                None, None, None, None,
+                enable_backward_smoothing, mode, max_epochs,
                 base_position, systems, sp3, clk,
-                antex, None, false, None,
+                antex,
             ).await {
                 eprintln!("Error: {}", e);
                 std::process::exit(1);

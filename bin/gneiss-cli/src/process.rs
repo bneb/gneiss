@@ -6,17 +6,29 @@ type ObsEpochsWithPos = (Option<Vec<gneiss_core::obs::EpochObs>>, Option<[f64; 3
 #[allow(clippy::too_many_arguments)]
 pub async fn run_process(
     rover: String, base: Option<String>, nav: Option<String>, output: String, config: Option<String>,
-    _enable_backward_smoothing: bool, mode: Option<String>,
-    _lambda_ratio: Option<f64>, _lambda_subset: Option<usize>, max_epochs: Option<usize>,
-    _lever_arm: String, _calibrate_imu: bool,
-    _raim_outlier_m: Option<f64>, _chi_square_pr: Option<f64>, _chi_square_cp: Option<f64>, _nominal_snr: Option<f64>,
-    _base_position: Option<String>, _systems: Option<String>, _sp3: Option<String>, _clk: Option<String>,
-    antex: Option<String>, _clock_jump_threshold: Option<f64>, _disable_doppler: bool, _bia: Option<String>
+    _enable_backward_smoothing: bool, mode: Option<String>, max_epochs: Option<usize>,
+    _base_position: Option<String>, systems: Option<String>, _sp3: Option<String>, _clk: Option<String>,
+    antex: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     info!("Starting SWFG Processing Pipeline...");
 
-    let (rover_rinex_epochs, _rover_approx_pos) = load_rover_epochs(&rover)?;
-    let (base_rinex_epochs, _approx_base_pos) = load_base_epochs(&base)?;
+    if _sp3.is_some() || _clk.is_some() {
+        return Err("--sp3/--clk are not yet wired into gneiss-cli: precise ephemeris \
+            requires satellite PCO and precise clock together or it measurably degrades \
+            accuracy (see docs/NETWORK_RTK_NEXT_STEPS.md, \"Precise ephemeris\"); refusing \
+            rather than silently running broadcast-only".into());
+    }
+
+    let (mut rover_rinex_epochs, _rover_approx_pos) = load_rover_epochs(&rover)?;
+    let (mut base_rinex_epochs, _approx_base_pos) = load_base_epochs(&base)?;
+    if let Some(systems) = systems.as_deref() {
+        if let Some(epochs) = rover_rinex_epochs.as_mut() {
+            gneiss_core::obs::filter_constellations(epochs, systems);
+        }
+        if let Some(epochs) = base_rinex_epochs.as_mut() {
+            gneiss_core::obs::filter_constellations(epochs, systems);
+        }
+    }
 
     let swfg_config = build_swfg_config(config, mode)?;
 

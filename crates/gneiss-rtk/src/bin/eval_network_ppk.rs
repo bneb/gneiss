@@ -526,28 +526,13 @@ fn load_dataset(dir: &Path, rover_file: &str, truth_file: &str, nav_file: &str) 
     // System filter for controlled experiments: GNEISS_SYSTEMS is a set of
     // constellation letters (e.g. "G" or "GE"). Default G preserves the
     // historical GPS-only behaviour on every dataset.
-    let allowed: Vec<char> = std::env::var("GNEISS_SYSTEMS")
-        .unwrap_or_else(|_| "G".into())
-        .chars()
-        .collect();
-    let keep = |c: gneiss_core::sat::Constellation| match c {
-        gneiss_core::sat::Constellation::Gps => allowed.contains(&'G'),
-        gneiss_core::sat::Constellation::Glonass => allowed.contains(&'R'),
-        gneiss_core::sat::Constellation::Galileo => allowed.contains(&'E'),
-        gneiss_core::sat::Constellation::Beidou => allowed.contains(&'C'),
-        _ => false,
-    };
+    let allowed = std::env::var("GNEISS_SYSTEMS").unwrap_or_else(|_| "G".into());
     let n_before: usize = rover_epochs.iter().map(|e| e.satellites.len()).sum();
-    let mut rover_epochs: Vec<EpochObs> = rover_epochs
-        .into_iter()
-        .map(|mut e| {
-            e.satellites.retain(|s| keep(s.sat.constellation));
-            e
-        })
-        .collect();
+    let mut rover_epochs = rover_epochs;
+    gneiss_core::obs::filter_constellations(&mut rover_epochs, &allowed);
     let n_after: usize = rover_epochs.iter().map(|e| e.satellites.len()).sum();
     if n_before != n_after {
-        println!("SYSTEM FILTER: {}/{} rover satellites kept ({})", n_after, n_before, allowed.iter().collect::<String>());
+        println!("SYSTEM FILTER: {}/{} rover satellites kept ({})", n_after, n_before, allowed);
     }
     // Carrier-smoothed-code (Hatch) filter, opt-in via GNEISS_HATCH=N.
     if let Ok(win) = std::env::var("GNEISS_HATCH") {
