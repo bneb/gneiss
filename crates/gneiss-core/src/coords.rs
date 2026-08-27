@@ -248,6 +248,16 @@ pub fn enu_to_ecef(origin_ecef: Vector3<f64>, enu: Vector3<f64>) -> Vector3<f64>
     Vector3::new(dx, dy, dz)
 }
 
+/// Converts an ECEF displacement from `ref_ecef` into an ENU (East, North,
+/// Up) offset. Takes the reference point's already-computed LLH rather
+/// than recomputing it internally, since callers typically hold a fixed
+/// reference station position and call this once per epoch.
+pub fn ecef_delta_to_enu(target_ecef: Vector3<f64>, ref_ecef: Vector3<f64>, ref_llh: Vector3<f64>) -> Vector3<f64> {
+    let r_ned = ecef_to_ned_matrix(ref_llh);
+    let d = r_ned * (target_ecef - ref_ecef);
+    Vector3::new(d.y, d.x, -d.z) // NED (N, E, D) -> ENU (E, N, U)
+}
+
 /// Projects an ECEF position covariance into local East/North/Up standard
 /// deviations. Reuses the NED rotation matrix -- variance is insensitive
 /// to the Down-vs-Up sign flip, only the East/North axis order matters
@@ -291,6 +301,19 @@ mod tests {
         // Epoch mismatch
         let c5 = Coordinate::new(Vector3::zeros(), Datum::WGS84, Frame::ECEF, t3);
         assert_eq!(c1.ensure_aligned(&c5).unwrap_err(), "Epoch mismatch");
+    }
+
+    #[test]
+    fn ecef_delta_to_enu_is_enu_to_ecef_inverse() {
+        // enu_to_ecef and ecef_delta_to_enu should round-trip exactly:
+        // pick an origin, push an ENU offset out to ECEF, then pull it
+        // back and recover the same offset.
+        let origin = llh_to_ecef(Vector3::new(37f64.to_radians(), -122f64.to_radians(), 50.0));
+        let origin_llh = ecef_to_llh(origin);
+        let enu_in = Vector3::new(12.3, -45.6, 7.8);
+        let target = origin + enu_to_ecef(origin, enu_in);
+        let enu_out = ecef_delta_to_enu(target, origin, origin_llh);
+        assert!((enu_in - enu_out).norm() < 1e-6, "round-trip mismatch: {enu_out:?}");
     }
 
     #[test]

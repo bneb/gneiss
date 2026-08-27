@@ -14,25 +14,6 @@ use gneiss_rtk::swfg::config::EngineConfig;
 use gneiss_rtk::swfg::engine::SwfgEngine;
 use gneiss_rtk::swfg::smoothing::{BatchFactorGraph, BatchSmoothingConfig};
 
-/// Helper to compute ENU offset from target ECEF relative to reference ECEF/LLH.
-fn ecef_to_enu(target_ecef: Vector3<f64>, ref_ecef: Vector3<f64>, ref_llh: Vector3<f64>) -> Vector3<f64> {
-    let lat = ref_llh.x;
-    let lon = ref_llh.y;
-    let sin_lat = lat.sin();
-    let cos_lat = lat.cos();
-    let sin_lon = lon.sin();
-    let cos_lon = lon.cos();
-
-    let dx = target_ecef.x - ref_ecef.x;
-    let dy = target_ecef.y - ref_ecef.y;
-    let dz = target_ecef.z - ref_ecef.z;
-
-    let e = -sin_lon * dx + cos_lon * dy;
-    let n = -sin_lat * cos_lon * dx - sin_lat * sin_lon * dy + cos_lat * dz;
-    let u = cos_lat * cos_lon * dx + cos_lat * sin_lon * dy + sin_lat * dz;
-    Vector3::new(e, n, u)
-}
-
 /// Simple parser for RTKLIB style .pos ground truth files.
 fn load_ground_truth_pos(path: &Path) -> std::collections::BTreeMap<u32, Vector3<f64>> {
     let mut truth = std::collections::BTreeMap::new();
@@ -181,7 +162,7 @@ fn evaluate_dataset(name: &str, nav_path: &Path, obs_path: &Path, base_obs_path:
                 
                 if let Some(&ref_ecef) = gt.get(&tow) {
                     let ref_llh = ecef_to_llh(ref_ecef);
-                    let enu = ecef_to_enu(sol.position_ecef, ref_ecef, ref_llh);
+                    let enu = gneiss_core::coords::ecef_delta_to_enu(sol.position_ecef, ref_ecef, ref_llh);
                     let horiz_err = (enu.x * enu.x + enu.y * enu.y).sqrt();
                     let err_3d = enu.norm();
                     horizontal_errors.push(horiz_err);
@@ -251,7 +232,7 @@ fn evaluate_dataset(name: &str, nav_path: &Path, obs_path: &Path, base_obs_path:
                 let tow = time.tow.floor() as u32;
                 if let Some(&ref_ecef) = gt.get(&tow) {
                     let ref_llh = ecef_to_llh(ref_ecef);
-                    let enu = ecef_to_enu(pos, ref_ecef, ref_llh);
+                    let enu = gneiss_core::coords::ecef_delta_to_enu(pos, ref_ecef, ref_llh);
                     let horiz_err = (enu.x * enu.x + enu.y * enu.y).sqrt();
                     batch_h_errors.push(horiz_err);
                 }

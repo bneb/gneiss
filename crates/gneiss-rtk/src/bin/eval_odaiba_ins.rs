@@ -39,25 +39,6 @@ fn parse_imu_csv(path: &Path) -> Vec<ImuSample> {
     samples
 }
 
-fn ecef_to_enu(target_ecef: Vector3<f64>, ref_ecef: Vector3<f64>, ref_llh: Vector3<f64>) -> Vector3<f64> {
-    let lat = ref_llh.x;
-    let lon = ref_llh.y;
-    let sin_lat = lat.sin();
-    let cos_lat = lat.cos();
-    let sin_lon = lon.sin();
-    let cos_lon = lon.cos();
-
-    let dx = target_ecef.x - ref_ecef.x;
-    let dy = target_ecef.y - ref_ecef.y;
-    let dz = target_ecef.z - ref_ecef.z;
-
-    let e = -sin_lon * dx + cos_lon * dy;
-    let n = -sin_lat * cos_lon * dx - sin_lat * sin_lon * dy + cos_lat * dz;
-    let u = cos_lat * cos_lon * dx + cos_lat * sin_lon * dy + sin_lat * dz;
-
-    Vector3::new(e, n, u)
-}
-
 fn main() {
     tracing_subscriber::fmt()
         .with_env_filter("warn")
@@ -280,16 +261,16 @@ fn main() {
             let truth_llh = gneiss_core::coords::ecef_to_llh(truth_pos);
 
             let fwd_err = fwd_opt.map(|(p, _)| {
-                let enu = ecef_to_enu(*p, truth_pos, truth_llh);
+                let enu = gneiss_core::coords::ecef_delta_to_enu(*p, truth_pos, truth_llh);
                 (enu.x * enu.x + enu.y * enu.y).sqrt()
             }).unwrap_or(999.9);
 
             let bwd_err = bwd_opt.map(|(p, _)| {
-                let enu = ecef_to_enu(*p, truth_pos, truth_llh);
+                let enu = gneiss_core::coords::ecef_delta_to_enu(*p, truth_pos, truth_llh);
                 (enu.x * enu.x + enu.y * enu.y).sqrt()
             }).unwrap_or(999.9);
 
-            let enu_smooth = ecef_to_enu(final_pos, truth_pos, truth_llh);
+            let enu_smooth = gneiss_core::coords::ecef_delta_to_enu(final_pos, truth_pos, truth_llh);
             let h_err = (enu_smooth.x * enu_smooth.x + enu_smooth.y * enu_smooth.y).sqrt();
             let err_3d = enu_smooth.norm();
 

@@ -17,17 +17,6 @@ use nalgebra::Vector3;
 use gneiss_rtk::swfg::kalman_smoother::{GnssKalmanSmoother, ProcessNoise};
 use gneiss_rtk::swfg::pipeline::{MeasurementPipeline, ReceiverState};
 
-fn ecef_to_enu(target: Vector3<f64>, ref_ecef: Vector3<f64>, ref_llh: Vector3<f64>) -> Vector3<f64> {
-    let (slat, clat) = (ref_llh.x.sin(), ref_llh.x.cos());
-    let (slon, clon) = (ref_llh.y.sin(), ref_llh.y.cos());
-    let d = target - ref_ecef;
-    Vector3::new(
-        -slon * d.x + clon * d.y,
-        -slat * clon * d.x - slat * slon * d.y + clat * d.z,
-        clat * clon * d.x + clat * slon * d.y + slat * d.z,
-    )
-}
-
 fn main() {
     tracing_subscriber::fmt()
         .with_env_filter("warn")
@@ -191,7 +180,7 @@ fn main() {
             let truth_llh = gneiss_core::coords::ecef_to_llh(truth_pos);
 
             // Smoothed error
-            let enu_s = ecef_to_enu(state.position_ecef, truth_pos, truth_llh);
+            let enu_s = gneiss_core::coords::ecef_delta_to_enu(state.position_ecef, truth_pos, truth_llh);
             let h_s = (enu_s.x * enu_s.x + enu_s.y * enu_s.y).sqrt();
             h_errors_smooth.push(h_s);
             errors_3d_smooth.push(enu_s.norm());
@@ -202,7 +191,7 @@ fn main() {
                 kf.history[i].x_updated[1],
                 kf.history[i].x_updated[2],
             );
-            let enu_f = ecef_to_enu(fwd_pos, truth_pos, truth_llh);
+            let enu_f = gneiss_core::coords::ecef_delta_to_enu(fwd_pos, truth_pos, truth_llh);
             let h_f = (enu_f.x * enu_f.x + enu_f.y * enu_f.y).sqrt();
             h_errors_fwd.push(h_f);
 
