@@ -713,6 +713,39 @@ Suspects ranked (for future investigation):
 Branch exp/glonass-icb retains partial WIP (uncommitted); main tree
 untouched. GLONASS stays gated OFF — no regression risk.
 
+**2026-08-26 re-check: the catastrophic symptom above does not currently
+reproduce.** Checked all three ranked suspects and the headline symptom
+against current HEAD before touching the ICB branch's WIP:
+
+- Suspect 1 (wrong channel lookup): ruled out. A dedicated diagnostic
+  (`crates/gneiss-parsers/examples/glo_k_check.rs`, part of the
+  exp/glonass-icb WIP) against the real multi-GNSS nav file shows 23
+  GLONASS slots with correct, ICD-range k-numbers (-7..+6) in the right
+  antipodal-pair pattern (R01/R05 both k=+1, R02/R06 both k=-4, etc.) —
+  `glo_freq_num` is reading real, sane values.
+- Suspect 3 (sign convention): ruled out by inspection —
+  `FREQ_GLO_L1_DELTA = +0.5625e6`, and higher k correctly produces higher
+  frequency, matching the ICD and the independent diagnostic's own
+  from-scratch calculation.
+- Suspect 2 (PZ-90/GPST time handling): not checked (no fast way to
+  verify without deeper instrumentation).
+- Headline symptom: `GNEISS_GLONASS=1` on the current multi2025 dataset
+  (GER vs GE, same day) produces **zero** `slip-gate: re-seeded` events
+  and a small, non-catastrophic effect — P181/P222 unchanged, P225 fix
+  rate 73.4% -> 70.2%, network fused 97.5% -> 97.3%. This matches the
+  milder, already-documented "FDMA plumbing landed" finding below (code
+  ICBs leak via float seeding, phase ambiguities mostly absorb the rest),
+  not the catastrophic every-epoch mismatch that motivated this branch.
+
+Read this as "the problem statement is stale," not "the bug is fixed" —
+the exp/glonass-icb branch was likely tested on a different day/dataset/
+commit where the mismatch was real. Before resuming or porting forward
+its well-engineered slope-based ICB model (`glo_icb.rs`: RTKLIB
+`glomodear=2` parity, correct cross-wavelength DD phase scaling, 4 green
+tests), re-establish that there's still a live problem to solve on
+*current* HEAD with the *current* dataset, using the same GNEISS_GLONASS
+toggle path above — don't assume the branch's premise still holds.
+
 ## Five-track fan-out consolidated results (all independently verified)
 
 | track | verdict | landed | key evidence |
