@@ -70,7 +70,6 @@ pub fn build_undifferenced_factors(
     epoch: u32,
     pose_id: VariableId,
     zwd_id: Option<VariableId>,
-    ifb_id: Option<VariableId>,
 ) {
     for obs in corrected {
         let clock_id = solver
@@ -88,7 +87,15 @@ pub fn build_undifferenced_factors(
             })
             .map(|(id, _)| *id);
 
-        let var_ifb = if obs.constellation_id == 1 { ifb_id } else { None };
+        // Lazy find-or-create: a GLONASS observation reaching this point
+        // has already survived ephemeris matching, so the variable this
+        // returns is guaranteed to get a factor below. See
+        // SlidingWindowSolver::ensure_ifb_glonass.
+        let var_ifb = if obs.constellation_id == 1 {
+            Some(solver.ensure_ifb_glonass())
+        } else {
+            None
+        };
         let pr_factor = build_pseudorange_factor(
             obs, epoch, pose_id, clock_id, zwd_id, var_ifb,
         );

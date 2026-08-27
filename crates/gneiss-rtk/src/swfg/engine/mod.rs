@@ -396,11 +396,12 @@ impl SwfgEngine {
             );
             Ok(records)
         } else {
-            let ifb_id = self.solver.graph.variables.iter()
-                .find(|(_, n)| matches!(n.kind, VariableKind::IfbGlonass))
-                .map(|(id, _)| *id);
+            if std::env::var("GNEISS_SWFG_DEBUG").is_ok() {
+                let glo_in_corrected = corrected.iter().filter(|o| o.constellation_id == 1).count();
+                eprintln!("SWFG-UNDIFF epoch={epoch} corrected_total={} glo_in_corrected={glo_in_corrected}", corrected.len());
+            }
             builder::build_undifferenced_factors(
-                &mut self.solver, corrected, epoch, pose_id, zwd_id, ifb_id,
+                &mut self.solver, corrected, epoch, pose_id, zwd_id,
             );
             Ok(Vec::new())
         }
@@ -552,6 +553,44 @@ mod tests {
         let sol = engine.process_epoch(&rover).unwrap();
         assert!(sol.n_satellites >= 4);
         assert!(sol.position_ecef.norm() > 1e6);
+    }
+
+    /// Regression test for the IfbGlonass orphan-variable bug
+    /// (docs/SOLVER_MODE_MATRIX.md): a GLONASS satellite tracked in the
+    /// observation file with NO matching ephemeris (missing/partial nav
+    /// data, e.g. a GPS-only broadcast file against multi-GNSS
+    /// observations) must not crash rover-only/PPP processing. Before the
+    /// fix, the IfbGlonass variable was created from raw satellite
+    /// tracking regardless of whether the satellite ever reached a
+    /// processed observation, so it got zero factors and every solve in
+    /// the session failed with OrphanVariable, forever.
+    #[test]
+    fn engine_processes_epoch_with_untracked_glonass_satellite() {
+        let time = GpsTime::new(2200, 100.0);
+        // Only GPS ephemerides -- deliberately no GLONASS entry, so the
+        // GLONASS satellite below cannot survive ephemeris matching.
+        let ephs: Vec<Ephemeris> = (1..=20).map(|prn| {
+            let m0 = (prn as f64 - 1.0) * std::f64::consts::TAU / 20.0;
+            make_gps_eph(SatelliteId { constellation: Constellation::Gps, prn }, time, m0)
+        }).collect();
+
+        let r = gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M;
+        let config = EngineConfig::Spp(SppConfig { initial_position: Some([r, 0.0, 0.0]), ..SppConfig::default() });
+        let mut engine = SwfgEngine::new(&config, ephs);
+
+        let mut rover = make_epoch(time, 16);
+        use gneiss_core::obs::{ObsCode, ObsType, Observation, SignalCode};
+        rover.satellites.push(gneiss_core::obs::SatObs {
+            sat: SatelliteId { constellation: Constellation::Glonass, prn: 1 },
+            observations: vec![Observation {
+                code: ObsCode { obs_type: ObsType::Pseudorange, signal: SignalCode { freq_band: 1, attribute: 'C' } },
+                value: 20_000_100.0,
+                lock_time: None, lli: None,
+            }],
+        });
+
+        let sol = engine.process_epoch(&rover);
+        assert!(sol.is_ok(), "untracked-ephemeris GLONASS satellite must not break the solve: {sol:?}");
     }
 
     #[test]

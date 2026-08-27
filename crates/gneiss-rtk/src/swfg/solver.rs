@@ -136,13 +136,26 @@ impl SlidingWindowSolver {
             self.graph.add_factor(Box::new(orient_prior));
         }
 
-        // GLONASS IFB (one per session if GLONASS present, not needed in DD mode)
-        if !is_dd_mode && epoch == 0 && _constellations.contains(&1) {
-            let ifb_id = self.graph.add_variable(VariableKind::IfbGlonass);
-            vars.push(ifb_id);
-        }
-
         vars
+    }
+
+    /// Lazily find-or-create the session's single GLONASS inter-frequency-
+    /// bias variable. Deliberately NOT created ahead of time from raw
+    /// satellite tracking (that was the bug: a GLONASS satellite can be
+    /// tracked in the observation file with no matching ephemeris —
+    /// missing/partial nav data — never survive to a processed
+    /// observation, and never get a factor, leaving a pre-created
+    /// variable permanently orphaned and every subsequent solve failing).
+    /// Call this only where a factor referencing the result is about to
+    /// be built, mirroring [`Self::ensure_ambiguity`]'s pattern: existence
+    /// and factor coverage can then never disagree.
+    pub fn ensure_ifb_glonass(&mut self) -> VariableId {
+        for node in self.graph.variables.values() {
+            if matches!(node.kind, VariableKind::IfbGlonass) {
+                return node.id;
+            }
+        }
+        self.graph.add_variable(VariableKind::IfbGlonass)
     }
 
     /// Create an ambiguity variable for a satellite-frequency pair.
