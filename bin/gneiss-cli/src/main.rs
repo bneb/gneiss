@@ -25,8 +25,10 @@ enum Commands {
         output: String,
         #[arg(long, help = "Path to engine configuration file (.json)")]
         config: Option<String>,
-        #[arg(long, help = "Enable backward smoothing")]
-        enable_backward_smoothing: bool,
+        #[arg(long, help = "Single forward-only pass (SWFG, no ambiguity resolution). \
+            Much faster, much less accurate -- typically 5-10x worse -- than the default. \
+            Use only when you specifically need a quick look or true single-pass behavior.")]
+        single_pass: bool,
         #[arg(long, help = "Engine mode (spp, rtk, ppp)")]
         mode: Option<String>,
         #[arg(long, help = "Maximum epochs to process")]
@@ -64,12 +66,12 @@ async fn main() {
     let cli = Cli::parse();
     match cli.command {
         Commands::Process {
-            rover, base, nav, output, config, enable_backward_smoothing, mode,
+            rover, base, nav, output, config, single_pass, mode,
             max_epochs, systems, sp3, clk, base_position, antex,
         } => {
             if let Err(e) = process::run_process(
                 rover, base, nav, output, config,
-                enable_backward_smoothing, mode, max_epochs,
+                !single_pass, mode, max_epochs,
                 base_position, systems, sp3, clk,
                 antex,
             ).await {

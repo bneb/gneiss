@@ -10,8 +10,6 @@ pub async fn run_process(
     _base_position: Option<String>, systems: Option<String>, _sp3: Option<String>, _clk: Option<String>,
     antex: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    info!("Starting SWFG Processing Pipeline...");
-
     if _sp3.is_some() || _clk.is_some() {
         return Err("--sp3/--clk are not yet wired into gneiss-cli: precise ephemeris \
             requires satellite PCO and precise clock together or it measurably degrades \
@@ -93,6 +91,9 @@ pub async fn run_process(
             trajectory.push((ep.time.week as u16, ep.time.tow, ep.position_ecef, ep.quality));
         }
     } else {
+        tracing::warn!("--single-pass: forward-only SWFG, no ambiguity resolution. \
+            Typically 5-10x less accurate than the default 4-pass pipeline. \
+            Drop --single-pass unless you specifically need it.");
         for epoch in selected_rover {
             let base_opt = base_rinex_epochs.as_ref().and_then(|b_epochs| {
                 b_epochs.iter().min_by(|a, b|
@@ -192,7 +193,7 @@ async fn write_results(
         let line = format!("{} {:.3} {:.4} {:.4} {:.4} {}\n", week, tow, pos.x, pos.y, pos.z, q);
         file.write_all(line.as_bytes()).await?;
     }
-    info!("Wrote SWFG result ({} epochs processed) to {}", n_processed, output);
+    info!("Wrote result ({} epochs processed) to {}", n_processed, output);
     Ok(())
 }
 
