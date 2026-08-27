@@ -975,3 +975,28 @@ Two asymmetries found but deliberately NOT unified:
 Recommend addressing both together in one round, specifically because
 fixing them requires regenerating the walkthrough reference either way
 -- no reason to pay that cost twice.
+
+## Remaining Pattern-1 env vars checked: no drift bug, left as-is
+
+The three env-var toggles not covered by the `configure_iekf` sweep --
+`GNEISS_STRICT_VETO` (widelane.rs), `GNEISS_AR_GATE` and `GNEISS_IF_VETO`
+(rtk_iekf/mod.rs) -- were checked against the same forward/backward-drift
+question. All three read `std::env::var` from code paths already shared
+between passes rather than per-pass setup:
+- `GNEISS_AR_GATE` is read once, inside `GnssRtkIekf::new()` itself.
+  Both passes construct through the same `configure_iekf` -> `new()`
+  chain, so there is only one read site, not two that could disagree.
+- `GNEISS_STRICT_VETO` and `GNEISS_IF_VETO` are read per-call inside
+  `far_matches_widelanes` and the post-fix IF-residual screen, both
+  reached only through `process_epoch`, which forward and backward
+  share verbatim (same method, same struct).
+
+No fix needed -- the bug class that motivated the `configure_iekf`
+extraction requires two independent setup call sites that can drift;
+these have exactly one. They're still "config not in the config"
+(invisible from `PostProcessOptions`, no CLI flag) but promoting
+explicitly-experimental, off-by-default AR-quality research knobs
+(`GNEISS_IF_VETO`'s own comment: "Experimental: post-fix iono-free
+residual screen") to first-class surfaced config isn't warranted
+without a concrete caller who needs to set them -- that would be
+speculative surface area, not a bug fix.
