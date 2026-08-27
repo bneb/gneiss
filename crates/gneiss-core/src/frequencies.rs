@@ -294,6 +294,23 @@ pub fn signal_for_band(c: crate::sat::Constellation, band: u8) -> Option<Signal>
     }
 }
 
+/// Frequency for a constellation's band through the Track C registry
+/// (`signal_for_band` + `frequency_for`), falling back to the legacy
+/// per-band table (`crate::signal::get_frequency`) for the
+/// constellation/band combinations `signal_for_band` doesn't cover yet.
+/// See this module's doc comment: both paths must agree wherever they
+/// overlap, so the fallback is deliberate, not a workaround to remove.
+pub fn track_c_frequency(c: Constellation, band: u8, glo_k: i8) -> f64 {
+    match signal_for_band(c, band) {
+        Some(sig) => frequency_for(c, sig, glo_k),
+        None => crate::signal::get_frequency(
+            crate::sat::SatelliteId { constellation: c, prn: 0 },
+            band,
+            glo_k,
+        ),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
