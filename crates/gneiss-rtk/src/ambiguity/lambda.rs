@@ -1,4 +1,4 @@
-use nalgebra::{DMatrix, DVector};
+use nalgebra::{DMatrix, DVector, SymmetricEigen};
 
 #[derive(Debug)]
 pub struct LdltResult {
@@ -29,7 +29,7 @@ pub struct LambdaResult {
 
 /// Resolves integer ambiguities using the LAMBDA method (Decorrelation + Search).
 pub fn resolve_lambda(a: &DVector<f64>, q: &DMatrix<f64>) -> Result<LambdaResult, &'static str> {
-    resolve_lambda_inner(a, q, 10000)
+    resolve_lambda_inner(a, q, 200_000)
 }
 
 fn resolve_lambda_inner(
@@ -102,17 +102,50 @@ fn run_lambda_search(
     Ok(((best_z, best_dist), (second_best_z, second_best_dist)))
 }
 
+/// Symmetrizes `q`, applies the same small unconditional diagonal epsilon
+/// the previous approach always used (kept so the well-conditioned common
+/// case stays numerically identical to the validated baseline), and, if
+/// that isn't enough to make it (numerically) positive definite, shifts
+/// its whole spectrum up by just enough to make the smallest eigenvalue
+/// `MIN_EIGENVALUE_FLOOR`. A fixed diagonal epsilon on its own only helps
+/// when the near-singularity is diagonal-aligned; ambiguity covariances
+/// that have drifted numerically over hundreds of Kalman updates can be
+/// near-singular along an arbitrary direction (e.g. several ambiguities
+/// sharing almost all their uncertainty with the common position error),
+/// which the eigenvalue-based shift fixes directly. Measured: applying
+/// the eigenvalue shift unconditionally (dropping the unconditional
+/// epsilon) shifts fix rates down by a few tenths of a percent across
+/// both guard scripts on well-conditioned matrices that never needed the
+/// shift in the first place -- keeping both terms avoids that regression.
+const MIN_EIGENVALUE_FLOOR: f64 = 1e-9;
+const BASE_DIAGONAL_EPSILON: f64 = 1e-10;
+
+fn regularize_positive_definite(q: &DMatrix<f64>) -> DMatrix<f64> {
+    let n = q.nrows();
+    let sym = (q + q.transpose()) * 0.5 + DMatrix::identity(n, n) * BASE_DIAGONAL_EPSILON;
+    let min_eig = SymmetricEigen::new(sym.clone()).eigenvalues.min();
+    if min_eig >= MIN_EIGENVALUE_FLOOR {
+        return sym;
+    }
+    sym + DMatrix::identity(n, n) * (MIN_EIGENVALUE_FLOOR - min_eig)
+}
+
 /// Decorrelates the ambiguities using the LAMBDA reduction (Z-transformation).
 /// Returns (z_hat, Q_z, Z_mat, L, D) where Q_z = L^T D L
+///
+/// `q_z` is re-regularized ([`regularize_positive_definite`]) before every
+/// `ldlt_lower` call, not just the first: the Z-transformations applied
+/// each iteration are exact (unimodular, integer) only in theory — in
+/// floating point they can nudge an already-barely-positive-definite
+/// matrix back below zero along its worst direction, and that compounds
+/// over the loop's many iterations on real (highly correlated,
+/// multi-constellation) ambiguity sets.
 fn decorrelate(a: &DVector<f64>, q: &DMatrix<f64>) -> Result<DecorrelateResult, &'static str> {
     let n = a.len();
     let mut z_mat = DMatrix::<f64>::identity(n, n);
     let mut z_hat = a.clone();
 
-    let mut q_z = q.clone();
-    for i in 0..n {
-        q_z[(i, i)] += 1e-10;
-    }
+    let mut q_z = regularize_positive_definite(q);
 
     let res = ldlt_lower(&q_z)?;
     let mut l = res.l;
@@ -125,6 +158,7 @@ fn decorrelate(a: &DVector<f64>, q: &DMatrix<f64>) -> Result<DecorrelateResult, 
         let k_u = k as usize;
 
         if apply_decorrelation_step(n, k_u, &l, &mut z_mat, &mut z_hat, &mut q_z) {
+            q_z = regularize_positive_definite(&q_z);
             let res = ldlt_lower(&q_z)?;
             l = res.l;
             d = res.d;
@@ -132,6 +166,7 @@ fn decorrelate(a: &DVector<f64>, q: &DMatrix<f64>) -> Result<DecorrelateResult, 
 
         if check_swap_condition(k_u, &l, &d) {
             swap_columns(n, k_u, &mut z_mat, &mut z_hat, &mut q_z);
+            q_z = regularize_positive_definite(&q_z);
             let res = ldlt_lower(&q_z)?;
             l = res.l;
             d = res.d;
@@ -141,6 +176,7 @@ fn decorrelate(a: &DVector<f64>, q: &DMatrix<f64>) -> Result<DecorrelateResult, 
         }
     }
 
+    q_z = regularize_positive_definite(&q_z);
     let res = ldlt_lower(&q_z)?;
     Ok(DecorrelateResult {
         z_hat,

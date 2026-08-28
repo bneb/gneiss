@@ -60,3 +60,9 @@ for the current sprint plan and roadmap.
 
 - Canonical citation: receiver_pcv.rs dd_correction_m — doc author violated
   documented invariant within minutes of implementing it correctly.
+
+## Agent Working Style
+
+- **Never read entire files into context.** Grep for the symbol first; read only the needed line range.
+- Per RUNBOOK: never claim verified without both guard scripts. Unverifiable work is labeled unverified, explicitly.
+- One task per session. `/compact` at natural boundaries; start a fresh session for a new task.
