@@ -1052,3 +1052,58 @@ substantially; nothing else moved outside noise. This walkthrough's
 new numbers are the reference from this point forward -- there's no
 checked-in file to update (see "Walkthrough reference refresh" above),
 just this log entry.
+
+## Code hygiene pass: 4 duplicate functions fixed, larger debt catalogued
+
+Following up on the architecture work above with a systematic sweep for
+CLAUDE.md's other hard rules (file size, duplicate functions). Found
+and fixed four genuine duplicate-function cases (all mathematically
+verified identical before touching anything, all confirmed
+byte-identical on both guard scripts after):
+- `compute_enu_stds` (combiner.rs, smoother.rs) -> `gneiss_core::coords::ecef_cov_to_enu_std`
+- `track_c_freq` (mw.rs, iono_free.rs) -> `gneiss_core::frequencies::track_c_frequency`
+- `ecef_to_enu` (eval_odaiba_kf/ins.rs, eval_swfg.rs) -> `gneiss_core::coords::ecef_delta_to_enu`
+- `horizontal_error`/`vertical_error` (eval_network_ppk.rs, reimplemented
+  despite `gneiss_core::metrics` already exporting canonical versions)
+
+The last one was the highest-stakes check: `eval_network_ppk` is the
+binary both guard scripts run, so these two functions produced every
+p50/p95/RMS number this session's whole verify-before-commit discipline
+was trusting. No drift was found, but it's exactly the kind of thing
+that's worth checking rather than assuming.
+
+Also split `forward.rs` (545 lines, over the 500-line file limit after
+the `configure_iekf` work) into `iekf_pass.rs`, fixing a layering smell
+where `backward.rs` reached into `forward.rs` for shared setup.
+
+Larger, correctly-deferred debt found along the way, not fixed here:
+- **19 other files over the 500-line limit**, several massively so
+  (rinex.rs 2349, spp.rs 2228, rtk_iekf/mod.rs 1743, ephemeris.rs 1573
+  lines). All pre-existing, none touched this session. Splitting these
+  is real, substantial architecture work on core validated engine
+  files -- not a "quick" fix, and risky to do without dedicated focus.
+- **40+ unconditional or ambiguously-gated `println!`/`eprintln!` calls**
+  in library code (not eval binaries). Some are legitimate opt-in debug
+  tooling already gated behind env vars (this session added a few of
+  those deliberately); others look like leftover debugging scaffolding.
+  Distinguishing the two requires reading each site in context -- too
+  large and too judgment-heavy for a quick pass. rtk_iekf/mod.rs alone
+  has a dozen-plus (`BAD-SEED`, `SP3-PROBE`, `CONTENT repr`,
+  `ENGINE-TEST` labeled prints suggest one-off debugging sessions left
+  in place).
+- **A `percentile` function with three different signatures**
+  (quality.rs: presorted+int-pct; sidereal/mod.rs: presorted+float-q;
+  eval_swfg.rs: owned-unsorted+float-pct). Confirmed these do NOT feed
+  either guard script (`eval_network_ppk.rs` computes its own p50/p95
+  inline via direct sorted-array indexing, using neither this nor the
+  canonical `gneiss_core::metrics::compute_statistics`). Lower stakes
+  than the four fixed above, and the signature differences mean
+  consolidating needs real per-call-site verification, not a
+  find-and-replace -- deferred rather than rushed.
+- **Nesting depth**: a rough brace-counting scan puts the worst offenders
+  in rinex.rs, ionex.rs, antex.rs, hatch.rs -- the same large parser
+  files already flagged for file size above. Likely one underlying
+  "these parsers need a dedicated pass" finding rather than several
+  independent quick fixes; the brace-counting heuristic also overstates
+  true control-flow depth (it counts struct/impl/fn scoping too), so a
+  real fix would need a proper per-function read first.
