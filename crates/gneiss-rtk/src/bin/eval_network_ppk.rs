@@ -27,6 +27,7 @@ use std::path::Path;
 use nalgebra::Vector3;
 
 use gneiss_core::ephemeris::Ephemeris;
+use gneiss_core::metrics::{horizontal_error, vertical_error};
 use gneiss_core::obs::EpochObs;
 use gneiss_core::time::GpsTime;
 use gneiss_rtk::estimators::rtk_iekf::DoubleDiffKey;
@@ -107,20 +108,6 @@ fn parse_truth(path: &Path) -> Truth {
         );
     }
     truth
-}
-
-fn horizontal_error(pos: Vector3<f64>, truth: Vector3<f64>) -> f64 {
-    let llh = gneiss_core::coords::ecef_to_llh(truth);
-    let ned = gneiss_core::coords::ecef_to_ned_matrix(llh) * (pos - truth);
-    (ned.x * ned.x + ned.y * ned.y).sqrt()
-}
-
-/// Signed up-axis error (m): positive = solution above truth. The vertical
-/// axis is where residual troposphere shows up first in RTK.
-fn vertical_error(pos: Vector3<f64>, truth: Vector3<f64>) -> f64 {
-    let llh = gneiss_core::coords::ecef_to_llh(truth);
-    let ned = gneiss_core::coords::ecef_to_ned_matrix(llh) * (pos - truth);
-    -ned.z
 }
 
 fn print_stats(
