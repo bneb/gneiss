@@ -55,6 +55,28 @@ fn track_c_freq_mod(
     }
 }
 
+/// Safety margin on top of the nominal code-noise sigma when bounding a
+/// freshly seeded or slip-reset ambiguity: real code noise (multipath, low
+/// elevation) regularly exceeds the nominal model by 3-5x, and
+/// under-stating this variance is what lets a single noisy low-elevation
+/// satellite's seed error masquerade as a *position* error instead of
+/// being absorbed by its own (appropriately loose) ambiguity state.
+const SEED_VARIANCE_SAFETY_MARGIN: f64 = 4.0;
+
+/// Variance (cycles^2) for a freshly seeded or slip-reset ambiguity: the
+/// seed is `phase - code/wavelength`, so its error is dominated by the
+/// *code* (pseudorange) noise, not the much-quieter phase noise. Converts
+/// the same elevation-weighted code-noise variance
+/// ([`GnssRtkIekf::compute_dd_variances`]) already used for the
+/// measurement update into cycles and inflates it by
+/// [`SEED_VARIANCE_SAFETY_MARGIN`] -- replacing a fixed, elevation-blind
+/// 100.0 cycles^2 that couldn't distinguish a 60-degree satellite from a
+/// 10-degree one.
+fn seed_ambiguity_variance_cycles2(pr_var_m2: f64, lambda: f64) -> f64 {
+    let sigma_cycles = pr_var_m2.sqrt() / lambda;
+    (SEED_VARIANCE_SAFETY_MARGIN * sigma_cycles).powi(2)
+}
+
 /// Pure pair decision for the centered precise-clock DD correction.
 ///
 /// Takes the centered clock lookups for `(satellite, reference)` and
@@ -303,7 +325,7 @@ impl GnssRtkIekf {
                 if let Some(m) = dd_meas.dd.iter().find(|m| m.key == key) {
                     if let Some(cp) = update::pcv_corrected_cp(m) {
                         let seed = cp - m.dd_pr_m / m.lambda;
-                        self.state.reset_ambiguity(&key, seed, 100.0);
+                        self.state.reset_ambiguity(&key, seed, seed_ambiguity_variance_cycles2(m.pr_var_m2, m.lambda));
                     }
                 }
                 self.wl_tracker.reset_pair(&DoubleDiffKey { freq_band: 1, ..key });
@@ -313,6 +335,20 @@ impl GnssRtkIekf {
                     }
                 }
                 tracing::debug!("slip-gate: tow={:.0} re-seeded sat={} band={}",
+                    rover.time.tow, key.sat, key.freq_band);
+            }
+        }
+
+        // Hard prefit gross-error screen, evaluated at the just-predicted
+        // (pre-update) position so a blunder can't hide behind an update it
+        // corrupted itself -- complements iekf_update_gated's Huber-style
+        // soft weighting, which has no defense against a kilometre-scale
+        // blunder dragging the linearization point before it can be seen
+        // as an outlier. See update::screen_gross_pr_errors.
+        let gross_rejected = update::screen_gross_pr_errors(&mut meas, self.state.pos_ecef);
+        if tracing::enabled!(tracing::Level::DEBUG) {
+            for key in &gross_rejected {
+                tracing::debug!("gross-error: tow={:.0} rejected sat={} band={}",
                     rover.time.tow, key.sat, key.freq_band);
             }
         }
@@ -730,7 +766,7 @@ impl GnssRtkIekf {
             dd_pcv_m,
         };
 
-        self.update_dd_ambiguity(key, update::pcv_corrected_cp(&meas), dd_pr, lambda, lli_slip);
+        self.update_dd_ambiguity(key, update::pcv_corrected_cp(&meas), dd_pr, lambda, lli_slip, meas.pr_var_m2);
 
         Some(meas)
     }
@@ -917,7 +953,10 @@ impl GnssRtkIekf {
         (pr_var, cp_var)
     }
 
-    fn update_dd_ambiguity(&mut self, key: DoubleDiffKey, dd_cp: Option<f64>, dd_pr: f64, lambda: f64, lli_slip: bool) {
+    /// Seeds or resets an ambiguity using [`seed_ambiguity_variance_cycles2`]
+    /// for its initial uncertainty rather than a fixed constant -- see that
+    /// function's doc comment.
+    fn update_dd_ambiguity(&mut self, key: DoubleDiffKey, dd_cp: Option<f64>, dd_pr: f64, lambda: f64, lli_slip: bool, pr_var_m2: f64) {
         let init_amb = dd_cp.map_or(0.0, |cp| cp - dd_pr / lambda);
         if std::env::var("WL_TRACE").is_ok() && init_amb.abs() > 1e5 {
             eprintln!("BAD-SEED tow-file key={:?} init_amb={:.3e}", key, init_amb);
@@ -930,7 +969,7 @@ impl GnssRtkIekf {
             let divergence = init_amb - self.state.ambiguities[rel].1;
             self.record_code_phase_divergence(key.freq_band, dd_cp.is_some(), divergence);
             if lli_slip {
-                self.state.reset_ambiguity(&key, init_amb, 100.0);
+                self.state.reset_ambiguity(&key, init_amb, seed_ambiguity_variance_cycles2(pr_var_m2, lambda));
             }
             return;
         }
@@ -951,7 +990,7 @@ impl GnssRtkIekf {
             // pairs on the same band see a stable median.
             self.code_phase_div.push((key.freq_band, offset));
         }
-        self.state.ensure_ambiguity(key, init_amb - offset, 100.0);
+        self.state.ensure_ambiguity(key, init_amb - offset, seed_ambiguity_variance_cycles2(pr_var_m2, lambda));
         self.state.ensure_iono(key, 4.0); // 2m sigma iono residual (legacy)
         if self.state.sat_iono_enabled {
             self.state.ensure_sat_iono_key(key.constellation_id, key.sat);
@@ -1134,6 +1173,25 @@ mod tests {
 
     fn dd_key(sat: u16, band: u8) -> DoubleDiffKey {
         DoubleDiffKey { constellation_id: 0, sat, ref_sat: 1, freq_band: band }
+    }
+
+    #[test]
+    fn seed_variance_matches_margin_squared_times_code_sigma_in_cycles() {
+        let pr_var_m2: f64 = 0.64; // 0.8 m code-noise sigma
+        let lambda = 0.1903;
+        let sigma_cycles = pr_var_m2.sqrt() / lambda;
+        let expected = (SEED_VARIANCE_SAFETY_MARGIN * sigma_cycles).powi(2);
+        assert!((seed_ambiguity_variance_cycles2(pr_var_m2, lambda) - expected).abs() < 1e-9);
+    }
+
+    #[test]
+    fn seed_variance_is_looser_for_noisier_low_elevation_code() {
+        let lambda = 0.1903;
+        let high_el_pr_var = 0.05; // ~60 degrees, per compute_dd_variances
+        let low_el_pr_var = 2.4; // ~15 degrees
+        let high = seed_ambiguity_variance_cycles2(high_el_pr_var, lambda);
+        let low = seed_ambiguity_variance_cycles2(low_el_pr_var, lambda);
+        assert!(low > high, "low-elevation seed variance ({low}) should exceed high-elevation ({high})");
     }
 
     /// Run the sim dataset through `engine`, returning per-epoch fix flags
@@ -1429,7 +1487,7 @@ mod tests {
         let mut eng = test_engine(GpsTime::new(2200, 100.0));
         let lambda = 0.2_f64;
         let raw = 105.75 - 100.0 / lambda;
-        eng.update_dd_ambiguity(dd_key(5, 1), Some(105.75), 100.0, lambda, false);
+        eng.update_dd_ambiguity(dd_key(5, 1), Some(105.75), 100.0, lambda, false, 1.0);
         assert_eq!(eng.state.get_amb_idx(&dd_key(5, 1)), Some(6));
         assert!((eng.state.ambiguities[0].1 - raw).abs() < 1e-12, "seed must equal raw init");
         assert!(eng.code_phase_div.is_empty(), "no samples recorded when gate off");
@@ -1445,7 +1503,7 @@ mod tests {
         eng.code_phase_div = vec![(1, 2.5), (2, 100.0), (1, 3.5), (1, 4.5)];
         let lambda = 0.2_f64;
         let raw = 105.75 - 100.0 / lambda;
-        eng.update_dd_ambiguity(dd_key(5, 1), Some(105.75), 100.0, lambda, false);
+        eng.update_dd_ambiguity(dd_key(5, 1), Some(105.75), 100.0, lambda, false, 1.0);
         let seeded = eng.state.ambiguities.iter().find(|(k, _)| *k == dd_key(5, 1)).unwrap().1;
         assert!((seeded - (raw - 3.5)).abs() < 1e-12, "seed = raw − median(band-1 divergences)");
         assert_eq!(eng.code_phase_div.len(), 5, "seeded pair joins the epoch's sample set");
@@ -1458,7 +1516,7 @@ mod tests {
         eng.ar_gate = true;
         let lambda = 0.2_f64;
         let raw = 105.75 - 100.0 / lambda;
-        eng.update_dd_ambiguity(dd_key(5, 1), Some(105.75), 100.0, lambda, false);
+        eng.update_dd_ambiguity(dd_key(5, 1), Some(105.75), 100.0, lambda, false, 1.0);
         let seeded = eng.state.ambiguities[0].1;
         assert!((seeded - raw).abs() < 1e-12, "no prior pairs -> no offset");
         assert_eq!(eng.code_phase_div, vec![(1, 0.0)]);
@@ -1472,7 +1530,7 @@ mod tests {
         eng.code_phase_div = vec![(2, 2.5), (2, 3.5)];
         let lambda = 0.2_f64;
         let raw = 105.75 - 100.0 / lambda;
-        eng.update_dd_ambiguity(dd_key(5, 1), Some(105.75), 100.0, lambda, false);
+        eng.update_dd_ambiguity(dd_key(5, 1), Some(105.75), 100.0, lambda, false, 1.0);
         assert!((eng.state.ambiguities[0].1 - raw).abs() < 1e-12);
     }
 
@@ -1485,7 +1543,7 @@ mod tests {
         let lambda = 0.2_f64;
         let raw = 205.75 - 100.0 / lambda;
         // Slip on an ESTABLISHED pair: legacy re-seed semantics preserved.
-        eng.update_dd_ambiguity(dd_key(2, 1), Some(205.75), 100.0, lambda, true);
+        eng.update_dd_ambiguity(dd_key(2, 1), Some(205.75), 100.0, lambda, true, 1.0);
         assert!((eng.state.ambiguities[0].1 - raw).abs() < 1e-12);
         assert_eq!(eng.code_phase_div.len(), 3, "established pair still contributes a sample");
     }
