@@ -199,11 +199,25 @@ pub fn parse_msm_masks(
 }
 
 /// Data provided for each active satellite.
+///
+/// Field presence and transmission order verified against RTKLIB's
+/// `decode_msm4`/`decode_msm_head` (github.com/tomojitakasu/RTKLIB,
+/// src/rtcm3.c) and the RTCM 10403.3 DF397-DF399/DF419 definitions:
+/// DF397 (all types) -> DF419 (MSM5/7 only) -> DF398 (all types) ->
+/// DF399 (MSM5/7 only), each field transmitted as a contiguous block
+/// across all `n_sat` satellites before the next field begins.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct MsmSatelliteData {
-    pub rough_ranges: Vec<u16>,            // 10 bits
-    pub extended_sat_info: Vec<u8>,        // 4 bits (MSM4+)
-    pub rough_phase_range_rates: Vec<i16>, // 14 bits (MSM5, 7 only)
+    /// DF397: rough range, whole milliseconds (all MSM types).
+    pub rough_range_int_ms: Vec<u8>, // 8 bits
+    /// DF419: extended satellite info (MSM5, 7 only -- NOT MSM4/6).
+    pub extended_sat_info: Vec<u8>, // 4 bits
+    /// DF398: rough range modulo 1 ms (all MSM types). Combine with
+    /// `rough_range_int_ms` for the full rough range: this field alone
+    /// is NOT a complete range.
+    pub rough_ranges: Vec<u16>, // 10 bits
+    /// DF399: rough phase-range rate (MSM5, 7 only).
+    pub rough_phase_range_rates: Vec<i16>, // 14 bits
 }
 
 /// Parses the Satellite Data Section.
@@ -215,22 +229,19 @@ pub fn parse_satellite_data(
     let mut offset = 0;
     let mut data = MsmSatelliteData::default();
 
-    // 1. Rough Ranges (10 bits)
-    let req_bits = n_sat * 10;
+    // 1. DF397: Rough Range, integer ms (8 bits) -- all MSM types.
+    let req_bits = n_sat * 8;
     if bits.len() < offset + req_bits {
         return Err(RtcmParseError::Incomplete);
     }
     for _ in 0..n_sat {
-        data.rough_ranges
-            .push(bits[offset..offset + 10].load_be::<u16>());
-        offset += 10;
+        data.rough_range_int_ms
+            .push(bits[offset..offset + 8].load_be::<u8>());
+        offset += 8;
     }
 
-    // 2. Extended Sat Info (4 bits) - MSM4, 5, 6, 7
-    if matches!(
-        msm_type,
-        MsmType::Msm4 | MsmType::Msm5 | MsmType::Msm6 | MsmType::Msm7
-    ) {
+    // 2. DF419: Extended Sat Info (4 bits) -- MSM5, 7 only.
+    if matches!(msm_type, MsmType::Msm5 | MsmType::Msm7) {
         let req_bits = n_sat * 4;
         if bits.len() < offset + req_bits {
             return Err(RtcmParseError::Incomplete);
@@ -242,7 +253,18 @@ pub fn parse_satellite_data(
         }
     }
 
-    // 3. Rough PhaseRange Rates (14 bits) - MSM5, 7
+    // 3. DF398: Rough Range, modulo 1 ms (10 bits) -- all MSM types.
+    let req_bits = n_sat * 10;
+    if bits.len() < offset + req_bits {
+        return Err(RtcmParseError::Incomplete);
+    }
+    for _ in 0..n_sat {
+        data.rough_ranges
+            .push(bits[offset..offset + 10].load_be::<u16>());
+        offset += 10;
+    }
+
+    // 4. DF399: Rough PhaseRange Rate (14 bits) -- MSM5, 7 only.
     if matches!(msm_type, MsmType::Msm5 | MsmType::Msm7) {
         let req_bits = n_sat * 14;
         if bits.len() < offset + req_bits {
@@ -376,23 +398,26 @@ mod tests {
     }
 
     fn payload_for_msm4_1sat_1sig() -> Vec<u8> {
-        // MSM4 GPS (msg 1074), 1 satellite (sat 1), 1 signal (sig 1), 1 cell
-        // Use a single pack_bits call so all bits are contiguous
+        // MSM4 GPS (msg 1074), 1 satellite (sat 1), 1 signal (sig 1), 1 cell.
+        // MSM4 has no DF419 extended sat info (MSM5/7 only): DF397 (8 bits)
+        // then DF398 (10 bits) directly, per RTKLIB decode_msm4 / RTCM
+        // 10403.3 field order.
         pack_bits(&[
             (12, 1074), (12, 1), (30, 5000), (1, 0), (3, 2), (7, 0), (2, 0), (2, 0), (1, 0), (3, 0),
             (64, 1u64 << 63), (32, 1u64 << 31), (1, 1),
-            (10, 100), (4, 5),
+            (8, 2), (10, 100),
             (15, 50), (22, 500), (4, 3), (1, 0), (6, 35),
         ])
     }
 
     fn payload_for_msm5_1sat_2sig() -> Vec<u8> {
         // Note: parse_signal_data reads field-by-field across all cells, not cell-by-cell.
+        // Sat data order: DF397 (int ms) -> DF419 (ext info) -> DF398 (rough range) -> DF399 (rate).
         // Order: fine_pr[0..1], fine_ph[0..1], lock[0..1], half_cycle[0..1], cnr[0..1], rates[0..1]
         pack_bits(&[
             (12, 1075), (12, 1), (30, 5000), (1, 0), (3, 2), (7, 0), (2, 0), (2, 0), (1, 0), (3, 0),
             (64, 1u64 << 63), (32, (1u64 << 31) | (1u64 << 30)), (2, 0b11),
-            (10, 100), (4, 5), (14, 25),
+            (8, 2), (4, 5), (10, 100), (14, 25),
             (15, 50), (15, 100),  // fine_pr[0], fine_pr[1]
             (22, 500), (22, 1000), // fine_ph[0], fine_ph[1]
             (4, 3), (4, 5),        // lock[0], lock[1]
@@ -403,10 +428,11 @@ mod tests {
     }
 
     fn payload_for_msm6_1sat_1sig() -> Vec<u8> {
+        // MSM6 has no DF419 extended sat info either (MSM5/7 only).
         pack_bits(&[
             (12, 1076), (12, 1), (30, 5000), (1, 0), (3, 2), (7, 0), (2, 0), (2, 0), (1, 0), (3, 0),
             (64, 1u64 << 63), (32, 1u64 << 31), (1, 1),
-            (10, 100), (4, 5),
+            (8, 2), (10, 100),
             (20, 50), (24, 500), (10, 7), (1, 0), (10, 35),
         ])
     }
@@ -415,7 +441,7 @@ mod tests {
         pack_bits(&[
             (12, 1077), (12, 1), (30, 5000), (1, 0), (3, 2), (7, 0), (2, 0), (2, 0), (1, 0), (3, 0),
             (64, 1u64 << 63), (32, 1u64 << 31), (1, 1),
-            (10, 100), (4, 5), (14, 25),
+            (8, 2), (4, 5), (10, 100), (14, 25),
             (20, 50), (24, 500), (10, 7), (1, 0), (10, 35), (15, 10),
         ])
     }
@@ -521,28 +547,32 @@ mod tests {
     // -----------------------------------------------------------------------
     #[test]
     fn test_parse_satellite_data_incomplete_rough_ranges() {
-        let bits = [0u8; 1].view_bits::<Msb0>(); // 8 bits, need 10 for 1 sat
+        // 8 bits: exactly enough for DF397 (rough range, integer ms) alone,
+        // but MSM4 still needs DF398 (10 more bits) right after it.
+        let bits = [0u8; 1].view_bits::<Msb0>();
         let result = parse_satellite_data(bits, 1, MsmType::Msm4);
         assert!(matches!(result, Err(RtcmParseError::Incomplete)));
     }
 
     #[test]
     fn test_parse_satellite_data_incomplete_ext_info() {
-        // Create exactly 13 bits (just enough for rough_ranges but not ext_sat_info)
+        // DF419 (extended sat info) is MSM5/7 only, so this must use MSM5 to
+        // actually exercise that field -- MSM4 never reads it at all.
+        // 12 bits: exactly enough for DF397 (8) but not DF419 (4 more).
         let raw = [0u8; 2]; // 16 bits
         let bits = raw.view_bits::<Msb0>();
-        let short_bits = &bits[..13]; // 13 bits: enough for 10-bit rough_ranges but not 4-bit ext_sat_info
-        let result = parse_satellite_data(short_bits, 1, MsmType::Msm4);
+        let short_bits = &bits[..12];
+        let result = parse_satellite_data(short_bits, 1, MsmType::Msm5);
         assert!(matches!(result, Err(RtcmParseError::Incomplete)));
     }
 
     #[test]
     fn test_parse_satellite_data_incomplete_rough_rate() {
-        // 14 bits: exactly enough for rough_ranges (10) + ext_sat_info (4), but
-        // not enough for 14-bit rough_phase_range_rates (MSM5 requires another 14)
-        let raw = [0u8; 2]; // 16 bits
+        // 22 bits: exactly enough for DF397 (8) + DF419 (4) + DF398 (10), but
+        // not enough for 14-bit DF399 rough_phase_range_rates (MSM5 only).
+        let raw = [0u8; 3]; // 24 bits
         let bits = raw.view_bits::<Msb0>();
-        let short_bits = &bits[..14]; // 14 bits: pass rough+ext, fail rates
+        let short_bits = &bits[..22];
         let result = parse_satellite_data(short_bits, 1, MsmType::Msm5);
         assert!(matches!(result, Err(RtcmParseError::Incomplete)));
     }
@@ -571,8 +601,12 @@ mod tests {
         assert_eq!(msg.masks.satellite_mask, 1u64 << 63);
         assert_eq!(msg.masks.signal_mask, 1u32 << 31);
         assert_eq!(msg.masks.cell_mask, vec![true]);
+        assert_eq!(msg.satellite_data.rough_range_int_ms, vec![2]);
         assert_eq!(msg.satellite_data.rough_ranges, vec![100]);
-        assert_eq!(msg.satellite_data.extended_sat_info, vec![5]);
+        assert!(
+            msg.satellite_data.extended_sat_info.is_empty(),
+            "MSM4 has no DF419 extended sat info (MSM5/7 only)"
+        );
         assert!(msg.satellite_data.rough_phase_range_rates.is_empty());
         assert_eq!(msg.signal_data.fine_pseudoranges, vec![50]);
         assert_eq!(msg.signal_data.fine_phase_ranges, vec![500]);
@@ -591,6 +625,7 @@ mod tests {
         let msg = parse_msm_message(&payload).unwrap();
         assert_eq!(msg.msm_type, MsmType::Msm5);
         assert_eq!(msg.header.message_number, 1075);
+        assert_eq!(msg.satellite_data.rough_range_int_ms, vec![2]);
         assert_eq!(msg.satellite_data.rough_ranges, vec![100]);
         assert_eq!(msg.satellite_data.extended_sat_info, vec![5]);
         assert_eq!(msg.satellite_data.rough_phase_range_rates, vec![25]);
@@ -677,14 +712,20 @@ mod tests {
     // -----------------------------------------------------------------------
     #[test]
     fn test_parse_satellite_data_msm6() {
+        // MSM6 has no DF419 extended sat info (MSM5/7 only): DF397 (8 bits)
+        // then DF398 (10 bits) directly.
         let payload = pack_bits(&[
+            (8, 3),
             (10, 200),
-            (4, 10),
         ]);
         let bits = payload.view_bits::<Msb0>();
         let (_remaining, data) = parse_satellite_data(bits, 1, MsmType::Msm6).unwrap();
+        assert_eq!(data.rough_range_int_ms, vec![3]);
         assert_eq!(data.rough_ranges, vec![200]);
-        assert_eq!(data.extended_sat_info, vec![10]);
+        assert!(
+            data.extended_sat_info.is_empty(),
+            "MSM6 has no DF419 extended sat info (MSM5/7 only)"
+        );
         assert!(data.rough_phase_range_rates.is_empty());
     }
 
@@ -708,11 +749,13 @@ mod tests {
     // -----------------------------------------------------------------------
     #[test]
     fn test_parse_msm4_glonass() {
-        // Single pack_bits call to avoid bit misalignment
+        // Single pack_bits call to avoid bit misalignment. MSM4 has no
+        // DF419 extended sat info (MSM5/7 only): DF397 (8 bits) then
+        // DF398 (10 bits) directly.
         let payload = pack_bits(&[
             (12, 1084), (12, 0), (30, 1000), (1, 0), (3, 0), (7, 0), (2, 0), (2, 0), (1, 0), (3, 0),
             (64, 1u64 << 62), (32, 1u64 << 31), (1, 1),
-            (10, 50), (4, 0),
+            (8, 0), (10, 50),
             (15, 5), (22, 50), (4, 0), (1, 0), (6, 30),
         ]);
         let result = parse_msm_message(&payload);
@@ -739,10 +782,12 @@ mod tests {
             (32, 1u64 << 31),
             (1, 1u64),
         ];
-        // Sat data: rough_range=0, ext_info=0, rough_phase_range_rate=0
+        // Sat data (MSM5 order): DF397 int_ms=0, DF419 ext_info=0,
+        // DF398 rough_range=0, DF399 rough_phase_range_rate=0.
         let sat_data = [
-            (10, 0u64),
+            (8, 0u64),
             (4, 0u64),
+            (10, 0u64),
             (14, 0u64),
         ];
         let all: Vec<_> = header
@@ -768,9 +813,12 @@ mod tests {
             (32, (1u64 << 31) | (1u64 << 30)),
             (2, 0b11u64),
         ];
+        // Sat data (MSM5 order): DF397 int_ms=0, DF419 ext_info=0,
+        // DF398 rough_range=0, DF399 rough_phase_range_rate=0.
         let sat_data = [
-            (10, 0u64),
+            (8, 0u64),
             (4, 0u64),
+            (10, 0u64),
             (14, 0u64),
         ];
         let all: Vec<_> = header
@@ -950,6 +998,7 @@ mod tests {
         assert_eq!(msg.signal_data.fine_phase_range_rates, vec![10, 20]);
         assert_eq!(msg.signal_data.fine_pseudoranges, vec![50, 100]);
         assert_eq!(msg.signal_data.fine_phase_ranges, vec![500, 1000]);
+        assert_eq!(msg.satellite_data.rough_range_int_ms, vec![2]);
         assert_eq!(msg.satellite_data.rough_ranges, vec![100]);
         assert_eq!(msg.satellite_data.extended_sat_info, vec![5]);
         assert_eq!(msg.satellite_data.rough_phase_range_rates, vec![25]);
@@ -986,7 +1035,7 @@ mod tests {
             let payload = pack_bits(&[
                 (12, 1074), (12, 0), (30, 0), (1, 0), (3, 0), (7, 0), (2, 0), (2, 0), (1, 0), (3, 0),
                 (64, 1u64 << 63), (32, 1u64 << 31), (1, 1),
-                (10, 0), (4, 0),
+                (8, 0), (10, 0),
                 (15, 0), (22, 0), (4, lock), (1, 0), (6, 0),
             ]);
             let msg = parse_msm_message(&payload).unwrap();
@@ -1006,7 +1055,7 @@ mod tests {
             let payload = pack_bits(&[
                 (12, 1076), (12, 0), (30, 0), (1, 0), (3, 0), (7, 0), (2, 0), (2, 0), (1, 0), (3, 0),
                 (64, 1u64 << 63), (32, 1u64 << 31), (1, 1),
-                (10, 0), (4, 0),
+                (8, 0), (10, 0),
                 (20, 0), (24, 0), (10, lock), (1, 0), (10, 0),
             ]);
             let msg = parse_msm_message(&payload).unwrap();
@@ -1025,7 +1074,7 @@ mod tests {
         let payload = pack_bits(&[
             (12, 1077), (12, 0), (30, 0), (1, 0), (3, 0), (7, 0), (2, 0), (2, 0), (1, 0), (3, 0),
             (64, 1u64 << 63), (32, 1u64 << 31), (1, 1),
-            (10, 0), (4, 0), (14, 0),
+            (8, 0), (4, 0), (10, 0), (14, 0),
             (20, 0), (24, 0), (10, 512), (1, 1), (10, 0), (15, 0),
         ]);
         let msg = parse_msm_message(&payload).unwrap();
