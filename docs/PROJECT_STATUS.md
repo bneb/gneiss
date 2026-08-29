@@ -254,11 +254,22 @@ list is shorter than it looked.
   (`BAD-SEED`, `SP3-PROBE`, `CONTENT repr`, `ENGINE-TEST` are ALL test
   names, not production leftovers -- captured/suppressed by the test
   harness unless run with `--nocapture`). None are leftover scaffolding.
-- [ ] **40+ ungated `println!`/`eprintln!` estimate for the REST of the
-  library** (outside `rtk_iekf/mod.rs`+`formation.rs`, now cleared)
-  still unverified -- given this file was the one named as worst and
-  turned out clean, the remaining estimate needs its own fresh audit
-  before assuming it still holds, rather than treated as confirmed debt.
+- [x] println!/eprintln! audit extended to the rest of the library —
+  ALSO mostly clean (2026-08-28). Sampled `post_process/` and `swfg/`
+  (~12 of the remaining ~30 sites outside `rtk_iekf`): per-epoch traces
+  are properly gated (`GNEISS_SWFG_DEBUG`, one with a comment
+  explaining a real incident it was added to catch -- an orphan-
+  variable crash that silently produced "0 epochs processed"); parse
+  failures print on the error path only, not per-epoch; the remainder
+  are one-time-per-pass confirmation lines (SPP init, SP3/CLK product
+  load counts) that are unconditional but harmless -- they fire once,
+  not per-epoch, so they don't spam output even though a stricter
+  reading would prefer them behind a verbosity flag too. No genuine
+  leftover-debugging-session cruft found anywhere sampled. Original
+  "some likely leftover scaffolding" characterization does not hold up
+  across two independent samples now (`rtk_iekf` and this one) -- not
+  exhaustively re-verified for every remaining site, but confident
+  enough to stop treating this as a real item on the debt list.
 - [x] Percentile logic was duplicated FOUR ways, not three as
   previously noted here. `quality.rs` and `sidereal/mod.rs`'s private
   `percentile()` helpers were confirmed truly identical (`floor(len*q)`
