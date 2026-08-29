@@ -236,10 +236,25 @@ list is shorter than it looked.
   positions, not an obvious crash.
 - [ ] **12d. UBX (u-blox binary) -> EpochObs conversion** — by
   contrast, `UbxRxmRawx::into_epoch_obs` (`gneiss-parsers/src/ubx.rs`)
-  IS a complete, well-tested implementation (GPS/GLONASS/Galileo/
-  BeiDou/QZSS/SBAS variants, invalid PR/CP handling, signal-band
-  mapping) -- but like the RTCM3 path, it has zero callers in
-  `gneiss-rtk` or any `bin/`. If a live receiver is easier to source
+  DOES genuinely populate real pseudorange/carrier-phase/Doppler/SNR
+  values (GPS/GLONASS/Galileo/BeiDou/QZSS/SBAS variants, invalid
+  PR/CP handling) -- structurally easier than RTCM3 to get right,
+  since UBX's own binary protocol already hands you SI-unit-scaled
+  floats (`pr_mes`/`cp_mes`) rather than RTCM3's compact integer+
+  scale-factor wire encoding the parser has to reconstruct. But
+  checked its signal-band mapping before trusting the "complete"
+  label: `freq_band = if sig_id == 0 { 1 } else { 2 }` collapses EVERY
+  non-zero UBX `sig_id` to band 2, which only covers basic L1+one-other
+  dual-frequency receivers -- it does not correctly distinguish GPS
+  L5, Galileo E5b, BeiDou B2, etc. on multi-band firmware. The existing
+  test (`test_ubx_into_epoch_obs_sig_id_2_band`) only pins this
+  simplified behavior, it doesn't verify against the real per-
+  constellation UBX sig_id table -- same "don't guess at spec details"
+  caution as RTCM3 applies to fixing this properly. Real pseudorange
+  data still makes this the more finished path overall; just don't
+  assume full multi-band correctness without checking the actual
+  receiver's signal set against u-blox's interface description first.
+  If a live receiver is easier to source
   over USB/serial (UBX) than a working RTCM3 base feed, this is the
   more finished path to wire up first.
 - [ ] **12e. NTRIP client maturity** — `gneiss-ntrip` is 119 lines
