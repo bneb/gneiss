@@ -133,14 +133,30 @@ is dominated by external data dependencies rather than algorithmic limitations.
   P181's invisible single-band wrong fixes are untouched by this — see
   Sprint 14.
 
-**SPRINT 10: Receiver PCV Rollout Beyond CAPO — OPEN**
-- [ ] `receiver_antenna.rs` (quarantined in `scratch/wip/`) needs
-  differential receiver PCV extended past the CAPO/Leica case to the
-  other antenna families in the CORS set (Trimble, Ashtech, Javad)
-- Note: OHLN's Ashtech antenna was checked this session (2026-08-28)
-  and already resolves/applies correctly with near-zero effect — its
-  410mm vertical RMS is NOT a receiver-PCV gap. Don't re-open that
-  specific case; the remaining work here is the other antenna families.
+**SPRINT 10: Receiver PCV Rollout Beyond CAPO — CLOSED, STALE PREMISE (2026-08-28)**
+- Same pattern as Sprint 7: the premise predates work that already
+  solved it. The "quarantined in scratch/wip/" file this item pointed
+  at (`scratch/wip/receiver_antenna.rs`, 365 lines, Aug 24 draft) is a
+  superseded scratch copy — the REAL, active implementation
+  (`crates/gneiss-parsers/src/receiver_antenna.rs`, 672 lines) already
+  graduated receiver PCO from opt-in to default and wired it into
+  `gneiss-cli` (commit `f6150b9`, predates this session). It is already
+  antenna-family-generic, not CAPO-specific: verified this session by
+  running OHLN's completely different family (Ashtech `ASH701945B_M`)
+  through the exact same `load_receiver_pcv` path used for CAPO's
+  Leica antenna, confirmed via `RECV-PCV enabled` trace that it
+  resolves and applies (just with near-zero effect for OHLN's specific
+  vertical-excursion problem, which is a different, still-open issue —
+  see Sprint 14's neighbor note above).
+- The scratch draft is harmless, unreferenced, and lives in the user's
+  personal `scratch/` working area (not a workspace crate) — out of
+  scope to delete autonomously; flagged here only so nobody re-reads
+  "quarantined in scratch/wip/" as a live gap.
+- No other antenna family in the CORS set showed a signal worth
+  chasing (P181/P222/SLAC share the rover's own Trimble family, so
+  differential PCV is near-zero by construction; P225's Trimble
+  TRM29659 is untested but same-family low-priority). Re-open only if
+  a specific new dataset surfaces a cross-family bias like CAPO's.
 
 **SPRINT 11: Phase-Only Network UPD Estimation — OPEN**
 - [ ] Recompute each base's wide-lane floats against the fused network
