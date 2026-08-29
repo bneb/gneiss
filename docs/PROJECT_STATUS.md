@@ -219,16 +219,25 @@ is dominated by external data dependencies rather than algorithmic limitations.
   synthetic/replayed-static data, no real moving-truth dataset yet —
   see `docs/KINEMATIC_MODE_REPORT.md`
 
-**SPRINT 14: Cross-Epoch Wrong-Fix Detection — OPEN**
-- [ ] P181's wrong fixes are overwhelmingly single-band and carry no
-  wide-lane contradiction signal (survive even zero-tolerance veto) —
-  no same-epoch dual-frequency validation is possible against them even
-  in principle. Detection must come from cross-epoch consistency.
-  Forward path already validated: `GnssRtkIekf.history` retains
-  per-pair float ambiguities; `GNEISS_AMB_DUMP=1` writes per-key
-  trajectories. Next: run the existing step-detection harness
-  (`scripts/analyze_steps.py`) against ambiguity-history columns
-  instead of the CSV-proxy channels that gave a negative result.
+**SPRINT 14: Cross-Epoch Wrong-Fix Detection — CLOSED, ALREADY DONE (2026-08-28 correction)**
+- Third stale-premise item found this session (same shape as Sprints 7
+  and 10) -- this one caught before any work was done, by re-reading
+  NETWORK_RTK_NEXT_STEPS.md more carefully rather than stopping at the
+  first matching section. The proposed "next step" here (run
+  `scripts/analyze_steps.py`'s step-detection against `GNEISS_AMB_DUMP`
+  ambiguity-history columns instead of CSV-proxy channels) is not new
+  work -- it was already executed. See "Ambiguity-history dump: built,
+  validated, zero wrong fixes found": dataset B P181 (GE + gradients)
+  shows ZERO wrong-fix episodes with the current stack. The wrong-fix
+  class this item describes was eliminated as a side effect of the
+  Galileo + gradient + robust-weighting work, sometime after the
+  original "Dataset B tail anatomy" finding that motivated this item.
+- Lesson for future roadmap audits: NETWORK_RTK_NEXT_STEPS.md is an
+  append-only lab notebook -- a finding's *last* word on a topic can be
+  many sections after its first, and later entries silently supersede
+  earlier ones without always cross-referencing back. Before writing a
+  roadmap item from a single section, grep the doc for the same nouns
+  further down before assuming the section you found is still current.
 
 **SPRINT 15: Helmert Frame Transform — OPEN, mining candidate identified**
 - [ ] Absolute precision on dataset B is capped by a frame mismatch
