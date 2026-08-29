@@ -202,10 +202,60 @@ list is shorter than it looked.
   data; not worth chasing further without a dataset that actually
   stresses wide-lane rounding margins.
 
-**SPRINT 12: RTCM/NTRIP Real-Time Input — OPEN**
-- [ ] `gneiss-ntrip`'s NTRIP client and the RTCM3 MSM4/MSM7 decoder
-  both exist but aren't wired to the estimator. No real-time RTK path
-  exists yet; every result in this document is post-processed/offline.
+**SPRINT 12: RTCM/NTRIP Real-Time Input — OPEN, broken into concrete sub-items (2026-08-28)**
+- Traced the actual state of every piece before writing this down,
+  rather than leaving it as one large undifferentiated "OPEN":
+
+- [x] **12a. RTCM3 framing/CRC** — real and tested (`crc24q`,
+  `parse_rtcm3_frame`).
+- [x] **12b. RTCM3 MSM raw bitfield extraction** — real and tested:
+  correct bit widths per MSM4/5 vs MSM6/7, sign extension, satellite/
+  signal/cell mask decoding (`parse_msm_header/masks/satellite_data/
+  signal_data`).
+- [ ] **12c. RTCM3 MSM -> EpochObs conversion — found to be a silent
+  stub, now clearly marked as one.** `MsmMessage::into_epoch_obs`
+  compiled, had a passing test, and looked complete, but every
+  `SatObs.observations` was unconditionally empty (the signal-decoding
+  loop was abandoned mid-implementation -- literally ended in a comment
+  reading "We will simplify this loop structure..." with no code after
+  it) and the epoch's GPS week was hardcoded to 0. Its only test never
+  checked `observations` at all, so nothing caught this. Fixed today:
+  added a loud doc-comment warning, removed the dead abandoned loop
+  body, and rewrote the test to explicitly assert-and-explain the
+  current empty-observations contract so it FAILS the moment someone
+  implements the real conversion (a stub silently "passing" on an
+  empty vec is not a passing test for the feature). Completing this
+  needs the RTCM 10403.x per-cell scale factors (rough range + fine
+  pseudorange/phaserange combination) and a real week-number source --
+  and there is no RTCM3 sample data anywhere in this repo to verify a
+  scaling implementation against
+  (`datasets/rtkexplorer/sample_1/base.rtcm3` is 0 bytes, likely never
+  fetched). Do not implement this from memory of the spec without a
+  real sample + independently-known-correct decoded values to check
+  against -- a wrong scale factor here produces plausible-looking wrong
+  positions, not an obvious crash.
+- [ ] **12d. UBX (u-blox binary) -> EpochObs conversion** — by
+  contrast, `UbxRxmRawx::into_epoch_obs` (`gneiss-parsers/src/ubx.rs`)
+  IS a complete, well-tested implementation (GPS/GLONASS/Galileo/
+  BeiDou/QZSS/SBAS variants, invalid PR/CP handling, signal-band
+  mapping) -- but like the RTCM3 path, it has zero callers in
+  `gneiss-rtk` or any `bin/`. If a live receiver is easier to source
+  over USB/serial (UBX) than a working RTCM3 base feed, this is the
+  more finished path to wire up first.
+- [ ] **12e. NTRIP client maturity** — `gneiss-ntrip` is 119 lines
+  (just `client.rs`); unclear whether it's been exercised against a
+  real caster or only unit-tested in isolation. Needs verification
+  against a live NTRIP mountpoint before trusting it in a real pipeline.
+- [ ] **12f. The real architectural gap: batch vs. streaming.** Even
+  with 12c/12d done, every entry point (`execute_post_process`,
+  `GnssRtkIekf::process_epoch`'s callers) takes a pre-collected
+  `&[EpochObs]` array. There is no incremental/streaming loop anywhere
+  that calls `process_epoch` one epoch at a time as data arrives live,
+  handles out-of-order or late base corrections, or manages a
+  live rover+base pairing. This is the largest single piece of new
+  architecture Sprint 12 actually needs, independent of which wire
+  format (RTCM3/UBX) feeds it -- start here only after 12c or 12d has
+  a real, verified data source to drive it with.
 
 **SPRINT 13: Code-Quality Remediation — IN PROGRESS**
 - [x] 4 duplicate functions deduped this session (`compute_enu_stds`,

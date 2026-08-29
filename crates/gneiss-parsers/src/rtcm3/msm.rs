@@ -36,8 +36,26 @@ pub struct MsmMessage {
 }
 
 impl MsmMessage {
+    /// Satellite/constellation shell of the decoded epoch, from the
+    /// satellite mask and message-number-derived constellation only.
+    ///
+    /// **NOT a working RTCM3-to-engine converter — every `SatObs.
+    /// observations` is unconditionally empty.** `MsmSignalData` (raw
+    /// pseudorange/phase-range/lock-time/CNR bitfields, correctly
+    /// extracted by [`parse_signal_data`] per the MSM4/5 vs MSM6/7 bit
+    /// widths) is never read here: turning those into actual observables
+    /// needs the RTCM 10403.x per-cell scale factors (rough range +
+    /// fine pseudorange/phaserange combination, satellite-mask-index to
+    /// cell-mask-index mapping) plus a real epoch week number (`time`
+    /// hardcodes week 0 below, which is also wrong). No RTCM3 sample
+    /// data exists in this repo to verify a scaling implementation
+    /// against (`datasets/rtkexplorer/sample_1/base.rtcm3` is 0 bytes),
+    /// so this was deliberately left as a shell rather than guessed at —
+    /// see docs/PROJECT_STATUS.md Sprint 12 for what's needed to finish
+    /// it. Not called from any production path today (verified: only
+    /// this file's own test calls it).
     pub fn into_epoch_obs(&self) -> EpochObs {
-        let time = GpsTime::new(0, self.header.epoch_time as f64 / 1000.0); // Simple time mapping
+        let time = GpsTime::new(0, self.header.epoch_time as f64 / 1000.0); // TODO: week is wrong, see doc comment.
 
         let constellation = match self.header.message_number / 10 {
             107 => Constellation::Gps,
@@ -50,34 +68,10 @@ impl MsmMessage {
         };
 
         let mut satellites = Vec::new();
-        let mut sat_idx = 0;
-        let _cell_idx = 0;
-
         for i in 0..64 {
-            // Check if satellite 'i' is present in the mask
             if (self.masks.satellite_mask & (1 << (63 - i))) != 0 {
-                let prn = (i + 1) as u8;
-                let sat = SatelliteId { constellation, prn };
-
-                let observations = Vec::new();
-                let _rough_range = self.satellite_data.rough_ranges[sat_idx] as f64; // Stub: need proper scaling
-
-                for j in 0..32 {
-                    // Check if signal 'j' is present in the signal mask
-                    if (self.masks.signal_mask & (1 << (31 - j))) != 0 {
-                        // Check if this specific cell (sat i, signal j) is active
-                        let _cell_offset =
-                            sat_idx * self.masks.signal_mask.count_ones() as usize + j;
-                        // wait, cell_mask is sparsely populated only for true signal bits.
-                        // Actually, cell_mask has size = N_sat * N_sig.
-                        // We need to track the active signal index
-
-                        // We will simplify this loop structure to just linearly read cells.
-                    }
-                }
-
-                satellites.push(SatObs { sat, observations });
-                sat_idx += 1;
+                let sat = SatelliteId { constellation, prn: (i + 1) as u8 };
+                satellites.push(SatObs { sat, observations: Vec::new() });
             }
         }
 
@@ -663,6 +657,19 @@ mod tests {
         assert_eq!(epoch.satellites[0].sat.prn, 1);
         // Constellation derived from message_number 1074/10 = 107 -> GPS
         assert_eq!(epoch.satellites[0].sat.constellation, Constellation::Gps);
+        // Pins the current, deliberately incomplete contract (see
+        // into_epoch_obs's doc comment): this message decodes one real
+        // pseudorange/phaserange cell, but the conversion to physical
+        // observables isn't implemented, so it's empty rather than
+        // wrong. This assertion must be replaced with real observable
+        // checks the moment that conversion is implemented -- a stub
+        // silently "working" on an empty vec is not a passing test for
+        // the real feature.
+        assert!(
+            epoch.satellites[0].observations.is_empty(),
+            "into_epoch_obs does not populate observations yet -- if this now fails, \
+             the stub has been implemented and this test needs real value assertions instead"
+        );
     }
 
     // -----------------------------------------------------------------------
