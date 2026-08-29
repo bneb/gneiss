@@ -209,9 +209,25 @@ is dominated by external data dependencies rather than algorithmic limitations.
   legitimate opt-in debug tooling, others likely leftover scaffolding
   — `rtk_iekf/mod.rs` alone has a dozen-plus labeled `BAD-SEED`,
   `SP3-PROBE`, `CONTENT repr`, `ENGINE-TEST`)
-- [ ] Triplicated `percentile` function (quality.rs, sidereal/mod.rs,
-  eval_swfg.rs) — confirmed not on the guard-script hot path, lower
-  stakes than the four already fixed, needs per-call-site verification
+- [ ] Percentile logic duplicated FOUR ways, not three as previously
+  noted here (2026-08-28 re-check): `quality.rs` and `sidereal/mod.rs`'s
+  private `percentile()` helpers ARE truly identical (`floor(len*q)`
+  indexing, same empty/bounds handling, differ only in whether `q` is
+  an integer-percent or a float-quantile parameter) and safe to unify.
+  `eval_swfg.rs`'s `percentile()` is NOT a duplicate of those two — it
+  uses a materially different index formula
+  (`round((len-1)*p)` vs `floor(len*q)`), which land on different
+  elements for the same requested quantile whenever `len*q` isn't a
+  whole number. The "canonical" `gneiss_core::metrics::compute_
+  statistics` is a FOURTH convention again (`ceil(len*q)` for p95/p99,
+  proper even-length interpolation for median) and doesn't expose
+  arbitrary quantiles (quality.rs needs exactly p50/p95, so it's a
+  close-but-not-quite fit even semantically). Unifying any pair here
+  changes that caller's actual output, not just its source location —
+  confirmed none of the three feed a guarded metric, so it's safe to
+  do EVENTUALLY, but it needs someone to consciously pick one
+  canonical definition and re-verify every caller's numbers move only
+  as expected, not a mechanical find-and-replace. Deferred, not fixed.
 - [ ] Nesting-depth pass on the large parser files (rinex.rs, ionex.rs,
   antex.rs, hatch.rs) — needs a proper per-function read, not a
   brace-counting heuristic
