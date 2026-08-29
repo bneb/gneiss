@@ -102,6 +102,111 @@ is dominated by external data dependencies rather than algorithmic limitations.
 - [x] 668 tests passing across all workspace crates with 0 failures
 - [x] Zero untracked clutter and optimized domain-structured `.gitignore`
 
+**SPRINT 6: Documentation Archival & Dead-Link Repair — COMPLETED**
+- [x] Fixed stale docs and dead links across the doc tree
+- [x] Untracked build/scratch bloat; archived superseded planning docs
+
+**SPRINT 7: State-Space Wet Troposphere — CLOSED, MOOT (2026-08-28)**
+- [x] Re-verified fresh: P222 v_RMS=103mm, SLAC v_RMS=210mm, both already
+  inside the <0.3m target that motivated a two-ZWD-state design. Other
+  fixes landed since (SP3/clock/orbit chain, cadence-hint fix) already
+  solved the problem this would have targeted. Do not build the
+  two-ZWD design without a fresh measurement showing an actual gap.
+  See docs/NETWORK_RTK_NEXT_STEPS.md, "Next architecture steps #1".
+
+**SPRINT 8: GLONASS FDMA Inter-Channel Bias — INVESTIGATED, NO-SHIP (2026-08-28)**
+- [x] Properly ported the exp/glonass-icb WIP onto current HEAD, fixed
+  three real bugs the port surfaced (state column-ordering, duplicate
+  auto-merged methods, missing engine wiring)
+- [x] Controlled A/B (GLONASS participation held constant, only ICB
+  calibration toggled): makes fix rate and h_p95 worse at every base,
+  including P181 where plain uncalibrated GLONASS was previously free
+- Preserved as `exp/glonass-icb-v2` (not merged). Re-attempting needs a
+  redesigned initialization/observability gate, not a constant tweak —
+  see docs/NETWORK_RTK_NEXT_STEPS.md for the full writeup.
+
+**SPRINT 9: Combiner Trust Model — DONE, architecture only (2026-08-28)**
+- [x] `PostProcessOptions.continuity_gate` centralizes the per-base
+  temporal honesty gate inside `execute_post_process`; any consumer
+  opts in with one field instead of duplicating the call
+- Does not change what the gate catches (still only temporal jumps);
+  P181's invisible single-band wrong fixes are untouched by this — see
+  Sprint 14.
+
+**SPRINT 10: Receiver PCV Rollout Beyond CAPO — OPEN**
+- [ ] `receiver_antenna.rs` (quarantined in `scratch/wip/`) needs
+  differential receiver PCV extended past the CAPO/Leica case to the
+  other antenna families in the CORS set (Trimble, Ashtech, Javad)
+- Note: OHLN's Ashtech antenna was checked this session (2026-08-28)
+  and already resolves/applies correctly with near-zero effect — its
+  410mm vertical RMS is NOT a receiver-PCV gap. Don't re-open that
+  specific case; the remaining work here is the other antenna families.
+
+**SPRINT 11: Phase-Only Network UPD Estimation — OPEN**
+- [ ] Recompute each base's wide-lane floats against the fused network
+  trajectory as known geometry (no code term needed), decompose
+  fractional residuals across bases x satellites (Σu_sat = 0), feed
+  corrected integers to the dormant `widelane::resolve_cascade` and
+  `far_matches_widelanes`. Largest, most novel item on this list — see
+  docs/NETWORK_RTK_NEXT_STEPS.md "Next architecture steps #2" for the
+  full design sketch. Expected: fix-rate headroom at P222/SLAC.
+
+**SPRINT 12: RTCM/NTRIP Real-Time Input — OPEN**
+- [ ] `gneiss-ntrip`'s NTRIP client and the RTCM3 MSM4/MSM7 decoder
+  both exist but aren't wired to the estimator. No real-time RTK path
+  exists yet; every result in this document is post-processed/offline.
+
+**SPRINT 13: Code-Quality Remediation — IN PROGRESS**
+- [x] 4 duplicate functions deduped this session (`compute_enu_stds`,
+  `track_c_freq` x2 sites, `ecef_to_enu`, `horizontal_error`/
+  `vertical_error`) — see "Code hygiene pass" in NETWORK_RTK_NEXT_STEPS.md
+- [ ] **19 files still over the 500-line limit**, worst offenders:
+  `rinex.rs` 2349, `spp.rs` 2228, `rtk_iekf/mod.rs` 1796 (was 1818),
+  `ephemeris.rs` 1573, `rtk_iekf/update.rs` 950, `rtk_iekf/state.rs` 581.
+  `mod.rs` has an established split pattern to follow (see
+  `clk_datum.rs`/`ar_gate.rs`: `impl GnssRtkIekf` blocks living in their
+  own file with colocated tests) — the DD-formation cluster
+  (`build_dd_measurements`, `build_single_dd_pair`, `receiver_dd_pcv_m`,
+  `formation_clock_corr_m`, `latch_clk_gate_warning`,
+  `zwd_innovation_pairs`, `extract_sat_positions`, `glo_freq_num`,
+  `compute_signal_sat_pos`, `compute_dd_variances`, ~530 lines with
+  tests) is the next clean extraction candidate, verified to have zero
+  external callers outside `mod.rs` itself.
+- [ ] 40+ ungated `println!`/`eprintln!` in library code (some
+  legitimate opt-in debug tooling, others likely leftover scaffolding
+  — `rtk_iekf/mod.rs` alone has a dozen-plus labeled `BAD-SEED`,
+  `SP3-PROBE`, `CONTENT repr`, `ENGINE-TEST`)
+- [ ] Triplicated `percentile` function (quality.rs, sidereal/mod.rs,
+  eval_swfg.rs) — confirmed not on the guard-script hot path, lower
+  stakes than the four already fixed, needs per-call-site verification
+- [ ] Nesting-depth pass on the large parser files (rinex.rs, ionex.rs,
+  antex.rs, hatch.rs) — needs a proper per-function read, not a
+  brace-counting heuristic
+- [ ] Kinematic mode (`4e40f22`, behind a flag): validated only against
+  synthetic/replayed-static data, no real moving-truth dataset yet —
+  see `docs/KINEMATIC_MODE_REPORT.md`
+
+**SPRINT 14: Cross-Epoch Wrong-Fix Detection — OPEN**
+- [ ] P181's wrong fixes are overwhelmingly single-band and carry no
+  wide-lane contradiction signal (survive even zero-tolerance veto) —
+  no same-epoch dual-frequency validation is possible against them even
+  in principle. Detection must come from cross-epoch consistency.
+  Forward path already validated: `GnssRtkIekf.history` retains
+  per-pair float ambiguities; `GNEISS_AMB_DUMP=1` writes per-key
+  trajectories. Next: run the existing step-detection harness
+  (`scripts/analyze_steps.py`) against ambiguity-history columns
+  instead of the CSV-proxy channels that gave a negative result.
+
+**SPRINT 15: Helmert Frame Transform — OPEN, mining candidate identified**
+- [ ] Absolute precision on dataset B is capped by a frame mismatch
+  between UNR IGS20 truth and the broadcast-solution frame (~56mm
+  vertical offset). `frames.rs` already has a `Helmert` trait/type,
+  built and tested but not integrated at any call site. The unrelated-
+  history `subagent-RTK-...`/`subagent-SPP-...` branches (mined for
+  ideas, never merged — genuinely different git root) were flagged
+  earlier as containing a 14-parameter Helmert transform implementation
+  worth a dedicated mining session before building this from scratch.
+
 <details><summary>Original per-item table</summary>
 
 | priority | item | expected impact | effort | dependency |
@@ -138,7 +243,7 @@ sites. Integration should happen atomically per-module.
 ### Known limitations
 (Updated Sprint 6 -- the bullets below were stale relative to shipped work; see docs/archive/ for
 the superseded docs that caused the drift.)
-- `estimators/rtk_iekf/mod.rs` is 1,775 lines (not ~750 as previously noted) -- split is overdue, tracked in Sprint 13
+- `estimators/rtk_iekf/mod.rs` is 1,796 lines (not ~750 as previously noted) -- split is overdue, tracked in Sprint 13
 - `receiver_antenna.rs` still WIP, quarantined in `scratch/wip/` -- differential receiver PCV rollout across
   antenna families beyond CAPO is open, tracked in Sprint 10
 - Ocean tide loading: **implemented** (Sprint 4 -- 11-constituent OTL model + IERS BLQ parser); this line
