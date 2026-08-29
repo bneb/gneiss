@@ -784,6 +784,69 @@ tests), re-establish that there's still a live problem to solve on
 *current* HEAD with the *current* dataset, using the same GNEISS_GLONASS
 toggle path above — don't assume the branch's premise still holds.
 
+**2026-08-28: properly ported and measured — NO-SHIP.** Took the above
+advice literally: cherry-picked the WIP (`01785a7`) onto current
+`network-rtk-long-baseline` (`2391eb1`) in an isolated worktree/branch
+(`test-glo-icb-port`), not the stale base it was written against. The
+port surfaced three real bugs in the WIP itself, none caught by its own
+(otherwise thorough) test suite because none of its tests exercised the
+full engine-wiring path or the icb+sat_iono interaction:
+
+1. `retain_active_ambiguities` preserved ICB columns in the wrong order
+   relative to sat_iono columns when both were enabled — silently
+   corrupts the compacted covariance's column alignment. New regression
+   test added (`retain_active_ambiguities_keeps_icb_after_sat_iono_when_
+   both_enabled`).
+2. Git's auto-merge had inserted a second, incorrectly-chained copy of
+   `ensure_icb`/`get_icb_idx`/`icb_offset` from the WIP's pre-sat_iono
+   baseline (`E0592` duplicate definitions) — deleted.
+3. `state.icb_enabled` was never set `true` anywhere in production code
+   (only in tests) — the entire feature was a structural no-op even with
+   `enable_glonass_icb` on. Fixed in `configure_iekf`.
+
+With those fixed, 0 warnings / 336+ tests green / clippy clean, and both
+regression guards pass unchanged (feature is correctly inert by
+default). Controlled measurement, GLONASS participation held constant
+across both arms (`GNEISS_SYSTEMS=GRE GNEISS_GLONASS=1`, same release
+binary, same day), toggling only `GNEISS_GLONASS_ICB`:
+
+| base | fix% off→on | h_p95 off→on | v_p95 off→on |
+|---|---|---|---|
+| P181 (15km) | 98.5 → **91.7** | 129 → **138 mm** | 252 → 252 mm |
+| P225 (21.9km) | 70.5 → **64.2** | 225 → **257 mm** | 367 → 351 mm |
+| P222 (38km) | 88.4 → **86.7** | 267 → **322 mm** | 113 → **135 mm** |
+| NETWORK fused | 97.4 → **94.1** | 172 → **178 mm** | — |
+
+Every base gets worse. The P181 result is the most telling: plain
+uncalibrated `enable_glonass` costs P181 *nothing* (see table above,
+"unchanged" row) — ICB calibration alone drops its fix rate 6.8 points.
+The harm is attributable to the ICB slope state itself, not to GLONASS
+participation in general.
+
+Root cause (partial — not fully confirmed, flagged for whoever picks
+this back up): `ICB_RW_M2_PER_S = 1e-12` effectively freezes the slope
+after initial convergence (variance growth over a full day is ~9e-8
+m²/MHz² — ruled out as "wandering slope corrupted by noise"). More
+likely: `ICB_INIT_VAR_M2_PER_MHZ2 = 4.0` is loose enough that a poorly-
+observed *initial* estimate — early epochs, ambiguities still seeding,
+few simultaneous GLONASS channels — can lock onto a wrong slope that
+then never self-corrects (RW ≈ 0 for the rest of the day), corrupting
+the code model at every subsequent epoch. Consistent with the model
+being a single global linear slope per FDMA band shared across all
+satellite pairs, which may not match the true per-satellite bias
+structure closely enough to tolerate a bad lock-in. Not verified via a
+slope-trajectory dump this round.
+
+Disposition: `exp/glonass-icb` left untouched (WIP, not merged). The
+properly-ported, fully-fixed, fully-measured version is preserved as
+`exp/glonass-icb-v2` (`be7ed35`, off `network-rtk-long-baseline` @
+`2391eb1`) — not merged, kept as the durable reference for whoever
+revisits this. GLONASS ICB moves from "queued" to the same measured-
+dead-end bucket as the other NO-SHIP items in this file. Re-attempting
+requires redesigning the slope's initialization/observability gating
+(e.g. delay engagement until N confident dual-frequency epochs across
+≥2 channels, or per-arc reset semantics), not a constant tweak.
+
 ## Five-track fan-out consolidated results (all independently verified)
 
 | track | verdict | landed | key evidence |
