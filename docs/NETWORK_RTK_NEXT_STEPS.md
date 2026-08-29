@@ -69,15 +69,24 @@ regressing it wouldn't fail CI today.
 
 ## Next architecture steps (in order)
 
-### 1. State-space wet troposphere inside the DD filter
-Two ZWD states (rover + active base) with NMF wet mapping differences,
-random-walk Q ≈ 3e-7 m²/s each, seeded ~15 cm. Elevations between
-stations differ by <0.5°, so the two columns are weakly separated — the
-design must (a) estimate their DIFFERENCE as primary and (b) tie the sum
-toward zero with a loose pseudo-observation, or interpolate base-side
-residuals from the network instead of estimating them. Target: P222/SLAC
-vertical RMS < 0.3 m. Requires the matrix-state plumbing added in
-`enable_zwd` (currently dormant behind `widelane_ar`).
+### 1. State-space wet troposphere inside the DD filter — MOOT, target already met
+~~Two ZWD states (rover + active base) with NMF wet mapping differences,
+random-walk Q ≈ 3e-7 m²/s each, seeded ~15 cm.~~ Target was P222/SLAC
+vertical RMS < 0.3 m. **2026-08-28: re-verified fresh (clean env, rebuilt
+release binary, dataset A default path) — P222 v_RMS=103mm, SLAC
+v_RMS=210mm, both already 1.4-3x inside the 0.3m target**, matching the
+"Refreshed 2026-08-26" table above to within 1-2mm (reproducible, not
+noise). Whatever combination of fixes landed since this item was written
+(SP3/clock/orbit chain, cadence-hint fix, or others) already solved the
+problem this two-ZWD design targeted. Building it now would be solving
+an already-solved problem — do not pick this up without a new, current
+measurement showing an actual gap. The matrix-state plumbing
+(`enable_zwd`) stays dormant behind `widelane_ar`; leave it there.
+
+Full current per-base picture (smoothed, same run): P181 v_RMS=84mm,
+**OHLN v_RMS=410mm** (2.7x P225, 4x P222 — see next item), CAPO
+v_RMS=101mm, P225 v_RMS=116mm. OHLN is now the only base with a real,
+unexplained vertical problem.
 
 ### 2. Phase-only network UPD estimation (activates the MW cascade)
 Raw MW carries per-(station,sat) code multipath — measured. Phase-only
@@ -129,6 +138,23 @@ observed) rather than by the estimator.
 - OHLN vertical: 93 episodic excursions (|v| > 30 cm, RMS 1.4 m over
   them) with unbiased p50 — wet-tropo/multipath activity specific to
   that baseline; diluted by fusion. Environmental, not a defect.
+
+  **2026-08-28 re-check** (the "Refreshed 2026-08-26" note above flagged
+  this as "worth a fresh look" at 430mm rather than assumed-environmental):
+  ruled out receiver antenna PCV/PCO as the cause. OHLN's exact header
+  combo (`ASH701945B_M`/`SCIT`) resolves cleanly against igs14.atx
+  (confirmed via `RECV-PCV enabled` trace) and applies same as every
+  other base — but moves OHLN's vertical RMS by <2mm (416→410mm forward,
+  unchanged smoothed), noise-level, unlike CAPO where the same mechanism
+  moved 40mm. The signature (p50≈+20mm, essentially unbiased; RMS=410mm,
+  huge) is a constant/smooth-pattern corrector doing nothing against
+  what must be occasional large excursions — consistent with the
+  existing "episodic, environmental" read, now confirmed by elimination
+  rather than assumed. Not chased further; would need per-epoch
+  timestamp correlation against the excursions to identify a specific
+  physical cause (multipath geometry, local wet-delay event), which is
+  a different, more expensive investigation than the antenna-gap
+  hypothesis this ruled out.
 
 ## Measured null result: satellite PCO in DD RTK (do not re-attempt casually)
 
