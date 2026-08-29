@@ -317,11 +317,39 @@ list is shorter than it looked.
   `extract_sat_positions` onto `satpos.rs`'s `EphSource`/
   `compute_phase_centre` and deleting the manual duplicate -- not
   mechanically relocating soon-to-be-deleted code into a third file.
-  Deferred rather than rushed: verifying `compute_phase_centre`
-  actually replicates every special case (SP3-then-broadcast fallback,
-  elevation masking, the `GNEISS_SP3_PROBE` debug trace) needs a
-  careful read neither this session's remaining time nor a rushed pass
-  should attempt.
+
+  Went one level deeper before calling this a safe mechanical swap,
+  and it isn't: `compute_phase_centre`'s pipeline is real and its
+  `BroadcastSrc`/`PreciseSrc` EphSource impls already exist and work,
+  but comparing it line-by-line against `extract_sat_positions` found
+  three genuine divergences, not just missing glue code:
+  1. `extract_sat_positions` calls `precise.position_at_with_hint(sv,
+     t, Some(rx_pos))` (a position hint for interpolation robustness);
+     `PreciseSrc::position_at` calls the hintless `position_at`. Swapping
+     in the pipeline as-is silently drops that hint.
+  2. `extract_sat_positions` looks up each satellite's OWN PCO via
+     `sat_pco::apply_sat_pco_z(pos, prn)` (per-satellite table);
+     `compute_phase_centre`'s stage 5 takes a single scalar `pco_z_m`
+     the caller must already know -- the per-satellite lookup would
+     have to move to the call site, not disappear.
+  3. Different transmit-time seeding entirely: `extract_sat_positions`'s
+     broadcast fallback (`compute_signal_sat_pos`) seeds τ from the
+     OBSERVED PSEUDORANGE (`pr_m / c`) at stage 1; `compute_phase_centre`
+     seeds τ from the GEOMETRIC distance to an approximate receiver
+     position (`(rx_pos - p0).norm() / c`). These differ by the
+     receiver clock bias term (pseudorange = geometric range +
+     c*clock_bias + ...) -- small once the filter has converged, less
+     so early in a session. This is an actual algorithmic choice, not
+     a bug in either direction, and picking one silently changes
+     early-epoch behavior.
+
+  None of these make the duplication finding above wrong -- the Sagnac
+  rotation itself is still identical -- but they mean "migrate onto
+  satpos.rs" is a real design task (extend the pipeline to accept a
+  position hint and a per-satellite PCO callback, and consciously
+  choose a τ-seeding convention) not a mechanical replace-and-delete.
+  Correctly deferred; this is now specified precisely enough for
+  whoever picks it up to not have to redo this comparison.
 - [ ] **Tests for the moved formation code still live in `mod.rs`'s
   test module**, not colocated with `formation.rs` -- needs a careful
   pass since some test helpers (`test_engine`, `run_sim`) are shared
