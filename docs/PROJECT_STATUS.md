@@ -296,15 +296,44 @@ is dominated by external data dependencies rather than algorithmic limitations.
   roadmap item from a single section, grep the doc for the same nouns
   further down before assuming the section you found is still current.
 
-**SPRINT 15: Helmert Frame Transform — OPEN, mining candidate identified**
+**SPRINT 15: Helmert Frame Transform — OPEN, rescoped from "build" to "integrate + verify parameters" (2026-08-28)**
 - [ ] Absolute precision on dataset B is capped by a frame mismatch
   between UNR IGS20 truth and the broadcast-solution frame (~56mm
-  vertical offset). `frames.rs` already has a `Helmert` trait/type,
-  built and tested but not integrated at any call site. The unrelated-
-  history `subagent-RTK-...`/`subagent-SPP-...` branches (mined for
-  ideas, never merged — genuinely different git root) were flagged
-  earlier as containing a 14-parameter Helmert transform implementation
-  worth a dedicated mining session before building this from scratch.
+  vertical offset). Went looking for the mining candidate this item
+  originally pointed at and found something better already in-tree:
+  a COMPLETE, correct 14-parameter Helmert implementation
+  (translation+rotation+scale, each with linear rates, standard
+  small-angle rotation form) already exists at
+  `crates/gneiss-geodesy/src/helmert.rs` (455 lines) — a real workspace
+  member, already a declared dependency of `gneiss-rtk`'s own
+  `Cargo.toml`. It has ZERO call sites anywhere (`grep
+  gneiss_geodesy crates/gneiss-rtk/src` is empty): a properly-built,
+  properly-wired-as-a-dependency, entirely unused capability. `frames.rs`
+  ALSO has its own independent, separately-tested `HelmertParams`
+  implementation used for its `ReferenceFrame` trait's fixed per-datum
+  constants — meaning there are now TWO parallel Helmert
+  implementations in-tree, which is itself a duplicate-implementation
+  item worth resolving alongside this (pick one, likely the
+  `gneiss-geodesy` one since it's the one with linear-rate/epoch
+  propagation support this problem actually needs).
+- **Why this isn't a 10-minute fix despite existing code**: IGS20,
+  ITRF2020, and current WGS84 realizations are all mm-level aligned
+  with each other -- a generic published inter-frame Helmert would not
+  explain a 56mm offset. That number is far more consistent with a
+  reference-EPOCH propagation issue (the CORS truth coordinates were
+  established at some survey epoch and may never have been propagated
+  to the actual 2020/2025 observation epoch via tectonic plate
+  velocity) than a frame-REALIZATION issue -- which is exactly what
+  `HelmertParams`'s `dtx/dty/dtz`/`ref_epoch` fields are for, but using
+  them correctly needs the station's actual published velocity, not a
+  generic frame-pair transform. Plugging in unverified or guessed
+  parameters would produce a plausible-looking but scientifically
+  bogus correction -- worse than leaving it alone. Next step is
+  research, not code: confirm from NGS/IGS metadata for these specific
+  CORS stations whether their published truth coordinates carry a
+  reference epoch distinct from the observation day, and if so, get
+  their real published velocities before writing a single parameter
+  literal.
 
 <details><summary>Original per-item table</summary>
 
