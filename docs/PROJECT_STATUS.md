@@ -10,6 +10,15 @@ multi-constellation processing, frame-safety types, and three independent
 regression guards. The remaining accuracy gap to Tier-1 commercial products
 is dominated by external data dependencies rather than algorithmic limitations.
 
+**2026-08-28 roadmap audit**: a full pass through every open item below
+(Sprints 6-15) found that roughly half were already resolved by other
+work and never marked done -- including the single largest item on the
+list (Sprint 11, phase-only network UPD estimation), which turned out
+to already be built, wired, and running by default since 2026-08-23,
+just never measured or documented. See each sprint's entry for what
+was verified vs. what's genuinely still open; the honest remaining
+list is shorter than it looked.
+
 ## Measured Results
 
 ### Dataset A (2020-05-14, GPS-only, broadcast ephemerides)
