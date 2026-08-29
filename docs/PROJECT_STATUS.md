@@ -259,25 +259,26 @@ list is shorter than it looked.
   still unverified -- given this file was the one named as worst and
   turned out clean, the remaining estimate needs its own fresh audit
   before assuming it still holds, rather than treated as confirmed debt.
-- [ ] Percentile logic duplicated FOUR ways, not three as previously
-  noted here (2026-08-28 re-check): `quality.rs` and `sidereal/mod.rs`'s
-  private `percentile()` helpers ARE truly identical (`floor(len*q)`
-  indexing, same empty/bounds handling, differ only in whether `q` is
-  an integer-percent or a float-quantile parameter) and safe to unify.
-  `eval_swfg.rs`'s `percentile()` is NOT a duplicate of those two — it
-  uses a materially different index formula
-  (`round((len-1)*p)` vs `floor(len*q)`), which land on different
-  elements for the same requested quantile whenever `len*q` isn't a
-  whole number. The "canonical" `gneiss_core::metrics::compute_
-  statistics` is a FOURTH convention again (`ceil(len*q)` for p95/p99,
-  proper even-length interpolation for median) and doesn't expose
-  arbitrary quantiles (quality.rs needs exactly p50/p95, so it's a
-  close-but-not-quite fit even semantically). Unifying any pair here
-  changes that caller's actual output, not just its source location —
-  confirmed none of the three feed a guarded metric, so it's safe to
-  do EVENTUALLY, but it needs someone to consciously pick one
-  canonical definition and re-verify every caller's numbers move only
-  as expected, not a mechanical find-and-replace. Deferred, not fixed.
+- [x] Percentile logic was duplicated FOUR ways, not three as
+  previously noted here. `quality.rs` and `sidereal/mod.rs`'s private
+  `percentile()` helpers were confirmed truly identical (`floor(len*q)`
+  indexing, same empty/bounds handling, differing only in whether `q`
+  was an integer-percent or float-quantile parameter) and unified into
+  `post_process::percentile` (2026-08-28) -- full suite green, same
+  305-test count, both guards pass.
+- [ ] Two conventions remain, deliberately NOT merged into the above:
+  `eval_swfg.rs`'s `percentile()` uses a materially different index
+  formula (`round((len-1)*p)` vs `floor(len*q)`), landing on different
+  elements for the same quantile whenever `len*q` isn't a whole number
+  -- a different statistic under the same name, not a true duplicate.
+  The "canonical" `gneiss_core::metrics::compute_statistics` is a
+  fourth convention again (`ceil(len*q)` for p95/p99, proper
+  even-length median interpolation) and doesn't expose arbitrary
+  quantiles either. Merging either of these changes that caller's
+  actual output, not just its source location -- confirmed neither
+  feeds a guarded metric, so it's safe to do eventually, but needs
+  someone to consciously pick one canonical definition and re-verify
+  the numbers move only as expected, not a mechanical find-and-replace.
 - [ ] Nesting-depth pass on the large parser files (rinex.rs, ionex.rs,
   antex.rs, hatch.rs) — needs a proper per-function read, not a
   brace-counting heuristic
