@@ -205,10 +205,25 @@ is dominated by external data dependencies rather than algorithmic limitations.
   remaining: `rinex.rs` 2349, `spp.rs` 2228, `rtk_iekf/mod.rs` 1202,
   `ephemeris.rs` 1573, `rtk_iekf/update.rs` 950, `formation.rs` 618,
   `rtk_iekf/state.rs` 581
-- [ ] 40+ ungated `println!`/`eprintln!` in library code (some
-  legitimate opt-in debug tooling, others likely leftover scaffolding
-  — `rtk_iekf/mod.rs` alone has a dozen-plus labeled `BAD-SEED`,
-  `SP3-PROBE`, `CONTENT repr`, `ENGINE-TEST`)
+- [x] `rtk_iekf/mod.rs` + `formation.rs` print audit — CLEARED
+  (2026-08-28): the file previously named here as the worst offender
+  ("a dozen-plus labeled `BAD-SEED`, `SP3-PROBE`, `CONTENT repr`,
+  `ENGINE-TEST`") turns out clean on inspection. All 11 `eprintln!`
+  sites across both files are either properly env-var-gated production
+  diagnostics (`GNEISS_GLO_DEBUG`, `GNEISS_FREQ_TRACE`,
+  `GNEISS_PCV_DEBUG`, `GNEISS_SP3_PROBE`, `WL_TRACE`, `GNEISS_CLK_TRACE`
+  -- the last gated at its one call site rather than internally, same
+  effect), a legitimate one-shot atomic-latched warning
+  (`latch_clk_gate_warning`, meant to always fire on a real
+  pathological condition), or confined to `#[cfg(test)]` functions
+  (`BAD-SEED`, `SP3-PROBE`, `CONTENT repr`, `ENGINE-TEST` are ALL test
+  names, not production leftovers -- captured/suppressed by the test
+  harness unless run with `--nocapture`). None are leftover scaffolding.
+- [ ] **40+ ungated `println!`/`eprintln!` estimate for the REST of the
+  library** (outside `rtk_iekf/mod.rs`+`formation.rs`, now cleared)
+  still unverified -- given this file was the one named as worst and
+  turned out clean, the remaining estimate needs its own fresh audit
+  before assuming it still holds, rather than treated as confirmed debt.
 - [ ] Percentile logic duplicated FOUR ways, not three as previously
   noted here (2026-08-28 re-check): `quality.rs` and `sidereal/mod.rs`'s
   private `percentile()` helpers ARE truly identical (`floor(len*q)`
