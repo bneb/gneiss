@@ -40,22 +40,6 @@ struct DdMeasurements {
     pub active_keys: Vec<DoubleDiffKey>,
 }
 
-/// Track C signal-registry frequency lookup (same policy as mw.rs).
-fn track_c_freq_mod(
-    c: gneiss_core::sat::Constellation,
-    primary: bool,
-    glo_k: i8,
-    band: u8,
-) -> f64 {
-    use gneiss_core::frequencies::{frequency_for, signal_for_band};
-    match signal_for_band(c, if primary { 1 } else { band }) {
-        Some(sig) => frequency_for(c, sig, glo_k),
-        None => {
-            if primary { 1_575_420_000.0 } else { 1_227_600_000.0 }
-        }
-    }
-}
-
 /// Safety margin on top of the nominal code-noise sigma when bounding a
 /// freshly seeded or slip-reset ambiguity: real code noise (multipath, low
 /// elevation) regularly exceeds the nominal model by 3-5x, and
@@ -666,13 +650,7 @@ impl GnssRtkIekf {
                 );
             }
         }
-        let freq_hz = match gneiss_core::frequencies::signal_for_band(
-            sat_id.constellation,
-            freq_band,
-        ) {
-            Some(sig) => gneiss_core::frequencies::frequency_for(sat_id.constellation, sig, glo_k),
-            None => gneiss_core::signal::get_frequency(sat_id, freq_band, glo_k),
-        };
+        let freq_hz = gneiss_core::frequencies::track_c_frequency(sat_id.constellation, freq_band, glo_k);
         let lambda = SPEED_OF_LIGHT_M_S / freq_hz;
         let (cp_rs, cp_rr, cp_bs, cp_br) = (
             rov_s.get_observable_phase(freq_band),
@@ -947,8 +925,8 @@ impl GnssRtkIekf {
         let base_dd =
             (sat_pos - base_pos).norm() - (ref_pos - base_pos).norm();
         let tropo = update::compute_tropo_dd(sat_pos, ref_pos, base_pos, cur);
-        let f1 = track_c_freq_mod(sat_id.constellation, true, glo_k, 1);
-        let f2 = track_c_freq_mod(sat_id.constellation, false, glo_k, b2);
+        let f1 = gneiss_core::frequencies::track_c_frequency(sat_id.constellation, 1, glo_k);
+        let f2 = gneiss_core::frequencies::track_c_frequency(sat_id.constellation, b2, glo_k);
         let lambda_wl = SPEED_OF_LIGHT_M_S / (f1 - f2);
         let pwl_cycles = dd_cp1 - dd_cp2;
         let pw = pwl_cycles - ((rs - rr) - base_dd + tropo) / lambda_wl;
