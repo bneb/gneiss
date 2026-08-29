@@ -160,18 +160,35 @@ is dominated by external data dependencies rather than algorithmic limitations.
 - [x] 4 duplicate functions deduped this session (`compute_enu_stds`,
   `track_c_freq` x2 sites, `ecef_to_enu`, `horizontal_error`/
   `vertical_error`) — see "Code hygiene pass" in NETWORK_RTK_NEXT_STEPS.md
-- [ ] **19 files still over the 500-line limit**, worst offenders:
-  `rinex.rs` 2349, `spp.rs` 2228, `rtk_iekf/mod.rs` 1796 (was 1818),
-  `ephemeris.rs` 1573, `rtk_iekf/update.rs` 950, `rtk_iekf/state.rs` 581.
-  `mod.rs` has an established split pattern to follow (see
-  `clk_datum.rs`/`ar_gate.rs`: `impl GnssRtkIekf` blocks living in their
-  own file with colocated tests) — the DD-formation cluster
-  (`build_dd_measurements`, `build_single_dd_pair`, `receiver_dd_pcv_m`,
-  `formation_clock_corr_m`, `latch_clk_gate_warning`,
-  `zwd_innovation_pairs`, `extract_sat_positions`, `glo_freq_num`,
-  `compute_signal_sat_pos`, `compute_dd_variances`, ~530 lines with
-  tests) is the next clean extraction candidate, verified to have zero
-  external callers outside `mod.rs` itself.
+- [x] 5th duplicate found and fixed same session: `track_c_freq_mod`
+  (`rtk_iekf/mod.rs`, 2 call sites) into the same canonical
+  `gneiss_core::frequencies::track_c_frequency` -- also a correctness
+  fix, not just a dedupe (old fallback was hardcoded GPS-nominal
+  regardless of actual constellation)
+- [x] `rtk_iekf/mod.rs` DD-formation cluster extracted into
+  `formation.rs` (`build_dd_measurements`, `build_single_dd_pair`,
+  `receiver_dd_pcv_m`, `formation_clock_corr_m`,
+  `latch_clk_gate_warning`, `zwd_innovation_pairs`, `update_phase_wl`,
+  `compute_dd_variances`, `glo_freq_num`, `extract_sat_positions`,
+  `broadcast_position_for`, `compute_signal_sat_pos`), following the
+  `clk_datum.rs`/`ar_gate.rs` impl-block-split pattern. `mod.rs`:
+  1796 -> 1202 lines. Full suite green (same 305-test count), both
+  guards byte-identical. Tests were NOT moved this round (they call
+  the relocated code via `eng.method(...)`, unaffected by which file
+  implements it) -- `formation.rs` itself is 618 lines, still over
+  budget and not yet colocated with its own tests. Both remain open:
+- [ ] **`formation.rs` (618 lines) needs its own split** -- formation
+  proper (`build_dd_measurements`/`build_single_dd_pair`) vs. the
+  clock/PCV correction helpers are the natural next seam
+- [ ] **Tests for the moved formation code still live in `mod.rs`'s
+  test module**, not colocated with `formation.rs` -- needs a careful
+  pass since some test helpers (`test_engine`, `run_sim`) are shared
+  with unrelated tests that must stay in `mod.rs`
+- [ ] **18 more files still over the 500-line limit** (was 19; `mod.rs`
+  itself no longer the single worst RTK-engine offender), worst
+  remaining: `rinex.rs` 2349, `spp.rs` 2228, `rtk_iekf/mod.rs` 1202,
+  `ephemeris.rs` 1573, `rtk_iekf/update.rs` 950, `formation.rs` 618,
+  `rtk_iekf/state.rs` 581
 - [ ] 40+ ungated `println!`/`eprintln!` in library code (some
   legitimate opt-in debug tooling, others likely leftover scaffolding
   — `rtk_iekf/mod.rs` alone has a dozen-plus labeled `BAD-SEED`,
