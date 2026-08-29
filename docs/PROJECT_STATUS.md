@@ -7,8 +7,23 @@ DD-RTK prototype into a multi-GNSS engine that outperforms RTKLIB 2.4.3
 by **1.9× on fix rate** and **3.6× on h_RMS** across six CORS baselines.
 The architecture now includes robust estimation, atmospheric state modeling,
 multi-constellation processing, frame-safety types, and three independent
-regression guards. The remaining accuracy gap to Tier-1 commercial products
-is dominated by external data dependencies rather than algorithmic limitations.
+regression guards.
+
+**2026-08-29: first measured comparison against actual Tier-1 specs**
+(not just RTKLIB) -- see docs/NETWORK_RTK_NEXT_STEPS.md, "Peer
+comparison: Gneiss vs published Leica/NovAtel/Qinertia specs". Against
+Leica's published single-baseline RTK datasheet spec (8mm+1ppm H,
+15mm+1ppm V RMS), gneiss currently runs **1.5-2.6x worse on horizontal,
+1.9-3.2x worse on vertical** across 15-50km baselines (excluding one
+known outlier base). That supersedes this section's previous
+unmeasured claim that the gap is "dominated by external data
+dependencies" -- the measured gap doesn't widen with baseline length
+the way pure atmospheric/orbit error would predict, suggesting noise
+floor and edge-case robustness (P181's invisible wrong fixes,
+receiver/antenna modeling depth) matter at least as much as external
+data. Real caveat: this compares a datasheet spec against gneiss's own
+broadcast-ephemeris run, not a controlled same-day same-hardware
+trial -- see that section for the full caveats.
 
 **2026-08-28 roadmap audit**: a full pass through every open item below
 (Sprints 6-15) found that roughly half were already resolved by other

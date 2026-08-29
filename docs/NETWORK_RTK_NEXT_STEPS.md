@@ -515,6 +515,73 @@ eliminated by the combined Galileo + gradient + robust-weighting stack.
 The dump infrastructure is retained for future datasets where wrong
 fixes do occur (dataset A legacy, adverse conditions).
 
+## Peer comparison: Gneiss vs published Leica/NovAtel/Qinertia specs (2026-08-29)
+
+Every prior "peer comparison" entry in this file benchmarks against
+RTKLIB -- a free, open-source reference implementation this project
+has always outperformed. None of them measure against the actual named
+tier-1 targets (Leica, NovAtel, Qinertia). This is the first attempt at
+that, using published datasheet specs (not measured against gneiss's
+own dataset by the vendors -- see caveats below) against gneiss's own
+fresh measurement (release binary sha256 `c93d4dbdc831`, dataset A
+default, clean env, smoothed/final output):
+
+| base | km | gneiss h_RMS | Leica spec h | ratio | gneiss v_RMS | Leica spec v | ratio |
+|---|---|---|---|---|---|---|---|
+| P181 | 15.0 | 34 mm | 23 mm | 1.5x | 84 mm | 30 mm | 2.8x |
+| CAPO | 16.6 | 48 mm | 25 mm | 1.9x | 101 mm | 32 mm | 3.2x |
+| P225 | 21.9 | 63 mm | 30 mm | 2.1x | 116 mm | 37 mm | 3.1x |
+| P222 | 38.0 | 120 mm | 46 mm | 2.6x | 103 mm | 53 mm | 1.9x |
+| SLAC | 49.7 | 252 mm | 58 mm | 4.4x | 210 mm | 65 mm | 3.2x |
+| OHLN | 16.5 | 102 mm | 25 mm | 4.2x | 410 mm | 32 mm | 13.0x |
+
+Leica spec = 8mm + 1ppm(H) / 15mm + 1ppm(V) RMS, single-baseline RTK
+(Leica Viva GS12/GS14/GS18T datasheets, consistent across their current
+receiver line). NovAtel PwrPak7's published RTK spec is 1cm + 1ppm RMS
+(not split into H/V in the fetched spec page) -- roughly matching
+Leica's horizontal number at these baselines. Qinertia's published
+figure is 4cm H / 8cm V, but that's their PPP mode (no base station);
+not a fair comparison against gneiss's base-relative RTK numbers, so
+omitted from the table above.
+
+**Reading this honestly:**
+- Excluding OHLN (a known, separately-investigated episodic-multipath
+  outlier -- see "Known benign anomalies" above), gneiss runs
+  **1.5-2.6x worse on horizontal and 1.9-3.2x worse on vertical** than
+  Leica's single-baseline spec, across the whole 15-50km baseline
+  range this dataset covers. That's a real, moderate, roughly
+  consistent gap -- not an order of magnitude, not close to parity.
+- The gap does NOT visibly widen with baseline length the way it would
+  if this were purely an unmodeled-atmosphere problem (P222 at 38km is
+  actually gneiss's BEST vertical ratio, 1.9x) -- consistent with this
+  project's own repeated finding that broadcast-orbit/atmosphere error
+  mostly cancels in short-to-medium DD baselines, and the remaining
+  gap is more about noise floor and edge-case robustness than
+  systematic long-baseline physics.
+- Real, important caveats this table doesn't capture: Leica's number
+  is a datasheet spec (their real-world performance envelope, not
+  necessarily their best case) measured on THEIR hardware/antennas
+  with precise orbit/clock corrections available in real time; gneiss
+  here uses broadcast-only ephemerides (see "Precise ephemeris: SP3
+  wiring tested" above -- precise products are measured NOT to help at
+  these baselines once orbit error cancels in DD, so this specific gap
+  is not primarily an "add SP3" fix). This is a genuinely different
+  operating point, not a controlled apples-to-apples trial the way the
+  RTKLIB comparisons above are (identical data, identical day).
+  Getting a true controlled comparison would need one of these
+  vendors' actual hardware logging the same CORS day, which is outside
+  what a documentation pass can produce.
+- The honest summary: **not tier-1 yet, but the gap is quantified,
+  moderate, and now has a number attached to it for the first time**,
+  rather than an unmeasured aspiration. Closing it further needs
+  exactly what's already tracked above and in
+  docs/PROJECT_STATUS.md's Sprint 13 (P181's invisible wrong fixes,
+  the atmospheric-decorrelation ceiling at long baselines, receiver
+  PCV/antenna modeling depth) -- this table doesn't change what to do
+  next, it gives a concrete target to measure progress against.
+
+Sources: [Leica Viva GS14 datasheet](https://techfee.fau.edu/approvedproposals/Download.cfm?sid=444&pid=343), [Leica Viva GS12 datasheet](https://grupoacre.es/wp-content/uploads/sites/3/2020/11/leica_viva_gs12_ds_en.pdf), [NovAtel PwrPak7 performance specs](https://docs.novatel.com/OEM7/Content/Technical_Specs_Receiver/PwrPak7_Performance_Specs.htm), [SBG Systems Qinertia 4 announcement](https://www.gpsworld.com/sbg-systems-unveils-qinertia-4/).
+
 ## Peer comparison: Gneiss vs RTKLIB on identical data (2020 DOY 135)
 
 Built RTKLIB 2.4.3 b34 (rnx2rtkp) from source; ran on identical P181
