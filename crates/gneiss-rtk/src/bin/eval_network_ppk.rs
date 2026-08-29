@@ -235,6 +235,9 @@ fn run_pass(
 ) -> ([f64; 4], Vec<SmoothedEpoch>) {
     // receiver_pcv is already Some/None per the caller's GNEISS_PCV=1 gate
     // (load_receiver_pcv); the engine applies it whenever it's Some.
+    // Long baselines need iono-immune fixing: MW wide-lane cascade AR
+    // unlocks the iono-free stage beyond ~20 km.
+    let widelane_ar = std::env::var("WL_DISABLE").is_err();
     let options = PostProcessOptions {
         enable_bidirectional: bidir,
         base_position: Some(base_pos_eff),
@@ -252,12 +255,14 @@ fn run_pass(
             STATIC_Q_ACCEL
         }),
         network_sat_upd: network_upd.clone(),
-        // Long baselines need iono-immune fixing: MW wide-lane cascade AR
-        // unlocks the iono-free stage beyond ~20 km.
-        widelane_ar: std::env::var("WL_DISABLE").is_err(),
+        widelane_ar,
         tropo_gradients: ctx.tropo_gradients,
         receiver_pcv,
         dynamics: ctx.dynamics,
+        // Honesty gating only makes sense once the bidirectional fuse has
+        // run; widelane_ar is this profile's signal that long-baseline
+        // iono-free products are in play.
+        continuity_gate: bidir && widelane_ar,
         // Moved from inside run_forward_iekf/run_backward_iekf, where it
         // was nested in a baseline-length gate meant for ZWD state (so
         // >25km baselines never got GLONASS regardless of this env var)
@@ -273,18 +278,10 @@ fn run_pass(
             return ([0.0; 4], Vec::new());
         }
     };
-    // Honesty gating on the fused bidirectional product: an excursion
-    // that jumps beyond what the motion model allows is reported as
-    // float — fixed 0.20 m/90 s for monuments, velocity+sigma-scaled
-    // for kinematic rovers.
+    // Honesty gating (excursion jumps beyond what the motion model
+    // allows downgraded to float) now happens inside execute_post_process
+    // itself via options.continuity_gate, set above.
     let mut traj = res.trajectory;
-    if bidir && options.widelane_ar {
-        traj = gneiss_rtk::post_process::network::apply_continuity_gate_dynamics(
-            traj,
-            gneiss_rtk::post_process::network::CONTINUITY_MAX_DT_S,
-            ctx.dynamics,
-        );
-    }
     // Sidereal stacking (GNEISS_SIDEREAL=1): diagnostic fold + strictly
     // causal first-half mitigation on the smoothed product, before any
     // error collection. Default OFF keeps the legacy path bit-identical.

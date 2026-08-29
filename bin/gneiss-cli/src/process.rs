@@ -258,6 +258,12 @@ fn backward_smoothing_options(
         receiver_pcv,
         dynamics: gneiss_rtk::post_process::ProcessingDynamics::from_env(),
         enable_glonass,
+        // No --continuity-gate flag yet (deferred, mirroring --glonass):
+        // the eval_network_ppk profile that validated this gate always
+        // pairs it with widelane_ar, but the CLI hasn't had its own
+        // measured A/B yet, so it stays off here rather than inheriting
+        // an unverified default.
+        continuity_gate: false,
     }
 }
 

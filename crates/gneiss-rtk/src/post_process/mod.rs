@@ -90,6 +90,17 @@ pub struct PostProcessOptions {
     /// DIFFERENT constellation sets. This field is now the single source
     /// of truth for both passes.
     pub enable_glonass: bool,
+    /// Opt-in temporal honesty gate on each base's fused trajectory
+    /// (`network::apply_continuity_gate_dynamics`): downgrades a fixed
+    /// claim to float when it jumps farther than the motion model allows
+    /// between adjacent epochs, the only independent signal against a
+    /// forward/backward pair that confidently agrees on the same wrong
+    /// integer (docs/NETWORK_RTK_NEXT_STEPS.md, "Combiner trust model").
+    /// Default off and must stay opt-in: flipping it for a consumer with
+    /// an existing bit-identical walkthrough reference is a deliberate,
+    /// signed-off change (see "Walkthrough reference refresh"), not a
+    /// side effect of wiring it up.
+    pub continuity_gate: bool,
 }
 
 /// Paired receiver antenna PCV models consumed by the DD engine.
@@ -149,6 +160,15 @@ pub fn execute_post_process(
         options.widelane_ar,
         options.dynamics,
     );
+    let smoothed_traj = if options.continuity_gate {
+        network::apply_continuity_gate_dynamics(
+            smoothed_traj,
+            network::CONTINUITY_MAX_DT_S,
+            options.dynamics,
+        )
+    } else {
+        smoothed_traj
+    };
     let quality_rep = quality::generate_quality_report(&smoothed_traj);
 
     Ok(PostProcessResult {
