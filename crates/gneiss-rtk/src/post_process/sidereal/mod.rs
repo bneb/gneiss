@@ -38,7 +38,7 @@ pub(crate) mod testing;
 use gneiss_core::coords::{ecef_to_llh, ecef_to_ned_matrix};
 use nalgebra::Vector3;
 
-use super::SmoothedEpoch;
+use super::{percentile, SmoothedEpoch};
 use phase::{Sample, SIDEREAL_PERIOD_S};
 use report::{ChannelDump, SiderealReport};
 
@@ -93,14 +93,6 @@ pub fn half_metrics(
         v_p50: percentile(&v, 0.50),
         v_rms: (v.iter().map(|x| x * x).sum::<f64>() / v.len().max(1) as f64).sqrt(),
     }
-}
-
-fn percentile(sorted: &[f64], q: f64) -> f64 {
-    if sorted.is_empty() {
-        return 0.0;
-    }
-    let idx = ((sorted.len() as f64 * q).floor() as usize).min(sorted.len() - 1);
-    sorted[idx]
 }
 
 fn channel_samples(

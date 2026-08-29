@@ -4,6 +4,7 @@
 //! fix rates, and assigns standard GNSS Quality indicators (Q1..Q5).
 
 use crate::post_process::combiner::SmoothedEpoch;
+use crate::post_process::percentile;
 
 /// Comprehensive quality report for a processed session.
 #[derive(Debug, Clone)]
@@ -61,10 +62,10 @@ pub fn generate_quality_report(epochs: &[SmoothedEpoch]) -> QualityReport {
         dgps_epochs: dgps,
         spp_epochs: spp,
         fix_rate_pct: (fixed as f64) / (n as f64) * 100.0,
-        median_separation_m: percentile(&separations, 50),
-        p95_separation_m: percentile(&separations, 95),
-        median_std_horizontal_m: percentile(&h_stds, 50),
-        median_std_3d_m: percentile(&d3_stds, 50),
+        median_separation_m: percentile(&separations, 0.50),
+        p95_separation_m: percentile(&separations, 0.95),
+        median_std_horizontal_m: percentile(&h_stds, 0.50),
+        median_std_3d_m: percentile(&d3_stds, 0.50),
     }
 }
 
@@ -81,12 +82,6 @@ fn empty_report() -> QualityReport {
         median_std_horizontal_m: 0.0,
         median_std_3d_m: 0.0,
     }
-}
-
-fn percentile(sorted: &[f64], pct: usize) -> f64 {
-    if sorted.is_empty() { return 0.0; }
-    let idx = ((sorted.len() * pct) / 100).min(sorted.len() - 1);
-    sorted[idx]
 }
 
 #[cfg(test)]

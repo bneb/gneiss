@@ -178,6 +178,19 @@ pub fn execute_post_process(
     })
 }
 
+/// Nearest-rank percentile of a pre-sorted slice (`q` in `[0.0, 1.0]`).
+/// Shared by `quality.rs` and `sidereal/mod.rs`, which both need exactly
+/// this convention -- not `gneiss_core::metrics::compute_statistics`'s
+/// `ceil`-based p95/p99, a different (also valid) convention that
+/// callers here were never using in the first place.
+pub(crate) fn percentile(sorted: &[f64], q: f64) -> f64 {
+    if sorted.is_empty() {
+        return 0.0;
+    }
+    let idx = ((sorted.len() as f64 * q).floor() as usize).min(sorted.len() - 1);
+    sorted[idx]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
