@@ -293,9 +293,35 @@ list is shorter than it looked.
   the relocated code via `eng.method(...)`, unaffected by which file
   implements it) -- `formation.rs` itself is 618 lines, still over
   budget and not yet colocated with its own tests. Both remain open:
-- [ ] **`formation.rs` (618 lines) needs its own split** -- formation
-  proper (`build_dd_measurements`/`build_single_dd_pair`) vs. the
-  clock/PCV correction helpers are the natural next seam
+- [ ] **`formation.rs` (618 lines) needs its own split -- but not a
+  plain move, a real dedupe was found first (2026-08-28).**
+  `extract_sat_positions`/`compute_signal_sat_pos` (in `formation.rs`,
+  ~134 lines) manually inline transmit-time iteration + Sagnac rotation
+  for both the broadcast and SP3-precise-orbit paths. `satpos.rs`
+  (264 lines, already in this directory) is a formal, type-safe
+  branded-stage pipeline built specifically to prevent exactly this
+  class of bug -- its own doc comment: "every satellite position used
+  in DD formation MUST flow through these five stages," referencing a
+  real historical ~140m cross-track bug from the broadcast and SP3
+  paths applying Sagnac inconsistently. Checked whether that bug is
+  currently live: it is not -- `grep satpos:: formation.rs` and
+  `grep -rl "use.*satpos::"` across `gneiss-rtk/src` are BOTH empty.
+  `satpos.rs`'s pipeline is wired to nothing. Compared its Sagnac
+  rotation formula against `formation.rs`'s manual one directly:
+  byte-for-byte identical (`r.x*cw + r.y*sw, -r.x*sw + r.y*cw, r.z`
+  either way). So the historical bug isn't currently live -- someone
+  independently hand-fixed the immediate case in the manual code and
+  separately built the principled type-safe prevention, and the two
+  were never connected. Net: this is real, duplicate physics code, not
+  a live accuracy bug. The RIGHT next step is migrating
+  `extract_sat_positions` onto `satpos.rs`'s `EphSource`/
+  `compute_phase_centre` and deleting the manual duplicate -- not
+  mechanically relocating soon-to-be-deleted code into a third file.
+  Deferred rather than rushed: verifying `compute_phase_centre`
+  actually replicates every special case (SP3-then-broadcast fallback,
+  elevation masking, the `GNEISS_SP3_PROBE` debug trace) needs a
+  careful read neither this session's remaining time nor a rushed pass
+  should attempt.
 - [ ] **Tests for the moved formation code still live in `mod.rs`'s
   test module**, not colocated with `formation.rs` -- needs a careful
   pass since some test helpers (`test_engine`, `run_sim`) are shared
