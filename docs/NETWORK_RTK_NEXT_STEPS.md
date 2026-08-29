@@ -88,7 +88,7 @@ Full current per-base picture (smoothed, same run): P181 v_RMS=84mm,
 v_RMS=101mm, P225 v_RMS=116mm. OHLN is now the only base with a real,
 unexplained vertical problem.
 
-### 2. Phase-only network UPD estimation (activates the MW cascade)
+### 2. Phase-only network UPD estimation (activates the MW cascade) — BUILT (2026-08-23), MEASURED (2026-08-28)
 Raw MW carries per-(station,sat) code multipath — measured. Phase-only
 alternative now feasible BECAUSE fusion exists: take the fused network
 trajectory as a known rover trajectory, recompute each base's wide-lane
@@ -98,6 +98,43 @@ then decompose fractional residuals across bases × satellites
 the dormant cascade (`widelane::resolve_cascade`) and the FAR veto
 (`far_matches_widelanes`). Expected: fix-rate headroom at P222/SLAC and
 honest fixes through disturbed windows.
+
+**2026-08-28: this design was already implemented in full** (commit
+`77e5a27`, 2026-08-23 — "phase-only network UPD estimator - validated
+on the CORS day set") and never marked done in this file. Traced the
+live code path before assuming otherwise: `mw::solve_network_upd` runs
+by default in `eval_network_ppk.rs` as a Phase-A pre-pass over all
+bases (opt-out via `WL_NO_UPD`, not opt-in), and
+`WidelaneTracker::fixed_widelane` applies the solved per-satellite UPD
+(`w -= us - ur`) before its round-to-integer gate, which is exactly
+what feeds `resolve_cascade`/`far_matches_widelanes`. The one thing the
+Aug 23 commit hadn't done — its own last line says so — was measure the
+downstream effect; it validated only the solver's internal residuals
+(351 pairs, RMS 0.122 cyc across 6 bases), not fix-rate impact.
+
+Measured today (fresh release binary, sha256 `470a48210284`, dataset A
+default full-day run, `WL_NO_UPD=1` vs unset):
+
+| base | fix% off→on (smoothed) | h_p95 off→on | v_p95 off→on |
+|---|---|---|---|
+| P181 | 86.5 → 86.4 | 57 → 57 mm | 163 → 163 mm |
+| OHLN | 79.8 → 80.1 | 185 → 186 mm | 216 → 213 mm |
+| CAPO | 92.6 → 92.9 | 90 → 88 mm | 156 → 156 mm |
+| P225 | 85.7 → 85.8 | 109 → 109 mm | 174 → 174 mm |
+| P222 | 83.0 → 82.8 | 209 → 209 mm | 170 → 170 mm |
+| SLAC | 69.9 → 69.9 | 363 → 363 mm | 192 → 192 mm |
+| NETWORK | 99.8 → 99.8 | — | — |
+
+Every delta is single-digit epochs out of ~2880 — noise, not signal,
+including P222/SLAC specifically. **Verdict: correctly built and
+live-wired, but delivers no measurable benefit on this dataset.**
+Plausible reason: the solved UPD magnitudes are small (±0.1 cyc per the
+original commit) relative to typical arc-mean noise on this benign
+mid-latitude day-time dataset, so the correction rarely flips a
+rounding decision that wouldn't have gone the same way anyway. Left
+on (provably not harmful, may matter on a noisier dataset); not worth
+chasing further without one that actually stresses wide-lane rounding
+margins.
 
 ### 3. Combiner trust model — DONE (architecture, not a new algorithm)
 `combiner.rs` blesses co-wrong pass agreement with hard-coded gates

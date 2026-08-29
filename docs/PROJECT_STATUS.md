@@ -158,14 +158,40 @@ is dominated by external data dependencies rather than algorithmic limitations.
   TRM29659 is untested but same-family low-priority). Re-open only if
   a specific new dataset surfaces a cross-family bias like CAPO's.
 
-**SPRINT 11: Phase-Only Network UPD Estimation — OPEN**
-- [ ] Recompute each base's wide-lane floats against the fused network
-  trajectory as known geometry (no code term needed), decompose
-  fractional residuals across bases x satellites (Σu_sat = 0), feed
-  corrected integers to the dormant `widelane::resolve_cascade` and
-  `far_matches_widelanes`. Largest, most novel item on this list — see
-  docs/NETWORK_RTK_NEXT_STEPS.md "Next architecture steps #2" for the
-  full design sketch. Expected: fix-rate headroom at P222/SLAC.
+**SPRINT 11: Phase-Only Network UPD Estimation — CLOSED, ALREADY BUILT (2026-08-28 correction)**
+- The biggest miss in this document's first draft: this was written up
+  as "OPEN... largest, most novel item on this list" by reading only
+  the original design-sketch section in NETWORK_RTK_NEXT_STEPS.md
+  ("Next architecture steps #2") without checking whether it had
+  already been done. It has. Traced the actual code before writing
+  anything: `mw::solve_network_upd` IS the phase-only cross-base
+  least-squares decomposition (Σu_sat=0 via eliminated-satellite
+  substitution) exactly as designed; `eval_network_ppk.rs` runs it as a
+  default Phase-A pre-pass (opt-OUT via `WL_NO_UPD`, not opt-in) over
+  all bases; and `WidelaneTracker::fixed_widelane` genuinely applies
+  the solved UPD (`w -= us - ur`) before the round-to-integer check
+  that feeds `resolve_cascade`/`far_matches_widelanes` -- confirmed by
+  reading the exact line, not inferring from a comment. Landed in
+  commit `77e5a27` (2026-08-23), which validated the SOLVER's internal
+  residuals (351 pairs, RMS 0.122 cyc) but explicitly left "wiring the
+  solved UPDs into cascade rounding" as its own next step -- that
+  wiring was completed at some point after, without a doc update.
+- **What was actually still missing, and is now done**: nobody had
+  measured the mechanism's downstream effect on fix rate/accuracy, only
+  the solver's internal residuals. Measured today (fresh
+  hash-verified release binary `470a48210284`, dataset A default,
+  `WL_NO_UPD=1` vs unset): every base's smoothed fix rate and h_p95/
+  v_p95 move by noise-level amounts (single-digit epoch counts out of
+  ~2880), including P222 and SLAC specifically -- the bases this was
+  predicted to help most. **Verdict: correctly built and wired, but
+  currently delivers no measurable benefit on this dataset.** Plausible
+  reason (not further chased): the commit's own note that solved UPD
+  magnitudes are small (+/-0.1 cyc) relative to typical arc-mean noise,
+  so the correction rarely flips a rounding decision either way on this
+  relatively benign mid-latitude day-time dataset. Left on (default,
+  unchanged) since it's provably not harmful and may matter on noisier
+  data; not worth chasing further without a dataset that actually
+  stresses wide-lane rounding margins.
 
 **SPRINT 12: RTCM/NTRIP Real-Time Input — OPEN**
 - [ ] `gneiss-ntrip`'s NTRIP client and the RTCM3 MSM4/MSM7 decoder
