@@ -99,12 +99,32 @@ the dormant cascade (`widelane::resolve_cascade`) and the FAR veto
 (`far_matches_widelanes`). Expected: fix-rate headroom at P222/SLAC and
 honest fixes through disturbed windows.
 
-### 3. Combiner trust model
+### 3. Combiner trust model — DONE (architecture, not a new algorithm)
 `combiner.rs` blesses co-wrong pass agreement with hard-coded gates
 (0.5/0.2/10 m). End-of-day windows show both passes agreeing on wrong
 fixes ~14 m apart from truth. Per-base continuity gating (eval-level)
 mitigates the product; moving the gate into combiner semantics would
 make every consumer honest. Must stay gated to avoid walkthrough drift.
+
+**2026-08-28:** `PostProcessOptions.continuity_gate` now applies
+`network::apply_continuity_gate_dynamics` centrally inside
+`execute_post_process`, right after the bidirectional combine — any
+consumer opts in with one field instead of duplicating the call.
+`eval_network_ppk.rs`'s manual post-hoc call (the only place this ever
+ran) is deleted in favor of setting the field to its previous `bidir &&
+widelane_ar` condition. Every other consumer defaults `false`,
+preserving exact current behavior (`eval_qinertia_ppk`'s walkthrough
+included) — flipping it on for `gneiss-cli` or the walkthrough is a
+separate, deliberate decision this does not make. Both guards
+byte-identical, full suite green, clippy clean.
+
+This closes the *architecture* gap (every consumer can now be honest
+without re-deriving the call); it does not change what the gate itself
+catches. The underlying mechanism is still the same temporal-jump
+signal — it still cannot detect a wrong fix that neither disagrees
+between passes nor jumps between epochs (P181's invisible single-band
+wrong fixes, per "Dataset B tail anatomy" above, are exactly this
+class). That remains open, tracked there.
 
 ### Measured blocker: iono-free engagement starvation at long baselines
 Instrumented outcome counts (full day, RUST_LOG=debug):
