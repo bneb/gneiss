@@ -212,28 +212,45 @@ list is shorter than it looked.
   correct bit widths per MSM4/5 vs MSM6/7, sign extension, satellite/
   signal/cell mask decoding (`parse_msm_header/masks/satellite_data/
   signal_data`).
-- [ ] **12c. RTCM3 MSM -> EpochObs conversion — found to be a silent
-  stub, now clearly marked as one.** `MsmMessage::into_epoch_obs`
-  compiled, had a passing test, and looked complete, but every
-  `SatObs.observations` was unconditionally empty (the signal-decoding
-  loop was abandoned mid-implementation -- literally ended in a comment
-  reading "We will simplify this loop structure..." with no code after
-  it) and the epoch's GPS week was hardcoded to 0. Its only test never
-  checked `observations` at all, so nothing caught this. Fixed today:
-  added a loud doc-comment warning, removed the dead abandoned loop
-  body, and rewrote the test to explicitly assert-and-explain the
-  current empty-observations contract so it FAILS the moment someone
-  implements the real conversion (a stub silently "passing" on an
-  empty vec is not a passing test for the feature). Completing this
-  needs the RTCM 10403.x per-cell scale factors (rough range + fine
-  pseudorange/phaserange combination) and a real week-number source --
-  and there is no RTCM3 sample data anywhere in this repo to verify a
-  scaling implementation against
-  (`datasets/rtkexplorer/sample_1/base.rtcm3` is 0 bytes, likely never
-  fetched). Do not implement this from memory of the spec without a
-  real sample + independently-known-correct decoded values to check
-  against -- a wrong scale factor here produces plausible-looking wrong
-  positions, not an obvious crash.
+- [x] **12c-1. RTCM3 MSM raw bitfield alignment — was a SEVERE, confirmed
+  bug, now fixed (2026-08-28).** Deeper than the `into_epoch_obs` stub
+  below: `parse_satellite_data` never read DF397 (8-bit rough-range
+  integer-ms field) at all, and read DF419 (extended sat info) for
+  every MSM type instead of MSM5/7 only. Verified against two
+  independent sources before touching code -- RTKLIB's
+  `decode_msm4`/`decode_msm_head` (github.com/tomojitakasu/RTKLIB,
+  the reference implementation this project already benchmarks
+  against) and an independent RTCM 10403.3 field reference, both
+  confirming the correct order (DF397 all-types -> DF419 MSM5/7-only
+  -> DF398 all-types -> DF399 MSM5/7-only). Both bugs shifted every
+  bit read after the satellite-data section -- the entire signal-data
+  section (pseudoranges, phaseranges, lock times, CNRs) -- for any
+  real MSM4/6 message. The test suite never caught this because its
+  synthetic payloads were built with the same wrong layout the parser
+  expected: parser and tests agreed with each other while both
+  disagreed with the real wire format. Fixed the struct, the parser,
+  and all 9 affected test call sites (3 of which used inline bit
+  literals a name-based search missed on the first pass). Full suite
+  green, clippy clean.
+- [ ] **12c-2. RTCM3 MSM -> EpochObs physical-unit conversion** —
+  `into_epoch_obs` remains the documented empty-observations stub;
+  this fix only corrects the bits landing in the right fields
+  underneath it, it doesn't implement the conversion. Now have a
+  VERIFIED scaling formula to implement against (RTKLIB `save_msm_obs`,
+  same source as above): `pseudorange_m = rough_int_ms*RANGE_MS +
+  rough_modulo*P2_10*RANGE_MS + fine_pseudorange*P2_24*RANGE_MS`
+  (RANGE_MS = c*0.001, P2_10/P2_24 = 2^-10/2^-24), carrier phase is
+  the same range sum divided by wavelength. What's still missing
+  before this can be implemented safely: (a) the cell-index -> 
+  (satellite, signal) mapping (`MsmMasks.cell_mask` walked in
+  satellite-major order against however many bits are set in
+  `satellite_mask`/`signal_mask` -- mechanical but unverified against
+  a real message), and (b) the RTCM signal-ID-to-frequency-band table
+  per constellation (needed to pick the right wavelength) -- not yet
+  sourced. There is still no RTCM3 sample data anywhere in this repo
+  (`datasets/rtkexplorer/sample_1/base.rtcm3` is 0 bytes) to validate
+  the finished conversion end-to-end against, though the formula
+  itself is now citable rather than guessed.
 - [ ] **12d. UBX (u-blox binary) -> EpochObs conversion** — by
   contrast, `UbxRxmRawx::into_epoch_obs` (`gneiss-parsers/src/ubx.rs`)
   DOES genuinely populate real pseudorange/carrier-phase/Doppler/SNR
