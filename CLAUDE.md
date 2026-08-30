@@ -45,3 +45,5 @@ investigation that motivated the SWFG rewrite (POST_MORTEM.md never existed; thi
 equivalent and is archived, not current).
 See [docs/PROJECT_STATUS.md](./docs/PROJECT_STATUS.md) and [docs/NETWORK_RTK_NEXT_STEPS.md](./docs/NETWORK_RTK_NEXT_STEPS.md)
 for the current sprint plan and roadmap.
+See [docs/TIER1_ROADMAP.md](./docs/TIER1_ROADMAP.md) for the cross-cutting roadmap to tier-1 PPK
+parity (performance, UX, features, code quality; accuracy is covered in PROJECT_STATUS.md's Sprint 16).
