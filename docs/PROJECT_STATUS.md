@@ -655,6 +655,39 @@ list is shorter than it looked.
   re-run: the deleted code was unreachable from any live path, so
   there's no mechanism by which this could move the accuracy numbers;
   full build/test/clippy pass clean.
+- [x] **Follow-up correction + a real, unexplored accuracy lever
+  (2026-08-30).** The line above wasn't quite right: deleting the dead
+  factory exposed that `AtmosphereModel::gmf_mapping_functions` was
+  *also* dead (zero callers once the factory was gone) -- only
+  `nmf_mapping_functions` is actually called (`formation.rs`,
+  `tropo_nmf`). Gated `gmf_impl` and its exclusive Legendre/spherical-
+  harmonic helper chain behind `#[cfg(test)]` rather than deleting
+  (see `atmosphere.rs`'s comment above `_legendre`) -- keeps it
+  test-verified rather than throwing away real physics.
+  **The actual finding underneath:** the deleted `TropoMapping` enum
+  had marked `Gmf` as `#[default]`, and its own doc comments claimed
+  GMF is more accurate than NMF at low elevation (~1-2cm vs ~3-5cm at
+  15°) -- but the live path hardcodes NMF specifically, with no
+  `tropo_gmf`-equivalent ever wired in.
+
+  **Tried it (2026-08-30), result: no measurable effect, reverted.**
+  Low enough cost to just run the experiment rather than leave it as a
+  suggestion: un-gated `gmf_impl`, re-added `gmf_mapping_functions`,
+  swapped both `formation.rs` call sites, rebuilt release, ran both
+  guards. Result: guardB (multi-GNSS) was **bit-for-bit identical on
+  all 10 metrics** to the NMF baseline; guardA (network) was identical
+  on 8 of 9, with OHLN's fix rate moving 80.1% -> 80.2% -- a
+  single-dataset, single-tenth-of-a-point move that's noise, not
+  signal. Confirms the hypothesis in the comment below `_legendre`:
+  the wet-mapping-function choice barely survives double-differencing
+  at these baseline lengths, because most of the wet delay is
+  common-mode between rover/base/ref-satellite and cancels regardless
+  of which mapping function computed it. Reverted cleanly (`git
+  checkout` on both files, back to the already-verified gated-GMF
+  commit) rather than keeping a zero-benefit change to the live path.
+  This closes the question rather than leaving it open -- worth
+  recording so a future session doesn't re-spend the same effort
+  re-deriving the same null result.
 - [ ] Kinematic mode (`4e40f22`, behind a flag): validated only against
   synthetic/replayed-static data, no real moving-truth dataset yet —
   see `docs/KINEMATIC_MODE_REPORT.md`
