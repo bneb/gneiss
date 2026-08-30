@@ -1,8 +1,74 @@
 use super::{sign_extend_i16, sign_extend_i32, RtcmParseError};
 use bitvec::prelude::*;
-use gneiss_core::obs::{EpochObs, SatObs};
+use gneiss_core::constants::SPEED_OF_LIGHT_M_S;
+use gneiss_core::obs::{EpochObs, ObsCode, ObsType, Observation, SatObs, SignalCode};
 use gneiss_core::sat::{Constellation, SatelliteId};
 use gneiss_core::time::GpsTime;
+
+/// Range corresponding to 1 millisecond of light travel (metres). Every MSM
+/// rough/fine range field is expressed as a fraction of this unit.
+const RANGE_MS: f64 = SPEED_OF_LIGHT_M_S * 0.001;
+const P2_10: f64 = 1.0 / 1024.0; // 2^-10, DF398 rough-range-modulo scale
+const P2_24: f64 = 1.0 / 16_777_216.0; // 2^-24, DF400 fine pseudorange (MSM4/5)
+const P2_29: f64 = 1.0 / 536_870_912.0; // 2^-29: DF401 fine phase (MSM4/5) and DF405 fine pseudorange (MSM6/7)
+const P2_31: f64 = 1.0 / 2_147_483_648.0; // 2^-31, DF406 fine phase (MSM6/7)
+
+/// MSM signal index (1-32) -> two-character RINEX-style observation code,
+/// verbatim from RTKLIB's `msm_sig_gps`/`msm_sig_gal`/`msm_sig_cmp`/
+/// `msm_sig_glo`/`msm_sig_qzs` tables (github.com/tomojitakasu/RTKLIB,
+/// src/rtcm3.c) -- the reference implementation this project already
+/// benchmarks against. Index 0 is unused (RTCM signal numbers are 1-32);
+/// empty string means "not defined for this constellation."
+fn msm_signal_rinex_code(c: Constellation, sig_id: u8) -> Option<&'static str> {
+    const GPS: [&str; 32] = [
+        "", "1C", "1P", "1W", "1Y", "1M", "", "2C", "2P", "2W", "2Y", "2M",
+        "", "", "2S", "2L", "2X", "", "", "", "", "5I", "5Q", "5X",
+        "", "", "", "", "", "1S", "1L", "1X",
+    ];
+    const GAL: [&str; 32] = [
+        "", "1C", "1A", "1B", "1X", "1Z", "", "6C", "6A", "6B", "6X", "6Z",
+        "", "7I", "7Q", "7X", "", "8I", "8Q", "8X", "", "5I", "5Q", "5X",
+        "", "", "", "", "", "", "", "",
+    ];
+    const BDS: [&str; 32] = [
+        "", "1I", "1Q", "1X", "", "", "", "6I", "6Q", "6X", "", "",
+        "", "7I", "7Q", "7X", "", "", "", "", "", "", "", "",
+        "", "", "", "", "", "", "", "",
+    ];
+    const GLO: [&str; 32] = [
+        "", "1C", "1P", "", "", "", "", "2C", "2P", "", "3I", "3Q",
+        "3X", "", "", "", "", "", "", "", "", "", "", "",
+        "", "", "", "", "", "", "", "",
+    ];
+    const QZS: [&str; 32] = [
+        "", "1C", "", "", "", "", "", "", "6S", "6L", "6X", "",
+        "", "", "2S", "2L", "2X", "", "", "", "", "5I", "5Q", "5X",
+        "", "", "", "", "", "1S", "1L", "1X",
+    ];
+    let table = match c {
+        Constellation::Gps => &GPS,
+        Constellation::Galileo => &GAL,
+        Constellation::Beidou => &BDS,
+        Constellation::Glonass => &GLO,
+        Constellation::Qzss => &QZS,
+        _ => return None, // SBAS and others: no MSM signal table sourced.
+    };
+    let idx = sig_id as usize;
+    if idx == 0 || idx > 31 {
+        return None;
+    }
+    let code = table[idx];
+    if code.is_empty() { None } else { Some(code) }
+}
+
+/// Split a two-character RINEX observation code (e.g. "1C", "2W", "5Q")
+/// into `(freq_band, attribute)`, matching [`gneiss_core::obs::SignalCode`].
+fn split_rinex_code(code: &str) -> Option<(u8, char)> {
+    let mut chars = code.chars();
+    let band = chars.next()?.to_digit(10)? as u8;
+    let attribute = chars.next()?;
+    Some((band, attribute))
+}
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum MsmType {
@@ -36,24 +102,40 @@ pub struct MsmMessage {
 }
 
 impl MsmMessage {
-    /// Satellite/constellation shell of the decoded epoch, from the
-    /// satellite mask and message-number-derived constellation only.
+    /// Converts the decoded MSM into engine-native pseudorange/carrier-phase
+    /// observables, per satellite.
     ///
-    /// **NOT a working RTCM3-to-engine converter — every `SatObs.
-    /// observations` is unconditionally empty.** `MsmSignalData` (raw
-    /// pseudorange/phase-range/lock-time/CNR bitfields, correctly
-    /// extracted by [`parse_signal_data`] per the MSM4/5 vs MSM6/7 bit
-    /// widths) is never read here: turning those into actual observables
-    /// needs the RTCM 10403.x per-cell scale factors (rough range +
-    /// fine pseudorange/phaserange combination, satellite-mask-index to
-    /// cell-mask-index mapping) plus a real epoch week number (`time`
-    /// hardcodes week 0 below, which is also wrong). No RTCM3 sample
-    /// data exists in this repo to verify a scaling implementation
-    /// against (`datasets/rtkexplorer/sample_1/base.rtcm3` is 0 bytes),
-    /// so this was deliberately left as a shell rather than guessed at —
-    /// see docs/PROJECT_STATUS.md Sprint 12 for what's needed to finish
-    /// it. Not called from any production path today (verified: only
-    /// this file's own test calls it).
+    /// Formula and signal tables verified against RTKLIB's `decode_msm4`/
+    /// `save_msm_obs` and `msm_sig_*` tables (github.com/tomojitakasu/
+    /// RTKLIB, src/rtcm3.c) plus an independent RTCM 10403.3 field
+    /// reference — not guessed from memory. Pseudorange (metres) =
+    /// `rough_int_ms*RANGE_MS + rough_modulo*P2_10*RANGE_MS +
+    /// fine_pseudorange*scale*RANGE_MS`; carrier phase is the same rough
+    /// range plus the fine phase-range term, divided by wavelength to get
+    /// cycles. Cell-to-(satellite,signal) indexing matches RTKLIB's
+    /// `save_msm_obs` exactly: satellite-major, signal-minor, linear index
+    /// advancing only on cells the cell mask marks active.
+    ///
+    /// Known, deliberate scope limits (not silently guessed past):
+    /// - **GLONASS carrier phase is never emitted** (pseudorange still is).
+    ///   Its wavelength depends on the per-satellite FDMA channel number,
+    ///   which MSM only carries in the extended-satellite-info field
+    ///   (MSM5/7 only) — an MSM4/6 GLONASS message has no reliable way to
+    ///   know it. Guessing the nominal (k=0) frequency would silently
+    ///   corrupt phase by multiple metres per channel step.
+    /// - **SBAS is not decoded at all** — no MSM signal-ID table was
+    ///   sourced for it (not used for DD-RTK anywhere in this engine).
+    /// - **The epoch's GPS week is still wrong** (hardcoded to week 0,
+    ///   `header.epoch_time` is only tow-of-day/tow-of-week depending on
+    ///   constellation) — real-time use needs the week from the
+    ///   receiver's own clock or a separate time-sync message; nothing in
+    ///   this struct carries it.
+    /// - **No RTCM3 sample data exists in this repo** to validate this
+    ///   end-to-end against real bytes (`datasets/rtkexplorer/sample_1/
+    ///   base.rtcm3` is 0 bytes) — every test below hand-computes its
+    ///   expected value from the same verified formula, which catches
+    ///   implementation bugs but can't catch a formula misunderstanding
+    ///   shared between the code and its tests.
     pub fn into_epoch_obs(&self) -> EpochObs {
         let time = GpsTime::new(0, self.header.epoch_time as f64 / 1000.0); // TODO: week is wrong, see doc comment.
 
@@ -67,12 +149,84 @@ impl MsmMessage {
             _ => Constellation::Gps, // Default fallback
         };
 
-        let mut satellites = Vec::new();
-        for i in 0..64 {
-            if (self.masks.satellite_mask & (1 << (63 - i))) != 0 {
-                let sat = SatelliteId { constellation, prn: (i + 1) as u8 };
-                satellites.push(SatObs { sat, observations: Vec::new() });
+        let active_sats: Vec<u8> = (0..64u8)
+            .filter(|&i| (self.masks.satellite_mask & (1 << (63 - i))) != 0)
+            .map(|i| i + 1)
+            .collect();
+        let active_sigs: Vec<u8> = (0..32u8)
+            .filter(|&j| (self.masks.signal_mask & (1 << (31 - j))) != 0)
+            .map(|j| j + 1)
+            .collect();
+        let n_sig = active_sigs.len();
+
+        let (pr_scale, ph_scale) = match self.msm_type {
+            MsmType::Msm4 | MsmType::Msm5 => (P2_24, P2_29),
+            MsmType::Msm6 | MsmType::Msm7 => (P2_29, P2_31),
+        };
+        let pr_bits = match self.msm_type { MsmType::Msm4 | MsmType::Msm5 => 15, _ => 20 };
+        let ph_bits = match self.msm_type { MsmType::Msm4 | MsmType::Msm5 => 22, _ => 24 };
+        let pr_sentinel = -(1i64 << (pr_bits - 1));
+        let ph_sentinel = -(1i64 << (ph_bits - 1));
+
+        let mut satellites: Vec<SatObs> = Vec::with_capacity(active_sats.len());
+        let mut cell_idx = 0usize;
+        for (sat_pos, &prn) in active_sats.iter().enumerate() {
+            let sat = SatelliteId { constellation, prn };
+            let mut observations = Vec::new();
+
+            let rough_m = self.satellite_data.rough_range_int_ms.get(sat_pos).copied().and_then(|int_ms| {
+                if int_ms == 255 {
+                    return None; // DF397 "not available" sentinel.
+                }
+                let modulo = *self.satellite_data.rough_ranges.get(sat_pos)?;
+                Some(int_ms as f64 * RANGE_MS + modulo as f64 * P2_10 * RANGE_MS)
+            });
+
+            for (sig_pos, &sig_id) in active_sigs.iter().enumerate() {
+                let mask_pos = sat_pos * n_sig + sig_pos;
+                if !self.masks.cell_mask.get(mask_pos).copied().unwrap_or(false) {
+                    continue;
+                }
+                let k = cell_idx;
+                cell_idx += 1;
+
+                let Some(rough_m) = rough_m else { continue };
+                let Some((band, attribute)) = msm_signal_rinex_code(constellation, sig_id)
+                    .and_then(split_rinex_code)
+                else {
+                    continue;
+                };
+
+                if let Some(&fine_pr) = self.signal_data.fine_pseudoranges.get(k) {
+                    if fine_pr as i64 != pr_sentinel {
+                        observations.push(Observation {
+                            code: ObsCode { obs_type: ObsType::Pseudorange, signal: SignalCode { freq_band: band, attribute } },
+                            value: rough_m + fine_pr as f64 * pr_scale * RANGE_MS,
+                            lock_time: None,
+                            lli: None,
+                        });
+                    }
+                }
+
+                // GLONASS phase needs the FDMA channel for wavelength;
+                // MSM doesn't reliably carry it here (see doc comment).
+                if constellation != Constellation::Glonass {
+                    if let Some(&fine_ph) = self.signal_data.fine_phase_ranges.get(k) {
+                        if fine_ph as i64 != ph_sentinel {
+                            let range_m = rough_m + fine_ph as f64 * ph_scale * RANGE_MS;
+                            let freq_hz = gneiss_core::frequencies::track_c_frequency(constellation, band, 0);
+                            observations.push(Observation {
+                                code: ObsCode { obs_type: ObsType::CarrierPhase, signal: SignalCode { freq_band: band, attribute } },
+                                value: range_m * freq_hz / SPEED_OF_LIGHT_M_S,
+                                lock_time: self.signal_data.lock_time_indicators.get(k).copied(),
+                                lli: None,
+                            });
+                        }
+                    }
+                }
             }
+
+            satellites.push(SatObs { sat, observations });
         }
 
         EpochObs { time, satellites }
@@ -692,19 +846,129 @@ mod tests {
         assert_eq!(epoch.satellites[0].sat.prn, 1);
         // Constellation derived from message_number 1074/10 = 107 -> GPS
         assert_eq!(epoch.satellites[0].sat.constellation, Constellation::Gps);
-        // Pins the current, deliberately incomplete contract (see
-        // into_epoch_obs's doc comment): this message decodes one real
-        // pseudorange/phaserange cell, but the conversion to physical
-        // observables isn't implemented, so it's empty rather than
-        // wrong. This assertion must be replaced with real observable
-        // checks the moment that conversion is implemented -- a stub
-        // silently "working" on an empty vec is not a passing test for
-        // the real feature.
-        assert!(
-            epoch.satellites[0].observations.is_empty(),
-            "into_epoch_obs does not populate observations yet -- if this now fails, \
-             the stub has been implemented and this test needs real value assertions instead"
-        );
+        // rough_range_int_ms=2, rough_ranges(modulo)=100, fine_pr=50 (MSM4:
+        // P2_24 scale) -- same formula as into_epoch_obs's own doc comment,
+        // checked here so a typo in the implementation shows up as a test
+        // failure rather than a silently different number.
+        let expected_pr = 2.0 * RANGE_MS + 100.0 * P2_10 * RANGE_MS + 50.0 * P2_24 * RANGE_MS;
+        let obs = &epoch.satellites[0].observations;
+        let pr = obs.iter().find(|o| o.code.obs_type == ObsType::Pseudorange)
+            .expect("MSM4 1sat/1sig payload has a valid cell, must produce a pseudorange");
+        assert!((pr.value - expected_pr).abs() < 1e-6, "pr={} expected={}", pr.value, expected_pr);
+        assert_eq!(pr.code.signal, SignalCode { freq_band: 1, attribute: 'C' }, "GPS sig_id=1 -> RINEX 1C");
+
+        let expected_range_m = 2.0 * RANGE_MS + 100.0 * P2_10 * RANGE_MS + 500.0 * P2_29 * RANGE_MS;
+        let expected_cycles = expected_range_m * gneiss_core::frequencies::track_c_frequency(Constellation::Gps, 1, 0) / SPEED_OF_LIGHT_M_S;
+        let ph = obs.iter().find(|o| o.code.obs_type == ObsType::CarrierPhase)
+            .expect("MSM4 1sat/1sig payload has a valid cell, must produce a carrier phase");
+        assert!((ph.value - expected_cycles).abs() < 1e-6, "ph={} expected={}", ph.value, expected_cycles);
+    }
+
+    // -----------------------------------------------------------------------
+    // into_epoch_obs: hand-verified formula edge cases
+    // -----------------------------------------------------------------------
+
+    /// All-zero rough range + fine pseudorange must produce exactly 0.0 --
+    /// the simplest possible check that isn't sensitive to a units/scale
+    /// error that happens to cancel out at nonzero values.
+    #[test]
+    fn test_into_epoch_obs_zero_range_is_zero() {
+        let payload = pack_bits(&[
+            (12, 1074), (12, 1), (30, 0), (1, 0), (3, 0), (7, 0), (2, 0), (2, 0), (1, 0), (3, 0),
+            (64, 1u64 << 63), (32, 1u64 << 31), (1, 1),
+            (8, 0), (10, 0),
+            (15, 0), (22, 0), (4, 0), (1, 0), (6, 0),
+        ]);
+        let epoch = parse_msm_message(&payload).unwrap().into_epoch_obs();
+        let pr = epoch.satellites[0].observations.iter()
+            .find(|o| o.code.obs_type == ObsType::Pseudorange).unwrap();
+        assert_eq!(pr.value, 0.0);
+        let ph = epoch.satellites[0].observations.iter()
+            .find(|o| o.code.obs_type == ObsType::CarrierPhase).unwrap();
+        assert_eq!(ph.value, 0.0);
+    }
+
+    /// DF397 == 255 (the "not available" sentinel) must suppress BOTH
+    /// pseudorange and carrier phase for that satellite -- not just leave
+    /// the rough part out of the sum.
+    #[test]
+    fn test_into_epoch_obs_rough_range_sentinel_suppresses_observations() {
+        let payload = pack_bits(&[
+            (12, 1074), (12, 1), (30, 0), (1, 0), (3, 0), (7, 0), (2, 0), (2, 0), (1, 0), (3, 0),
+            (64, 1u64 << 63), (32, 1u64 << 31), (1, 1),
+            (8, 255), (10, 100),
+            (15, 50), (22, 500), (4, 0), (1, 0), (6, 0),
+        ]);
+        let epoch = parse_msm_message(&payload).unwrap().into_epoch_obs();
+        assert!(epoch.satellites[0].observations.is_empty());
+    }
+
+    /// Fine-pseudorange sentinel (-16384 for MSM4/5's 15-bit field) must
+    /// suppress only the pseudorange, not the carrier phase computed from
+    /// a separately-valid fine phase-range in the same cell.
+    #[test]
+    fn test_into_epoch_obs_fine_pseudorange_sentinel_suppresses_only_pr() {
+        // -16384 is the most-negative representable 15-bit two's-complement
+        // value (-2^14): its bit pattern is the sign bit alone, 1<<14.
+        let sentinel_15bit: u64 = 1 << 14;
+        let payload = pack_bits(&[
+            (12, 1074), (12, 1), (30, 0), (1, 0), (3, 0), (7, 0), (2, 0), (2, 0), (1, 0), (3, 0),
+            (64, 1u64 << 63), (32, 1u64 << 31), (1, 1),
+            (8, 1), (10, 0),
+            (15, sentinel_15bit), (22, 0), (4, 0), (1, 0), (6, 0),
+        ]);
+        let epoch = parse_msm_message(&payload).unwrap().into_epoch_obs();
+        let obs = &epoch.satellites[0].observations;
+        assert!(obs.iter().all(|o| o.code.obs_type != ObsType::Pseudorange), "PR sentinel must suppress the pseudorange");
+        assert!(obs.iter().any(|o| o.code.obs_type == ObsType::CarrierPhase), "phase is independently valid, must still be emitted");
+    }
+
+    /// GLONASS never emits carrier phase (FDMA channel not reliably known
+    /// from MSM) but pseudorange, which needs no frequency, still works.
+    #[test]
+    fn test_into_epoch_obs_glonass_phase_is_scoped_out() {
+        let payload = pack_bits(&[
+            (12, 1084), (12, 1), (30, 0), (1, 0), (3, 0), (7, 0), (2, 0), (2, 0), (1, 0), (3, 0),
+            (64, 1u64 << 63), (32, 1u64 << 31), (1, 1),
+            (8, 1), (10, 0),
+            (15, 0), (22, 0), (4, 0), (1, 0), (6, 0),
+        ]);
+        let epoch = parse_msm_message(&payload).unwrap().into_epoch_obs();
+        let obs = &epoch.satellites[0].observations;
+        assert!(obs.iter().any(|o| o.code.obs_type == ObsType::Pseudorange), "GLONASS pseudorange needs no frequency, must still work");
+        assert!(obs.iter().all(|o| o.code.obs_type != ObsType::CarrierPhase), "GLONASS phase is deliberately scoped out, see doc comment");
+    }
+
+    /// 2 satellites x 2 signals, sparse cell mask (only 2 of 4 cells
+    /// active, on DIFFERENT satellites) -- the highest-risk new logic is
+    /// the cell-index-to-(satellite,signal) mapping; verify each active
+    /// cell's data lands on the correct satellite, not the next one over.
+    #[test]
+    fn test_into_epoch_obs_sparse_cell_mask_maps_to_correct_satellite() {
+        // sats: PRN1 (bit63), PRN2 (bit62). sigs: sig1 (bit31), sig2 (bit30).
+        // cell_mask (sat-major, sig-minor over 2x2): [sat1/sig1=1, sat1/sig2=0, sat2/sig1=0, sat2/sig2=1]
+        // -> 2 active cells: cell0 = (PRN1, sig1) with fine_pr=111; cell1 = (PRN2, sig2) with fine_pr=222.
+        let payload = pack_bits(&[
+            (12, 1074), (12, 1), (30, 0), (1, 0), (3, 0), (7, 0), (2, 0), (2, 0), (1, 0), (3, 0),
+            (64, (1u64 << 63) | (1u64 << 62)), (32, (1u64 << 31) | (1u64 << 30)),
+            (1, 1), (1, 0), (1, 0), (1, 1), // cell_mask: sat1/sig1, sat1/sig2, sat2/sig1, sat2/sig2
+            (8, 1), (8, 1),   // rough_range_int_ms[sat1], [sat2]
+            (10, 0), (10, 0), // rough_ranges[sat1], [sat2]
+            (15, 111), (15, 222), // fine_pr[cell0], fine_pr[cell1]
+            (22, 0), (22, 0),
+            (4, 0), (4, 0),
+            (1, 0), (1, 0),
+            (6, 0), (6, 0),
+        ]);
+        let epoch = parse_msm_message(&payload).unwrap().into_epoch_obs();
+        assert_eq!(epoch.satellites.len(), 2);
+        let pr_for = |prn: u8| -> f64 {
+            epoch.satellites.iter().find(|s| s.sat.prn == prn).unwrap()
+                .observations.iter().find(|o| o.code.obs_type == ObsType::Pseudorange).unwrap().value
+        };
+        let expected = |fine: f64| 1.0 * RANGE_MS + fine * P2_24 * RANGE_MS;
+        assert!((pr_for(1) - expected(111.0)).abs() < 1e-6, "cell0 (fine_pr=111) must land on PRN1, its actual satellite");
+        assert!((pr_for(2) - expected(222.0)).abs() < 1e-6, "cell1 (fine_pr=222) must land on PRN2, not PRN1");
     }
 
     // -----------------------------------------------------------------------
