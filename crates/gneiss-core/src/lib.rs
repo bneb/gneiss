@@ -10,6 +10,7 @@ pub mod ephemeris;
 pub mod frames;
 pub mod hatch;
 pub mod frequencies;
+pub mod keplerian;
 #[cfg(test)] mod geodetic_tests;
 pub mod gnss_time;
 pub mod imu;
