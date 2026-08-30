@@ -584,6 +584,17 @@ list is shorter than it looked.
   *every* position rather than failing loudly. Deliberately deferred
   rather than rushed — flagged precisely enough for a future pass
   with more room to be careful, not silently skipped.
+- [x] A third severe case, fixed: `rtcm3/msm.rs`'s `into_epoch_obs`
+  (2026-08-30) — the pseudorange/carrier-phase observable construction
+  (written earlier this session) hit 8 levels
+  (`for-sat -> for-sig -> if-not-glonass -> if-let-fine-phase ->
+  if-not-sentinel`). Extracted `push_pseudorange_obs` /
+  `push_carrier_phase_obs`, caller drops to depth 2. Full suite green
+  including all 5 hand-verified sentinel/GLONASS/sparse-mask tests
+  from the original feature work. Guards not re-run: confirmed via
+  grep that `MsmMessage` has no callers anywhere in the benchmarked
+  path (RTCM3/NTRIP real-time input isn't wired into `gneiss-cli` yet
+  — see 12e/12g above), so nothing this touches feeds either guard.
 - [x] `gneiss-rtk/src/measurements/hatch.rs` (234 lines) deleted as a
   dead duplicate (2026-08-30): defined its own `HatchFilter`/
   `HatchState` (SNR-adaptive window, traces to the `9352abf` initial
