@@ -425,6 +425,16 @@ list is shorter than it looked.
   -- GLONASS uses a separate, shorter RK4 integration instead). Neither
   needed the careful test-untangling the `formation.rs`/`mod.rs`
   impl-block extractions did.
+- [x] `spp.rs` (2228 lines) assessed, correctly deferred (2026-08-29):
+  a much bigger, messier undertaking than the three extractions above
+  -- production code alone is already ~690 lines (over budget on its
+  own, unlike `state.rs`), and its test code is ONE 1534-line module
+  rather than cleanly pre-separated ones like `screen.rs`'s or
+  `state.rs`'s. It's also the legacy SWFG/PPP path, not the validated
+  `rtk_iekf` engine this project actually benchmarks. Lower payoff,
+  higher effort, lower priority than what's already been done today --
+  correctly left for a dedicated future pass rather than rushed.
+  `rinex.rs` (2349 lines, a parser file) not yet assessed at all.
 - [x] `rtk_iekf/state.rs` (581 lines) checked, correctly left alone
   (2026-08-29): unlike `formation.rs`/`update.rs`, its production code
   (one `impl RtkState` block, ~335 lines -- already under budget on its
