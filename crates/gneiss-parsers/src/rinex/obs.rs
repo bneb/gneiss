@@ -233,41 +233,59 @@ fn parse_rinex_2_obs_sat<I: Iterator<Item = String>>(
     let mut val_idx = 0;
 
     for _ in 0..num_val_lines {
-        if let Some(obs_line) = lines.next() {
-            for col in 0..5 {
-                if val_idx >= obs_types.len() {
-                    break;
-                }
-                let start = col * 16;
-                let end = (start + 14).min(obs_line.len());
-                if start < obs_line.len() {
-                    let val_str = obs_line[start..end].trim();
-                    if !val_str.is_empty() {
-                        if let Ok(val) = val_str.parse::<f64>() {
-                            let mut lli = None;
-                            if start + 14 < obs_line.len() {
-                                let lli_char = obs_line[start + 14..start + 15]
-                                    .chars()
-                                    .next()
-                                    .unwrap_or(' ');
-                                if lli_char != ' ' {
-                                    if let Ok(l) = lli_char.to_string().parse::<u8>() {
-                                        lli = Some(l);
-                                    }
-                                }
-                            }
-                            let type_str = &obs_types[val_idx];
-                            if let Some(obs) = map_rinex_type(type_str, val, lli) {
-                                observations.push(obs);
-                            }
-                        }
-                    }
-                }
-                val_idx += 1;
-            }
-        }
+        let Some(obs_line) = lines.next() else { continue };
+        val_idx = parse_rinex_2_obs_line(&obs_line, obs_types, val_idx, &mut observations);
     }
     Some(SatObs { sat, observations })
+}
+
+/// Parses up to 5 observation values from one RINEX 2 data line, starting at
+/// `val_idx` into `obs_types`. Returns the updated `val_idx`.
+fn parse_rinex_2_obs_line(
+    obs_line: &str,
+    obs_types: &[String],
+    mut val_idx: usize,
+    observations: &mut Vec<Observation>,
+) -> usize {
+    for col in 0..5 {
+        if val_idx >= obs_types.len() {
+            break;
+        }
+        if let Some(obs) = parse_rinex_2_obs_value(obs_line, col, &obs_types[val_idx]) {
+            observations.push(obs);
+        }
+        val_idx += 1;
+    }
+    val_idx
+}
+
+fn parse_rinex_2_obs_value(obs_line: &str, col: usize, type_str: &str) -> Option<Observation> {
+    let start = col * 16;
+    if start >= obs_line.len() {
+        return None;
+    }
+    let end = (start + 14).min(obs_line.len());
+    let val_str = obs_line[start..end].trim();
+    if val_str.is_empty() {
+        return None;
+    }
+    let val = val_str.parse::<f64>().ok()?;
+    let lli = parse_rinex_obs_lli(obs_line, start);
+    map_rinex_type(type_str, val, lli)
+}
+
+fn parse_rinex_obs_lli(obs_line: &str, start: usize) -> Option<u8> {
+    if start + 14 >= obs_line.len() {
+        return None;
+    }
+    let lli_char = obs_line[start + 14..start + 15]
+        .chars()
+        .next()
+        .unwrap_or(' ');
+    if lli_char == ' ' {
+        return None;
+    }
+    lli_char.to_string().parse::<u8>().ok()
 }
 
 fn parse_rinex_2_obs<I: Iterator<Item = String>>(
@@ -370,34 +388,28 @@ fn parse_rinex_3_obs_line(
     if let Some(types) = const_obs_types.get(&constellation) {
         let mut observations = Vec::new();
         for (i, type_str) in types.iter().enumerate() {
-            let start = 3 + i * 16;
-            let end = (start + 14).min(obs_line.len());
-            if start < obs_line.len() {
-                let val_str = obs_line[start..end].trim();
-                if !val_str.is_empty() {
-                    if let Ok(val) = val_str.parse::<f64>() {
-                        let mut lli = None;
-                        if start + 14 < obs_line.len() {
-                            let lli_char = obs_line[start + 14..start + 15]
-                                .chars()
-                                .next()
-                                .unwrap_or(' ');
-                            if lli_char != ' ' {
-                                if let Ok(l) = lli_char.to_string().parse::<u8>() {
-                                    lli = Some(l);
-                                }
-                            }
-                        }
-                        if let Some(obs) = map_rinex_type(type_str, val, lli) {
-                            observations.push(obs);
-                        }
-                    }
-                }
+            if let Some(obs) = parse_rinex_3_obs_value(obs_line, i, type_str) {
+                observations.push(obs);
             }
         }
         return Some(SatObs { sat, observations });
     }
     None
+}
+
+fn parse_rinex_3_obs_value(obs_line: &str, type_idx: usize, type_str: &str) -> Option<Observation> {
+    let start = 3 + type_idx * 16;
+    if start >= obs_line.len() {
+        return None;
+    }
+    let end = (start + 14).min(obs_line.len());
+    let val_str = obs_line[start..end].trim();
+    if val_str.is_empty() {
+        return None;
+    }
+    let val = val_str.parse::<f64>().ok()?;
+    let lli = parse_rinex_obs_lli(obs_line, start);
+    map_rinex_type(type_str, val, lli)
 }
 
 fn parse_rinex_3_obs<I: Iterator<Item = String>>(

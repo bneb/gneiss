@@ -161,44 +161,7 @@ pub fn parse_ionex<R: BufRead>(reader: R) -> Result<IonexGrid, String> {
                 // The TEC values follow on the NEXT line(s).  The descriptor
                 // line itself does NOT contain TEC data — only metadata.
                 if in_tec || in_rms {
-                    let mut tec_row = Vec::with_capacity(lon_count);
-                    let mut col = 0;
-
-                    // Read TEC values from subsequent lines (skip the descriptor)
-                    loop {
-                        i += 1;
-                        if i >= lines.len() {
-                            break;
-                        }
-                        let data_line = &lines[i];
-                        // If this line has an IONEX label, it's not TEC data
-                        if data_line.len() >= 60 {
-                            let lbl = data_line[60..].trim();
-                            if lbl.len() > 2 && !lbl.starts_with(' ') {
-                                // This is a new IONEX record — back up and stop
-                                i -= 1;
-                                break;
-                            }
-                        }
-                        // Parse up to 12 values (5 chars each) from columns 0-59
-                        let end = data_line.len().min(60);
-                        for j in (0..end).step_by(5) {
-                            if j + 5 <= end && col < lon_count {
-                                let val_str = data_line[j..j + 5].trim();
-                                if let Ok(val) = val_str.parse::<f64>() {
-                                    tec_row.push(val);
-                                    col += 1;
-                                } else if !val_str.is_empty() {
-                                    tec_row.push(0.0);
-                                    col += 1;
-                                }
-                            }
-                        }
-                        if col >= lon_count {
-                            break;
-                        }
-                    }
-
+                    let tec_row = parse_ionex_data_row(&lines, &mut i, lon_count);
                     if in_tec {
                         current_tec.push(tec_row);
                     } else {
@@ -220,6 +183,66 @@ pub fn parse_ionex<R: BufRead>(reader: R) -> Result<IonexGrid, String> {
     }
 
     Ok(grid)
+}
+
+/// Reads one TEC/RMS data row starting at the line after `*i`, advancing `*i`
+/// to the last data line consumed (leaving it positioned at the next label
+/// line, if the row ended early because a new IONEX record began).
+fn parse_ionex_data_row(lines: &[String], i: &mut usize, lon_count: usize) -> Vec<f64> {
+    let mut tec_row = Vec::with_capacity(lon_count);
+    let mut col = 0;
+
+    loop {
+        *i += 1;
+        if *i >= lines.len() {
+            break;
+        }
+        let data_line = &lines[*i];
+        if is_ionex_label_line(data_line) {
+            *i -= 1;
+            break;
+        }
+        col = append_ionex_row_values(data_line, &mut tec_row, col, lon_count);
+        if col >= lon_count {
+            break;
+        }
+    }
+    tec_row
+}
+
+/// True if `line` carries an IONEX section label (columns 60+), meaning it's
+/// not a TEC/RMS data line.
+fn is_ionex_label_line(line: &str) -> bool {
+    if line.len() < 60 {
+        return false;
+    }
+    let lbl = line[60..].trim();
+    lbl.len() > 2 && !lbl.starts_with(' ')
+}
+
+/// Parses up to 12 values (5 chars each) from columns 0-59 of `data_line`
+/// into `tec_row`, starting at column index `col`. Returns the updated `col`.
+fn append_ionex_row_values(
+    data_line: &str,
+    tec_row: &mut Vec<f64>,
+    mut col: usize,
+    lon_count: usize,
+) -> usize {
+    let end = data_line.len().min(60);
+    for j in (0..end).step_by(5) {
+        if j + 5 > end || col >= lon_count {
+            continue;
+        }
+        let val_str = data_line[j..j + 5].trim();
+        if let Ok(val) = val_str.parse::<f64>() {
+            tec_row.push(val);
+            col += 1;
+        } else if !val_str.is_empty() {
+            tec_row.push(0.0);
+            col += 1;
+        }
+    }
+    col
 }
 
 /// Parse an IONEX epoch line: "  YYYY  MM  DD  HH  MM  SS"
