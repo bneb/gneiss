@@ -517,9 +517,93 @@ list is shorter than it looked.
   feeds a guarded metric, so it's safe to do eventually, but needs
   someone to consciously pick one canonical definition and re-verify
   the numbers move only as expected, not a mechanical find-and-replace.
-- [ ] Nesting-depth pass on the large parser files (rinex/obs.rs,
-  rinex/nav.rs, ionex.rs, antex.rs, hatch.rs) — needs a proper
-  per-function read, not a brace-counting heuristic
+- [x] Nesting-depth pass on the large parser files, first round
+  (2026-08-30): read every flagged function by hand rather than
+  brace-counting, per the caveat above. Two genuinely severe cases
+  found and fixed by extracting helper functions (same
+  behavior-preserving-extraction technique as the earlier `formation.rs`/
+  `screen.rs` splits, verified via full test suite + both guards, not
+  just unit tests): `rinex/obs.rs`'s `parse_rinex_2_obs_sat`/
+  `parse_rinex_3_obs_line` bottomed out at 8-9 levels of nested
+  `if`/`if let` (the RINEX value+LLI parsing was one giant nested
+  block); now split into `parse_rinex_{2,3}_obs_value` +
+  `parse_rinex_obs_lli` (the LLI-extraction logic turned out to be
+  byte-for-byte identical between RINEX 2 and 3 — same 16-byte field
+  layout — so it's shared, not duplicated), max depth 2. `ionex.rs`'s
+  TEC/RMS row reader hit 6 levels (`match` arm -> `if` -> `loop` ->
+  `for` -> `if` -> `if let`); extracted `parse_ionex_data_row` +
+  `is_ionex_label_line` + `append_ionex_row_values`, max depth 2.
+  Two borderline cases reviewed and deliberately left alone, same
+  "don't force a split with no clean fault line" judgment as
+  `state.rs` earlier: `rinex/nav.rs`'s epoch dispatch loop and
+  `gneiss-parsers/antex.rs`'s frequency-record parser both peak around
+  4 levels, mostly single-line ternary-style `if`/`else` value
+  expressions rather than imperative logic with side effects nested
+  deep inside — real but much less severe than the two fixed cases,
+  and restructuring either risks the exact "confident refactor breaks
+  ephemeris/antenna parsing in a way tests don't catch" failure mode
+  this project has hit before. Not yet looked at: `hatch.rs` was on
+  the original list but turned out to be dead code entirely — see
+  below.
+- [x] `gneiss-rtk/src/measurements/hatch.rs` (234 lines) deleted as a
+  dead duplicate (2026-08-30): defined its own `HatchFilter`/
+  `HatchState` (SNR-adaptive window, traces to the `9352abf` initial
+  commit) with **zero callers anywhere in the workspace** outside its
+  own module and one `pub use` re-export (confirmed via exhaustive
+  grep) -- superseded by `gneiss_core::hatch::HatchFilter` (simpler
+  fixed-window design, added later by `0bcbcaa feat(hatch): ...`,
+  opt-in via `GNEISS_HATCH=N`), which IS the one `eval_network_ppk.rs`
+  actually uses. Two same-named types implementing the same algorithm
+  is exactly CLAUDE.md's "no duplicate function definitions" rule;
+  the old one was legacy cruft that survived the "V3 domain-driven
+  restructure" (`850ffd3`) uncleaned. Full build/test/clippy pass;
+  guards not re-run (unreachable code, same reasoning as the
+  `atmosphere.rs` item below).
+- [x] `gneiss-geodesy` crate audit (2026-08-30): the entire crate is a
+  first-commit (`9352abf`) relic with **zero usage anywhere outside
+  itself** -- `grep -rn "gneiss_geodesy::"` across the whole workspace
+  returns nothing but its own source, despite being a live Cargo
+  dependency of `gneiss-rtk`. Of its three modules: `antex.rs` (237
+  lines, a `PcvData`/ANTEX parser) is a confirmed-superseded duplicate
+  of the actively-used `gneiss_parsers::antex::AntennaPcv` -- deleted.
+  `geoid.rs` (237 lines, ellipsoidal<->orthometric height via geoid
+  undulation) is the ONLY geoid-handling code anywhere in the
+  workspace -- not a duplicate of anything, genuinely unique and
+  complete, just never wired into the position-output pipeline. Left
+  in place and NOT deleted (unlike the antex/helmert modules, this
+  isn't superseded cruft -- it's a real, orthogonal capability with no
+  live consumer yet, same category as the `ionex.rs` finding below).
+  `Cargo.toml` trimmed to drop the `libm`/`gneiss-core`/`serde_json`
+  deps that only the deleted files used.
+- [x] **`helmert.rs` deletion surfaced a real, live accuracy bug --
+  fixed (2026-08-30).** `gneiss-geodesy::helmert::HelmertParams` was
+  a second, ALSO-orphaned 14-parameter Helmert implementation, and its
+  own test fixture's ITRF2014->ITRF2020 numbers didn't match the
+  authoritative source either (a third, independently-wrong variant,
+  not a "which one is right" situation). But `gneiss-core/frames.rs`'s
+  own doc comment on the *actually-used* `ITRF2020_TO_ITRF2014`
+  constant already carried a self-flagged warning: "rates zeroed
+  pending confirmation at itrf.ign.fr ... ~2mm Z error by 2025 if
+  true." Fetched the primary source directly
+  (<https://itrf.ign.fr/docs/solutions/itrf2020/Transfo-ITRF2020_TRFs.txt>,
+  cross-checked against the itrf.ign.fr transformations page, 3
+  independent fetches all agreeing): the rates are real and nonzero --
+  Ty = -0.1 mm/yr, Tz = **+0.2 mm/yr** (the existing warning had
+  guessed the right magnitude but the wrong sign), and scale is -0.42
+  ppb, not the -0.40 this file had. Fixed all three; this constant
+  feeds `Igs20`/`Itrf2020`/`Wgs84Broadcast`'s hub conversion, which
+  `eval_network_ppk.rs` calls on every truth-position lookup -- so
+  every benchmark run to date had a small (~1-2mm at a ~2025 truth
+  epoch, 10 years past the 2015.0 reference, growing over time)
+  uncorrected systematic bias in exactly this link. Updated the one
+  test that hardcoded the old scale value
+  (`itrf2020_to_itrf2014_shift_matches_published_parameters`). Small
+  in isolation, but real, verified against primary authority (not
+  memory), and it's the kind of silently-compounding mm-level error
+  that adds up against a "tier 1" accuracy bar. Full build/test/clippy
+  pass; both benchmark guards re-run given this is a live numeric
+  change, not dead code -- both guards pass, identical numbers to the
+  pre-fix run (the ~1-2mm correction is well inside existing margins).
 - [x] `atmosphere.rs` dead-code audit (2026-08-30): `TropoMapping`
   enum, the `TropoMapper` trait, `NmfMapper`/`GmfMapper`/`Vmf1Mapper`,
   and `create_tropo_mapper` formed a pluggable tropo-mapper factory
