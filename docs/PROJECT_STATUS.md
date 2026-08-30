@@ -290,6 +290,26 @@ list is shorter than it looked.
   data still makes this the more finished path overall; just don't
   assume full multi-band correctness without checking the actual
   receiver's signal set against u-blox's interface description first.
+
+  **2026-08-29: tried to source the real sigId table, hit a genuine
+  dead end.** The official u-blox interface description PDFs (ZED-F9R
+  etc.) aren't text-extractable with any tool available in this
+  environment (no `pdftotext`/`pdfgrep`, no Python PDF library
+  installed, and `strings` finds zero plaintext matches -- the tables
+  live in compressed content streams). Checked whether RTKLIB's own
+  `ublox.c` driver had a usable table the way its RTCM3 code did (the
+  approach that worked for 12c-1/12c-2): it does not -- `decode_rxmrawx`
+  hardcodes exactly one signal code per constellation
+  (`sys==SYS_CMP?CODE_L1I:(sys==SYS_GAL?CODE_L1X:CODE_L1C)`) and never
+  reads `sigId` to differentiate bands at all, i.e. even RTKLIB doesn't
+  solve this generally. Correctly stopping here rather than guessing
+  sigId values from memory or installing new PDF-parsing tooling for a
+  narrower-impact fix (unlike the RTCM stub, UBX's existing pseudorange/
+  phase VALUES are already correct -- only the band LABEL for non-L1
+  signals is oversimplified). Whoever picks this up needs either a
+  copy of the target receiver's actual interface description read
+  properly, or real UBX log data from a multi-band receiver to
+  reverse-engineer the mapping empirically.
   If a live receiver is easier to source
   over USB/serial (UBX) than a working RTCM3 base feed, this is the
   more finished path to wire up first.
