@@ -217,7 +217,7 @@ list is shorter than it looked.
   data; not worth chasing further without a dataset that actually
   stresses wide-lane rounding margins.
 
-**SPRINT 12: RTCM/NTRIP Real-Time Input — OPEN, broken into concrete sub-items (2026-08-28)**
+**SPRINT 12: RTCM/NTRIP Real-Time Input — IN PROGRESS, 2 of 6 sub-items done (2026-08-29)**
 - Traced the actual state of every piece before writing this down,
   rather than leaving it as one large undifferentiated "OPEN":
 
@@ -247,25 +247,29 @@ list is shorter than it looked.
   and all 9 affected test call sites (3 of which used inline bit
   literals a name-based search missed on the first pass). Full suite
   green, clippy clean.
-- [ ] **12c-2. RTCM3 MSM -> EpochObs physical-unit conversion** —
-  `into_epoch_obs` remains the documented empty-observations stub;
-  this fix only corrects the bits landing in the right fields
-  underneath it, it doesn't implement the conversion. Now have a
-  VERIFIED scaling formula to implement against (RTKLIB `save_msm_obs`,
-  same source as above): `pseudorange_m = rough_int_ms*RANGE_MS +
-  rough_modulo*P2_10*RANGE_MS + fine_pseudorange*P2_24*RANGE_MS`
-  (RANGE_MS = c*0.001, P2_10/P2_24 = 2^-10/2^-24), carrier phase is
-  the same range sum divided by wavelength. What's still missing
-  before this can be implemented safely: (a) the cell-index -> 
-  (satellite, signal) mapping (`MsmMasks.cell_mask` walked in
-  satellite-major order against however many bits are set in
-  `satellite_mask`/`signal_mask` -- mechanical but unverified against
-  a real message), and (b) the RTCM signal-ID-to-frequency-band table
-  per constellation (needed to pick the right wavelength) -- not yet
-  sourced. There is still no RTCM3 sample data anywhere in this repo
-  (`datasets/rtkexplorer/sample_1/base.rtcm3` is 0 bytes) to validate
-  the finished conversion end-to-end against, though the formula
-  itself is now citable rather than guessed.
+- [x] **12c-2. RTCM3 MSM -> EpochObs physical-unit conversion — DONE
+  (2026-08-29).** `into_epoch_obs` now produces real pseudorange (all
+  5 constellations with a sourced signal table) and carrier-phase
+  (all but GLONASS) observables, not empty vectors. Sourced the two
+  remaining pieces from RTKLIB directly: the MSM signal-ID tables
+  (`msm_sig_gps/gal/cmp/glo/qzs`, verbatim) and the cell-to-
+  (satellite,signal) index mapping (`save_msm_obs`'s own loop,
+  confirmed satellite-major/signal-minor before writing gneiss's
+  version -- this was the highest-risk piece, easy to get subtly
+  backwards). GLONASS phase stays deliberately unemitted (needs the
+  FDMA channel number, which MSM only carries in MSM5/7's extended-
+  sat-info field); GLONASS pseudorange works fine since range
+  reconstruction needs no frequency. SBAS isn't decoded (no signal
+  table sourced, unused for DD-RTK here). 5 new hand-verified tests
+  (zero-range exactness, both sentinel cases independently, the
+  GLONASS scope limit, and a sparse-cell-mask test that would have
+  caught an indexing bug) plus the original stub-pinning test rewritten
+  now that there's a real feature to check. Full suite green (251 ->
+  256 gneiss-parsers tests), clippy clean. Still no real RTCM3 sample
+  data in this repo to validate end-to-end against actual bytes --
+  every test's expected value is computed from the same verified
+  formula the implementation uses, which catches implementation bugs
+  but can't catch a formula misunderstanding shared between the two.
 - [ ] **12d. UBX (u-blox binary) -> EpochObs conversion** — by
   contrast, `UbxRxmRawx::into_epoch_obs` (`gneiss-parsers/src/ubx.rs`)
   DOES genuinely populate real pseudorange/carrier-phase/Doppler/SNR
