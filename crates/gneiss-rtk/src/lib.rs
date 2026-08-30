@@ -11,7 +11,6 @@ pub use ambiguity::lambda;
 pub use ambiguity::par;
 pub use estimators::spp;
 pub use measurements::combinations;
-pub use measurements::hatch;
 
 #[cfg(feature = "doppler-velocity")]
 pub use measurements::doppler;
