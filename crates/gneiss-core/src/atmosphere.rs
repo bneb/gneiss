@@ -150,7 +150,19 @@ fn nmf_impl(pos_llh: Vector3<f64>, el: f64, time: GpsTime) -> (f64, f64) {
 // ---------------------------------------------------------------------------
 // GMF (Böhm et al. 2006) — spherical harmonic expansion to degree 9
 // Closed-form using ECMWF ERA-40 coefficients. No external data needed.
+//
+// Test-only for now (#[cfg(test)] below): GMF was the originally-documented
+// #[default] mapping function choice (see the deleted TropoMapping enum's
+// history) and is more accurate than NMF at low elevation per its own doc
+// (~1-2cm vs ~3-5cm at 15 deg) -- but the live rtk_iekf/formation.rs path
+// calls `nmf_mapping_functions` specifically, not this. Nobody has verified
+// whether switching would actually help *this* pipeline's DD-RTK accuracy
+// (mapping-function form error is only one term among several, and partially
+// cancels in double-differencing at short baselines), so this is kept
+// test-verified and available rather than deleted, pending a deliberate
+// A/B pass against both benchmark guards.
 // ---------------------------------------------------------------------------
+#[cfg(test)]
 fn _legendre(n: usize, m: usize, t: f64) -> f64 {
     if n < m {
         return 0.0;
@@ -170,6 +182,7 @@ fn _legendre(n: usize, m: usize, t: f64) -> f64 {
         / (n - m) as f64
 }
 
+#[cfg(test)]
 fn _legendre_norm(n: usize, m: usize, t: f64) -> f64 {
     let pnm = _legendre(n, m, t);
     let mut num = 1.0;
@@ -189,6 +202,7 @@ fn _legendre_norm(n: usize, m: usize, t: f64) -> f64 {
 /// coeffs: (n, m, A_cos, A_sin) where A_cos is the cosine coefficient
 /// and A_sin is the sine coefficient for the cos(m*lon)/sin(m*lon) terms.
 /// The annual amplitude uses the same A_cos/A_sin structure.
+#[cfg(test)]
 fn _sh_eval_annual(
     coeffs_cos: &[(usize, usize, f64, f64)],
     coeffs_sin: Option<&[(usize, usize, f64, f64)]>,
@@ -216,6 +230,7 @@ fn _sh_eval_annual(
 }
 
 /// Evaluate a spherical harmonic sum (static, no annual variation).
+#[cfg(test)]
 fn _sh_eval_static(
     coeffs_cos: &[(usize, usize, f64)],
     coeffs_sin: Option<&[(usize, usize, f64)]>,
@@ -240,6 +255,7 @@ fn _sh_eval_static(
     val
 }
 
+#[cfg(test)]
 fn gmf_impl(pos_llh: Vector3<f64>, el: f64, time: GpsTime) -> (f64, f64) {
     let lat = pos_llh.x;
     let lon = pos_llh.y;
@@ -659,14 +675,8 @@ impl AtmosphereModel {
         (trph + trpw) / libm::cos(z)
     }
 
-    #[allow(dead_code)]
     pub fn nmf_mapping_functions(pos_llh: Vector3<f64>, el: f64, time: GpsTime) -> (f64, f64) {
         nmf_impl(pos_llh, el, time)
-    }
-
-    #[allow(dead_code)]
-    pub fn gmf_mapping_functions(pos_llh: Vector3<f64>, el: f64, time: GpsTime) -> (f64, f64) {
-        gmf_impl(pos_llh, el, time)
     }
 
     /// Computes Tropospheric delay in meters using the Saastamoinen zenith delay mapped with Niell Mapping Function (NMF).

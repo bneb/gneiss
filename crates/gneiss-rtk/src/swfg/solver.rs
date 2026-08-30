@@ -32,14 +32,9 @@ pub struct SlidingWindowSolver {
     window_size: usize,
     /// Current epoch counter (monotonically increasing).
     current_epoch: u32,
-    /// LM damping parameter (updated adaptively).
-    #[allow(dead_code)]
-    lambda: f64,
     /// Maximum LM iterations per solve.
-    #[allow(dead_code)]
     max_lm_iterations: usize,
     /// Convergence tolerance (norm of delta).
-    #[allow(dead_code)]
     convergence_tol: f64,
 }
 
@@ -57,7 +52,6 @@ impl SlidingWindowSolver {
             graph: EstimationGraph::new(),
             window_size,
             current_epoch: 0,
-            lambda: 1e-6,
             max_lm_iterations: 10,
             convergence_tol: 1e-4,
         }
