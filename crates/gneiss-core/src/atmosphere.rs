@@ -1,9 +1,6 @@
 use crate::time::GpsTime;
-use alloc::boxed::Box;
-use alloc::string::String;
 use alloc::vec::Vec;
 use nalgebra::Vector3;
-use serde::{Deserialize, Serialize};
 
 /// Ionospheric delay model parameters (Klobuchar).
 #[derive(Debug, Clone, Copy)]
@@ -36,91 +33,6 @@ impl Default for TropoParams {
             press_hpa: 1013.25,
             hum_rel: 0.5,
         }
-    }
-}
-
-/// Tropospheric mapping function selection.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[derive(Default)]
-pub enum TropoMapping {
-    /// Niell Mapping Function (1996) — fast, closed-form, ~3-5cm at 15°
-    Nmf,
-    /// Global Mapping Function (Böhm 2006) — closed-form, ~1-2cm at 15°
-    #[default]
-    Gmf,
-    /// Vienna Mapping Function 1/3 — grid-file based, ~0.5-1cm at 15°
-    Vmf1,
-}
-
-
-/// Trait for tropospheric mapping functions.
-/// Returns (hydrostatic_mapping, wet_mapping) as dimensionless scale factors.
-pub trait TropoMapper: Send + Sync {
-    fn mapping_functions(&self, pos_llh: Vector3<f64>, el: f64, time: GpsTime) -> (f64, f64);
-    fn name(&self) -> &'static str;
-}
-
-// ---------------------------------------------------------------------------
-// NMF mapper — wraps the existing Niell (1996) implementation
-// ---------------------------------------------------------------------------
-pub struct NmfMapper;
-
-impl TropoMapper for NmfMapper {
-    fn mapping_functions(&self, pos_llh: Vector3<f64>, el: f64, time: GpsTime) -> (f64, f64) {
-        nmf_impl(pos_llh, el, time)
-    }
-    fn name(&self) -> &'static str {
-        "NMF"
-    }
-}
-
-// ---------------------------------------------------------------------------
-// GMF mapper — Böhm et al. (2006), doi:10.1029/2005GL025546
-// Closed-form: no external data files required.
-// Coefficients from ECMWF ERA-40 reanalysis fitted to 9×9 spherical harmonics.
-// ---------------------------------------------------------------------------
-pub struct GmfMapper;
-
-impl TropoMapper for GmfMapper {
-    fn mapping_functions(&self, pos_llh: Vector3<f64>, el: f64, time: GpsTime) -> (f64, f64) {
-        gmf_impl(pos_llh, el, time)
-    }
-    fn name(&self) -> &'static str {
-        "GMF"
-    }
-}
-
-// ---------------------------------------------------------------------------
-// VMF1 stub — requires TU Wien grid files (vmf.geo.tuwien.ac.at)
-// ---------------------------------------------------------------------------
-pub struct Vmf1Mapper {
-    pub grid_path: Option<String>,
-}
-
-impl TropoMapper for Vmf1Mapper {
-    fn mapping_functions(&self, pos_llh: Vector3<f64>, el: f64, time: GpsTime) -> (f64, f64) {
-        // Fall back to GMF until grid files are provided and parsed
-        gmf_impl(pos_llh, el, time)
-    }
-    fn name(&self) -> &'static str {
-        match &self.grid_path {
-            Some(_) => "VMF1 (grid)",
-            None => "VMF1→GMF (no grid)",
-        }
-    }
-}
-
-/// Factory: create the configured mapper.
-pub fn create_tropo_mapper(
-    mapping: TropoMapping,
-    _grid_path: Option<String>,
-) -> Box<dyn TropoMapper> {
-    match mapping {
-        TropoMapping::Nmf => Box::new(NmfMapper),
-        TropoMapping::Gmf => Box::new(GmfMapper),
-        TropoMapping::Vmf1 => Box::new(Vmf1Mapper {
-            grid_path: _grid_path,
-        }),
     }
 }
 
