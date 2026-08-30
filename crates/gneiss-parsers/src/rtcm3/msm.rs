@@ -197,33 +197,19 @@ impl MsmMessage {
                     continue;
                 };
 
-                if let Some(&fine_pr) = self.signal_data.fine_pseudoranges.get(k) {
-                    if fine_pr as i64 != pr_sentinel {
-                        observations.push(Observation {
-                            code: ObsCode { obs_type: ObsType::Pseudorange, signal: SignalCode { freq_band: band, attribute } },
-                            value: rough_m + fine_pr as f64 * pr_scale * RANGE_MS,
-                            lock_time: None,
-                            lli: None,
-                        });
-                    }
-                }
-
+                push_pseudorange_obs(
+                    &mut observations,
+                    self.signal_data.fine_pseudoranges.get(k).copied(),
+                    pr_sentinel, rough_m, pr_scale, band, attribute,
+                );
                 // GLONASS phase needs the FDMA channel for wavelength;
                 // MSM doesn't reliably carry it here (see doc comment).
-                if constellation != Constellation::Glonass {
-                    if let Some(&fine_ph) = self.signal_data.fine_phase_ranges.get(k) {
-                        if fine_ph as i64 != ph_sentinel {
-                            let range_m = rough_m + fine_ph as f64 * ph_scale * RANGE_MS;
-                            let freq_hz = gneiss_core::frequencies::track_c_frequency(constellation, band, 0);
-                            observations.push(Observation {
-                                code: ObsCode { obs_type: ObsType::CarrierPhase, signal: SignalCode { freq_band: band, attribute } },
-                                value: range_m * freq_hz / SPEED_OF_LIGHT_M_S,
-                                lock_time: self.signal_data.lock_time_indicators.get(k).copied(),
-                                lli: None,
-                            });
-                        }
-                    }
-                }
+                push_carrier_phase_obs(
+                    &mut observations,
+                    self.signal_data.fine_phase_ranges.get(k).copied(),
+                    self.signal_data.lock_time_indicators.get(k).copied(),
+                    ph_sentinel, rough_m, ph_scale, band, attribute, constellation,
+                );
             }
 
             satellites.push(SatObs { sat, observations });
@@ -231,6 +217,63 @@ impl MsmMessage {
 
         EpochObs { time, satellites }
     }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn push_pseudorange_obs(
+    observations: &mut Vec<Observation>,
+    fine_pr: Option<i32>,
+    pr_sentinel: i64,
+    rough_m: f64,
+    pr_scale: f64,
+    band: u8,
+    attribute: char,
+) {
+    let Some(fine_pr) = fine_pr else { return };
+    if fine_pr as i64 == pr_sentinel {
+        return;
+    }
+    observations.push(Observation {
+        code: ObsCode {
+            obs_type: ObsType::Pseudorange,
+            signal: SignalCode { freq_band: band, attribute },
+        },
+        value: rough_m + fine_pr as f64 * pr_scale * RANGE_MS,
+        lock_time: None,
+        lli: None,
+    });
+}
+
+#[allow(clippy::too_many_arguments)]
+fn push_carrier_phase_obs(
+    observations: &mut Vec<Observation>,
+    fine_ph: Option<i32>,
+    lock_time: Option<u16>,
+    ph_sentinel: i64,
+    rough_m: f64,
+    ph_scale: f64,
+    band: u8,
+    attribute: char,
+    constellation: Constellation,
+) {
+    if constellation == Constellation::Glonass {
+        return;
+    }
+    let Some(fine_ph) = fine_ph else { return };
+    if fine_ph as i64 == ph_sentinel {
+        return;
+    }
+    let range_m = rough_m + fine_ph as f64 * ph_scale * RANGE_MS;
+    let freq_hz = gneiss_core::frequencies::track_c_frequency(constellation, band, 0);
+    observations.push(Observation {
+        code: ObsCode {
+            obs_type: ObsType::CarrierPhase,
+            signal: SignalCode { freq_band: band, attribute },
+        },
+        value: range_m * freq_hz / SPEED_OF_LIGHT_M_S,
+        lock_time,
+        lli: None,
+    });
 }
 
 /// Parses a complete MSM message from the raw RTCM3 payload bytes.
