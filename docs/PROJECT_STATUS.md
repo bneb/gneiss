@@ -634,6 +634,20 @@ list is shorter than it looked.
   keeps the already-computed monthly-median output, not the raw
   per-day series the definitive test needs.
 
+  **Attempted to fetch the raw series directly (this session): failed.**
+  Tried three plausible UNR Nevada Geodetic Laboratory URLs for
+  station P181's `.tenv3` file via WebFetch --
+  `geodesy.unr.edu/gps_timeseries/tenv3/IGS20/P181.tenv3`,
+  the bare `tenv3/` directory listing, and the `IGS14/` variant of
+  the same path -- all three returned HTTP 404. This may mean the
+  URL structure has changed since `fetch_multignss_dataset.py` was
+  written, or that UNR's server blocks non-browser fetches; not
+  enough signal to tell which, and not worth further guessing. The
+  definitive test remains specified-but-unrun; a future session with
+  interactive browser access (to find the current correct URL by
+  navigating the site) or a known-good UNR endpoint should be able
+  to complete it in minutes.
+
 <details><summary>Original per-item table</summary>
 
 | priority | item | expected impact | effort | dependency |
