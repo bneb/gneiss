@@ -9,6 +9,7 @@ pub mod mw;
 pub mod predict;
 pub mod sat_pco;
 pub mod satpos;
+pub mod screen;
 pub mod smoother;
 pub mod state;
 pub mod update;
@@ -335,8 +336,8 @@ impl GnssRtkIekf {
         // corrupted itself -- complements iekf_update_gated's Huber-style
         // soft weighting, which has no defense against a kilometre-scale
         // blunder dragging the linearization point before it can be seen
-        // as an outlier. See update::screen_gross_pr_errors.
-        let gross_rejected = update::screen_gross_pr_errors(&mut meas, self.state.pos_ecef);
+        // as an outlier. See screen::screen_gross_pr_errors.
+        let gross_rejected = screen::screen_gross_pr_errors(&mut meas, self.state.pos_ecef);
         if tracing::enabled!(tracing::Level::DEBUG) {
             for key in &gross_rejected {
                 tracing::debug!("gross-error: tow={:.0} rejected sat={} band={}",
