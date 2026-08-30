@@ -34,6 +34,19 @@ just never measured or documented. See each sprint's entry for what
 was verified vs. what's genuinely still open; the honest remaining
 list is shorter than it looked.
 
+**2026-08-30: prioritized path to tier-1 status — see Sprint 16.**
+Synthesizes every measurement above into a ranked list rather than a
+flat item catalog: (1) run the existing wrong-fix diagnostic against
+the dataset the Leica gap was actually measured on, not the one it
+happened to be tested on before; (2) the batch-vs-streaming
+architecture gap (Sprint 12f) is reclassified as the single largest
+item on the *entire* roadmap, not just Sprint 12 -- no accuracy ratio
+matters if the engine cannot process a live correction stream at all;
+(3) smaller, independent feature-completeness gaps (orthometric
+height output, long-baseline IONEX comparison, kinematic-mode
+validation). Also states plainly what this roadmap cannot close by
+itself -- see Sprint 16's closing section.
+
 ## Measured Results
 
 ### Dataset A (2020-05-14, GPS-only, broadcast ephemerides)
@@ -848,6 +861,23 @@ list is shorter than it looked.
   interactive browser access (to find the current correct URL by
   navigating the site) or a known-good UNR endpoint should be able
   to complete it in minutes.
+- [x] **The duplicate-Helmert item above ("worth resolving alongside
+  this") is now resolved — opposite of the original tentative call
+  (2026-08-30, see Sprint 13).** This entry originally recommended
+  keeping `gneiss-geodesy::helmert.rs` over `frames.rs`'s
+  `HelmertParams` because gneiss-geodesy's "has linear-rate/epoch
+  propagation support this problem actually needs" — but that
+  reasoning was built on the (now-refuted, see above) frame-mismatch
+  hypothesis, and doesn't hold up on its own technical merits either:
+  `frames.rs`'s `HelmertParams` already has the same `dtx/dty/dtz`-
+  style rate fields (used directly to fix `ITRF2020_TO_ITRF2014`'s
+  rates against IERS's primary source — see Sprint 13). Deleted
+  `gneiss-geodesy::helmert.rs` instead: it had zero callers anywhere
+  (not just for this problem — for anything), while `frames.rs`'s
+  version is the one actually wired into `EcefPos::convert_to`, used
+  by `eval_network_ppk.rs` on every truth-position lookup and by the
+  CAPO vertical-bias fix. Kept and fixed the version that was already
+  live, rather than the one that merely looked more complete on paper.
 
 <details><summary>Original per-item table</summary>
 
@@ -863,13 +893,125 @@ list is shorter than it looked.
 | 8 | Ocean tide loading (BLQ parser) | OHLN-specific mm-cm | medium | external data |
 | 9 | VMF1 mapping function | improved tropo slant mapping | low | external coefficients |
 
-### Data quality ceiling
+</details>
 
-Even with ALL items above implemented, absolute accuracy on dataset B is
-limited by truth-datum mismatch (~56 mm vertical offset between UNR IGS20
-and broadcast-solution frame). Resolving this requires either:
-a) Helmert frame transformation using published parameters
-b) Self-consistent truth definition (session-mean based precision scoring)
+**SPRINT 16: Path to Tier-1 Peer Status — Prioritized Synthesis (2026-08-30)**
+
+Every prior sprint attacked one item at a time. This one steps back and
+asks the standing goal's actual question directly: what, in priority
+order, closes the gap to Leica/NovAtel/Qinertia peer status, using only
+what's already been *measured* in this project rather than fresh
+speculation (per this doc's own Key Lesson #1: "measure before
+building"). Two things go into a roadmap item here — a concrete
+technical gap, or an honest statement that a gap isn't closeable by
+code alone. Not both mixed together.
+
+**The quantified starting point** (2026-08-29 Leica comparison, dataset
+A, six bases, broadcast ephemerides): gneiss runs 1.5-2.6x worse on
+horizontal RMS and 1.9-3.2x worse on vertical RMS than Leica's
+single-baseline RTK datasheet spec at 15-50km, excluding one known
+episodic-multipath outlier (OHLN). This is a **real, moderate,
+consistent gap — not an order of magnitude, not parity either.** The
+gap does not widen with baseline length the way unmodeled atmosphere
+error would, which is why items 1-9 in the collapsed table above
+(precise ephemeris, per-satellite iono, VMF1, etc.) are all *already
+measured or reasoned* to have limited-to-negative marginal value at
+these baselines — DD cancellation eats most of what they'd fix. This
+session's own NMF->GMF experiment (Sprint 13) is a fresh data point
+confirming the same pattern yet again: a textbook-plausible mapping-
+function accuracy improvement, measured, zero effect.
+
+**Priority 1 — figure out what's actually driving the gap, on the
+dataset where it's measured.** The Leica comparison's own reading
+attributes the gap to "noise floor and edge-case robustness (P181's
+invisible wrong fixes, receiver/antenna modeling depth)," not missing
+algorithms. But the one concrete diagnostic built for exactly this
+(`GNEISS_AMB_DUMP`'s per-key ambiguity-history dump, see
+NETWORK_RTK_NEXT_STEPS.md "Ambiguity-history dump") was only ever run
+against **dataset B**, where it found **zero wrong-fix episodes** —
+a different dataset than the one the Leica gap was actually measured
+on (dataset A). Nobody has run this diagnostic against dataset A's
+P181 specifically. This is the single highest-value, lowest-cost next
+step in this whole roadmap: it either confirms the "invisible wrong
+fixes" hypothesis with real evidence (pointing at Sprint 14's shelved
+cross-epoch step-detection work as the fix), or rules it out the same
+way it got ruled out on dataset B (pointing back at receiver/antenna
+modeling depth, or something not yet hypothesized at all). Either
+answer is more actionable than the current "probably one of these two
+things" state.
+
+**Priority 2 — the categorical gap no accuracy number captures: batch
+vs. streaming (Sprint 12f).** Every number in this document, including
+the Leica comparison, comes from *post-processing a complete RINEX
+file*. Every named tier-1 competitor is fundamentally a *real-time*
+device: RTCM3 corrections arrive over NTRIP, epoch by epoch, live.
+Gneiss has a real, tested RTCM3 MSM decoder and a real, tested NTRIP
+client (`gneiss-ntrip`) — this session confirmed (Sprint 13, item 12e)
+that *neither has a single call site in `gneiss-cli`*. There is no
+mode in which gneiss can process a live corrections stream today. This
+isn't one gap among several — it's a different category. A tier-1
+comparison table showing 1.9x on vertical RMS is meaningless to a
+surveyor who cannot get a live fix in the field at all. This is
+Sprint 12f, already scoped as "the largest single piece of new
+architecture Sprint 12 actually needs" — this entry promotes it from
+"largest Sprint 12 item" to "largest item on the entire roadmap,"
+because it's the one gap that blocks the product category itself, not
+just a percentage.
+
+**Priority 3 — supporting gaps, smaller and independent, worth doing
+regardless of priorities 1-2's outcome:**
+- `gneiss-geodesy::geoid` (Sprint 13, 2026-08-30 finding): complete,
+  tested orthometric-height conversion with zero callers. Tier-1
+  receivers universally report both ellipsoidal and orthometric
+  height; gneiss currently cannot output the latter at all. Wiring
+  this in is small, low-risk, and closes a basic feature-parity gap
+  independent of any accuracy work.
+- `ionex.rs` (pre-existing finding, still open): complete, tested
+  IONEX/TEC-map parser with zero callers, likely superseded by the
+  per-satellite iono-as-estimated-state approach the live engine uses
+  — but nobody has actually compared the two approaches on a
+  long-baseline dataset where external iono priors would matter most
+  (dataset A's P222/SLAC at 38-50km, not the short baselines where
+  this session's NMF/GMF-style experiments keep finding DD
+  cancellation dominates).
+- `rtk_iekf/formation.rs`'s depth-5 nesting (Sprint 13, 2026-08-30):
+  real CLAUDE.md violation in core DD-formation math, deliberately not
+  rushed given the stakes of a mistake there. Worth a dedicated,
+  careful pass, not a quick fix.
+- Kinematic mode (behind a flag, Sprint 13): unvalidated against any
+  real moving-truth dataset. Blocks any claim about rover-in-motion
+  performance, which is most of what tier-1 RTK receivers are actually
+  used for in the field (static surveying is one use case among many).
+
+**What this roadmap cannot close, stated honestly rather than implied
+away by a longer task list:** "peer status among tier-1 GNSS engines"
+is not solely an accuracy-ratio or feature-completeness claim. Leica,
+NovAtel, and Qinertia/SBG ship certified firmware across dozens of
+receiver models, validated across years of field deployment in
+climates and conditions no CI dataset reproduces, with 24/7 support
+organizations and (for some product lines) safety certifications this
+project has no path to obtaining. No engineering sprint converts a
+single-maintainer open-source Rust engine into that. What sprints 1-16
+*can* do — and what this document should keep being honest about
+either doing or not doing — is close the parts of the gap that are
+actually algorithmic, architectural, or feature-completeness gaps:
+priorities 1-3 above are that list, in the order the project's own
+measurements justify.
+
+**This section is stale.** It originally said absolute accuracy on
+dataset B is capped by a ~56mm vertical truth-datum/frame mismatch,
+fixable via "Helmert frame transformation using published parameters."
+Sprint 15's full investigation (2026-08-29) found the opposite: IGS20/
+ITRF2020/WGS84 are mm-level aligned, no generic Helmert transform would
+explain 56mm, and the actual mechanism is almost certainly dataset B's
+truth being a MONTHLY MEDIAN compared against a single-day observation
+(1-3cm single-day vertical GPS scatter is well documented and fully
+sufficient to produce this). "Self-consistent truth definition" (option
+b below) was the right instinct — see Sprint 15 for the fully-specified,
+not-yet-run definitive test. No Helmert transform (option a) is needed;
+see Sprint 13's entry for why the two in-tree Helmert implementations
+were consolidated to one anyway (a separate, real, but unrelated
+duplicate-code finding).
 
 ## Architecture Notes
 
@@ -879,8 +1021,15 @@ Three modules provide compile-time prevention of frame-mixing bugs:
 - `frames.rs`: ReferenceFrame trait + EcefPos<F> newtype + Helmert
 - `frequencies.rs`: Signal enum + explicit constellation/band mapping
 
-These are built and tested but NOT yet integrated into estimator call
-sites. Integration should happen atomically per-module.
+**Update (2026-08-30): `frames.rs` IS integrated**, contradicting the
+next sentence, which is stale. `EcefPos<F>`/`ReferenceFrame`'s Helmert
+hub conversion is live in `eval_network_ppk.rs` (truth-position lookups)
+and is what the CAPO vertical-bias fix runs through — see Sprint 13's
+`ITRF2020_TO_ITRF2014` entry, which found and fixed a real bug in
+exactly this live code path. `gnss_time.rs` and `frequencies.rs`'s
+integration status hasn't been re-checked this session.
+~~These are built and tested but NOT yet integrated into estimator call
+sites. Integration should happen atomically per-module.~~
 
 ### Known limitations
 (Updated Sprint 6 -- the bullets below were stale relative to shipped work; see docs/archive/ for
