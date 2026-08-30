@@ -43,10 +43,10 @@ earlier engine generation; current engine is network RTK/PPK, see docs/PROJECT_S
 See [docs/archive/SPRINT_PLAN_V2.md](./docs/archive/SPRINT_PLAN_V2.md) for the historical PPP accuracy
 investigation that motivated the SWFG rewrite (POST_MORTEM.md never existed; this was the closest
 equivalent and is archived, not current).
-See [docs/PROJECT_STATUS.md](./docs/PROJECT_STATUS.md) and [docs/NETWORK_RTK_NEXT_STEPS.md](./docs/NETWORK_RTK_NEXT_STEPS.md)
+See [docs/PROJECT_STATUS.md](./docs/PROJECT_STATUS.md) and [docs/TIER1_ROADMAP.md](./docs/TIER1_ROADMAP.md)
 for the current sprint plan and roadmap.
 
-## Frame Safety (added from PCV incident — see docs/NETWORK_RTK_NEXT_STEPS.md)
+## Frame Safety (added from PCV incident — see docs/archive/NETWORK_RTK_NEXT_STEPS.md)
 
 - **Relational coupling must be structurally enforced.** Parameters that are
   views of the same object, epoch, or frame must be derived from shared

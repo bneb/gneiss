@@ -44,16 +44,16 @@ python3 scripts/heartbeat.py
 
 ## Known Dead Ends (do not re-attempt)
 
-See docs/NETWORK_RTK_NEXT_STEPS.md "Validated Negative Results" section.
+See docs/PROJECT_STATUS.md and docs/archive/NETWORK_RTK_NEXT_STEPS.md "Validated Negative Results" section.
 
 ## Key Files
 
 | file | purpose |
 |---|---|
-| PROJECT_STATUS.md | comprehensive status + roadmap |
-| NETWORK_RTK_NEXT_STEPS.md | findings log + architecture notes |
-| OHLN_ANOMALY.md | EOD investigation |
-| FRAME_SAFETY_PLAN.md | frame-safety architecture |
+| docs/PROJECT_STATUS.md | comprehensive status + sprint logs |
+| docs/TIER1_ROADMAP.md | Tier-1 PPK roadmap |
+| docs/FRAME_SAFETY_PLAN.md | frame-safety architecture |
 | scripts/check_network_benchmark.py | dataset A guard |
 | scripts/check_multignss_benchmark.py | dataset B guard |
 | scripts/heartbeat.py | round telemetry |
+| docs/archive/ | archived historical logs & superseded docs |

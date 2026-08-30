@@ -23,6 +23,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
+use rayon::prelude::*;
 
 use nalgebra::Vector3;
 
@@ -372,21 +373,11 @@ fn run_base(
     rover_file: &str,
     ctx: &RunContext,
     rover: &[EpochObs],
+    base_epochs: &[EpochObs],
     network_upd: Option<HashMap<u16, f64>>,
 ) -> ([f64; 8], Vec<SmoothedEpoch>) {
-    // Receiver-side PCO: shift the base reference point from ARP to its L1
-    // phase centre so DD geometry references real antenna positions. The
-    // rover stays ARP-referenced (truth datum), so this corrects the
-    // cross-family differential without introducing an evaluation offset.
-    // Graduated from opt-in to on-by-default: measured strictly positive
-    // on cross-family baselines (CAPO v_p50 -54 -> -14mm) and exactly
-    // zero-effect on same-family ones, on both datasets A and B.
     let recv_pco_on = std::env::var("GNEISS_RECV_PCO_DISABLE").is_err();
     let base_pos_eff = if recv_pco_on {
-        // Differential datum correction: subtract the rover antenna's own
-        // PCO so same-family baselines stay put and only cross-family
-        // mismatches (e.g. CAPO's Leica +39.7 mm Up) move. Rover ARP
-        // anchor = first truth epoch.
         let rover_arp = ctx.truth.values().next().copied();
         let antex = std::env::var("GNEISS_ANTEX")
             .unwrap_or_else(|_| "datasets/igs14.atx".into());
@@ -414,19 +405,6 @@ fn run_base(
     } else {
         base.base_pos
     };
-    let base_f = match File::open(dir.join(base.base_file)) {
-        Ok(f) => f,
-        Err(e) => {
-            eprintln!("Failed to open {}: {}", base.base_file, e);
-            return ([0.0; 8], Vec::new());
-        }
-    };
-    let Ok((base_epochs, _)) = gneiss_parsers::rinex::parse_rinex_obs(BufReader::new(base_f)) else {
-        eprintln!("Failed to parse {}", base.base_file);
-        return ([0.0; 8], Vec::new());
-    };
-    // Opt-in elevation-dependent receiver PCV correction (GNEISS_PCV=1):
-    // strips the differential antenna signature from every DD phase.
     let receiver_pcv = if std::env::var("GNEISS_PCV").is_ok() {
         eprintln!("DEBUG: GNEISS_PCV detected");
         let antex = std::env::var("GNEISS_ANTEX")
@@ -439,14 +417,13 @@ fn run_base(
         initial_position: Some([base_pos_eff.x, base_pos_eff.y, base_pos_eff.z]),
         ..Default::default()
     });
-    let (fwd, _fwd_traj) = run_pass(&config, ctx, rover, &base_epochs, base, "Forward", false, network_upd.clone(), base_pos_eff, receiver_pcv.clone());
-    let (smooth, smooth_traj) = run_pass(&config, ctx, rover, &base_epochs, base, "Smoothed", true, network_upd.clone(), base_pos_eff, receiver_pcv);
+    let (fwd, _fwd_traj) = run_pass(&config, ctx, rover, base_epochs, base, "Forward", false, network_upd.clone(), base_pos_eff, receiver_pcv.clone());
+    let (smooth, smooth_traj) = run_pass(&config, ctx, rover, base_epochs, base, "Smoothed", true, network_upd.clone(), base_pos_eff, receiver_pcv);
     let mut out = [0.0; 8];
     out[..4].copy_from_slice(&fwd);
     out[4..].copy_from_slice(&smooth);
     (out, smooth_traj)
 }
-
 fn print_summary(results: &[(&NetworkBase, [f64; 8])], n_epochs: usize) {
     println!("========================================================");
     println!("Multi-Base Network RTK Benchmark (P224 rover, {:.1} h, {} epochs)", n_epochs as f64 * 30.0 / 3600.0, n_epochs);
@@ -480,7 +457,6 @@ fn apply_hatch_filter(rover_epochs: &mut [EpochObs], window: usize) {
     let mut hf = HatchFilter::new(window);
     for epoch in rover_epochs.iter_mut() {
         for sat_obs in epoch.satellites.iter_mut() {
-            // L1 only: the primary band used for DD ambiguity init.
             let lambda = gneiss_core::frequencies::frequency_for(
                 sat_obs.sat.constellation,
                 gneiss_core::frequencies::Signal::GpsL1Ca,
@@ -597,18 +573,32 @@ fn main() {
     // satellite wide-lane UPDs that make MW rounding trustworthy.
     let only = std::env::var("WL_ONLY_BASE").ok();
 
+    let active_bases: Vec<_> = bases
+        .iter()
+        .filter(|b| only.as_ref().is_none_or(|want| b.id == want.as_str()))
+        .collect();
+
+    // Preload all active base observation files once in parallel
+    let loaded_base_obs: HashMap<&str, std::sync::Arc<Vec<EpochObs>>> = active_bases
+        .par_iter()
+        .filter_map(|base| {
+            let f = File::open(dir.join(base.base_file)).ok()?;
+            let (mut epochs, _) = gneiss_parsers::rinex::parse_rinex_obs(BufReader::new(f)).ok()?;
+            let allowed = std::env::var("GNEISS_SYSTEMS").unwrap_or_else(|_| "G".into());
+            gneiss_core::obs::filter_constellations(&mut epochs, &allowed);
+            Some((base.id, std::sync::Arc::new(epochs)))
+        })
+        .collect();
+
     // Phase A: per-base forward passes collecting phase-only wide-lane
     // arc means; cross-base least squares solves satellite wide-lane UPDs
     // that Phase B applies before wide-lane rounding.
     let mut network_upd: Option<HashMap<u16, f64>> = None;
     if std::env::var("WL_NO_UPD").is_err() {
-        let mut per_base: Vec<HashMap<DoubleDiffKey, f64>> = Vec::new();
-        for base in bases {
-            if let Some(want) = &only { if base.id != want.as_str() { continue; } }
-            let Ok(f) = File::open(dir.join(base.base_file)) else { continue };
-            let Ok((base_epochs, _)) = gneiss_parsers::rinex::parse_rinex_obs(BufReader::new(f)) else { continue };
+        let per_base_means: Vec<_> = active_bases.par_iter().filter_map(|base| {
+            let base_epochs = loaded_base_obs.get(base.id)?;
             let (_, _wl, pw) = forward::run_forward_pass_collecting(
-                ctx.ephemerides, selected_rover, &base_epochs,
+                ctx.ephemerides, selected_rover, base_epochs,
                 base.base_pos, 1e-6,
             );
             let means: HashMap<DoubleDiffKey, f64> = pw
@@ -616,9 +606,15 @@ fn main() {
                 .into_iter()
                 .map(|(k, (m, _))| (k, m))
                 .collect();
-            println!("UPD pre-pass [{}]: {} converged pairs", base.id, means.len());
-            per_base.push(means);
+            Some((base.id, means))
+        }).collect();
+
+        let mut per_base: Vec<HashMap<DoubleDiffKey, f64>> = Vec::new();
+        for (base_id, means) in &per_base_means {
+            println!("UPD pre-pass [{}]: {} converged pairs", base_id, means.len());
+            per_base.push(means.clone());
         }
+
         let sol = gneiss_rtk::estimators::rtk_iekf::mw::solve_network_upd(&per_base);
         println!(
             "Network WL UPD solution (residual RMS {:.3} cyc, {} sats):",
@@ -632,9 +628,16 @@ fn main() {
         network_upd = Some(sol.sat_upd);
     }
 
-    for base in bases {
-        if let Some(want) = &only { if base.id != want.as_str() { continue; } }
-        let (stats, traj) = run_base(base, dir, rover_file, &ctx, selected_rover, network_upd.clone());
+    let base_results: Vec<_> = active_bases
+        .par_iter()
+        .filter_map(|base| {
+            let base_epochs = loaded_base_obs.get(base.id)?;
+            let (stats, traj) = run_base(base, dir, rover_file, &ctx, selected_rover, base_epochs, network_upd.clone());
+            Some((*base, stats, traj))
+        })
+        .collect();
+
+    for (base, stats, traj) in base_results {
         if stats.iter().any(|s| *s > 0.0) {
             results.push((base, stats));
         }

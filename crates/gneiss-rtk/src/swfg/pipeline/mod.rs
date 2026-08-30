@@ -8,6 +8,7 @@ pub mod bias_factor;
 pub mod dd_factors;
 pub mod factors;
 pub mod passes;
+pub mod tropo_factors;
 
 pub use aux_factors::{DualAntennaHeadingFactor, OdometerVelocityFactor};
 pub use bias_factor::ImuBiasPriorFactor;
@@ -19,6 +20,7 @@ pub use factors::{
     build_carrier_phase_factor, build_pseudorange_factor, CarrierPhaseFactor,
     DopplerVelocityFactor, NhcFactor, PseudorangeFactor,
 };
+pub use tropo_factors::{gradient_mapping_function, slant_gradient_delay, ZwdRandomWalkFactor};
 pub use passes::{
     BroadcastClockCorrection, CorrectionPass, CorrectedObservation, KlobucharIono,
     PreciseClockCorrection, RawObservation, ReceiverState, SaastamoinenTropo, SnrVarianceModel,

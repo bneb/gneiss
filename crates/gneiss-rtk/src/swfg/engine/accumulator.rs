@@ -1,7 +1,7 @@
-//! Per-satellite double-differenced pseudorange accumulator (ring buffer)
-//! for code averaging across epochs in RTK mode.
+//! Per-satellite double-differenced pseudorange accumulator (O(1) ring buffer)
+//! for fast code averaging across epochs in RTK mode.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
 /// Key identifying a double-differenced satellite pair and frequency band.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -11,33 +11,40 @@ pub struct DdSatKey {
     pub frequency: u8,
 }
 
-/// Accumulator entry storing recent DD pseudorange residuals.
+/// Accumulator entry storing recent DD pseudorange residuals in an O(1) ring buffer.
 #[derive(Debug, Clone)]
 pub struct DdAccumulatorEntry {
-    pub history: Vec<f64>,
+    pub history: VecDeque<f64>,
     pub max_samples: usize,
+    running_sum: f64,
 }
 
 impl DdAccumulatorEntry {
     pub fn new(max_samples: usize) -> Self {
         Self {
-            history: Vec::with_capacity(max_samples),
+            history: VecDeque::with_capacity(max_samples),
             max_samples,
+            running_sum: 0.0,
         }
     }
 
+    #[inline]
     pub fn add(&mut self, sample: f64) {
         if self.history.len() >= self.max_samples {
-            self.history.remove(0);
+            if let Some(old) = self.history.pop_front() {
+                self.running_sum -= old;
+            }
         }
-        self.history.push(sample);
+        self.running_sum += sample;
+        self.history.push_back(sample);
     }
 
+    #[inline]
     pub fn mean(&self) -> Option<f64> {
         if self.history.is_empty() {
             None
         } else {
-            Some(self.history.iter().sum::<f64>() / self.history.len() as f64)
+            Some(self.running_sum / self.history.len() as f64)
         }
     }
 
@@ -50,6 +57,7 @@ impl DdAccumulatorEntry {
         Some(variance.sqrt())
     }
 
+    #[inline]
     pub fn count(&self) -> usize {
         self.history.len()
     }
@@ -109,12 +117,12 @@ mod tests {
         }
         let (mean, count) = acc.get_averaged(&key).unwrap();
         assert_eq!(count, 5);
-        assert_eq!(mean, 3.0); // (1+2+3+4+5)/5 = 3.0
+        assert!((mean - 3.0).abs() < 1e-12); // (1+2+3+4+5)/5 = 3.0
 
         // Push 6th item — 1 drops out
         acc.add_observation(key, 6.0);
         let (mean2, count2) = acc.get_averaged(&key).unwrap();
         assert_eq!(count2, 5);
-        assert_eq!(mean2, 4.0); // (2+3+4+5+6)/5 = 4.0
+        assert!((mean2 - 4.0).abs() < 1e-12); // (2+3+4+5+6)/5 = 4.0
     }
 }

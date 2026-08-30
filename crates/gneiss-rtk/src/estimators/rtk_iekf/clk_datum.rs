@@ -23,6 +23,58 @@
 
 use super::state::DoubleDiffKey;
 use super::GnssRtkIekf;
+use gneiss_core::constants::SPEED_OF_LIGHT_M_S;
+
+/// Pure pair decision for the centered precise-clock DD correction.
+pub(crate) fn centered_pair_correction(
+    sat: Option<gneiss_parsers::clk_centering::CenteredClock>,
+    reference: Option<gneiss_parsers::clk_centering::CenteredClock>,
+) -> (f64, bool) {
+    use gneiss_parsers::clk_centering::MAX_CENTERED_SPREAD_S;
+    const C: f64 = SPEED_OF_LIGHT_M_S;
+    match (sat, reference) {
+        (Some(a), Some(b)) => {
+            let tripped = a.spread_s > MAX_CENTERED_SPREAD_S || b.spread_s > MAX_CENTERED_SPREAD_S;
+            if tripped {
+                (0.0, true)
+            } else {
+                (C * (a.bias_s - b.bias_s), false)
+            }
+        }
+        _ => (0.0, false),
+    }
+}
+
+/// `GNEISS_CLK_TRACE` diagnostic: first 10 evaluations show the centered
+/// biases, spreads, and resulting pair correction (metres).
+pub(crate) fn clk_centering_trace(
+    tow: f64,
+    sat_id: gneiss_core::sat::SatelliteId,
+    ref_sv: gneiss_core::sat::SatelliteId,
+    cs: Option<gneiss_parsers::clk_centering::CenteredClock>,
+    cr: Option<gneiss_parsers::clk_centering::CenteredClock>,
+    corr_m: f64,
+) {
+    static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let n = N.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    if n >= 10 {
+        return;
+    }
+    let fmt = |c: Option<gneiss_parsers::clk_centering::CenteredClock>| match c {
+        Some(x) => format!("{:+.1}us/spr{:.1}us", x.bias_s * 1e6, x.spread_s * 1e6),
+        None => "none".to_string(),
+    };
+    eprintln!(
+        "CLKDD[{n}] tow={:.0} {:?}{:02}-{:02} sat={} ref={} -> {:+.3} m",
+        tow,
+        sat_id.constellation,
+        sat_id.prn,
+        ref_sv.prn,
+        fmt(cs),
+        fmt(cr),
+        corr_m
+    );
+}
 
 /// Seed variance (m^2) for the iono state of a transferred arc; matches
 /// the fresh-seed value used in `update_dd_ambiguity`.

@@ -45,12 +45,17 @@ def _ensure_fresh_binary() -> int:
 
 
 def main() -> int:
+    smoke = "--smoke" in sys.argv or "--quick" in sys.argv or "-s" in sys.argv or "MAX_EPOCHS" in os.environ
     if _ensure_fresh_binary() != 0:
         return 1
     print(f"binary sha256[:12] = {_binary_hash()}")
     env = dict(os.environ,
                GNEISS_DATASET="multi2025",
                GNEISS_SYSTEMS="GE")
+    if smoke and "MAX_EPOCHS" not in env:
+        env["MAX_EPOCHS"] = "1800"
+    if "MAX_EPOCHS" in env:
+        print(f"[SMOKE MODE] Evaluating {env['MAX_EPOCHS']} epochs (~{int(env['MAX_EPOCHS'])*30/60:.1f} min)")
     r = subprocess.run([str(BIN)], env=env, capture_output=True, text=True)
     if r.returncode != 0:
         print("FAIL: eval exited", r.returncode)

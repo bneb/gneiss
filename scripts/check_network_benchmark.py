@@ -23,13 +23,20 @@ BIN = Path("target/release/eval_network_ppk")
 
 
 def run_eval() -> str:
+    import os
+    smoke = "--smoke" in sys.argv or "--quick" in sys.argv or "-s" in sys.argv or "MAX_EPOCHS" in os.environ
     if not BIN.exists():
         sys.exit(
             f"FAIL: {BIN} not found - "
             "run 'cargo build --release --bin eval_network_ppk' first"
         )
+    env = dict(os.environ)
+    if smoke and "MAX_EPOCHS" not in env:
+        env["MAX_EPOCHS"] = "1800"
+    if "MAX_EPOCHS" in env:
+        print(f"[SMOKE MODE] Evaluating {env['MAX_EPOCHS']} epochs")
     result = subprocess.run(
-        [str(BIN)], capture_output=True, text=True, check=True
+        [str(BIN)], env=env, capture_output=True, text=True, check=True
     )
     return result.stdout
 

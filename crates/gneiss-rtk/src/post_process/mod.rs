@@ -8,12 +8,15 @@
 
 pub mod antenna;
 pub mod backward;
+pub mod boresight;
 pub mod combiner;
 pub mod dynamics;
 pub mod forward;
 pub mod iekf_pass;
+pub mod lever_arm;
 pub mod network;
 pub mod quality;
+pub mod sbet;
 pub mod screening;
 pub mod sidereal;
 
@@ -25,9 +28,12 @@ use gneiss_core::obs::EpochObs;
 use crate::swfg::config::EngineConfig;
 use crate::swfg::imu_preintegration::ImuSample;
 
+pub use boresight::{BoresightCalibrationResult, BoresightEstimator, BoresightObservation};
 pub use combiner::SmoothedEpoch;
 pub use dynamics::ProcessingDynamics;
+pub use lever_arm::{LeverArmEstimate, LeverArmEstimator, LeverArmObservation};
 pub use quality::QualityReport;
+pub use sbet::export_sbet_trajectory;
 pub use screening::ScreeningReport;
 
 /// Complete result of a post-processing run.

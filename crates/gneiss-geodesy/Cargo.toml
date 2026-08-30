@@ -10,3 +10,4 @@ workspace = true
 [dependencies]
 nalgebra = { version = "0.32", default-features = false, features = ["alloc"] }
 serde = { version = "1.0.228", features = ["derive"] }
+libm = "0.2.16"

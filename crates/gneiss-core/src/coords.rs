@@ -268,9 +268,9 @@ pub fn ecef_cov_to_enu_std(pos_ecef: Vector3<f64>, cov_ecef: nalgebra::Matrix3<f
     let r_ned = ecef_to_ned_matrix(llh);
     let cov_enu = r_ned * cov_ecef * r_ned.transpose();
     (
-        cov_enu[(1, 1)].max(0.0).sqrt(),
-        cov_enu[(0, 0)].max(0.0).sqrt(),
-        cov_enu[(2, 2)].max(0.0).sqrt(),
+        libm::sqrt(cov_enu[(1, 1)].max(0.0)),
+        libm::sqrt(cov_enu[(0, 0)].max(0.0)),
+        libm::sqrt(cov_enu[(2, 2)].max(0.0)),
     )
 }
 

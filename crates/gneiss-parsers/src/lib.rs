@@ -12,4 +12,5 @@ pub mod sp3;
 pub mod precise_orbit;
 pub mod receiver_antenna;
 pub mod receiver_pcv;
+pub mod sbet;
 pub mod ubx;

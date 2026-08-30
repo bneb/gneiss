@@ -43,7 +43,7 @@ earlier engine generation; current engine is network RTK/PPK, see docs/PROJECT_S
 See [docs/archive/SPRINT_PLAN_V2.md](./docs/archive/SPRINT_PLAN_V2.md) for the historical PPP accuracy
 investigation that motivated the SWFG rewrite (POST_MORTEM.md never existed; this was the closest
 equivalent and is archived, not current).
-See [docs/PROJECT_STATUS.md](./docs/PROJECT_STATUS.md) and [docs/NETWORK_RTK_NEXT_STEPS.md](./docs/NETWORK_RTK_NEXT_STEPS.md)
-for the current sprint plan and roadmap.
+See [docs/PROJECT_STATUS.md](./docs/PROJECT_STATUS.md) and [docs/TIER1_ROADMAP.md](./docs/TIER1_ROADMAP.md)
+for the current sprint plan and roadmap (historical network RTK notes in [docs/archive/NETWORK_RTK_NEXT_STEPS.md](./docs/archive/NETWORK_RTK_NEXT_STEPS.md)).
 See [docs/TIER1_ROADMAP.md](./docs/TIER1_ROADMAP.md) for the cross-cutting roadmap to tier-1 PPK
 parity (performance, UX, features, code quality; accuracy is covered in PROJECT_STATUS.md's Sprint 16).

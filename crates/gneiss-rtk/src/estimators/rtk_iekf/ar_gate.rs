@@ -49,6 +49,15 @@ pub(crate) fn coherence_offset(band: u8, divergences: &[(u8, f64)]) -> f64 {
     median(&same_band)
 }
 
+/// Safety margin on top of nominal code-noise sigma when bounding freshly seeded ambiguities.
+pub(crate) const SEED_VARIANCE_SAFETY_MARGIN: f64 = 4.0;
+
+/// Variance (cycles^2) for a freshly seeded or slip-reset ambiguity.
+pub(crate) fn seed_ambiguity_variance_cycles2(pr_var_m2: f64, lambda: f64) -> f64 {
+    let sigma_cycles = pr_var_m2.sqrt() / lambda;
+    (SEED_VARIANCE_SAFETY_MARGIN * sigma_cycles).powi(2)
+}
+
 /// Temporary AR-only view of `state` restricted to DD pairs whose *both*
 /// members clear `mask_rad` elevation above the rover. Pairs without a
 /// matching measurement this epoch fail open (kept) so bookkeeping gaps can

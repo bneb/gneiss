@@ -10,46 +10,46 @@ RTK for commercial hardware (u-blox); the estimator core is currently being hard
 survey-grade CORS baseline data before being re-validated on consumer receiver hardware (tracked in
 the roadmap's Sprint 11).
 
-**This README describes the current (network RTK/PPK) engine as of Sprint 5.** Two earlier engine
-generations exist in this repository's history -- a tightly-coupled GNSS+INS EKF, and a sliding-window
-factor graph -- both superseded. Their docs are preserved under `docs/archive/` for historical record
-only; do not treat them as current. See `docs/PROJECT_STATUS.md` for the authoritative status and
-`docs/NETWORK_RTK_NEXT_STEPS.md` for the live findings log and roadmap.
+**This README describes the current engine as of Sprint 31.** See `docs/PROJECT_STATUS.md` for the authoritative status and
+`docs/TIER1_ROADMAP.md` for the Tier-1 PPK/PPP/Realtime parity roadmap.
 
 ## Features
 
 - **Double-difference RTK/PPK**: Iterated EKF over DD pseudorange/carrier-phase observations, forward
   + backward RTS smoothing with a measured-agreement combiner.
-- **Ambiguity Resolution**: LAMBDA integer AR with partial AR (ILS subset selection) and FFRT validation
-  for GPS, Galileo, and BeiDou. GLONASS is implemented but gated off by default -- a >500-cycle-per-epoch
-  FDMA phase mismatch is root-caused but not yet fixed (see `docs/NETWORK_RTK_NEXT_STEPS.md`, roadmap Sprint 9).
-- **Frame safety**: Typed `TimeSystem`, `EcefPos<F>`, and `Signal` primitives prevent an entire class of
-  silent GNSS/BeiDou time-offset and frequency-mixing bugs that were the majority of real defects found
-  during development (see `docs/FRAME_SAFETY_PLAN.md`).
-- **Atmospheric modeling**: Per-satellite mapped slant ionosphere state filter; NS-gradient troposphere
-  states; 11-constituent Ocean Tide Loading via an IERS BLQ parser.
-- **Precise products**: SP3 + RINEX clock + PCO wired via a unified staged pipeline, with broadcast-ephemeris
-  fallback.
-- **Robust estimation**: Huber-weighted IEKF update; validated to substantially reduce fix-rate tail error
-  versus a naive least-squares update.
-- **Real-time plumbing (not yet wired end-to-end)**: An async NTRIP client (`gneiss-ntrip`) and RTCM3
-  MSM4/MSM7 decoder both exist; live-correction streaming into the estimator is tracked in roadmap Sprint 12.
+- **Tightly-Coupled GNSS/INS**: Sliding-window factor graph (SWFG) fusing high-rate on-manifold IMU
+  preintegration (Forster et al.) with raw pseudorange/carrier-phase observation factors.
+- **Ambiguity Resolution & PPP-AR**: LAMBDA integer AR for RTK and decoupled Wide-Lane/Narrow-Lane
+  Melbourne-Wübbena integer resolution with fractional phase bias (OSB/DCB) absorption for PPP-AR.
+- **Frame & Geodetic Safety**: Structurally enforced `EpochPosition<F, R>`, `Arp`, `Apc`, `GroundMonument`
+  markers with tectonic plate velocity propagation ($\mathbf{X}(t_1) = \mathbf{X}(t_0) + \mathbf{V}(t_1 - t_0)$)
+  and typed `TimeSystem` / `Signal` registries.
+- **Antenna Phase Center Modeling**: Full 2D azimuth $\times$ elevation bilinear interpolation for ANTEX
+  receiver PCV models and satellite PCO/PCV.
+- **Enterprise Formats & Trajectories**: Full 17-field binary Applanix POSPac `.sbet` (136 bytes/epoch)
+  and 10-field `.sbet.rms` (80 bytes/epoch) export, along with POS, CSV, KML, and GeoJSON.
+- **Universal Geoid Grids & Projections**: Fast binary parsers for NOAA VDatum `.gtx`, NRCan `.byn`
+  (CGG2013, HTv2), Transverse Mercator (UTM/Gauss-Krüger), Lambert Conformal Conic, and binary `.gsb` NTv2 datum shifts.
+- **Photogrammetry & Site Calibration**: Boresight misalignment $[\Delta \phi, \Delta \theta, \Delta \psi]$ &
+  lever-arm $\mathbf{l}_c$ Levenberg-Marquardt auto-estimator, shutter synchronization (`CameraEventInterpolator`),
+  and 4-parameter horizontal Helmert + vertical slope site calibration (`gneiss-cli calibrate`).
+- **Interactive Visual GUI & Diagnostics**: Single-binary embedded web workspace (`gneiss-cli gui`) with
+  responsive Canvas trajectory rendering, polar skyplots, and multi-channel residual time-series inspectors.
+- **Automated CORS Reference Harvester**: `gneiss-fetch` tool for automated discovery and Hatanaka RINEX
+  retrieval from NOAA CORS, EUREF, and CDDIS networks.
+- **Executive QC Reporting**: Publication-grade HTML/PDF certification reports (`--qc-report`) with KPI badges.
+- **Multi-Core Parallelism**: Rayon-accelerated per-base forward/backward passes and batch mission execution.
+- **Real-Time Streaming Engine & Live Mode**: `StreamingRtkEngine` with live RTCM3 MSM decoding and
+  `gneiss-cli live` streaming runner with real-time NMEA 0183 `$GNGGA` sentence generation.
 
-## Project Status & Roadmap
+## Project Status & Strategic Roadmap
 
-The project has gone through three architecture generations; the current one (documented here) is
-**network RTK/PPK against a network of CORS reference baselines** (15-50km), used to harden the
-double-difference estimator core against clean, well-characterized truth data before it is
-re-validated against the flagship target: commercial u-blox receiver hardware.
+The project has executed all 3 prioritized phases of the Tier-1 master roadmap:
+1. **Phase 1: PPK Post-Processing Dominance** (Sprints 1–25) — Achieving parity and superiority over NovAtel Waypoint GrafNav, SBG Qinertia, and Leica Infinity on PPK accuracy, throughput, and UX.
+2. **Phase 2: High-Precision PPP & PPP-AR** (Sprints 26–28) — Global base-station-free centimeter positioning with precise SP3/CLK products, ZWD random walks, and integer PPP-AR.
+3. **Phase 3: Real-Time & Streaming Operations** (Sprints 29–31) — High-throughput low-latency live RTCM3 streaming, `StreamingRtkEngine`, and live CLI runner.
 
-Sprints 1-5 (frame safety, precise products, slant ionosphere, troposphere/geodesy, production polish)
-are complete. The active roadmap (sprints 6-13 -- tropospheric observability, obs-side clock refactor,
-long-baseline ambiguity resolution, antenna/datum precision, Tier-1 and u-blox-hardware validation,
-real-time path, production hardening) lives in `docs/NETWORK_RTK_NEXT_STEPS.md` and the project's
-sprint roadmap artifact.
-
-**Supported modes:** Single Point Positioning (SPP), Real-Time Kinematic / PPK (double-difference,
-static and -- behind a flag, not yet production-validated -- kinematic).
+See `docs/TIER1_ROADMAP.md` for the complete roadmap and `docs/PROJECT_STATUS.md` for comprehensive verification metrics.
 
 ## Architecture
 
@@ -161,12 +161,12 @@ are preserved in `docs/archive/` but describe superseded architectures -- do not
 ## Documentation
 
 - [Current project status & sprint history](./docs/PROJECT_STATUS.md)
-- [Live findings log & architecture roadmap](./docs/NETWORK_RTK_NEXT_STEPS.md)
+- [Tier-1 PPK Parity Roadmap](./docs/TIER1_ROADMAP.md)
 - [Round-by-round development process](./RUNBOOK.md)
 - [Frame-safety architecture](./docs/FRAME_SAFETY_PLAN.md)
 - [Architecture details](./ARCHITECTURE.md) *(describes an earlier engine generation -- read with that in mind)*
 - [Precise Point Positioning (PPP-AR) explained](./docs/PPP_AR_EXPLAINED.md) *(background/theory, still accurate)*
-- Superseded planning docs: [docs/archive/](./docs/archive/)
+- Superseded planning docs & historical logs: [docs/archive/](./docs/archive/)
 
 ## Workspace Structure
 
