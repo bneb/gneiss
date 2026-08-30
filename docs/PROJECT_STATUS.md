@@ -217,7 +217,7 @@ list is shorter than it looked.
   data; not worth chasing further without a dataset that actually
   stresses wide-lane rounding margins.
 
-**SPRINT 12: RTCM/NTRIP Real-Time Input — IN PROGRESS, 2 of 6 sub-items done (2026-08-29)**
+**SPRINT 12: RTCM/NTRIP Real-Time Input — IN PROGRESS, 2 of 7 sub-items done (2026-08-30: added 12g)**
 - Traced the actual state of every piece before writing this down,
   rather than leaving it as one large undifferentiated "OPEN":
 
@@ -313,10 +313,35 @@ list is shorter than it looked.
   If a live receiver is easier to source
   over USB/serial (UBX) than a working RTCM3 base feed, this is the
   more finished path to wire up first.
-- [ ] **12e. NTRIP client maturity** — `gneiss-ntrip` is 119 lines
-  (just `client.rs`); unclear whether it's been exercised against a
-  real caster or only unit-tested in isolation. Needs verification
-  against a live NTRIP mountpoint before trusting it in a real pipeline.
+- [ ] **12e. NTRIP client maturity — sharper than previously stated
+  (2026-08-30).** `gneiss-ntrip` is a live Cargo dependency of
+  `gneiss-cli` (declared in its `Cargo.toml`), but `grep -rn
+  "gneiss_ntrip" bin/gneiss-cli/src/` returns nothing -- it isn't just
+  "unverified against a live caster," it has **zero call sites
+  anywhere**, including within the CLI it's compiled into. There is no
+  `gneiss-cli` subcommand that invokes it at all yet. So the real
+  first step isn't live-caster verification -- it's wiring a command
+  surface that calls it, which then makes live-caster verification
+  possible. Same conclusion as 12f: this is blocked on the
+  batch-vs-streaming architecture gap below, since a live NTRIP feed
+  is inherently a streaming source with nowhere to plug into yet.
+- [ ] **12g. `gneiss-fetch` (675 lines: `provider.rs` +
+  `sources::{noaa,bkg,cddis}` + `hatanaka.rs` RINEX decompression) is
+  in the exact same boat, not previously documented (2026-08-30).**
+  Also a live `gneiss-cli` Cargo dependency, also zero call sites
+  anywhere in `gneiss-cli/src/` or elsewhere in the workspace. This is
+  a complete, real capability for fetching station coordinates/RINEX
+  from NOAA CORS, BKG, and CDDIS directly from Rust -- but this
+  project's actual dataset-acquisition path is the separate Python
+  scripts (`scripts/fetch_multignss_dataset.py` et al.), not this
+  crate. Two independent, complete implementations of "fetch geodetic
+  data from public sources," one wired into the actual workflow
+  (Python) and one compiled into every `gneiss-cli` build for no
+  functional benefit (Rust). Not deleting either -- the Python scripts
+  are what's actually validated and used; `gneiss-fetch` might be the
+  intended eventual replacement for a native `gneiss-cli fetch`
+  subcommand, or might be superseded cruft like `gneiss-geodesy` was.
+  Flagging rather than guessing which.
 - [ ] **12f. The real architectural gap: batch vs. streaming.** Even
   with 12c/12d done, every entry point (`execute_post_process`,
   `GnssRtkIekf::process_epoch`'s callers) takes a pre-collected
