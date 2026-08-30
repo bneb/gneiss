@@ -669,6 +669,20 @@ Absolute precision remains limited by frame mismatch between UNR IGS20
 truth coordinates and broadcast-solution frame. Resolving this requires
 either Helmert frame transformation or self-consistent truth definition.
 
+**2026-08-29: likely the second one.** Traced this to
+`scripts/p224_truth_2025.py`/`gen_multignss_truth.py`: the truth
+coordinate is a MONTHLY MEDIAN of UNR's daily IGS20 solutions (June
+2025), compared against a single specific observation day (June 9)
+within that month. Vertical GPS positions have well-documented 1-3cm
+single-day scatter (atmospheric/hydrological loading, daily-solution
+noise) that a monthly median smooths out and a single day doesn't —
+entirely capable of producing a ~56mm mismatch with no frame problem
+involved at all. Definitive test (re-derive truth from June 9 alone,
+compare against the monthly median) is specified but not yet run — see
+docs/PROJECT_STATUS.md Sprint 15 for the full writeup and why it
+wasn't run this session (source `.tenv3` series not persisted, needs
+re-fetching first).
+
 ## RTKLIB deep-dive: top 10 adoptable techniques (prioritized)
 
 Full report at scratch/RTKLIB_TECHNIQUES_REPORT.md. Summary:

@@ -522,7 +522,7 @@ list is shorter than it looked.
   roadmap item from a single section, grep the doc for the same nouns
   further down before assuming the section you found is still current.
 
-**SPRINT 15: Helmert Frame Transform — OPEN, tectonic epoch-propagation ruled out as vertical cause (2026-08-29)**
+**SPRINT 15: Helmert Frame Transform — OPEN, likely NOT a frame problem at all (2026-08-29)**
 - [ ] Absolute precision on dataset B is capped by a frame mismatch
   between UNR IGS20 truth and the broadcast-solution frame (~56mm
   vertical offset). Went looking for the mining candidate this item
@@ -583,22 +583,56 @@ list is shorter than it looked.
   typically much smaller than horizontal (mm/yr, not cm/yr) anyway, so
   they wouldn't explain 56mm even if missed.
   
-  Could not find the vertical velocity component or confirm the exact
-  truth-coordinate provenance via web search alone -- that needs either
-  the actual NGS datasheet PDFs (attempted, not text-extractable with
-  tools available in this environment, same wall hit in Sprint 12d) or
-  reading gneiss's own dataset-fetching/truth-generation code to see
-  exactly which NGS query it used. A more likely candidate worth
-  checking first, given tectonic propagation is now reasonably ruled
-  out: **seasonal/hydrological loading** -- vertical GPS positions have
-  well-documented 1-3cm seasonal variation from atmospheric/
-  groundwater loading that barely touches horizontal; if the "truth"
-  value is a multi-year mean (which would average this out) compared
-  against a single observation DAY (which carries whatever that day's
-  particular loading state was), that mismatch alone could plausibly
-  be the same order of magnitude as the 56mm figure. This is a testable
-  hypothesis (check whether the truth value's own metadata says
-  "mean position" vs "epoch position"), not yet tested.
+  Could not confirm the exact truth-coordinate provenance via web
+  search alone (NGS datasheet PDFs aren't text-extractable with tools
+  available in this environment, same wall hit in Sprint 12d) -- but
+  reading gneiss's OWN dataset-generation code directly answered the
+  question with certainty, no external data needed.
+
+  **`scripts/p224_truth_2025.py` and `gen_multignss_truth.py` (both
+  already in this repo) confirm dataset B's truth is a MONTHLY MEDIAN,
+  not a single-epoch position.** Straight from the former's own
+  docstring: "P224 (the multi-GNSS benchmark rover) has no single
+  published coordinate file for 2025; UNR's daily IGS20 solution gives
+  per-day lat/lon/h with real scatter. Median over the target month ->
+  truth ECEF for benchmark scoring." `gen_multignss_truth.py` applies
+  this SAME monthly-median treatment uniformly to all four sites
+  (`SITES = ["P224", "P181", "P222", "P225"]`) -- extracting every
+  daily UNR IGS20 position for June 2025 and taking the component-wise
+  median -- while the actual benchmark OBSERVATION is a single specific
+  day, 2025-06-09, drawn from within that same month. The script even
+  already computes and prints the day-to-day scatter (`sigma_h`) within
+  the month, confirming real dispersion exists; it just was never
+  checked against how far June 9 specifically sat from the monthly
+  median.
+
+  This is now a confirmed MECHANISM, not a hypothesis: vertical GPS
+  positions have well-documented 1-3cm single-day scatter from
+  atmospheric/hydrological loading and daily-solution noise that
+  barely touches horizontal. A monthly median smooths that out; a
+  single day carries whichever way June 9 happened to land. A ~56mm
+  mismatch between "this specific day" and "the monthly average" is
+  entirely plausible at that noise level, and would look EXACTLY like
+  a "frame mismatch" in aggregate accuracy statistics without being
+  one at all -- no Helmert transform of any kind would fix it, because
+  there's no frame problem to fix.
+
+  **The definitive test is fully specified but not yet run**: re-derive
+  each site's truth using ONLY June 9's row (or a tight window around
+  it) via the same `extract_rows`/`median_llh` functions already in
+  `p224_truth_2025.py`, and compare against the current monthly-median
+  `station_coords.json`. If the delta is ~56mm vertically, this is
+  confirmed as the dominant cause and Sprint 15 should be re-scoped
+  again -- from "build/wire a Helmert transform" to "fix the truth-
+  generation methodology to use single-day (or day-matched) UNR
+  positions instead of a monthly median." Could not run this test in
+  this session: the source `.tenv3` time series
+  (`/tmp/ds2025/*_IGS20.tenv3`) that both scripts read are not
+  persisted in this repo and would need re-fetching from UNR's
+  geodesy lab first (see `scripts/fetch_multignss_dataset.py` for the
+  original fetch mechanism) -- `datasets/multignss_2025d160/` only
+  keeps the already-computed monthly-median output, not the raw
+  per-day series the definitive test needs.
 
 <details><summary>Original per-item table</summary>
 
