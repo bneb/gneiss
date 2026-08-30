@@ -413,8 +413,12 @@ list is shorter than it looked.
 - [ ] **18 more files still over the 500-line limit** (was 19; `mod.rs`
   itself no longer the single worst RTK-engine offender), worst
   remaining: `rinex.rs` 2349, `spp.rs` 2228, `rtk_iekf/mod.rs` 1202,
-  `ephemeris.rs` 1573, `rtk_iekf/update.rs` 950, `formation.rs` 618,
-  `rtk_iekf/state.rs` 581
+  `ephemeris.rs` 1573, `rtk_iekf/update.rs` 814 (was 950 -- see
+  `screen.rs` extraction below), `formation.rs` 618, `rtk_iekf/state.rs`
+  581. `screen.rs` (new, 148 lines) is a clean extraction: production
+  code moved together with its already-self-contained test module, no
+  test-untangling needed -- see the commit for why that made this one
+  easier than the `formation.rs`/`mod.rs` impl-block extractions.
 - [x] `rtk_iekf/mod.rs` + `formation.rs` print audit — CLEARED
   (2026-08-28): the file previously named here as the worst offender
   ("a dozen-plus labeled `BAD-SEED`, `SP3-PROBE`, `CONTENT repr`,
