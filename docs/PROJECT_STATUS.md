@@ -419,6 +419,16 @@ list is shorter than it looked.
   code moved together with its already-self-contained test module, no
   test-untangling needed -- see the commit for why that made this one
   easier than the `formation.rs`/`mod.rs` impl-block extractions.
+- [x] `rtk_iekf/state.rs` (581 lines) checked, correctly left alone
+  (2026-08-29): unlike `formation.rs`/`update.rs`, its production code
+  (one `impl RtkState` block, ~335 lines -- already under budget on its
+  own) is a single cohesive concern (state-vector column-offset
+  bookkeeping), not multiple mixed-together ones. The overage is
+  entirely four legitimately-organized, feature-specific test modules
+  (base lifecycle+gradients, iono, iono-retain-compaction, sat-iono).
+  No clean fault line to split along without inventing one --
+  forcing a split here would be exactly the "unrequested abstraction"
+  CLAUDE.md's own Code section warns against. Left as one file.
 - [x] `rtk_iekf/mod.rs` + `formation.rs` print audit — CLEARED
   (2026-08-28): the file previously named here as the worst offender
   ("a dozen-plus labeled `BAD-SEED`, `SP3-PROBE`, `CONTENT repr`,
