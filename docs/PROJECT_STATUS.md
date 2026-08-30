@@ -545,6 +545,20 @@ list is shorter than it looked.
   this project has hit before. Not yet looked at: `hatch.rs` was on
   the original list but turned out to be dead code entirely — see
   below.
+- [ ] Extended the pass to `rtk_iekf/{mod,formation}.rs` (2026-08-30):
+  `mod.rs`'s AR-decision debug-logging block and slip-gate reseed loop
+  peak around depth 3-4, same "borderline, mostly a tracing guard,
+  not worth the risk" call as the other depth-4 cases above.
+  `formation.rs`'s per-satellite double-difference loop is a real
+  depth-5 case though (`for sat -> if let (rs,bs) -> for freq_band ->
+  if let Some(m) -> if let Some(cp)`), on genuine DD-formation logic
+  with several mutably-threaded locals (`pair_cp`, `active_keys`,
+  `meas_list`, `self.pair_epochs`) crossing the loop boundary —
+  extracting it cleanly means a ~10-parameter helper, not a quick win.
+  This is core positioning math, not a parser; a mistake here biases
+  *every* position rather than failing loudly. Deliberately deferred
+  rather than rushed — flagged precisely enough for a future pass
+  with more room to be careful, not silently skipped.
 - [x] `gneiss-rtk/src/measurements/hatch.rs` (234 lines) deleted as a
   dead duplicate (2026-08-30): defined its own `HatchFilter`/
   `HatchState` (SNR-adaptive window, traces to the `9352abf` initial
