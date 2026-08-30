@@ -410,15 +410,21 @@ list is shorter than it looked.
   test module**, not colocated with `formation.rs` -- needs a careful
   pass since some test helpers (`test_engine`, `run_sim`) are shared
   with unrelated tests that must stay in `mod.rs`
-- [ ] **18 more files still over the 500-line limit** (was 19; `mod.rs`
-  itself no longer the single worst RTK-engine offender), worst
-  remaining: `rinex.rs` 2349, `spp.rs` 2228, `rtk_iekf/mod.rs` 1202,
-  `ephemeris.rs` 1573, `rtk_iekf/update.rs` 814 (was 950 -- see
-  `screen.rs` extraction below), `formation.rs` 618, `rtk_iekf/state.rs`
-  581. `screen.rs` (new, 148 lines) is a clean extraction: production
-  code moved together with its already-self-contained test module, no
-  test-untangling needed -- see the commit for why that made this one
-  easier than the `formation.rs`/`mod.rs` impl-block extractions.
+- [ ] **17 more files still over the 500-line limit** (was 19 at the
+  start of this Sprint 13 pass), worst remaining: `rinex.rs` 2349,
+  `spp.rs` 2228, `rtk_iekf/mod.rs` 1202, `ephemeris.rs` 1397 (was 1573
+  -- see `keplerian.rs` below), `rtk_iekf/update.rs` 814 (was 950 --
+  see `screen.rs` below), `formation.rs` 618, `rtk_iekf/state.rs` 581.
+  `screen.rs` (new, 148 lines) and `keplerian.rs` (new, 176 lines,
+  `crates/gneiss-core`) are both clean extractions -- `screen.rs`
+  moved production code together with its already-self-contained test
+  module; `keplerian.rs` moved genuinely shared orbital mechanics
+  (GPS/Galileo/BeiDou/QZSS's Keplerian propagation, verified
+  byte-identical via diff before committing, and NOT GLONASS-specific
+  despite sitting right after `GlonassEphemeris` in the original file
+  -- GLONASS uses a separate, shorter RK4 integration instead). Neither
+  needed the careful test-untangling the `formation.rs`/`mod.rs`
+  impl-block extractions did.
 - [x] `rtk_iekf/state.rs` (581 lines) checked, correctly left alone
   (2026-08-29): unlike `formation.rs`/`update.rs`, its production code
   (one `impl RtkState` block, ~335 lines -- already under budget on its
