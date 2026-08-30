@@ -522,7 +522,7 @@ list is shorter than it looked.
   roadmap item from a single section, grep the doc for the same nouns
   further down before assuming the section you found is still current.
 
-**SPRINT 15: Helmert Frame Transform — OPEN, rescoped from "build" to "integrate + verify parameters" (2026-08-28)**
+**SPRINT 15: Helmert Frame Transform — OPEN, tectonic epoch-propagation ruled out as vertical cause (2026-08-29)**
 - [ ] Absolute precision on dataset B is capped by a frame mismatch
   between UNR IGS20 truth and the broadcast-solution frame (~56mm
   vertical offset). Went looking for the mining candidate this item
@@ -554,12 +554,51 @@ list is shorter than it looked.
   them correctly needs the station's actual published velocity, not a
   generic frame-pair transform. Plugging in unverified or guessed
   parameters would produce a plausible-looking but scientifically
-  bogus correction -- worse than leaving it alone. Next step is
-  research, not code: confirm from NGS/IGS metadata for these specific
-  CORS stations whether their published truth coordinates carry a
-  reference epoch distinct from the observation day, and if so, get
-  their real published velocities before writing a single parameter
-  literal.
+  bogus correction -- worse than leaving it alone.
+
+  **2026-08-29: did the research, found real data, and it points away
+  from tectonic epoch-propagation as the vertical culprit.** Found
+  actual published PBO/NGS horizontal velocities and reference epochs
+  for three of the shared stations (P181/P225/P222 appear in both
+  dataset A and dataset B): P181 ref epoch 2005.09 at (-29.0, 9.6)
+  mm/yr, P225 epoch 2005.14 at (-25.2, 2.7) mm/yr, P222 epoch 2005.26
+  at (-31.5, 10.0) mm/yr (horizontal East/North components, Pacific
+  plate motion). Dataset B is 2025-06-09 (~2025.44) -- a ~20.2-20.35
+  year gap from these reference epochs, which at ~30mm/yr would be
+  ~600mm of UNPROPAGATED horizontal drift if these raw reference-epoch
+  coordinates were used directly as truth.
+
+  That's the key finding: no ~600mm horizontal bias has EVER been
+  reported anywhere in this project's extensive dataset A/B accuracy
+  work (measured horizontal errors top out around 250mm even in the
+  worst tail). This is strong indirect evidence that whatever truth
+  coordinates this project already uses are NOT the raw 2005-epoch
+  values -- they're already epoch-propagated (standard NGS/OPUS
+  practice: querying a station's position for a specific date returns
+  the propagated coordinate, not the raw datasheet reference-epoch
+  one). **This rules out plain tectonic epoch-propagation as the
+  driver of the ~56mm VERTICAL offset specifically** -- if the standard
+  tool that got horizontal right was used, it got vertical
+  epoch-propagation right too, and vertical tectonic rates are
+  typically much smaller than horizontal (mm/yr, not cm/yr) anyway, so
+  they wouldn't explain 56mm even if missed.
+  
+  Could not find the vertical velocity component or confirm the exact
+  truth-coordinate provenance via web search alone -- that needs either
+  the actual NGS datasheet PDFs (attempted, not text-extractable with
+  tools available in this environment, same wall hit in Sprint 12d) or
+  reading gneiss's own dataset-fetching/truth-generation code to see
+  exactly which NGS query it used. A more likely candidate worth
+  checking first, given tectonic propagation is now reasonably ruled
+  out: **seasonal/hydrological loading** -- vertical GPS positions have
+  well-documented 1-3cm seasonal variation from atmospheric/
+  groundwater loading that barely touches horizontal; if the "truth"
+  value is a multi-year mean (which would average this out) compared
+  against a single observation DAY (which carries whatever that day's
+  particular loading state was), that mismatch alone could plausibly
+  be the same order of magnitude as the 56mm figure. This is a testable
+  hypothesis (check whether the truth value's own metadata says
+  "mean position" vs "epoch position"), not yet tested.
 
 <details><summary>Original per-item table</summary>
 
