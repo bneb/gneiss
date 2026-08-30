@@ -410,9 +410,31 @@ list is shorter than it looked.
   test module**, not colocated with `formation.rs` -- needs a careful
   pass since some test helpers (`test_engine`, `run_sim`) are shared
   with unrelated tests that must stay in `mod.rs`
-- [ ] **17 more files still over the 500-line limit** (was 19 at the
-  start of this Sprint 13 pass), worst remaining: `rinex.rs` 2349,
-  `spp.rs` 2228, `rtk_iekf/mod.rs` 1202, `ephemeris.rs` 1397 (was 1573
+- [x] `rinex.rs` (2349 lines) split (2026-08-30) into
+  `rinex/{mod,obs,nav}.rs`: OBS-file and NAV-file parsing had zero
+  shared internal function dependencies (confirmed via grep before
+  touching anything -- `parse_rinex_f14` is OBS-header-only,
+  `parse_rinex_f64` is NAV-only), so this was a clean split with each
+  half's tests moved alongside it. Production code alone is now
+  `obs.rs` ~463 lines and `nav.rs` ~491 lines, both under the 500
+  budget -- the honest caveat is that each file's *total* line count
+  (1350 and 1006) is still over 500 once its co-located test module is
+  counted, same shape as the pre-existing `msm.rs`. Per this project's
+  own established convention (CLAUDE.md mandates tests live with the
+  code they test), the 500-line guideline is being read as a
+  production-code reviewability budget, not a hard cap including
+  dense test coverage -- flagging this reading explicitly rather than
+  quietly deciding it. Byte-identical diff-verified against the
+  original before building; full workspace build/test/clippy and both
+  benchmark guards all pass.
+- [ ] **18 files still over the 500-line *total* limit** (was 19 at
+  the start of this Sprint 13 pass; the `rinex.rs` split above nets to
+  +1 by this raw metric -- one file over 500 replaced by two -- even
+  though the actual production-code reviewability problem it targets
+  is fixed). By *production-code-only* line count, `rinex/obs.rs` and
+  `rinex/nav.rs` don't belong on this list at all. Worst remaining by
+  total lines: `spp.rs` 2228,
+  `rtk_iekf/mod.rs` 1202, `ephemeris.rs` 1397 (was 1573
   -- see `keplerian.rs` below), `rtk_iekf/update.rs` 814 (was 950 --
   see `screen.rs` below), `formation.rs` 618, `rtk_iekf/state.rs` 581.
   `screen.rs` (new, 148 lines) and `keplerian.rs` (new, 176 lines,
@@ -434,7 +456,7 @@ list is shorter than it looked.
   `rtk_iekf` engine this project actually benchmarks. Lower payoff,
   higher effort, lower priority than what's already been done today --
   correctly left for a dedicated future pass rather than rushed.
-  `rinex.rs` (2349 lines, a parser file) not yet assessed at all.
+  `rinex.rs` has since been assessed and split -- see above.
 - [x] `rtk_iekf/state.rs` (581 lines) checked, correctly left alone
   (2026-08-29): unlike `formation.rs`/`update.rs`, its production code
   (one `impl RtkState` block, ~335 lines -- already under budget on its
@@ -495,9 +517,21 @@ list is shorter than it looked.
   feeds a guarded metric, so it's safe to do eventually, but needs
   someone to consciously pick one canonical definition and re-verify
   the numbers move only as expected, not a mechanical find-and-replace.
-- [ ] Nesting-depth pass on the large parser files (rinex.rs, ionex.rs,
-  antex.rs, hatch.rs) — needs a proper per-function read, not a
-  brace-counting heuristic
+- [ ] Nesting-depth pass on the large parser files (rinex/obs.rs,
+  rinex/nav.rs, ionex.rs, antex.rs, hatch.rs) — needs a proper
+  per-function read, not a brace-counting heuristic
+- [x] `atmosphere.rs` dead-code audit (2026-08-30): `TropoMapping`
+  enum, the `TropoMapper` trait, `NmfMapper`/`GmfMapper`/`Vmf1Mapper`,
+  and `create_tropo_mapper` formed a pluggable tropo-mapper factory
+  with zero callers anywhere in the workspace (confirmed via
+  exhaustive grep) -- `AtmosphereModel`'s real tropo methods call the
+  private `nmf_impl`/`gmf_impl` functions directly and never routed
+  through this factory. Removed ~88 lines (the abstraction plus the
+  `Box`/`String`/`serde` imports that only it used), a straight
+  CLAUDE.md "no dead code" fix, not a file-size one. Guards not
+  re-run: the deleted code was unreachable from any live path, so
+  there's no mechanism by which this could move the accuracy numbers;
+  full build/test/clippy pass clean.
 - [ ] Kinematic mode (`4e40f22`, behind a flag): validated only against
   synthetic/replayed-static data, no real moving-truth dataset yet —
   see `docs/KINEMATIC_MODE_REPORT.md`
