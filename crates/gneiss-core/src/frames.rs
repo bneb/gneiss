@@ -36,9 +36,13 @@
 //!
 //! # Provenance of numeric constants
 //!
-//! * `ITRF2020 -> ITRF2014`: ITRF center table (Altamimi et al., epoch 2015.0):
-//!   T = (-1.4, -0.9, +1.4) mm, D = -0.40 ppb, rates pending verification
-//!   (`gneiss-geodesy/helmert.rs` carries a conflicting variant; reconcile).
+//! * `ITRF2020 -> ITRF2014`: official ITRF transformation table
+//!   (<https://itrf.ign.fr/docs/solutions/itrf2020/Transfo-ITRF2020_TRFs.txt>),
+//!   epoch 2015.0: T = (-1.4, -0.9, +1.4) mm, D = -0.42 ppb, zero rotations;
+//!   rates T = (0.0, -0.1, +0.2) mm/yr, D and rotation rates zero. Verified
+//!   2026-08-30 against the primary source after finding this file's own
+//!   long-standing constant zeroed the Ty/Tz rates and used D = -0.40 ppb
+//!   pending confirmation — both now corrected.
 //! * `IGS20`, `WGS84(G2296)`: aligned to ITRF2020 by construction / NGA STP
 //!   (< 1 mm and cm-level respectively); both links equal the ITRF2020 row.
 
@@ -189,20 +193,26 @@ pub trait ReferenceFrame {
 }
 
 /// Published ITRF2020 -> ITRF2014 link (epoch 2015.0; rotations zero).
-/// WARNING: rates zeroed pending confirmation at itrf.ign.fr (some sources
-/// report Tz drift ≈ −0.2 mm/yr here ⇒ ~2 mm Z error by 2025 if true).
+/// Confirmed 2026-08-30 against the primary source
+/// (<https://itrf.ign.fr/docs/solutions/itrf2020/Transfo-ITRF2020_TRFs.txt>,
+/// cross-checked against <https://itrf.ign.fr/en/solutions/transformations>):
+/// Ty/Tz rates are -0.1/+0.2 mm/yr, not zero as this constant previously
+/// had it, and scale is -0.42 ppb, not the -0.40 previously here. At a
+/// ~2025 truth epoch (10 years past the 2015.0 reference), the old zeroed
+/// rates under-corrected Tz by ~2 mm -- small, but real and systematic in
+/// every `Igs20`/`Itrf2020` conversion through this hub.
 const ITRF2020_TO_ITRF2014: HelmertParams = HelmertParams {
     tx_mm: -1.4,
     ty_mm: -0.9,
     tz_mm: 1.4,
-    scale_ppb: -0.40,
+    scale_ppb: -0.42,
     rx_mas: 0.0,
     ry_mas: 0.0,
     rz_mas: 0.0,
     ref_epoch_yr: 2015.0,
     tx_rate: 0.0,
-    ty_rate: 0.0,
-    tz_rate: 0.0,
+    ty_rate: -0.1,
+    tz_rate: 0.2,
     scale_rate: 0.0,
     rx_rate: 0.0,
     ry_rate: 0.0,
@@ -525,10 +535,11 @@ mod tests {
     #[test]
     fn itrf2020_to_itrf2014_shift_matches_published_parameters() {
         // Independent scalar derivation of X_14 = T + (1+s)·X_20, T in mm.
+        // Evaluated at the reference epoch (2015.0), so rate terms drop out.
         let expected_shift = Vector3::new(
-            -1.4e-3 + -0.40e-9 * SITE[0],
-            -0.9e-3 + -0.40e-9 * SITE[1],
-            1.4e-3 + -0.40e-9 * SITE[2],
+            -1.4e-3 + -0.42e-9 * SITE[0],
+            -0.9e-3 + -0.42e-9 * SITE[1],
+            1.4e-3 + -0.42e-9 * SITE[2],
         );
         let got = EcefPos::<Itrf2020>::new(SITE)
             .convert_to::<Itrf2014>(2015.0)
