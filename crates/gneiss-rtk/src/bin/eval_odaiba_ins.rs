@@ -86,8 +86,18 @@ fn main() {
     let computed_base = default_base_arp + ned_to_ecef * Vector3::new(0.0, 0.0, 0.0855);
     let base_pos = base_approx.approx_position.map(|p| Vector3::new(p[0], p[1], p[2])).unwrap_or(computed_base);
 
+    let base_index: BTreeMap<u32, &gneiss_core::obs::EpochObs> = base_epochs.iter()
+        .map(|e| ((e.time.tow * 1000.0).round() as u32, e))
+        .collect();
+
+    let rover_init_pos = if let Some(spp) = gneiss_rtk::swfg::engine::epoch::compute_spp_seeding(&rover_epochs[0], &ephemerides) {
+        spp
+    } else {
+        base_pos
+    };
+
     let rtk_config = gneiss_rtk::swfg::config::RtkConfig {
-        initial_position: Some([base_pos.x, base_pos.y, base_pos.z]),
+        initial_position: Some([rover_init_pos.x, rover_init_pos.y, rover_init_pos.z]),
         ..Default::default()
     };
     let config = EngineConfig::Rtk(rtk_config);
@@ -127,9 +137,8 @@ fn main() {
             None
         };
 
-        let base_epoch = base_epochs.iter()
-            .filter(|b| (b.time.tow - epoch.time.tow).abs() < 0.1)
-            .min_by(|a, b| (a.time.tow - epoch.time.tow).abs().partial_cmp(&(b.time.tow - epoch.time.tow).abs()).unwrap_or(std::cmp::Ordering::Equal));
+        let exact_ms = (epoch.time.tow * 1000.0).round() as u32;
+        let base_epoch = base_index.get(&exact_ms).copied();
 
         let res = if let Some(base) = base_epoch {
             engine.process_rtk_epoch_with_imu(epoch, base, base_pos, preint_opt)
@@ -149,13 +158,19 @@ fn main() {
             }
         }
 
-        if i % 100 == 0 || i == rover_epochs.len() - 1 {
+        if i % 500 == 0 || i == rover_epochs.len() - 1 {
             println!("Forward pass: epoch {}/{} (TOW {}) - solutions: {}", i + 1, rover_epochs.len(), tow_sec, forward_solutions.len());
         }
     }
 
     // Backward Pass (Qinertia Offline Bidirectional Smoother)
-    let mut engine_bwd = SwfgEngine::new(&config, ephemerides.clone());
+    let last_rover_pos = forward_solutions.values().last().map(|(p, _)| *p).unwrap_or(rover_init_pos);
+    let rtk_config_bwd = gneiss_rtk::swfg::config::RtkConfig {
+        initial_position: Some([last_rover_pos.x, last_rover_pos.y, last_rover_pos.z]),
+        ..Default::default()
+    };
+    let config_bwd = EngineConfig::Rtk(rtk_config_bwd);
+    let mut engine_bwd = SwfgEngine::new(&config_bwd, ephemerides.clone());
     if let Some(ref k) = klobuchar {
         engine_bwd.set_klobuchar(k.alpha, k.beta);
     }
@@ -163,53 +178,13 @@ fn main() {
     let mut rev_epochs = rover_epochs.clone();
     rev_epochs.reverse();
 
-    // Group IMU samples per epoch for backward pass
-    let mut epoch_imu_map: BTreeMap<u32, Vec<gneiss_rtk::swfg::imu_preintegration::ImuSample>> = BTreeMap::new();
-    let mut cur_idx = 0usize;
-    for epoch in &rover_epochs {
-        let tow_sec = epoch.time.tow.floor() as u32;
-        let current_us = (epoch.time.tow * 1_000_000.0) as u32;
-        let mut samples = Vec::new();
-        while cur_idx < imu_samples.len() && imu_samples[cur_idx].time_us <= current_us {
-            samples.push(imu_samples[cur_idx]);
-            cur_idx += 1;
-        }
-        if !samples.is_empty() {
-            epoch_imu_map.insert(tow_sec, samples);
-        }
-    }
-
     for (i, epoch) in rev_epochs.iter().enumerate() {
         let tow_sec = epoch.time.tow.floor() as u32;
-        let base_epoch = base_epochs.iter()
-            .filter(|b| (b.time.tow - epoch.time.tow).abs() < 0.1)
-            .min_by(|a, b| (a.time.tow - epoch.time.tow).abs().partial_cmp(&(b.time.tow - epoch.time.tow).abs()).unwrap_or(std::cmp::Ordering::Equal));
-
-        let preint_bwd = if let Some(samples) = epoch_imu_map.get(&tow_sec) {
-            let has_valid_gyro = samples.iter().any(|s| s.gyro.norm() > 1e-6);
-            if samples.len() >= 2 && has_valid_gyro {
-                let rev_samples: Vec<_> = samples.iter().rev().cloned().map(|mut s| {
-                    s.accel = -s.accel;
-                    s.gyro = -s.gyro;
-                    s
-                }).collect();
-                let mut preint = ImuPreintegration::new();
-                preint.integrate(&rev_samples, &Vector3::zeros(), &Vector3::zeros());
-                let dt = preint.dt;
-                if dt > 2.0 && (preint.dp.norm() / dt.max(1e-3)) < 0.5 {
-                    preint.dp = Vector3::zeros();
-                    preint.dv = Vector3::zeros();
-                }
-                Some(preint)
-            } else {
-                None
-            }
-        } else {
-            None
-        };
+        let exact_ms = (epoch.time.tow * 1000.0).round() as u32;
+        let base_epoch = base_index.get(&exact_ms).copied();
 
         let res = if let Some(base) = base_epoch {
-            engine_bwd.process_rtk_epoch_with_imu(epoch, base, base_pos, preint_bwd)
+            engine_bwd.process_rtk_epoch_with_imu(epoch, base, base_pos, None)
         } else {
             engine_bwd.process_epoch(epoch)
         };
@@ -220,7 +195,7 @@ fn main() {
             }
         }
 
-        if i % 100 == 0 || i == rev_epochs.len() - 1 {
+        if i % 500 == 0 || i == rev_epochs.len() - 1 {
             println!("Backward pass: epoch {}/{} (TOW {}) - solutions: {}", i + 1, rev_epochs.len(), tow_sec, backward_solutions.len());
         }
     }

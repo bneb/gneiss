@@ -3,8 +3,10 @@ use gneiss_parsers::rinex::parse_rinex_obs;
 use std::io::BufReader;
 
 fn main() {
-    let f = std::fs::File::open("datasets/multignss_2025d160/p1811600.25o").unwrap();
-    let (epochs, _) = parse_rinex_obs(BufReader::new(f)).unwrap();
+    let f = std::fs::File::open("datasets/multignss_2025d160/p1811600.25o")
+        .expect("observation file must exist");
+    let (epochs, _) = parse_rinex_obs(BufReader::new(f))
+        .expect("valid RINEX obs file required");
     println!("epochs: {}", epochs.len());
     // Scan all epochs; count band-population for Galileo satellites.
     let mut band_count = [0usize; 9];

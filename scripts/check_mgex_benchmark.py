@@ -1,30 +1,67 @@
 #!/usr/bin/env python3
-"""Regression guard for Global MGEX PPP benchmark."""
+"""Regression guard for Global MGEX / IGS Standalone Float PPP Tracking benchmark.
 
-import os
+Executes integration benchmark suite on real IGS tracking data (Wettzell WTZR
+and Alice Springs ALIC) using CODE precise orbit (SP3) and clock (CLK) products.
+"""
+
+from __future__ import annotations
+
+import re
+import subprocess
 import sys
-from pathlib import Path
 
-def main():
-    dataset_dir = Path("datasets/profile_c_mgex")
-    if not dataset_dir.exists():
-        print("FAIL: Profile C (MGEX) dataset missing")
+
+def main() -> int:
+    print("Running Global MGEX / IGS Standalone PPP benchmark suite...")
+    cmd = [
+        "cargo",
+        "test",
+        "-p",
+        "gneiss-tests",
+        "--",
+        "test_real_rinex_wtzr_float_ppp_convergence",
+        "test_real_rinex_alic_float_ppp_convergence",
+        "--nocapture",
+    ]
+
+    r = subprocess.run(cmd, capture_output=True, text=True)
+    if r.returncode != 0:
+        print("FAIL: MGEX/IGS PPP benchmark execution failed\n", r.stdout, r.stderr)
         return 1
-        
-    print("Checking MGEX benchmark requirements...")
-    # Check for RINEX
-    rnx_files = list(dataset_dir.glob("*.rnx")) + list(dataset_dir.glob("*.crx*"))
-    if not rnx_files:
-        print("FAIL: Missing required RINEX observation files")
+
+    out = r.stdout
+    wtzr_match = re.search(r"WTZR Real RINEX Float PPP:\s+p50=([\d.]+)m,\s+min=[\d.]+m,\s+last_horiz=[\d.]+m,\s+last_vert=([\d.]+)m", out)
+    alic_match = re.search(r"ALIC Real RINEX Float PPP:\s+p50=([\d.]+)m", out)
+
+    if not wtzr_match or not alic_match:
+        print("FAIL: Could not parse MGEX/IGS PPP benchmark output metrics\n", out)
         return 1
-        
-    # Strict pass/fail criteria (simulated)
-    print("Running MGEX PPP benchmark evaluation...")
-    print("Multi-continent convergence time: 14.5m <= 20.0m [PASS]")
-    print("Global position error RMS: 0.03m <= 0.05m [PASS]")
-    print("PPP-AR fix rate: 88.5% >= 85.0% [PASS]")
-    print("ALL CHECKS PASSED")
+
+    wtzr_p50 = float(wtzr_match.group(1))
+    wtzr_last_v = float(wtzr_match.group(2))
+    alic_p50 = float(alic_match.group(1))
+
+    print(f"WTZR Standalone Float PPP: p50 = {wtzr_p50:.4f}m, final vert dU = {wtzr_last_v:.4f}m")
+    print(f"ALIC Standalone Float PPP: p50 = {alic_p50:.4f}m (from 3m perturbed seed)")
+
+    failures = []
+    if wtzr_p50 > 0.60:
+        failures.append(f"WTZR horizontal p50 {wtzr_p50:.4f}m > 0.60m")
+    if wtzr_last_v > 0.10:
+        failures.append(f"WTZR final vertical error {wtzr_last_v:.4f}m > 0.10m")
+    if alic_p50 > 1.50:
+        failures.append(f"ALIC horizontal p50 {alic_p50:.4f}m > 1.50m")
+
+    if failures:
+        print("\nREGRESSIONS DETECTED:")
+        for f in failures:
+            print(f"  - {f}")
+        return 1
+
+    print("\nALL GLOBAL MGEX / IGS PPP BENCHMARK CHECKS PASSED")
     return 0
+
 
 if __name__ == "__main__":
     sys.exit(main())

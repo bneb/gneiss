@@ -1,3 +1,5 @@
+#![cfg_attr(test, allow(clippy::unwrap_used))]
+
 use std::path::Path;
 use clap::{Parser, Subcommand};
 
@@ -5,6 +7,7 @@ mod calibrate;
 mod evaluator;
 mod export;
 mod gui;
+mod ingest;
 mod live;
 mod process;
 mod qc;
@@ -21,17 +24,17 @@ struct Cli {
 enum Commands {
     /// Process GNSS data to produce a trajectory
     Process {
-        #[arg(short = 'r', long, help = "Path to rover raw data (.obs)")]
+        #[arg(short = 'r', long, help = "Path or URI to rover raw data (.obs, .ubx, https://...)")]
         rover: String,
-        #[arg(short = 'b', long = "base", action = clap::ArgAction::Append, help = "Path to base station raw data (.obs) - specify multiple for Network RTK")]
+        #[arg(short = 'b', long = "base", action = clap::ArgAction::Append, help = "Path or URI to base station raw data (.obs, cors://..., https://...) - specify multiple for Network RTK")]
         base: Vec<String>,
-        #[arg(short = 'n', long, help = "Path to ephemeris/nav file (.nav, .rnx)")]
+        #[arg(short = 'n', long, help = "Path or URI to ephemeris/nav file (.nav, .rnx)")]
         nav: Option<String>,
         #[arg(short = 'o', long, help = "Path to output trajectory file (.pos, .csv, .kml, .json, .sbet)")]
         output: String,
         #[arg(long, help = "Output export format (pos, csv, kml, json, sbet)")]
         format: Option<String>,
-        #[arg(long, help = "Path to write structured QC report (.json or .csv)")]
+        #[arg(long, help = "Path to write structured QC report (.json, .csv, or .html)")]
         qc_report: Option<String>,
         #[arg(long, help = "Path to geoid grid (.gtx, .byn, or .json) for orthometric height")]
         geoid: Option<String>,
@@ -56,6 +59,10 @@ enum Commands {
         antex: Option<String>,
         #[arg(long, help = "Include GLONASS in double-difference formation")]
         glonass: bool,
+        #[arg(long, help = "Automatically discover and ingest N nearest CORS stations (e.g. --auto-cors 3)")]
+        auto_cors: Option<usize>,
+        #[arg(long, help = "Automatically fetch precise products (SP3/CLK/ANTEX)")]
+        auto_products: bool,
     },
 
     /// Compute local site calibration from paired GNSS and Ground Control Points (CSV)
@@ -119,6 +126,8 @@ enum Commands {
         port: u16,
         #[arg(short = 't', long, help = "Path to trajectory file (.pos) to load into workspace")]
         trajectory: Option<String>,
+        #[arg(short = 'b', long = "base", action = clap::ArgAction::Append, help = "Path to base station file (.obs, .rnx)")]
+        base: Vec<String>,
     },
 
     /// Real-time live streaming RTK mode
@@ -148,12 +157,13 @@ async fn main() {
         Commands::Process {
             rover, base, nav, output, format, qc_report, geoid, config,
             single_pass, mode, max_epochs, systems, sp3, clk,
-            base_position, antex, glonass,
+            base_position, antex, glonass, auto_cors, auto_products,
         } => {
             let args = process::ProcessArgs {
                 rover, bases: base, nav, output, format, qc_report, geoid, config,
                 enable_backward_smoothing: !single_pass, mode, max_epochs,
                 base_position, systems, antex, glonass, sp3, clk,
+                auto_cors, auto_products,
             };
             if let Err(e) = process::run_process(args).await {
                 eprintln!("Error: {}", e);
@@ -199,10 +209,11 @@ async fn main() {
                 println!("{}", json);
             }
         }
-        Commands::Gui { port, trajectory } => {
+        Commands::Gui { port, trajectory, base } => {
             let args = gui::GuiArgs {
                 port,
                 trajectory_file: trajectory,
+                base_files: base,
             };
             if let Err(e) = gui::run_gui_server(args).await {
                 eprintln!("GUI server error: {}", e);
@@ -294,6 +305,8 @@ async fn run_batch_mode(
                 glonass,
                 sp3: None,
                 clk: None,
+                auto_cors: None,
+                auto_products: false,
             };
             process::run_process(args).await?;
         }

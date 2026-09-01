@@ -74,8 +74,8 @@ mod tests {
         let rms_h = (h_errs.iter().map(|e| e * e).sum::<f64>() / h_errs.len() as f64).sqrt();
         println!("Open-sky Kinematic Post-Processed RTK: RMS={:.4}m, Fixed={}/{}", rms_h, fixed_count, result.trajectory.len());
 
-        assert!(fixed_count >= 25, "At least 25/30 epochs should be fixed");
-        assert!(rms_h < 0.03, "Horizontal RMS error must be < 3cm, got {:.4}m", rms_h);
+        assert!(fixed_count >= 28, "At least 28/30 epochs should be fixed, got {}", fixed_count);
+        assert!(rms_h < 0.010, "Horizontal RMS error must be < 1.0cm, got {:.4}m", rms_h);
     }
 
     #[test]
@@ -129,7 +129,7 @@ mod tests {
 
         let rms_h = (h_errs.iter().map(|e| e * e).sum::<f64>() / h_errs.len() as f64).sqrt();
         println!("Cycle Slip Post-Processed RTK: RMS={:.4}m", rms_h);
-        assert!(rms_h < 0.04, "Cycle slip post-processing RMS must be < 4cm, got {:.4}m", rms_h);
+        assert!(rms_h < 0.010, "Cycle slip post-processing RMS must be < 1.0cm, got {:.4}m", rms_h);
     }
 
     #[test]
@@ -184,6 +184,6 @@ mod tests {
 
         let rms_h = (h_errs.iter().map(|e| e * e).sum::<f64>() / h_errs.len() as f64).sqrt();
         println!("Outage Post-Processed RTK: RMS={:.4}m", rms_h);
-        assert!(rms_h < 0.08, "Outage post-processing RMS must be < 8cm, got {:.4}m", rms_h);
+        assert!(rms_h < 0.015, "Outage post-processing RMS must be < 1.5cm, got {:.4}m", rms_h);
     }
 }

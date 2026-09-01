@@ -627,12 +627,10 @@ mod obs_side_clk_tests {
         // Record epoch = 2025-06-08T12:00 GPST == week 2370, tow 43200
         // (matches the eval instant below).
         // Two GPS sats, biases ∓100 µs at one epoch.
-        format!(
-            "     3.00           C                                       RINEX VERSION / TYPE\n\
-             2    AS    AR                                          # / TYPES OF DATA\n\
-             AS G01  2025  6  8 12  0  0.000000  1   -0.000110000000E+00\n\
-             AS G02  2025  6  8 12  0  0.000000  1   -0.000090000000E+00\n\
-             AS G03  2025  6  8 12  0  0.000000  1   -0.000090000000E+00\n"
-        )
+        "     3.00           C                                       RINEX VERSION / TYPE\n\
+         2    AS    AR                                          # / TYPES OF DATA\n\
+         AS G01  2025  6  8 12  0  0.000000  1   -0.000110000000E+00\n\
+         AS G02  2025  6  8 12  0  0.000000  1   -0.000090000000E+00\n\
+         AS G03  2025  6  8 12  0  0.000000  1   -0.000090000000E+00\n".to_string()
     }
 }

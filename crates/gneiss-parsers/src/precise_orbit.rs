@@ -23,6 +23,7 @@ use std::collections::HashMap;
 type Node = (f64, Vector3<f64>, f64);
 
 /// Interpolated precise orbit store.
+#[derive(Debug, Clone)]
 pub struct PreciseOrbit {
     /// Per-satellite time-ordered samples.
     tracks: HashMap<String, Vec<(GpsTime, Sp3Record)>>,
@@ -50,6 +51,24 @@ impl PreciseOrbit {
     /// or insufficient data.
     pub fn position_at(&self, sv: &str, t: GpsTime) -> Option<(Vector3<f64>, f64)> {
         self.interpolate(sv, t)
+    }
+
+    /// Interpolated position (m), velocity (m/s), and clock offset (s) including
+    /// periodic relativistic eccentricity clock correction (-\frac{2 r \cdot v}{c^2}).
+    pub fn position_and_velocity_at(
+        &self,
+        sv: &str,
+        t: GpsTime,
+    ) -> Option<(Vector3<f64>, Vector3<f64>, f64)> {
+        let (pos, clk_base) = self.interpolate(sv, t)?;
+        let dt = 0.5; // seconds
+        let t_fwd = GpsTime::new(t.week, t.tow + dt);
+        let t_bwd = GpsTime::new(t.week, t.tow - dt);
+        let (pos_fwd, _) = self.interpolate(sv, t_fwd)?;
+        let (pos_bwd, _) = self.interpolate(sv, t_bwd)?;
+        let vel = (pos_fwd - pos_bwd) / (2.0 * dt);
+        let rel_corr = -2.0 * pos.dot(&vel) / (SPEED_OF_LIGHT_M_S * SPEED_OF_LIGHT_M_S);
+        Some((pos, vel, clk_base + rel_corr))
     }
 
     /// As [`PreciseOrbit::position_at`], but when a receiver position hint is
@@ -407,4 +426,31 @@ mod tests {
         let expected_nohint = 1.0e-6 + 1.0e-9 * 4500.0;
         assert!((clk_nohint - expected_nohint).abs() < 1e-15);
     }
+
+    #[test]
+    fn test_position_and_velocity_relativistic_correction() {
+        let dt = 900.0;
+        let r = 26_560_000.0_f64;
+        let eps: Vec<Sp3Epoch> = (0..30)
+            .map(|i| {
+                let t = i as f64 * dt;
+                let mut recs = HashMap::new();
+                recs.insert(
+                    "G01".to_string(),
+                    Sp3Record {
+                        position: Vector3::new(r, 0.0, 0.0),
+                        clock_offset: 1.0e-6,
+                    },
+                );
+                Sp3Epoch { time: GpsTime::new(2105, t), records: recs }
+            })
+            .collect();
+        let orb = PreciseOrbit::new(eps);
+
+        let t_query = GpsTime::new(2105, 4500.0);
+        let (pos, _vel, clk) = orb.position_and_velocity_at("G01", t_query).unwrap();
+        assert!((pos.x - r).abs() < 1e-3);
+        assert!((clk - 1.0e-6).abs() < 1e-10);
+    }
 }
+

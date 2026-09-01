@@ -55,6 +55,7 @@ pub struct PppConfig {
     pub initial_position: Option<[f64; 3]>,
     pub window_size: usize,
     pub ar: Option<ArConfig>,
+    pub is_kinematic: bool,
 }
 
 impl Default for PppConfig {
@@ -65,6 +66,7 @@ impl Default for PppConfig {
             initial_position: None,
             window_size: 10,
             ar: None,
+            is_kinematic: false,
         }
     }
 }

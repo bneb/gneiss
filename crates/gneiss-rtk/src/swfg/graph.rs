@@ -183,7 +183,7 @@ mod tests {
     #[test]
     fn graph_remove_variable_removes_factors() {
         let mut g = EstimationGraph::new();
-        let id = g.add_variable(VariableKind::Ambiguity { satellite: 1, frequency: 1 });
+        let id = g.add_variable(VariableKind::Ambiguity { satellite: 1, frequency: 1, arc: 0 });
         let factor = PriorFactor {
             variable: id,
             mu: DVector::from_element(1, 0.0),
@@ -200,7 +200,7 @@ mod tests {
         let mut g = EstimationGraph::new();
         g.add_variable(VariableKind::Pose { epoch: 0 });        // 6
         g.add_variable(VariableKind::Velocity { epoch: 0 });    // 3
-        g.add_variable(VariableKind::Ambiguity { satellite: 1, frequency: 1 }); // 1
+        g.add_variable(VariableKind::Ambiguity { satellite: 1, frequency: 1, arc: 0 }); // 1
         assert_eq!(g.total_dim(), 10);
     }
 

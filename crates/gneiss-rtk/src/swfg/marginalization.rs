@@ -154,19 +154,21 @@ pub fn marginalize(
     }
 
     // Schur complement: S = C - B^T A^{-1} B
-    // Use SVD pseudo-inverse for numerical stability
-    let svd = a.clone().svd(true, true);
-    let mut a_inv = DMatrix::zeros(a.nrows(), a.ncols());
-    for (i, &sigma) in svd.singular_values.iter().enumerate() {
-        if sigma > 1e-10 {
-            let u_col = svd.u.as_ref()?.column(i);
-            let v_col = svd.v_t.as_ref()?.row(i).transpose();
-            a_inv += (v_col * u_col.transpose()) / sigma;
-        }
+    // Solve A * X = B and A * y = g_a directly
+    let mut a_reg = a.clone();
+    for i in 0..a_reg.nrows() {
+        a_reg[(i, i)] += 1e-8;
     }
+    let (b_sol, ga_sol) = if let Some(chol) = a_reg.clone().cholesky() {
+        (chol.solve(&b), chol.solve(&g_a))
+    } else {
+        let x = a_reg.clone().qr().solve(&b)?;
+        let y = a_reg.qr().solve(&g_a).unwrap_or_else(|| DVector::zeros(g_a.len()));
+        (x, y)
+    };
 
-    let s = &c - &b.transpose() * &a_inv * &b;
-    let g_rem = &g_b - &b.transpose() * &a_inv * &g_a;
+    let s = &c - &b.transpose() * &b_sol;
+    let g_rem = &g_b - &b.transpose() * &ga_sol;
 
     let mut prior_variables = Vec::new();
     for &id in kept_ids {

@@ -62,8 +62,8 @@ fn test_byn_roundtrip_parsing() {
     let max_lat_mas: i32 = 41 * 3_600_000;
     let min_lon_mas: i32 = -100 * 3_600_000;
     let max_lon_mas: i32 = -99 * 3_600_000;
-    let dlat_mas: i32 = 1 * 3_600_000;
-    let dlon_mas: i32 = 1 * 3_600_000;
+    let dlat_mas: i32 = 3_600_000;
+    let dlon_mas: i32 = 3_600_000;
 
     bytes[8..12].copy_from_slice(&min_lat_mas.to_le_bytes());
     bytes[12..16].copy_from_slice(&max_lat_mas.to_le_bytes());

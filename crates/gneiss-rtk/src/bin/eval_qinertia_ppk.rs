@@ -131,18 +131,28 @@ fn print_stats(name: &str, mut h_errs: Vec<f64>, mut d3_errs: Vec<f64>, fix_coun
     h_errs.sort_by(|a, b| a.total_cmp(b));
     d3_errs.sort_by(|a, b| a.total_cmp(b));
     let n = h_errs.len();
+    let p10 = h_errs[(n as f64 * 0.10) as usize];
+    let p25 = h_errs[(n as f64 * 0.25) as usize];
     let p50 = h_errs[n / 2];
     let p68 = h_errs[(n as f64 * 0.68) as usize];
+    let p75 = h_errs[(n as f64 * 0.75) as usize];
+    let p90 = h_errs[(n as f64 * 0.90) as usize];
     let p95 = h_errs[(n as f64 * 0.95) as usize];
+    let p99 = h_errs[(n as f64 * 0.99) as usize];
+    let max = *h_errs.last().unwrap_or(&0.0);
+    let mean = h_errs.iter().sum::<f64>() / n as f64;
     let rms = (h_errs.iter().map(|e| e * e).sum::<f64>() / n as f64).sqrt();
 
     let p50_3d = d3_errs[n / 2];
     let p95_3d = d3_errs[(n as f64 * 0.95) as usize];
+    let rms_3d = (d3_errs.iter().map(|e| e * e).sum::<f64>() / n as f64).sqrt();
     let fix_pct = (fix_count as f64 / total_count.max(1) as f64) * 100.0;
 
     println!("=== {} (N={}, Fixed={}/{} [{:.1}%]) ===", name, n, fix_count, total_count, fix_pct);
     println!("Horizontal Error:  p50={:.3}m,  p68={:.3}m,  p95={:.3}m,  RMS={:.3}m", p50, p68, p95, rms);
-    println!("3D Position Error: p50={:.3}m,  p95={:.3}m", p50_3d, p95_3d);
+    println!("  Horizontal CDF:  p10={:.3}m, p25={:.3}m, p50={:.3}m, p68={:.3}m, p75={:.3}m, p90={:.3}m, p95={:.3}m, p99={:.3}m, max={:.3}m, mean={:.3}m",
+        p10, p25, p50, p68, p75, p90, p95, p99, max, mean);
+    println!("3D Position Error: p50={:.3}m,  p95={:.3}m,  RMS={:.3}m", p50_3d, p95_3d, rms_3d);
 }
 
 fn evaluate_dataset_spec(spec: &DatasetSpec) {
@@ -211,6 +221,9 @@ fn evaluate_dataset_spec(spec: &DatasetSpec) {
         dynamics: Default::default(),
         enable_glonass: false,
         continuity_gate: false,
+        precise_orbits: None,
+        precise_clocks: None,
+        sinex_bias: None,
     };
     let fwd_res = match execute_post_process(&config, &ephemerides, selected_rover, Some(&base_epochs), imu_samples.as_deref(), &fwd_options) {
         Ok(r) => r,
@@ -246,6 +259,9 @@ fn evaluate_dataset_spec(spec: &DatasetSpec) {
         dynamics: Default::default(),
         enable_glonass: false,
         continuity_gate: false,
+        precise_orbits: None,
+        precise_clocks: None,
+        sinex_bias: None,
     };
     let smooth_res = match execute_post_process(&config, &ephemerides, selected_rover, Some(&base_epochs), imu_samples.as_deref(), &smooth_options) {
         Ok(r) => r,
@@ -300,7 +316,12 @@ fn main() {
         evaluate_dataset_spec(&odaiba_spec);
     }
 
-    // 2. RTK Explorer F9P Kinematic (u-blox ZED-F9P + TMG2 Base)
+    let max_f9p = std::env::var("MAX_F9P_EPOCHS")
+        .or_else(|_| std::env::var("MAX_EPOCHS"))
+        .ok()
+        .and_then(|s| s.parse::<usize>().ok())
+        .unwrap_or(usize::MAX);
+
     let f9p_spec = DatasetSpec {
         name: "RTK Explorer F9P (u-blox ZED-F9P Kinematic 1Hz)",
         dir: "datasets/rtkexplorer/sample_1/f9p_ppp_1224",
@@ -310,7 +331,7 @@ fn main() {
         truth_file: "rover_ppk.pos",
         imu_file: None,
         base_pos_override: Some(Vector3::new(-1283434.6250, -4713071.9830, 4090105.0479)),
-        max_epochs: 600,
+        max_epochs: max_f9p,
     };
     if Path::new(f9p_spec.dir).exists() {
         evaluate_dataset_spec(&f9p_spec);
@@ -330,5 +351,21 @@ fn main() {
     };
     if Path::new(cors_spec.dir).exists() {
         evaluate_dataset_spec(&cors_spec);
+    }
+
+    // 4. NOAA CORS Medium Baseline (P181 Base, P224 Rover, 15.0 km, 30s)
+    let p181_spec = DatasetSpec {
+        name: "NOAA CORS Regional Baseline (P181 Base, P224 Rover, 15.0km, 30s)",
+        dir: "datasets/cors_short_baseline",
+        rover_file: "p2241350.20o",
+        base_file: "p1811350.20o",
+        nav_file: "brdc1350.20n",
+        truth_file: "p224_truth.pos",
+        imu_file: None,
+        base_pos_override: Some(Vector3::new(-2697941.2851, -4255089.1805, 3898009.7146)),
+        max_epochs: 600,
+    };
+    if Path::new(p181_spec.dir).exists() {
+        evaluate_dataset_spec(&p181_spec);
     }
 }

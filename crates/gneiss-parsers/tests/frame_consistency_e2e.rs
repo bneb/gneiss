@@ -63,7 +63,7 @@ fn e2e_galileo_secondary_is_e5a_not_e5b() {
         .expect("Galileo must have a secondary signal policy");
     assert_eq!(band, 5);
     assert_eq!(sig, Signal::GalE5a);
-    let f_e5a = 1176_450_000.0;
+    let f_e5a = 1_176_450_000.0;
     let f_resolved = gneiss_core::frequencies::frequency_for(
         Constellation::Galileo,
         sig,

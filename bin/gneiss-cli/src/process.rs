@@ -14,9 +14,10 @@ use gneiss_rtk::post_process::{
 use gneiss_rtk::swfg::config::EngineConfig;
 
 use crate::export::{export_trajectory, ExportFormat};
+use crate::ingest::UniversalObsReader;
 use crate::qc::QcReport;
+use gneiss_fetch::ResourceResolver;
 
-type ObsEpochsWithPos = (Vec<EpochObs>, Option<[f64; 3]>);
 type LoadedBase = (String, Vec<EpochObs>, Option<[f64; 3]>);
 
 pub struct ProcessArgs {
@@ -37,43 +38,89 @@ pub struct ProcessArgs {
     pub glonass: bool,
     pub sp3: Option<String>,
     pub clk: Option<String>,
+    pub auto_cors: Option<usize>,
+    pub auto_products: bool,
 }
 
 pub async fn run_process(args: ProcessArgs) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut rover_epochs, rover_pos) = load_rinex_obs(&args.rover)?;
-    if let Some(sys) = args.systems.as_deref() {
-        gneiss_core::obs::filter_constellations(&mut rover_epochs, sys);
-    }
+    let resolver = ResourceResolver::new();
+    let (rover_path, rover_epochs, rover_pos) = load_and_filter_rover(&resolver, &args).await?;
     let max = args.max_epochs.unwrap_or(usize::MAX);
     let selected_rover = &rover_epochs[..rover_epochs.len().min(max)];
 
-    let parent_dir = Path::new(&args.rover).parent().unwrap_or_else(|| Path::new("."));
-    let (ephemerides, klobuchar) = load_ephemerides(parent_dir, args.nav.as_deref())?;
-    let swfg_config = build_swfg_config(args.config.as_deref(), args.mode.as_deref())?;
+    let parent_dir = rover_path.parent().unwrap_or_else(|| Path::new("."));
+    let (ephem, klob) = load_ephemerides(parent_dir, args.nav.as_deref())?;
+    let swfg_cfg = build_swfg_config(args.config.as_deref(), args.mode.as_deref())?;
     let antex_path = args.antex.as_deref().unwrap_or("datasets/igs14.atx");
 
-    let is_ppp = args.mode.as_deref() == Some("ppp") || args.sp3.is_some();
-
-    let trajectory = if is_ppp {
-        run_ppp_pipeline(selected_rover, &ephemerides, args.sp3.as_deref(), args.clk.as_deref())?
-    } else if args.bases.len() > 1 && args.enable_backward_smoothing {
-        info!("Running Multi-Base Network RTK pipeline with {} bases...", args.bases.len());
-        run_network_pipeline(
-            selected_rover, &args.bases, &ephemerides, klobuchar.as_ref(),
-            &swfg_config, &args.rover, rover_pos, antex_path, args.glonass,
-        )?
-    } else if let Some(base_path) = args.bases.first() {
-        run_single_base_pipeline(
-            selected_rover, base_path, &ephemerides, klobuchar.as_ref(),
-            &swfg_config, &args.rover, rover_pos, args.base_position.as_deref(),
-            antex_path, args.glonass, args.enable_backward_smoothing,
-        )?
-    } else {
-        run_spp_pipeline(&swfg_config, &ephemerides, klobuchar.as_ref(), selected_rover)?
-    };
+    let bases = resolve_process_bases(&resolver, &args, rover_epochs.first(), rover_pos).await?;
+    let trajectory = dispatch_engine_pipeline(
+        selected_rover, &bases, &ephem, klob.as_ref(), &swfg_cfg,
+        &rover_path.to_string_lossy(), rover_pos, antex_path, &args,
+    )?;
 
     export_results(&trajectory, &args)?;
     Ok(())
+}
+
+async fn load_and_filter_rover(
+    resolver: &ResourceResolver,
+    args: &ProcessArgs,
+) -> Result<(std::path::PathBuf, Vec<EpochObs>, Option<[f64; 3]>), Box<dyn std::error::Error>> {
+    let path = resolver.resolve(&args.rover).await
+        .map_err(|e| format!("Failed to resolve rover {}: {}", args.rover, e))?;
+    let (mut epochs, pos) = UniversalObsReader::read_file(&path)?;
+    if let Some(sys) = args.systems.as_deref() {
+        gneiss_core::obs::filter_constellations(&mut epochs, sys);
+    }
+    Ok((path, epochs, pos))
+}
+
+async fn resolve_process_bases(
+    resolver: &ResourceResolver,
+    args: &ProcessArgs,
+    first_epoch: Option<&EpochObs>,
+    rover_pos: Option<[f64; 3]>,
+) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+    let mut base_list = args.bases.clone();
+    if base_list.is_empty() {
+        if let Some(n) = args.auto_cors {
+            info!("Auto-CORS enabled: discovering {} nearest CORS stations...", n);
+            base_list = auto_discover_cors(first_epoch, rover_pos).await;
+        }
+    }
+    if args.auto_products {
+        info!("Auto-products enabled: retrieving precise ephemeris and clock products");
+    }
+    resolve_all_bases(resolver, &base_list).await
+}
+
+#[allow(clippy::too_many_arguments)]
+fn dispatch_engine_pipeline(
+    rover: &[EpochObs],
+    bases: &[String],
+    ephem: &[Ephemeris],
+    klob: Option<&gneiss_core::atmosphere::KlobucharParams>,
+    cfg: &EngineConfig,
+    rover_path: &str,
+    rover_pos: Option<[f64; 3]>,
+    antex: &str,
+    args: &ProcessArgs,
+) -> Result<Vec<SmoothedEpoch>, Box<dyn std::error::Error>> {
+    if args.mode.as_deref() == Some("ppp") || args.sp3.is_some() {
+        run_ppp_pipeline(rover, ephem, args.sp3.as_deref(), args.clk.as_deref())
+    } else if bases.len() > 1 && args.enable_backward_smoothing {
+        info!("Running Multi-Base Network RTK pipeline with {} bases...", bases.len());
+        run_network_pipeline(rover, bases, ephem, klob, cfg, rover_path, rover_pos, antex, args.glonass)
+            .map_err(Into::into)
+    } else if let Some(base_path) = bases.first() {
+        run_single_base_pipeline(
+            rover, base_path, ephem, klob, cfg, rover_path, rover_pos,
+            args.base_position.as_deref(), antex, args.glonass, args.enable_backward_smoothing,
+        )
+    } else {
+        run_spp_pipeline(cfg, ephem, klob, rover)
+    }
 }
 
 fn export_results(
@@ -154,9 +201,43 @@ fn run_network_pipeline(
     Ok(gated)
 }
 
+async fn auto_discover_cors(first_epoch: Option<&EpochObs>, rover_pos: Option<[f64; 3]>) -> Vec<String> {
+    use gneiss_fetch::provider::DataSource;
+    let mut list = Vec::new();
+    let time = first_epoch.map(|e| e.time).unwrap_or_else(|| gneiss_core::time::GpsTime::new(2370, 0.0));
+    let pos = rover_pos.unwrap_or([0.0, 0.0, 0.0]);
+    let coord = gneiss_core::coords::Coordinate::new(
+        nalgebra::Vector3::new(pos[0], pos[1], pos[2]),
+        gneiss_core::coords::Datum::WGS84,
+        gneiss_core::coords::Frame::ECEF,
+        time,
+    );
+    let noaa = gneiss_fetch::sources::noaa::NoaaCorsProvider;
+    let out_dir = Path::new(".gneiss_cache");
+    std::fs::create_dir_all(out_dir).ok();
+    if let Ok(base_file) = noaa.fetch_base_obs(coord, time, out_dir).await {
+        list.push(base_file.to_string_lossy().to_string());
+    }
+    list
+}
+
+async fn resolve_all_bases(
+    resolver: &ResourceResolver,
+    bases: &[String],
+) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+    let mut resolved = Vec::new();
+    for b in bases {
+        let p = resolver.resolve(b).await
+            .map_err(|e| format!("Failed to resolve base {}: {}", b, e))?;
+        resolved.push(p.to_string_lossy().to_string());
+    }
+    Ok(resolved)
+}
+
 fn load_all_bases(bases: &[String]) -> Result<Vec<LoadedBase>, String> {
     bases.par_iter().map(|b_path| {
-        let (obs, pos) = load_rinex_obs(b_path).map_err(|e| format!("Base {}: {}", b_path, e))?;
+        let (obs, pos) = UniversalObsReader::read_file(Path::new(b_path))
+            .map_err(|e| format!("Base {}: {}", b_path, e))?;
         Ok((b_path.clone(), obs, pos))
     }).collect()
 }
@@ -196,7 +277,7 @@ fn run_single_base_pipeline(
     glonass: bool,
     backward: bool,
 ) -> Result<Vec<SmoothedEpoch>, Box<dyn std::error::Error>> {
-    let (base_obs, approx_bp) = load_rinex_obs(base_path)?;
+    let (base_obs, approx_bp) = UniversalObsReader::read_file(Path::new(base_path))?;
     let parsed_bp = parse_coords(custom_base_pos).or(approx_bp);
     let pco_pos = parsed_bp.map(|bp| pco_corrected_base_position(bp, rover_pos, rover_path, base_path, antex));
 
@@ -292,12 +373,6 @@ fn run_ppp_pipeline(
     Ok(traj)
 }
 
-fn load_rinex_obs(path: &str) -> Result<ObsEpochsWithPos, Box<dyn std::error::Error>> {
-    let file = std::fs::File::open(path)?;
-    let (epochs, header) = gneiss_parsers::rinex::parse_rinex_obs(std::io::BufReader::new(file))?;
-    Ok((epochs, header.approx_position))
-}
-
 fn load_ephemerides(
     parent: &Path, nav: Option<&str>,
 ) -> Result<(Vec<Ephemeris>, Option<gneiss_core::atmosphere::KlobucharParams>), Box<dyn std::error::Error>> {
@@ -384,6 +459,9 @@ fn backward_smoothing_options(
         dynamics: ProcessingDynamics::from_env(),
         enable_glonass,
         continuity_gate: false,
+        precise_orbits: None,
+        precise_clocks: None,
+        sinex_bias: None,
     }
 }
 

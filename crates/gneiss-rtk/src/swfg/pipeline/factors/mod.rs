@@ -4,10 +4,12 @@
 //! Dynamics: DopplerVelocityFactor (between-epoch constraint)
 
 pub mod dynamics;
+pub mod uduc;
 #[cfg(test)]
 mod tests;
 
 pub use dynamics::{DopplerVelocityFactor, NhcFactor};
+pub use uduc::{SlantIonoRandomWalkFactor, UducCarrierPhaseFactor, UducPseudorangeFactor};
 
 use nalgebra::{DMatrix, DVector, Vector3};
 
@@ -151,17 +153,36 @@ impl Factor for CarrierPhaseFactor {
             .and_then(|i| values.get(i))
             .map_or(0.0, |v| v[0] * self.obs.freq_num as f64);
 
+        if let Some(cp2_cycles) = self.obs.cp_l2 {
+            let f1_sq = self.obs.f1 * self.obs.f1;
+            let f2_sq = self.obs.f2.max(1.0) * self.obs.f2.max(1.0);
+            let gamma = f1_sq / f2_sq;
+            if (gamma - 1.0).abs() > 0.1 {
+                let lambda2 = gneiss_core::constants::SPEED_OF_LIGHT_M_S / self.obs.f2.max(1.0);
+                let cp1_m = self.obs.cp_l1.unwrap_or(0.0) * lambda;
+                let cp2_m = cp2_cycles * lambda2;
+                let cp_if_m = (gamma * cp1_m - cp2_m) / (gamma - 1.0) - self.windup_m;
+                let predicted = geometric_range
+                    - self.obs.sat_clock_m
+                    + rx_clk
+                    + self.obs.tropo_dry_m
+                    + zwd * self.obs.tropo_map_wet
+                    + amb_cycles
+                    + ifb_term;
+                return DVector::from_element(1, cp_if_m - predicted);
+            }
+        }
+
         let predicted = geometric_range
             - self.obs.sat_clock_m
             + rx_clk
             + self.obs.tropo_dry_m
             + zwd * self.obs.tropo_map_wet
             - self.obs.iono_l1_m
-            + lambda * amb_cycles
+            + amb_cycles
             + ifb_term;
 
         let cp_raw_m = self.obs.cp_l1.unwrap_or(0.0) * lambda;
-        // Phase windup is ALWAYS subtracted from carrier phase per AGENTS.md
         let cp_corr_m = cp_raw_m - self.windup_m;
 
         DVector::from_element(1, cp_corr_m - predicted)
@@ -194,8 +215,7 @@ impl Factor for CarrierPhaseFactor {
                 j[(0, start_zwd)] = -self.obs.tropo_map_wet;
             }
         }
-        let lambda = gneiss_core::constants::SPEED_OF_LIGHT_M_S / self.obs.f1.max(1.0);
-        j[(0, start_amb)] = -lambda;
+        j[(0, start_amb)] = -1.0;
 
         if let Some(clk_id) = self.var_clock {
             if let Some((start_clk, _)) = values.index_of(clk_id) {
@@ -212,11 +232,24 @@ impl Factor for CarrierPhaseFactor {
     }
 
     fn information(&self) -> DMatrix<f64> {
-        DMatrix::from_element(1, 1, 1.0 / self.obs.cp_variance_m2.max(1e-9))
+        let var = if self.obs.cp_l2.is_some() {
+            let f1_sq = self.obs.f1 * self.obs.f1;
+            let f2_sq = self.obs.f2.max(1.0) * self.obs.f2.max(1.0);
+            let gamma = f1_sq / f2_sq;
+            if (gamma - 1.0).abs() > 0.1 {
+                let factor = (gamma * gamma + 1.0) / ((gamma - 1.0) * (gamma - 1.0));
+                self.obs.cp_variance_m2 * factor
+            } else {
+                self.obs.cp_variance_m2
+            }
+        } else {
+            self.obs.cp_variance_m2
+        };
+        DMatrix::from_element(1, 1, 1.0 / var.max(1e-9))
     }
 
     fn robust_threshold(&self) -> Option<f64> {
-        Some(0.05)
+        Some(0.50)
     }
 
     fn use_cauchy(&self) -> bool {

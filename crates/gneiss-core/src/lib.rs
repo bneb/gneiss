@@ -1,4 +1,5 @@
 #![no_std]
+#![cfg_attr(test, allow(clippy::unwrap_used))]
 
 extern crate alloc;
 

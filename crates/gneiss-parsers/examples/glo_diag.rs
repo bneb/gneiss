@@ -3,8 +3,10 @@ use gneiss_parsers::rinex::{parse_rinex_nav, parse_rinex_obs};
 use std::io::BufReader;
 
 fn main() {
-    let nav = std::fs::File::open("datasets/multignss_2025d160/station_mixed_nav.rnx").unwrap();
-    let (ephems, _) = parse_rinex_nav(BufReader::new(nav)).unwrap();
+    let nav = std::fs::File::open("datasets/multignss_2025d160/station_mixed_nav.rnx")
+        .expect("nav file must exist");
+    let (ephems, _) = parse_rinex_nav(BufReader::new(nav))
+        .expect("valid RINEX nav file required");
     println!("total ephems: {}", ephems.len());
     let glo: Vec<_> = ephems.iter().filter_map(|e| match e {
         gneiss_core::ephemeris::Ephemeris::Glonass(g) => Some((g.sat, g.freq_num)),
@@ -19,8 +21,10 @@ fn main() {
         }
     }
     // Observation side: which R-sats appear, with phase on band1?
-    let obs = std::fs::File::open("datasets/multignss_2025d160/p2241600.25o").unwrap();
-    let (epochs, _) = parse_rinex_obs(BufReader::new(obs)).unwrap();
+    let obs = std::fs::File::open("datasets/multignss_2025d160/p2241600.25o")
+        .expect("obs file must exist");
+    let (epochs, _) = parse_rinex_obs(BufReader::new(obs))
+        .expect("valid RINEX obs file required");
     let mut r_phases = std::collections::BTreeMap::new();
     for ep in epochs.iter().take(50) {
         for so in &ep.satellites {

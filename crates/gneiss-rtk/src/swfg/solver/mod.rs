@@ -147,6 +147,15 @@ impl SlidingWindowSolver {
     /// Call this only where a factor referencing the result is about to
     /// be built, mirroring [`Self::ensure_ambiguity`]'s pattern: existence
     /// and factor coverage can then never disagree.
+    pub fn ensure_static_pose(&mut self) -> VariableId {
+        for node in self.graph.variables.values() {
+            if matches!(node.kind, VariableKind::StaticPose) {
+                return node.id;
+            }
+        }
+        self.graph.add_variable(VariableKind::StaticPose)
+    }
+
     pub fn ensure_ifb_glonass(&mut self) -> VariableId {
         for node in self.graph.variables.values() {
             if matches!(node.kind, VariableKind::IfbGlonass) {
@@ -157,23 +166,23 @@ impl SlidingWindowSolver {
     }
 
     /// Create an ambiguity variable for a satellite-frequency pair.
-    /// These persist across ALL epochs — they are NOT per-epoch.
-    pub fn ensure_ambiguity(&mut self, satellite: u16, frequency: u8) -> VariableId {
-        // Check if already exists (by scanning — could be optimized with a
-        // separate lookup map).
+    /// Create or retrieve an undifferenced ambiguity variable for a satellite and arc.
+    /// These persist across ALL epochs of the tracking arc.
+    pub fn ensure_ambiguity(&mut self, satellite: u16, frequency: u8, arc: u32) -> VariableId {
         for node in self.graph.variables.values() {
             if let VariableKind::Ambiguity {
                 satellite: s,
                 frequency: f,
+                arc: a,
             } = node.kind
             {
-                if s == satellite && f == frequency {
+                if s == satellite && f == frequency && a == arc {
                     return node.id;
                 }
             }
         }
         self.graph
-            .add_variable(VariableKind::Ambiguity { satellite, frequency })
+            .add_variable(VariableKind::Ambiguity { satellite, frequency, arc })
     }
 
     /// Create a double-differenced ambiguity variable for a (sat, ref_sat) pair.
@@ -320,7 +329,7 @@ impl SlidingWindowSolver {
         let mut offset = 0;
         for node in self.graph.variables.values_mut() {
             let dim = node.value.len();
-            if let VariableKind::Pose { .. } = node.kind {
+            if matches!(node.kind, VariableKind::Pose { .. } | VariableKind::StaticPose) {
                 // Position update is linear
                 node.value[0] += delta[offset];
                 node.value[1] += delta[offset + 1];
@@ -432,6 +441,24 @@ impl SlidingWindowSolver {
             });
             total += s;
         }
+
+        if let Some(ref prior) = self.graph.marginal_prior {
+            let mut current_x = prior.x0.clone();
+            let mut prior_idx = 0;
+            for &(var_id, dim) in &prior.variables {
+                if let Some(val) = values.get(var_id) {
+                    for k in 0..dim {
+                        current_x[prior_idx + k] = val[k];
+                    }
+                }
+                prior_idx += dim;
+            }
+            let delta_x = &current_x - &prior.x0;
+            let h_delta = &prior.hessian * &delta_x;
+            let prior_cost = 0.5 * (&delta_x.transpose() * &h_delta)[(0, 0)] + (&prior.gradient.transpose() * &delta_x)[(0, 0)];
+            total += prior_cost;
+        }
+
         total
     }
 

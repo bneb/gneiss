@@ -47,7 +47,8 @@ fn main() {
 
     for (name_a, _, _) in pairs {
         // index lookup is trivial at this size
-        let (a_label, a) = models.iter().find(|(l, _)| *l == name_a).unwrap();
+        let (a_label, a) = models.iter().find(|(l, _)| *l == name_a)
+            .expect("antenna model must exist in loaded list");
         for (b_label, b) in &models {
             if b_label == a_label {
                 continue;
@@ -67,7 +68,9 @@ fn main() {
     let (_, ash) = &models[1];
     println!("\nSingle difference PCV_rov - PCV_base [mm], TRM59800.00 SCIT - ASH701945B_M SCIT (G01):");
     for zen in [0.0f64, 15.0, 30.0, 45.0, 60.0, 75.0, 85.0] {
-        let s = trm.pcv_mm("G01", zen).unwrap() - ash.pcv_mm("G01", zen).unwrap();
+        let trm_val = trm.pcv_mm("G01", zen).expect("G01 PCV for TRM required");
+        let ash_val = ash.pcv_mm("G01", zen).expect("G01 PCV for ASH required");
+        let s = trm_val - ash_val;
         println!("  zen {:>4.0} deg (el {:>4.0}): {:+6.2}", zen, 90.0 - zen, s);
     }
 }

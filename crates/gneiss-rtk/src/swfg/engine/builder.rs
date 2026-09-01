@@ -38,91 +38,93 @@ pub struct RtkFactorContext<'a> {
     pub base_raw: &'a [RawObservation],
 }
 
-/// Selects reference satellite per constellation with hysteresis.
 pub fn select_ref_satellite(
     const_obs: &[&CorrectedObservation],
     cid: u8,
     ref_sat_map: &HashMap<u8, u16>,
 ) -> u16 {
-    let best_obs = match const_obs
-        .iter()
-        .max_by(|a, b| a.elevation_rad.total_cmp(&b.elevation_rad))
-    {
+    let best = match const_obs.iter().max_by(|a, b| a.elevation_rad.total_cmp(&b.elevation_rad)) {
         Some(b) => b,
         None => return 0,
     };
-    if let Some(&prev_ref) = ref_sat_map.get(&cid) {
-        let prev_ref_obs = const_obs.iter().find(|o| o.satellite == prev_ref);
-        match prev_ref_obs {
-            Some(prev) if prev.elevation_rad >= 0.26 => prev_ref, // 15° — keep
-            Some(_) if best_obs.elevation_rad < 0.52 => prev_ref, // no candidate > 30°
-            _ => best_obs.satellite,
+    if let Some(&prev) = ref_sat_map.get(&cid) {
+        match const_obs.iter().find(|o| o.satellite == prev) {
+            Some(p) if p.elevation_rad >= 0.26 => prev,
+            Some(_) if best.elevation_rad < 0.52 => prev,
+            _ => best.satellite,
         }
     } else {
-        best_obs.satellite
+        best.satellite
     }
 }
 
 /// Build undifferenced PR and CP factors for SPP/PPP mode.
+#[allow(clippy::too_many_arguments)]
 pub fn build_undifferenced_factors(
     solver: &mut SlidingWindowSolver,
     corrected: &[CorrectedObservation],
     epoch: u32,
     pose_id: VariableId,
     zwd_id: Option<VariableId>,
+    slip_counts: &mut HashMap<u16, u32>,
+    windup_trackers: &mut HashMap<u16, gneiss_geodesy::windup::PhaseWindupTracker>,
+    rover_time: gneiss_core::time::GpsTime,
+    rx_pos: Vector3<f64>,
 ) {
-    for obs in corrected {
-        let clock_id = solver
-            .graph
-            .variables
-            .iter()
-            .find(|(_, n)| {
-                matches!(
-                    n.kind,
-                    VariableKind::ClockBias {
-                        epoch: e,
-                        constellation_id: c,
-                    } if e == epoch && c == obs.constellation_id
-                )
-            })
-            .map(|(id, _)| *id);
+    let (sun_pos, _) = gneiss_geodesy::tides::solar_lunar_positions(rover_time.tow, rover_time.week);
+    let ref_llh = gneiss_core::coords::ecef_to_llh(rx_pos);
+    let sin_lat = ref_llh.x.sin();
+    let cos_lat = ref_llh.x.cos();
+    let sin_lon = ref_llh.y.sin();
+    let cos_lon = ref_llh.y.cos();
 
-        // Lazy find-or-create: a GLONASS observation reaching this point
-        // has already survived ephemeris matching, so the variable this
-        // returns is guaranteed to get a factor below. See
-        // SlidingWindowSolver::ensure_ifb_glonass.
-        let var_ifb = if obs.constellation_id == 1 {
-            Some(solver.ensure_ifb_glonass())
-        } else {
-            None
-        };
-        let pr_factor = build_pseudorange_factor(
-            obs, epoch, pose_id, clock_id, zwd_id, var_ifb,
-        );
+    let rx_up = Vector3::new(cos_lat * cos_lon, cos_lat * sin_lon, sin_lat);
+    let rx_north = Vector3::new(-sin_lat * cos_lon, -sin_lat * sin_lon, cos_lat);
+    let rx_east = Vector3::new(-sin_lon, cos_lon, 0.0);
+
+    for obs in corrected {
+        let clock_id = solver.graph.variables.iter().find(|(_, n)| {
+            matches!(n.kind, VariableKind::ClockBias { epoch: e, constellation_id: c } if e == epoch && c == obs.constellation_id)
+        }).map(|(id, _)| *id);
+
+        let var_ifb = if obs.constellation_id == 1 { Some(solver.ensure_ifb_glonass()) } else { None };
+        let pr_factor = build_pseudorange_factor(obs, epoch, pose_id, clock_id, zwd_id, var_ifb);
         solver.graph.add_factor(pr_factor);
 
         if let Some(cp_l1) = obs.cp_l1 {
-            let amb_id = solver.ensure_ambiguity(obs.satellite, 1);
+            if obs.cp_l1_lli.unwrap_or(0) & 1 != 0 {
+                *slip_counts.entry(obs.satellite).or_insert(0) += 1;
+            }
+            let arc = *slip_counts.entry(obs.satellite).or_insert(0);
+            let amb_id = solver.ensure_ambiguity(obs.satellite, 1, arc);
             let lambda = gneiss_core::constants::SPEED_OF_LIGHT_M_S / obs.f1.max(1.0);
-            let current_val = solver
-                .graph
-                .variables
-                .get(&amb_id)
-                .map_or(0.0, |n| n.value[0]);
+
+            let tracker = windup_trackers.entry(obs.satellite).or_default();
+            let windup_rad = tracker.update(&obs.sat_pos_ecef, &sun_pos, &rx_pos, &rx_up, &rx_north, &rx_east);
+            let windup_m = (windup_rad / (2.0 * std::f64::consts::PI)) * lambda;
+
+            let current_val = solver.graph.variables.get(&amb_id).map_or(0.0, |n| n.value[0]);
             if current_val == 0.0 {
-                let float_amb = (cp_l1 * lambda - obs.pr_l1) / lambda;
-                solver.graph.set_value(amb_id, &[float_amb]);
+                let float_amb_m = if let (Some(cp2), Some(pr2)) = (obs.cp_l2, obs.pr_l2) {
+                    let gamma = (obs.f1 / obs.f2.max(1.0)).powi(2);
+                    let pr_if = (gamma * obs.pr_l1 - pr2) / (gamma - 1.0);
+                    let lambda2 = gneiss_core::constants::SPEED_OF_LIGHT_M_S / obs.f2.max(1.0);
+                    let cp_if = (gamma * cp_l1 * lambda - cp2 * lambda2) / (gamma - 1.0) - windup_m;
+                    cp_if - pr_if
+                } else {
+                    (cp_l1 * lambda - windup_m) - obs.pr_l1
+                };
+                solver.graph.set_value(amb_id, &[float_amb_m]);
                 let amb_prior = crate::swfg::factor::PriorFactor::new(
-                    amb_id,
-                    nalgebra::DVector::from_element(1, float_amb),
-                    4.0,
+                    amb_id, nalgebra::DVector::from_element(1, float_amb_m), 10_000.0,
                 );
                 solver.graph.add_factor(Box::new(amb_prior));
             }
             let mut cp_obs = obs.clone();
-            cp_obs.cp_variance_m2 = 2.5e-3;
+            let sin_el = obs.elevation_rad.sin().max(0.1);
+            cp_obs.cp_variance_m2 = (0.003 / sin_el).powi(2);
             let cp_factor = build_carrier_phase_factor(
-                &cp_obs, epoch, pose_id, clock_id, zwd_id, amb_id, var_ifb, 0.0,
+                &cp_obs, epoch, pose_id, clock_id, zwd_id, amb_id, var_ifb, windup_m,
             );
             solver.graph.add_factor(cp_factor);
         }

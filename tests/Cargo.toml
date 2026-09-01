@@ -10,6 +10,7 @@ workspace = true
 
 [dependencies]
 gneiss-core.workspace = true
+gneiss-geodesy.workspace = true
 gneiss-rtk.workspace = true
 gneiss-parsers.workspace = true
 nalgebra = { version = "0.32", default-features = false, features = ["alloc"] }

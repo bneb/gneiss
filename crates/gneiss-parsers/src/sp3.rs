@@ -215,7 +215,7 @@ mod tests {
         );
         let content = format!(
             "{}*  2024 03 15 12 00  0.00000000\n{}EOF\n",
-            "", &p_line,
+            "", p_line,
         );
         let reader = std::io::Cursor::new(content);
         let epochs = parse_sp3(reader).unwrap();

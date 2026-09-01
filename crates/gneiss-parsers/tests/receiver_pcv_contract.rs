@@ -41,7 +41,7 @@ mod receiver_pcv_contract {
         // and contains radome as the second whitespace-separated token.
         db.antennas.iter().find(|a| {
             let parts: Vec<&str> = a.antenna_type.split_whitespace().collect();
-            parts.len() >= 1 && parts[0] == ant_type
+            !parts.is_empty() && parts[0] == ant_type
                 && (parts.get(1).copied() == Some(radome) 
                     || (parts.len() == 1 && radome == "NONE"))
         })
@@ -57,9 +57,8 @@ mod receiver_pcv_contract {
     #[test]
     fn contract_ash701945b_scit_pco() {
         let Some(db) = load_db() else { return };
-        let ant = find_antenna(&db, "ASH701945B_M", "SCIT");
-        assert!(ant.is_some(), "ASH701945B_M SCIT must exist in igs14.atx");
-        let ant = ant.unwrap();
+        let ant = find_antenna(&db, "ASH701945B_M", "SCIT")
+            .expect("ASH701945B_M SCIT must exist in igs14.atx");
         
         // Find G01 frequency NEU
         if let Some(freq) = ant.frequencies.get("G01") {
@@ -86,8 +85,9 @@ mod receiver_pcv_contract {
     #[test]
     fn contract_ash_pcv_grid_values() {
         let Some(db) = load_db() else { return };
-        let ant = find_antenna(&db, "ASH701945B_M", "SCIT").unwrap();
-        let (noazi, dzen) = get_l1_pcv_grid(&ant).expect("G01 frequency required");
+        let ant = find_antenna(&db, "ASH701945B_M", "SCIT")
+            .expect("ASH701945B_M antenna must exist");
+        let (noazi, dzen) = get_l1_pcv_grid(ant).expect("G01 frequency required");
         assert!(!noazi.is_empty(), "G01 NOAZI grid must be non-empty");
         assert_eq!(noazi[0], 0.00, "zenith 0 PCV must be 0");
         assert!(dzen > 0.0, "dzen must be positive");
@@ -96,11 +96,15 @@ mod receiver_pcv_contract {
     #[test]
     fn contract_leiar20_differs_from_trm() {
         let Some(db) = load_db() else { return };
-        let leica = find_antenna(&db, "LEIAR20", "LEIM").unwrap();
-        let trimble = find_antenna(&db, "TRM59800.80", "SCIT").unwrap();
+        let leica = find_antenna(&db, "LEIAR20", "LEIM")
+            .expect("LEIAR20 antenna must exist");
+        let trimble = find_antenna(&db, "TRM59800.80", "SCIT")
+            .expect("TRM59800.80 antenna must exist");
 
-        let leica_pcv = &leica.frequencies.get("G01").unwrap().noazi;
-        let trm_pcv = &trimble.frequencies.get("G01").unwrap().noazi;
+        let leica_pcv = &leica.frequencies.get("G01")
+            .expect("LEIAR20 G01 frequency must exist").noazi;
+        let trm_pcv = &trimble.frequencies.get("G01")
+            .expect("TRM59800 G01 frequency must exist").noazi;
 
         // At zenith 30° (index 6 for 5° step), the PCVs should differ by > 3mm
         // (from ground truth: LEIAR20 ≈ -2.26, TRM ≈ -7.38)
@@ -117,12 +121,16 @@ mod receiver_pcv_contract {
     #[test]
     fn contract_same_family_zero_differential() {
         let Some(db) = load_db() else { return };
-        let rov = find_antenna(&db, "TRM59800.80", "SCIT").unwrap();
-        let bas = find_antenna(&db, "TRM59800.80", "SCIT").unwrap();
+        let rov = find_antenna(&db, "TRM59800.80", "SCIT")
+            .expect("rov antenna must exist");
+        let bas = find_antenna(&db, "TRM59800.80", "SCIT")
+            .expect("bas antenna must exist");
 
         // Same antenna type → identical PCV tables → zero DD correction
-        let rov_g01 = &rov.frequencies.get("G01").unwrap().noazi;
-        let bas_g01 = &bas.frequencies.get("G01").unwrap().noazi;
+        let rov_g01 = &rov.frequencies.get("G01")
+            .expect("rov G01 must exist").noazi;
+        let bas_g01 = &bas.frequencies.get("G01")
+            .expect("bas G01 must exist").noazi;
         assert_eq!(rov_g01.len(), bas_g01.len());
         for i in 0..rov_g01.len().min(bas_g01.len()) {
             assert!((rov_g01[i] - bas_g01[i]).abs() < 1e-12);

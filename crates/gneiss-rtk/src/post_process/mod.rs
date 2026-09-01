@@ -19,6 +19,7 @@ pub mod quality;
 pub mod sbet;
 pub mod screening;
 pub mod sidereal;
+pub mod vrs;
 
 use nalgebra::Vector3;
 
@@ -35,6 +36,7 @@ pub use lever_arm::{LeverArmEstimate, LeverArmEstimator, LeverArmObservation};
 pub use quality::QualityReport;
 pub use sbet::export_sbet_trajectory;
 pub use screening::ScreeningReport;
+pub use vrs::{synthesize_vrs_epoch, NetworkAtmosphereSurface, NetworkStation};
 
 /// Complete result of a post-processing run.
 #[derive(Debug, Clone)]
@@ -107,6 +109,9 @@ pub struct PostProcessOptions {
     /// signed-off change (see "Walkthrough reference refresh"), not a
     /// side effect of wiring it up.
     pub continuity_gate: bool,
+    pub precise_orbits: Option<std::sync::Arc<gneiss_parsers::precise_orbit::PreciseOrbit>>,
+    pub precise_clocks: Option<std::sync::Arc<gneiss_parsers::rinex_clk::RinexClock>>,
+    pub sinex_bias: Option<std::sync::Arc<gneiss_parsers::sinex_bia::SinexBias>>,
 }
 
 /// Paired receiver antenna PCV models consumed by the DD engine.
@@ -144,6 +149,9 @@ pub fn execute_post_process(
         options.network_sat_upd.clone(),
         options.receiver_pcv.clone(),
         options.enable_glonass,
+        options.precise_orbits.clone(),
+        options.precise_clocks.clone(),
+        options.sinex_bias.clone(),
     );
 
     // Pass 3: Backward Pass (if enabled)

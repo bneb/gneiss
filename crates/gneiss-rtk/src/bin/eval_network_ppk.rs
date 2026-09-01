@@ -271,6 +271,9 @@ fn run_pass(
         // Same env var, now applies uniformly to both passes and all
         // baseline lengths -- see PostProcessOptions::enable_glonass.
         enable_glonass: std::env::var("GNEISS_GLONASS").is_ok(),
+        precise_orbits: None,
+        precise_clocks: None,
+        sinex_bias: None,
     };
     let res = match execute_post_process(config, ctx.ephemerides, rover, Some(base_epochs), None, &options) {
         Ok(r) => r,

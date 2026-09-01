@@ -10,15 +10,15 @@ fn solver_creates_epoch_variables() {
     let vars = solver.create_epoch_variables(0, 10, &[0], false, false);
     assert_eq!(vars.len(), 3);
     assert_eq!(solver.graph.n_variables(), 3);
-    assert_eq!(solver.graph.total_dim(), 6 + 3 + 1);
+    assert_eq!(solver.graph.total_dim(), 6 + 1 + 1);
 }
 
 #[test]
 fn solver_ensure_ambiguity_is_idempotent() {
     let config = EngineConfig::Rtk(RtkConfig::default());
     let mut solver = SlidingWindowSolver::new(&config);
-    let id1 = solver.ensure_ambiguity(1, 1);
-    let id2 = solver.ensure_ambiguity(1, 1);
+    let id1 = solver.ensure_ambiguity(1, 1, 0);
+    let id2 = solver.ensure_ambiguity(1, 1, 0);
     assert_eq!(id1, id2, "second call should return existing ambiguity");
     assert_eq!(solver.graph.n_variables(), 1);
 }

@@ -2,11 +2,15 @@
 use gneiss_parsers::{precise_orbit::PreciseOrbit, rinex::parse_rinex_nav, sp3::parse_sp3};
 
 fn main() {
-    let nav = std::fs::File::open("datasets/multignss_2025d160/station_mixed_nav.rnx").unwrap();
-    let (ephems, _) = parse_rinex_nav(std::io::BufReader::new(nav)).unwrap();
+    let nav = std::fs::File::open("datasets/multignss_2025d160/station_mixed_nav.rnx")
+        .expect("nav file must exist");
+    let (ephems, _) = parse_rinex_nav(std::io::BufReader::new(nav))
+        .expect("valid RINEX nav file required");
 
-    let sp3f = std::fs::File::open("datasets/precise/2025/160/GFZ0MGXRAP_20250609.sp3").unwrap();
-    let epochs = parse_sp3(std::io::BufReader::new(sp3f)).unwrap();
+    let sp3f = std::fs::File::open("datasets/precise/2025/160/GFZ0MGXRAP_20250609.sp3")
+        .expect("SP3 file must exist");
+    let epochs = parse_sp3(std::io::BufReader::new(sp3f))
+        .expect("valid SP3 file required");
     // Evaluate at the first GPS TOE so broadcast fits are inside their
     // validity window; compare SP3 interpolation at that same instant.
     let t_mid = ephems.iter()
@@ -35,24 +39,21 @@ fn main() {
                 _ => continue,
             };
             let dt = if toe.week == t_mid.week { (toe.tow - t_mid.tow).abs() } else { f64::INFINITY };
-            if best.map_or(true, |(_, d)| dt < d) {
+            if best.is_none_or(|(_, d)| dt < d) {
                 best = Some((cand, dt));
             }
         }
-        let (_, dt_best) = match best { Some(x) => x, None => continue };
-        let (bc_pos, _vel, _clk_bias, _clk_drift) = match best.unwrap().0 {
+        let (cand_best, dt_best) = match best { Some(x) => x, None => continue };
+        let (bc_pos, _vel, _clk_bias, _clk_drift) = match cand_best {
             gneiss_core::ephemeris::Ephemeris::Gps(g) => g.position(t_mid),
             _ => unreachable!(),
         };
         let _ = dt_best;
         let name = format!("{}{:02}", "G", sat.prn);
-        match precise.position_at(&name, t_mid) {
-            Some((sp3_pos, clk)) => {
-                let d = (bc_pos - sp3_pos).norm();
-                println!("{}: |bcast-sp3| = {:9.3} m  |dt_toe|={:6.0}s  sp3_clk={:+9.1} ns", name, d, dt_best, clk * 1e9);
-                shown += 1;
-            }
-            None => {}
+        if let Some((sp3_pos, clk)) = precise.position_at(&name, t_mid) {
+            let d = (bc_pos - sp3_pos).norm();
+            println!("{}: |bcast-sp3| = {:9.3} m  |dt_toe|={:6.0}s  sp3_clk={:+9.1} ns", name, d, dt_best, clk * 1e9);
+            shown += 1;
         }
     }
 }

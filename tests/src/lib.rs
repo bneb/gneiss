@@ -1,3 +1,5 @@
+#![cfg_attr(test, allow(clippy::unwrap_used))]
+
 #[cfg(test)]
 pub mod benchmark_matrix;
 pub mod post_process_simulation;

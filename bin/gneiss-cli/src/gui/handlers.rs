@@ -1,9 +1,21 @@
-//! API route request handlers and JSON serializers.
-
+use serde::Serialize;
 use serde_json::json;
 use gneiss_core::coords::ecef_to_llh;
 use gneiss_rtk::post_process::SmoothedEpoch;
 use crate::export::ExportFormat;
+
+#[derive(Debug, Clone, Serialize)]
+pub struct BaseInfo {
+    pub name: String,
+    pub lat: f64,
+    pub lon: f64,
+    pub alt: f64,
+}
+
+/// Serializes base stations into a JSON array for map visualization.
+pub fn format_bases_json(bases: &[BaseInfo]) -> String {
+    serde_json::to_string(bases).unwrap_or_else(|_| "[]".to_string())
+}
 
 /// Serializes trajectory epochs into a lightweight JSON array for Canvas visualization.
 pub fn format_trajectory_json(trajectory: &[SmoothedEpoch]) -> String {
@@ -68,4 +80,126 @@ pub fn generate_export_bytes(
     let bytes = std::fs::read(&tmp_path)?;
     let _ = std::fs::remove_file(&tmp_path);
     Ok(bytes)
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct SolveRequest {
+    pub rover: String,
+    pub bases: Vec<String>,
+    pub nav: Option<String>,
+    pub antex: Option<String>,
+    pub max_epochs: Option<usize>,
+    pub auto_cors: Option<usize>,
+    pub auto_products: bool,
+}
+
+pub async fn handle_solve_request(
+    req: SolveRequest,
+) -> Result<(Vec<SmoothedEpoch>, Vec<BaseInfo>), String> {
+    let tmp_out = std::env::temp_dir().join(format!("gneiss_solve_{}.pos", std::process::id()));
+    let args = crate::process::ProcessArgs {
+        rover: req.rover,
+        bases: req.bases.clone(),
+        nav: req.nav,
+        output: tmp_out.to_string_lossy().to_string(),
+        format: Some("pos".to_string()),
+        qc_report: None,
+        geoid: None,
+        config: None,
+        enable_backward_smoothing: true,
+        mode: None,
+        max_epochs: req.max_epochs,
+        base_position: None,
+        systems: None,
+        antex: req.antex,
+        glonass: true,
+        sp3: None,
+        clk: None,
+        auto_cors: req.auto_cors,
+        auto_products: req.auto_products,
+    };
+    crate::process::run_process(args).await.map_err(|e| e.to_string())?;
+    let epochs = super::server::load_trajectory_file(&tmp_out).map_err(|e| e.to_string())?;
+    let _ = std::fs::remove_file(&tmp_out);
+    let bases = super::server::load_base_stations(&req.bases);
+    Ok((epochs, bases))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gneiss_core::time::GpsTime;
+    use nalgebra::{Matrix3, Vector3};
+
+    fn make_test_epoch(tow: f64, quality: u8, sd_e: f64, sd_n: f64, sd_u: f64) -> SmoothedEpoch {
+        SmoothedEpoch {
+            time: GpsTime::new(2137, tow),
+            position_ecef: Vector3::new(-2688179.79, -4265663.79, 3893784.58),
+            velocity_ecef: None,
+            attitude: None,
+            cov_position: Matrix3::identity() * 0.0001,
+            std_east: sd_e,
+            std_north: sd_n,
+            std_up: sd_u,
+            separation_3d: 0.005,
+            quality,
+            n_satellites: 14,
+        }
+    }
+
+    #[test]
+    fn test_format_bases_json() {
+        let bases = vec![BaseInfo {
+            name: "P181".to_string(),
+            lat: 37.9145,
+            lon: -122.3767,
+            alt: 72.74,
+        }];
+        let json_str = format_bases_json(&bases);
+        assert!(json_str.contains("P181"));
+        assert!(json_str.contains("37.9145"));
+    }
+
+    #[test]
+    fn test_format_qc_json_accuracy() {
+        let epochs = vec![
+            make_test_epoch(100.0, 1, 0.01, 0.01, 0.02),
+            make_test_epoch(101.0, 1, 0.01, 0.01, 0.02),
+            make_test_epoch(102.0, 2, 0.02, 0.02, 0.04),
+            make_test_epoch(103.0, 1, 0.01, 0.01, 0.02),
+        ];
+        let qc_str = format_qc_json(&epochs);
+        let qc: serde_json::Value = serde_json::from_str(&qc_str).unwrap();
+        assert_eq!(qc["total_epochs"], 4);
+        assert_eq!(qc["fixed_epochs"], 3);
+        assert_eq!(qc["fix_rate_pct"], 75.0);
+    }
+
+    #[test]
+    fn test_format_trajectory_json() {
+        let epochs = vec![make_test_epoch(100.0, 1, 0.008, 0.012, 0.024)];
+        let traj_str = format_trajectory_json(&epochs);
+        let list: serde_json::Value = serde_json::from_str(&traj_str).unwrap();
+        assert_eq!(list.as_array().unwrap().len(), 1);
+        assert_eq!(list[0]["quality"], 1);
+        assert_eq!(list[0]["nsat"], 14);
+    }
+
+    #[test]
+    fn test_solve_request_deserialization() {
+        let json_payload = r#"{
+            "rover": "datasets/rover.ubx",
+            "bases": ["datasets/base.obs"],
+            "nav": null,
+            "antex": null,
+            "max_epochs": 100,
+            "auto_cors": null,
+            "auto_products": true
+        }"#;
+        let req: SolveRequest = serde_json::from_str(json_payload).unwrap();
+        assert_eq!(req.rover, "datasets/rover.ubx");
+        assert_eq!(req.bases.len(), 1);
+        assert_eq!(req.max_epochs, Some(100));
+        assert!(req.auto_products);
+    }
 }

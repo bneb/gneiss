@@ -157,6 +157,47 @@ pub fn compute_phase_centre(
     Ok(PhaseCentre(final_pos))
 }
 
+/// Run the five-stage pipeline with full 3D body-frame PCO projection.
+///
+/// Uses the nominal GNSS yaw-attitude model (Sun-pointing solar panels) to project
+/// ANTEX 3D phase center offsets [PCO_x, PCO_y, PCO_z] into ECEF coordinates.
+pub fn compute_phase_centre_3d(
+    src: &dyn EphSource,
+    sv: &SatelliteId,
+    t_rx: GpsTime,
+    rx_pos: Vector3<f64>,
+    pco_body_m: Vector3<f64>,
+) -> Result<PhaseCentre, PipeErr> {
+    let (p0, _clk0) = src.position_at(sv, t_rx).ok_or(PipeErr::NoPosition)?;
+    let tau0 = (rx_pos - p0).norm() / SPEED_OF_LIGHT_M_S;
+
+    let t_tx0 = GpsTime::new(t_rx.week, t_rx.tow - tau0);
+    let (_p1, clk1) = src.position_at(sv, t_tx0).ok_or(PipeErr::NoClock)?;
+    let t_tx = GpsTime::new(t_rx.week, t_tx0.tow - clk1);
+    let tx = TxTimeKnown { t_tx, tau_s: tau0 };
+
+    let (ptx, _) = src.position_at(sv, tx.t_tx).ok_or(PipeErr::NoPosition)?;
+    let pos_tx = PosAtTx(ptx);
+
+    let wt = EARTH_ROTATION_RATE_RAD_S * tx.tau_s;
+    let (sw, cw) = libm::sincos(wt);
+    let r = pos_tx.0;
+    let sagnac = SagnacApplied(Vector3::new(
+        r.x * cw + r.y * sw,
+        -r.x * sw + r.y * cw,
+        r.z,
+    ));
+
+    let final_pos = if src.com_referenced() && (pco_body_m.x.abs() > 0.0 || pco_body_m.y.abs() > 0.0 || pco_body_m.z.abs() > 0.0) {
+        let (sun_pos, _) = gneiss_geodesy::tides::solar_lunar_positions(t_rx.tow, t_rx.week);
+        let pco_ecef = gneiss_geodesy::project_satellite_pco_to_ecef(&sagnac.0, &sun_pos, &pco_body_m);
+        sagnac.0 + pco_ecef
+    } else {
+        sagnac.0
+    };
+    Ok(PhaseCentre(final_pos))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -261,4 +302,16 @@ mod tests {
         let (_, clk) = pos_opt.unwrap();
         assert!((clk - 10.0e-6).abs() < 1e-12);
     }
+
+    #[test]
+    fn test_compute_phase_centre_3d_attitude_projection() {
+        let sv = SatelliteId { constellation: gneiss_core::sat::Constellation::Gps, prn: 7 };
+        let t_rx = GpsTime::new(2370, 43_200.0);
+        let rx = Vector3::new(-2_688_201.0, -4_265_643.0, 3_893_778.0);
+        let pco_body = Vector3::new(0.1, 0.2, 1.5);
+        let pc = compute_phase_centre_3d(&FakeSrc, &sv, t_rx, rx, pco_body)
+            .expect("3D PCO calculation must resolve");
+        assert!(pc.0.norm() < 26_000_000.0);
+    }
 }
+

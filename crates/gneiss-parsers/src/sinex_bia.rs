@@ -201,18 +201,18 @@ impl SinexBias {
         }
 
         let fallback = match obs.to_string().as_str() {
-            "C1C" => {
+            "C1C" | "C1X" => {
                 if sat.constellation == Constellation::Gps {
                     Some("C1W")
                 } else {
-                    None
+                    Some("C1C")
                 }
             }
-            "L1C" => {
+            "L1C" | "L1X" => {
                 if sat.constellation == Constellation::Gps {
                     Some("L1W")
                 } else {
-                    None
+                    Some("L1C")
                 }
             }
             "C2X" | "C2L" | "C2S" => {
@@ -229,6 +229,12 @@ impl SinexBias {
                     Some("L2C")
                 }
             }
+            "C5X" | "C5I" => Some("C5Q"),
+            "L5X" | "L5I" => Some("L5Q"),
+            "C7X" | "C7I" => Some("C7Q"),
+            "L7X" | "L7I" => Some("L7Q"),
+            "C8X" | "C8I" => Some("C8Q"),
+            "L8X" | "L8I" => Some("L8Q"),
             _ => None,
         };
 

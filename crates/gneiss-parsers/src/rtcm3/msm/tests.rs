@@ -9,7 +9,7 @@ use gneiss_core::sat::Constellation;
     /// Pack (num_bits, value) pairs into a byte buffer in Msb0 order.
     fn pack_bits(pairs: &[(usize, u64)]) -> Vec<u8> {
         let total_bits: usize = pairs.iter().map(|(b, _)| *b).sum();
-        let mut bytes = vec![0u8; (total_bits + 7) / 8];
+        let mut bytes = vec![0u8; total_bits.div_ceil(8)];
         let mut pos = 0;
         for &(bits, val) in pairs {
             for i in 0..bits {

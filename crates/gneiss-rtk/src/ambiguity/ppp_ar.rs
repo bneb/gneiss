@@ -123,6 +123,42 @@ impl PppArSolver {
             is_fixed: true,
         })
     }
+
+    /// Resolve Between-Satellite Single-Difference (SD) Wide-Lane integer ambiguities:
+    ///   \Delta \hat{N}_{WL}^{s, s_0} = \text{round}\left( \frac{(\Phi_{MW}^s - B_{WL}^s) - (\Phi_{MW}^{s_0} - B_{WL}^{s_0})}{\lambda_{WL}} \right)
+    ///
+    /// Single-differencing cancels common receiver hardware phase biases.
+    pub fn fix_sd_wide_lane(
+        ref_sat_idx: usize,
+        ref_mw_cycles: f64,
+        ref_bias_wl_cycles: f64,
+        candidates: &[WideLaneCandidate],
+        max_fractional_error: f64,
+    ) -> Vec<FixedWideLane> {
+        let mut fixed = Vec::new();
+        let ref_corrected_mw = ref_mw_cycles - ref_bias_wl_cycles;
+
+        for c in candidates {
+            if c.sat_idx == ref_sat_idx {
+                continue;
+            }
+
+            let c_corrected_mw = c.mw_cycles - c.bias_wl_cycles;
+            let sd_mw = c_corrected_mw - ref_corrected_mw;
+            let n_rounded = libm::round(sd_mw) as i32;
+            let frac_err = libm::fabs(sd_mw - (n_rounded as f64));
+
+            if frac_err <= max_fractional_error {
+                fixed.push(FixedWideLane {
+                    sat_idx: c.sat_idx,
+                    n_wl: n_rounded,
+                    fractional_residual: frac_err,
+                });
+            }
+        }
+
+        fixed
+    }
 }
 
 #[cfg(test)]
@@ -159,4 +195,31 @@ mod tests {
         assert_eq!(fixed[1].sat_idx, 2);
         assert_eq!(fixed[1].n_wl, -6);
     }
+
+    #[test]
+    fn test_between_satellite_single_difference_wide_lane_fixing() {
+        let candidates = vec![
+            WideLaneCandidate {
+                sat_idx: 10,
+                mw_cycles: 105.42,
+                mw_std_cycles: 0.05,
+                bias_wl_cycles: 0.40, // corrected = 105.02
+            },
+            WideLaneCandidate {
+                sat_idx: 14,
+                mw_cycles: 82.15,
+                mw_std_cycles: 0.06,
+                bias_wl_cycles: 0.13, // corrected = 82.02
+            },
+        ];
+
+        // Reference satellite: corrected = 50.00
+        let sd_fixed = PppArSolver::fix_sd_wide_lane(1, 50.35, 0.35, &candidates, 0.10);
+        assert_eq!(sd_fixed.len(), 2);
+        assert_eq!(sd_fixed[0].sat_idx, 10);
+        assert_eq!(sd_fixed[0].n_wl, 55); // 105.02 - 50.00 = 55.02 -> 55
+        assert_eq!(sd_fixed[1].sat_idx, 14);
+        assert_eq!(sd_fixed[1].n_wl, 32); // 82.02 - 50.00 = 32.02 -> 32
+    }
 }
+

@@ -34,6 +34,9 @@ pub fn run_forward_pass(
     sat_upd: Option<std::collections::HashMap<u16, f64>>,
     receiver_pcv: Option<std::sync::Arc<super::ReceiverPcvPair>>,
     enable_glonass: bool,
+    precise_orbits: Option<std::sync::Arc<gneiss_parsers::precise_orbit::PreciseOrbit>>,
+    precise_clocks: Option<std::sync::Arc<gneiss_parsers::rinex_clk::RinexClock>>,
+    sinex_bias: Option<std::sync::Arc<gneiss_parsers::sinex_bia::SinexBias>>,
 ) -> Vec<FilteredEpoch> {
     if imu_samples.is_none() && base_pos.is_some() && base_epochs.is_some() {
         if let Some(bp) = base_pos {
@@ -47,7 +50,12 @@ pub fn run_forward_pass(
         }
     }
 
-    run_forward_swfg(config, ephemerides, klobuchar, rover_epochs, base_epochs, base_pos, imu_samples)
+    let mut cfg = config.clone();
+    if let EngineConfig::Ppp(ref mut c) = cfg {
+        c.is_kinematic = dynamics.is_kinematic();
+    }
+
+    run_forward_swfg(&cfg, ephemerides, klobuchar, rover_epochs, base_epochs, base_pos, imu_samples, precise_orbits, precise_clocks, sinex_bias)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -167,6 +175,7 @@ pub fn run_forward_pass_collecting(
     (epochs, wl, pw)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run_forward_swfg(
     config: &EngineConfig,
     ephemerides: &[Ephemeris],
@@ -175,10 +184,19 @@ fn run_forward_swfg(
     base_epochs: Option<&[EpochObs]>,
     base_pos: Option<Vector3<f64>>,
     imu_samples: Option<&[ImuSample]>,
+    precise_orbits: Option<std::sync::Arc<gneiss_parsers::precise_orbit::PreciseOrbit>>,
+    precise_clocks: Option<std::sync::Arc<gneiss_parsers::rinex_clk::RinexClock>>,
+    sinex_bias: Option<std::sync::Arc<gneiss_parsers::sinex_bia::SinexBias>>,
 ) -> Vec<FilteredEpoch> {
     let mut engine = SwfgEngine::new(config, ephemerides.to_vec());
     if let Some((alpha, beta)) = klobuchar {
         engine.set_klobuchar(alpha, beta);
+    }
+    if let Some(orbits) = precise_orbits {
+        engine.set_precise_products(orbits, precise_clocks);
+    }
+    if let Some(bias) = sinex_bias {
+        engine.set_sinex_bias(bias);
     }
 
     let mut imu_idx = 0usize;

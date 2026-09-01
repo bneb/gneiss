@@ -305,7 +305,7 @@ SAMPLE              TEST AGENCY          05-DEC-19 20:20     PGM / RUN BY / DATE
             let file = std::fs::File::open(path).unwrap();
             let reader = std::io::BufReader::new(file);
             let grid = parse_ionex(reader).unwrap();
-            assert!(grid.tec_maps.len() >= 1);
+            assert!(!grid.tec_maps.is_empty());
             // Verify grid dimensions
             let nlat = ((grid.lat1 - grid.lat2).abs() / grid.dlat.abs()).round() as usize + 1;
             let nlon = ((grid.lon2 - grid.lon1) / grid.dlon.abs()).round() as usize;

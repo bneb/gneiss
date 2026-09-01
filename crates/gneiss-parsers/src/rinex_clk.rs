@@ -239,6 +239,7 @@ mod tests {
     ///   [22..24] minute
     ///   [25..34] seconds  (9 chars, right-aligned)
     ///   [40..59] bias     (19 chars, D-exponent notation)
+    #[allow(clippy::too_many_arguments)]
     fn as_line(sat: &str, year: i32, month: i32, day: i32, hour: i32, min: i32, sec: f64, bias: f64) -> String {
         let sec_fmt = format!("{:>9.6}", sec);
         // Bias with D exponent notation, padded to 19 chars.
@@ -355,9 +356,7 @@ mod tests {
         // The bias safely occupies [40..59] in a well-padded line.
         // Replace that span with 'x' characters.
         let mut bytes: Vec<u8> = line.into_bytes();
-        for i in 40..59 {
-            bytes[i] = b'x';
-        }
+        bytes[40..59].fill(b'x');
         let content = String::from_utf8(bytes).unwrap();
         let clk = RinexClock::parse(&content);
         assert!(clk.satellites.is_empty());

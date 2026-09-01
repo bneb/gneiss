@@ -92,7 +92,7 @@ fn parity_all_constellation_band_pairs() {
 fn gps_band5_resolves_to_l5_not_l2() {
     let f = gneiss_core::frequencies::signal_for_band(Constellation::Gps, 5)
         .map(|sig| gneiss_core::frequencies::frequency_for(Constellation::Gps, sig, 0))
-        .unwrap();
+        .expect("GPS band 5 must resolve to a valid frequency");
     assert!((f - 1176.45e6).abs() < 1.0, "GPS b5 -> {f}");
 }
 

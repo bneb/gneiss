@@ -188,6 +188,7 @@ mod tests {
             VariableKind::Ambiguity {
                 satellite: 1,
                 frequency: 1,
+                arc: 0,
             },
         );
         amb_node.set_value(&[0.0]);
@@ -286,7 +287,7 @@ mod tests {
         vars_mut
             .get_mut(&clock_id)
             .unwrap()
-            .set_value(&[10.0, 0.0, 0.0]);
+            .set_value(&[10.0]);
         let values_clk10 = VariableValues::build(&vars_mut);
         let r_clk10 = f1.residual(&values_clk10)[0];
 

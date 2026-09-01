@@ -287,7 +287,7 @@ mod tests {
         let sat = SatelliteId { constellation: Constellation::Gps, prn: 1 };
         let sat_obs = gneiss_core::obs::SatObs { sat, observations: Vec::new() };
         let ep = EpochObs { time: GpsTime::new(2000, 100.0), satellites: vec![sat_obs] };
-        let report = screen_dataset(&[ep.clone()], Some(&[ep]), Some(Vector3::zeros()));
+        let report = screen_dataset(std::slice::from_ref(&ep), Some(std::slice::from_ref(&ep)), Some(Vector3::zeros()));
         assert_eq!(report.total_epochs, 1);
         assert_eq!(report.refined_base_pos, Some(Vector3::zeros()));
     }
