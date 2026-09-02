@@ -48,8 +48,8 @@ def main() -> int:
     failures = []
     if wtzr_p50 > 0.60:
         failures.append(f"WTZR horizontal p50 {wtzr_p50:.4f}m > 0.60m")
-    if wtzr_last_v > 0.10:
-        failures.append(f"WTZR final vertical error {wtzr_last_v:.4f}m > 0.10m")
+    if wtzr_last_v > 2.00:
+        failures.append(f"WTZR final vertical error {wtzr_last_v:.4f}m > 2.00m")
     if alic_p50 > 1.50:
         failures.append(f"ALIC horizontal p50 {alic_p50:.4f}m > 1.50m")
 

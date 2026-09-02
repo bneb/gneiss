@@ -25,6 +25,9 @@ struct DatasetSpec {
     imu_file: Option<&'static str>,
     base_pos_override: Option<Vector3<f64>>,
     max_epochs: usize,
+    dynamics: gneiss_rtk::post_process::ProcessingDynamics,
+    widelane_ar: bool,
+    enable_glonass: bool,
 }
 
 fn parse_truth(path: &Path) -> BTreeMap<u32, Vector3<f64>> {
@@ -179,9 +182,8 @@ fn evaluate_dataset_spec(spec: &DatasetSpec) {
     };
     let (rover_epochs, rover_header) = match gneiss_parsers::rinex::parse_rinex_obs(BufReader::new(rov_f)) {
         Ok(r) => r,
-        Err(e) => { eprintln!("Failed to parse rover obs: {}", e); return; }
+        Err(e) => { eprintln!("Failed to parse rover: {}", e); return; }
     };
-    let rover_init_pos = rover_header.approx_position.map(|p| Vector3::new(p[0], p[1], p[2]));
 
     let base_f = match File::open(dir.join(spec.base_file)) {
         Ok(f) => f,
@@ -189,14 +191,15 @@ fn evaluate_dataset_spec(spec: &DatasetSpec) {
     };
     let (base_epochs, base_header) = match gneiss_parsers::rinex::parse_rinex_obs(BufReader::new(base_f)) {
         Ok(r) => r,
-        Err(e) => { eprintln!("Failed to parse base obs: {}", e); return; }
+        Err(e) => { eprintln!("Failed to parse base: {}", e); return; }
     };
 
-    let base_pos = spec.base_pos_override.unwrap_or_else(|| {
-        base_header.approx_position.map_or_else(
-            || Vector3::new(-3961904.4341, 3348994.266, 3698211.7067),
-            |p| Vector3::new(p[0], p[1], p[2]),
-        )
+    let base_pos = spec.base_pos_override.or_else(|| {
+        base_header.approx_position.map(|p| Vector3::new(p[0], p[1], p[2]))
+    }).unwrap_or_else(|| Vector3::new(0.0, 0.0, 0.0));
+
+    let rover_init_pos = rover_header.approx_position.map(|p| Vector3::new(p[0], p[1], p[2])).or_else(|| {
+        gneiss_rtk::swfg::engine::epoch::compute_spp_seeding(&rover_epochs[0], &ephemerides)
     });
 
     let config = EngineConfig::Rtk(gneiss_rtk::swfg::config::RtkConfig {
@@ -214,12 +217,12 @@ fn evaluate_dataset_spec(spec: &DatasetSpec) {
         klobuchar_alpha: klobuchar.as_ref().map(|k| k.alpha),
         klobuchar_beta: klobuchar.as_ref().map(|k| k.beta),
         q_accel: None,
-        widelane_ar: false,
+        widelane_ar: spec.widelane_ar,
         tropo_gradients: false,
         network_sat_upd: None,
         receiver_pcv: None,
-        dynamics: Default::default(),
-        enable_glonass: false,
+        dynamics: spec.dynamics,
+        enable_glonass: spec.enable_glonass,
         continuity_gate: false,
         precise_orbits: None,
         precise_clocks: None,
@@ -252,12 +255,12 @@ fn evaluate_dataset_spec(spec: &DatasetSpec) {
         klobuchar_alpha: klobuchar.as_ref().map(|k| k.alpha),
         klobuchar_beta: klobuchar.as_ref().map(|k| k.beta),
         q_accel: None,
-        widelane_ar: false,
+        widelane_ar: spec.widelane_ar,
         tropo_gradients: false,
         network_sat_upd: None,
         receiver_pcv: None,
-        dynamics: Default::default(),
-        enable_glonass: false,
+        dynamics: spec.dynamics,
+        enable_glonass: spec.enable_glonass,
         continuity_gate: false,
         precise_orbits: None,
         precise_clocks: None,
@@ -311,6 +314,9 @@ fn main() {
         imu_file: Some("imu.csv"),
         base_pos_override: Some(odaiba_base),
         max_epochs: 600,
+        dynamics: gneiss_rtk::post_process::ProcessingDynamics::Kinematic,
+        widelane_ar: false,
+        enable_glonass: false,
     };
     if Path::new(odaiba_spec.dir).exists() {
         evaluate_dataset_spec(&odaiba_spec);
@@ -332,6 +338,9 @@ fn main() {
         imu_file: None,
         base_pos_override: Some(Vector3::new(-1283434.6250, -4713071.9830, 4090105.0479)),
         max_epochs: max_f9p,
+        dynamics: gneiss_rtk::post_process::ProcessingDynamics::Kinematic,
+        widelane_ar: true,
+        enable_glonass: true,
     };
     if Path::new(f9p_spec.dir).exists() {
         evaluate_dataset_spec(&f9p_spec);
@@ -348,6 +357,9 @@ fn main() {
         imu_file: None,
         base_pos_override: Some(Vector3::new(-1283433.9360, -4713073.2930, 4090105.0870)),
         max_epochs: 300,
+        dynamics: gneiss_rtk::post_process::ProcessingDynamics::Static,
+        widelane_ar: false,
+        enable_glonass: false,
     };
     if Path::new(cors_spec.dir).exists() {
         evaluate_dataset_spec(&cors_spec);
@@ -364,6 +376,9 @@ fn main() {
         imu_file: None,
         base_pos_override: Some(Vector3::new(-2697941.2851, -4255089.1805, 3898009.7146)),
         max_epochs: 600,
+        dynamics: gneiss_rtk::post_process::ProcessingDynamics::Static,
+        widelane_ar: false,
+        enable_glonass: false,
     };
     if Path::new(p181_spec.dir).exists() {
         evaluate_dataset_spec(&p181_spec);

@@ -472,8 +472,8 @@ impl GnssRtkIekf {
 
         let sin_s = el_s.sin().max(0.1);
         let sin_r = el_r.sin().max(0.1);
-
-        let pr_var = 2.0 * (0.04 / (sin_s * sin_s) + 0.04 / (sin_r * sin_r));
+        let pr_base = 0.20;
+        let pr_var = 2.0 * (pr_base * pr_base / (sin_s * sin_s) + pr_base * pr_base / (sin_r * sin_r));
         let cp_base = 0.003 / lambda;
         let cp_var = 2.0 * (cp_base * cp_base / (sin_s * sin_s) + cp_base * cp_base / (sin_r * sin_r));
 

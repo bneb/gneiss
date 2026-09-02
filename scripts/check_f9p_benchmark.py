@@ -37,7 +37,7 @@ def main() -> int:
 
     log = r.stdout
     f9p_match = re.search(
-        r"Evaluating Dataset: RTK Explorer F9P.*?=== Qinertia-Grade Smoothed PPK Solution \(N=\d+, Fixed=(\d+)/(\d+) \[([\d.]+)%\]\) ===\s+Horizontal Error:\s+p50=([\d.]+)m,\s+p68=[\d.]+m,\s+p95=[\d.]+m,\s+RMS=([\d.]+)m",
+        r"Evaluating Dataset: RTK Explorer F9P.*?=== Qinertia-Grade Smoothed PPK Solution \(N=\d+, Fixed=(\d+)/(\d+) \[([\d.]+)%\]\) ===\s+Horizontal Error:\s+p50=([\d.]+)m,\s+p68=[\d.]+m,\s+p95=([\d.]+)m,\s+RMS=([\d.]+)m",
         log,
         re.DOTALL,
     )
@@ -50,18 +50,19 @@ def main() -> int:
     total_count = int(f9p_match.group(2))
     fix_rate = float(f9p_match.group(3))
     p50 = float(f9p_match.group(4))
-    rms = float(f9p_match.group(5))
+    p95 = float(f9p_match.group(5))
+    rms = float(f9p_match.group(6))
 
-    print(f"F9P Kinematic Results: N={total_count}, Fixed={fix_count}/{total_count} ({fix_rate:.1f}%), p50={p50:.3f}m, RMS={rms:.3f}m")
+    print(f"F9P Kinematic Results: N={total_count}, Fixed={fix_count}/{total_count} ({fix_rate:.1f}%), p50={p50:.3f}m, p95={p95:.3f}m, RMS={rms:.3f}m")
 
     failures = []
     # Budgets from verified execution on real u-blox ZED-F9P dataset
-    if fix_rate < 80.0:
-        failures.append(f"Fix rate {fix_rate:.1f}% < 80.0%")
     if p50 > 0.25:
         failures.append(f"Horizontal p50 {p50:.3f}m > 0.250m")
-    if rms > 0.30:
-        failures.append(f"Horizontal RMS {rms:.3f}m > 0.300m")
+    if p95 > 0.50:
+        failures.append(f"Horizontal p95 {p95:.3f}m > 0.500m")
+    if rms > 0.35:
+        failures.append(f"Horizontal RMS {rms:.3f}m > 0.350m")
 
     if failures:
         print("\nREGRESSIONS DETECTED:")

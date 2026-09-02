@@ -70,8 +70,6 @@ fn formal_sigma_m(cov: &Matrix3<f64>) -> f64 {
 struct SepLimits {
     /// Honesty gate: beyond this, fixed claims are downgraded.
     strict_m: f64,
-    /// Fuse window when only one pass claims a fix.
-    cross_fix_fuse_m: f64,
     /// Fuse window when both passes claim fixes.
     both_fixed_fuse_m: f64,
 }
@@ -81,7 +79,6 @@ impl SepLimits {
         match prof {
             ProcessingDynamics::Static => SepLimits {
                 strict_m: STRICT_DISAGREE_M,
-                cross_fix_fuse_m: 0.50,
                 both_fixed_fuse_m: 0.20,
             },
             ProcessingDynamics::Kinematic => {
@@ -93,10 +90,6 @@ impl SepLimits {
                 SepLimits {
                     strict_m: dynamics::kinematic_sep_limit_m(
                         dynamics::KIN_DISAGREE_K_SIGMA, sf, sb,
-                        dynamics::KIN_THRESHOLD_FLOOR_M, dynamics::KIN_THRESHOLD_CAP_M,
-                    ),
-                    cross_fix_fuse_m: dynamics::kinematic_sep_limit_m(
-                        dynamics::KIN_FUSE_CROSS_K_SIGMA, sf, sb,
                         dynamics::KIN_THRESHOLD_FLOOR_M, dynamics::KIN_THRESHOLD_CAP_M,
                     ),
                     both_fixed_fuse_m: dynamics::kinematic_sep_limit_m(
@@ -120,17 +113,9 @@ fn combine_bidirectional_epoch(
     let limits = SepLimits::for_profile(prof, fwd, bwd);
 
     let (pos, cov, mut q) = if fwd.is_fixed && !bwd.is_fixed {
-        if sep < limits.cross_fix_fuse_m {
-            fuse_covariances(fwd, bwd, 1)
-        } else {
-            (fwd.position_ecef, fwd.cov_position, 1)
-        }
+        (fwd.position_ecef, fwd.cov_position, 1)
     } else if bwd.is_fixed && !fwd.is_fixed {
-        if sep < limits.cross_fix_fuse_m {
-            fuse_covariances(fwd, bwd, 1)
-        } else {
-            (bwd.position_ecef, bwd.cov_position, 1)
-        }
+        (bwd.position_ecef, bwd.cov_position, 1)
     } else if fwd.is_fixed && bwd.is_fixed {
         if sep < limits.both_fixed_fuse_m {
             fuse_covariances(fwd, bwd, 1)

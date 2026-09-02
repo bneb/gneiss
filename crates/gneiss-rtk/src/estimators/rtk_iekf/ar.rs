@@ -83,7 +83,7 @@ fn try_partial_ar(
 ) -> Option<ArResult> {
     let n_amb = a_float.len();
     let float_trace = state.cov[(0, 0)] + state.cov[(1, 1)] + state.cov[(2, 2)];
-    if n_amb <= 4 || float_trace > 2.0 {
+    if n_amb <= 4 || float_trace > 25.0 {
         return None;
     }
 

@@ -214,11 +214,7 @@ impl GnssRtkIekf {
             }
             _ => self.q_accel,
         };
-        let f_mat = if self.widelane_ar {
-            predict::predict_state_gated(&mut self.state, rover.time, q_now, true)
-        } else {
-            predict::predict_state(&mut self.state, rover.time, q_now)
-        };
+        let f_mat = predict::predict_state_gated(&mut self.state, rover.time, q_now, true);
         let (x_pred, p_pred) = (self.state.to_dvector(), self.state.cov.clone());
 
         // Innovation gating: an undetected cycle slip (e.g. a base receiver
