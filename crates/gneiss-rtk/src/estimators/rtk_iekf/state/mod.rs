@@ -296,6 +296,67 @@ impl RtkState {
         }
     }
 
+    /// Rotate double-difference ambiguities and covariance when reference satellite changes.
+    pub fn transfer_reference_satellite(
+        &mut self,
+        const_id: u8,
+        freq_band: u8,
+        old_ref: u16,
+        new_ref: u16,
+    ) -> bool {
+        if old_ref == new_ref {
+            return false;
+        }
+        let pivot_key = DoubleDiffKey {
+            constellation_id: const_id,
+            sat: new_ref,
+            ref_sat: old_ref,
+            freq_band,
+        };
+        let Some(pivot_idx) = self.get_amb_idx(&pivot_key) else {
+            return false;
+        };
+        let t_mat = self.build_reference_transfer_matrix(const_id, freq_band, old_ref, new_ref, pivot_idx);
+        let mut x = self.to_dvector();
+        x = &t_mat * &x;
+        self.update_from_dvector(&x);
+        self.cov = &t_mat * &self.cov * t_mat.transpose();
+        self.update_keys_after_transfer(const_id, freq_band, old_ref, new_ref);
+        true
+    }
+
+    fn build_reference_transfer_matrix(
+        &self,
+        const_id: u8,
+        freq_band: u8,
+        old_ref: u16,
+        new_ref: u16,
+        pivot_idx: usize,
+    ) -> DMatrix<f64> {
+        let dim = self.cov.nrows();
+        let mut t_mat = DMatrix::identity(dim, dim);
+        for (i, (key, _)) in self.ambiguities.iter().enumerate() {
+            if key.constellation_id == const_id && key.freq_band == freq_band && key.ref_sat == old_ref {
+                let state_idx = self.amb_offset() + i;
+                if key.sat == new_ref {
+                    t_mat[(state_idx, state_idx)] = -1.0;
+                } else {
+                    t_mat[(state_idx, pivot_idx)] = -1.0;
+                }
+            }
+        }
+        t_mat
+    }
+
+    fn update_keys_after_transfer(&mut self, const_id: u8, freq_band: u8, old_ref: u16, new_ref: u16) {
+        for (key, _) in self.ambiguities.iter_mut() {
+            if key.constellation_id == const_id && key.freq_band == freq_band && key.ref_sat == old_ref {
+                let sat = if key.sat == new_ref { old_ref } else { key.sat };
+                *key = DoubleDiffKey { constellation_id: const_id, sat, ref_sat: new_ref, freq_band };
+            }
+        }
+    }
+
     /// Reset an ambiguity variance (e.g. after detected cycle slip).
     pub fn reset_ambiguity(&mut self, key: &DoubleDiffKey, initial_val: f64, initial_var: f64) {
         if let Some(idx) = self.get_amb_idx(key) {

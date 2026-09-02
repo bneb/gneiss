@@ -171,3 +171,29 @@ fn sat_iono_multi_constellation_keys() {
     assert!(idx_gal.is_some());
     assert_ne!(idx_gps, idx_gal);
 }
+
+#[test]
+fn test_transfer_reference_satellite_math() {
+    let t = GpsTime::new(2100, 0.0);
+    let mut st = RtkState::new(Vector3::zeros(), t);
+    let k21 = DoubleDiffKey { constellation_id: 0, sat: 2, ref_sat: 1, freq_band: 1 };
+    let k31 = DoubleDiffKey { constellation_id: 0, sat: 3, ref_sat: 1, freq_band: 1 };
+    st.ensure_ambiguity(k21, 5.0, 0.04);
+    st.ensure_ambiguity(k31, 8.0, 0.04);
+
+    // Transfer reference satellite from 1 to 2
+    let transferred = st.transfer_reference_satellite(0, 1, 1, 2);
+    assert!(transferred);
+
+    let k12 = DoubleDiffKey { constellation_id: 0, sat: 1, ref_sat: 2, freq_band: 1 };
+    let k32 = DoubleDiffKey { constellation_id: 0, sat: 3, ref_sat: 2, freq_band: 1 };
+
+    let idx12 = st.get_amb_idx(&k12).unwrap();
+    let idx32 = st.get_amb_idx(&k32).unwrap();
+
+    let x = st.to_dvector();
+    assert_eq!(x[idx12], -5.0, "N_12 = -N_21 = -5.0");
+    assert_eq!(x[idx32], 3.0, "N_32 = N_31 - N_21 = 8.0 - 5.0 = 3.0");
+    assert!(st.cov[(idx12, idx12)] > 0.0);
+    assert!(st.cov[(idx32, idx32)] > 0.0);
+}

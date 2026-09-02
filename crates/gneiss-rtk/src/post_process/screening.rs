@@ -66,8 +66,9 @@ impl CycleSlipDetector {
             (Some(a), Some(b)) => (a, b),
             _ => return false,
         };
-        let lambda1 = 0.19029367279836488; // L1 default
-        let lambda2 = 0.24421021342456815; // L2 default
+        let lambda1 = gneiss_core::signal::get_wavelength(sat, 1, 0);
+        let band2 = if sat.constellation == gneiss_core::sat::Constellation::Galileo { 7 } else { 2 };
+        let lambda2 = gneiss_core::signal::get_wavelength(sat, band2, 0);
         let gf = c1 * lambda1 - c2 * lambda2;
         let is_slip = if let Some(&prev) = self.prev_gf_m.get(&sat) {
             (gf - prev).abs() > 0.05 // 5cm jump in geometry-free phase

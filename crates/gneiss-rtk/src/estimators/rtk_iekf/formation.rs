@@ -62,9 +62,17 @@ impl GnssRtkIekf {
                 continue;
             }
 
+            let old_ref_opt = self.ref_sats.get(&const_id).copied();
             let ref_sat_id = self.select_reference_satellite_hys(const_id, &const_sats);
             if ref_sat_id == 0 {
                 continue;
+            }
+            if let Some(old_ref) = old_ref_opt {
+                if old_ref != ref_sat_id {
+                    for freq_band in [1, 2, 5, 7] {
+                        self.state.transfer_reference_satellite(const_id, freq_band, old_ref, ref_sat_id);
+                    }
+                }
             }
 
             let ref_pos = match const_sats.iter().find(|(s, _)| s.prn as u16 == ref_sat_id) {
