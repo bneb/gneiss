@@ -10,8 +10,9 @@ use std::io::{BufRead, BufReader};
 use std::path::Path;
 use nalgebra::Vector3;
 
+use gneiss_core::atmosphere::KlobucharParams;
 use gneiss_core::time::GpsTime;
-use gneiss_rtk::post_process::{execute_post_process, PostProcessOptions};
+use gneiss_rtk::post_process::{execute_post_process, PostProcessOptions, SmoothedEpoch};
 use gneiss_rtk::swfg::config::EngineConfig;
 use gneiss_rtk::swfg::imu_preintegration::ImuSample;
 
@@ -129,7 +130,15 @@ fn compute_3d_error(pos: Vector3<f64>, truth: Vector3<f64>) -> f64 {
     (pos - truth).norm()
 }
 
-fn print_stats(name: &str, mut h_errs: Vec<f64>, mut d3_errs: Vec<f64>, fix_count: usize, total_count: usize) {
+fn format_stats(
+    out: &mut String,
+    name: &str,
+    mut h_errs: Vec<f64>,
+    mut d3_errs: Vec<f64>,
+    fix_count: usize,
+    total_count: usize,
+) {
+    use std::fmt::Write;
     if h_errs.is_empty() { return; }
     h_errs.sort_by(|a, b| a.total_cmp(b));
     d3_errs.sort_by(|a, b| a.total_cmp(b));
@@ -151,48 +160,79 @@ fn print_stats(name: &str, mut h_errs: Vec<f64>, mut d3_errs: Vec<f64>, fix_coun
     let rms_3d = (d3_errs.iter().map(|e| e * e).sum::<f64>() / n as f64).sqrt();
     let fix_pct = (fix_count as f64 / total_count.max(1) as f64) * 100.0;
 
-    println!("=== {} (N={}, Fixed={}/{} [{:.1}%]) ===", name, n, fix_count, total_count, fix_pct);
-    println!("Horizontal Error:  p50={:.3}m,  p68={:.3}m,  p95={:.3}m,  RMS={:.3}m", p50, p68, p95, rms);
-    println!("  Horizontal CDF:  p10={:.3}m, p25={:.3}m, p50={:.3}m, p68={:.3}m, p75={:.3}m, p90={:.3}m, p95={:.3}m, p99={:.3}m, max={:.3}m, mean={:.3}m",
+    let _ = writeln!(out, "=== {} (N={}, Fixed={}/{} [{:.1}%]) ===", name, n, fix_count, total_count, fix_pct);
+    let _ = writeln!(out, "Horizontal Error:  p50={:.3}m,  p68={:.3}m,  p95={:.3}m,  RMS={:.3}m", p50, p68, p95, rms);
+    let _ = writeln!(out, "  Horizontal CDF:  p10={:.3}m, p25={:.3}m, p50={:.3}m, p68={:.3}m, p75={:.3}m, p90={:.3}m, p95={:.3}m, p99={:.3}m, max={:.3}m, mean={:.3}m",
         p10, p25, p50, p68, p75, p90, p95, p99, max, mean);
-    println!("3D Position Error: p50={:.3}m,  p95={:.3}m,  RMS={:.3}m", p50_3d, p95_3d, rms_3d);
+    let _ = writeln!(out, "3D Position Error: p50={:.3}m,  p95={:.3}m,  RMS={:.3}m", p50_3d, p95_3d, rms_3d);
 }
 
-fn evaluate_dataset_spec(spec: &DatasetSpec) {
-    println!("\n========================================================");
-    println!("Evaluating Dataset: {}", spec.name);
-    println!("========================================================");
+fn collect_trajectory_stats(
+    trajectory: &[SmoothedEpoch],
+    truth: &BTreeMap<u32, Vector3<f64>>,
+) -> (Vec<f64>, Vec<f64>, usize) {
+    let mut h_errs = Vec::new();
+    let mut d3_errs = Vec::new();
+    let mut fix_count = 0;
+    for ep in trajectory {
+        let tow = ep.time.tow.round() as u32;
+        if ep.quality == 1 { fix_count += 1; }
+        if let Some(&t) = truth.get(&tow) {
+            let h = compute_horizontal_error(ep.position_ecef, t);
+            let d3 = compute_3d_error(ep.position_ecef, t);
+            if h < 100.0 {
+                h_errs.push(h);
+                d3_errs.push(d3);
+            }
+        }
+    }
+    (h_errs, d3_errs, fix_count)
+}
+
+fn make_post_process_options(
+    spec: &DatasetSpec,
+    base_pos: Vector3<f64>,
+    rover_init_pos: Option<Vector3<f64>>,
+    klob: Option<&KlobucharParams>,
+    bidirectional: bool,
+) -> PostProcessOptions {
+    PostProcessOptions {
+        enable_bidirectional: bidirectional,
+        base_position: Some(base_pos),
+        initial_rover_position: rover_init_pos,
+        klobuchar_alpha: klob.map(|k| k.alpha),
+        klobuchar_beta: klob.map(|k| k.beta),
+        q_accel: None,
+        widelane_ar: spec.widelane_ar,
+        tropo_gradients: false,
+        network_sat_upd: None,
+        receiver_pcv: None,
+        dynamics: spec.dynamics,
+        enable_glonass: spec.enable_glonass,
+        continuity_gate: false,
+        precise_orbits: None,
+        precise_clocks: None,
+        sinex_bias: None,
+    }
+}
+
+fn evaluate_dataset_spec(spec: &DatasetSpec) -> String {
+    use std::fmt::Write;
+    let mut out = String::new();
+    let _ = writeln!(out, "\n========================================================");
+    let _ = writeln!(out, "Evaluating Dataset: {}", spec.name);
+    let _ = writeln!(out, "========================================================");
 
     let dir = Path::new(spec.dir);
-    let nav_f = match File::open(dir.join(spec.nav_file)) {
-        Ok(f) => f,
-        Err(e) => { eprintln!("Failed to open nav {}: {}", spec.nav_file, e); return; }
-    };
-    let (ephemerides, klobuchar) = match gneiss_parsers::rinex::parse_rinex_nav(BufReader::new(nav_f)) {
-        Ok(r) => r,
-        Err(e) => { eprintln!("Failed to parse nav: {}", e); return; }
-    };
-
+    let Ok(nav_f) = File::open(dir.join(spec.nav_file)) else { return out; };
+    let Ok((ephemerides, klobuchar)) = gneiss_parsers::rinex::parse_rinex_nav(BufReader::new(nav_f)) else { return out; };
     let truth = parse_truth(&dir.join(spec.truth_file));
     let imu_samples = spec.imu_file.map(|f| parse_imu(&dir.join(f)));
 
-    let rov_f = match File::open(dir.join(spec.rover_file)) {
-        Ok(f) => f,
-        Err(e) => { eprintln!("Failed to open rover obs: {}", e); return; }
-    };
-    let (rover_epochs, rover_header) = match gneiss_parsers::rinex::parse_rinex_obs(BufReader::new(rov_f)) {
-        Ok(r) => r,
-        Err(e) => { eprintln!("Failed to parse rover: {}", e); return; }
-    };
-
-    let base_f = match File::open(dir.join(spec.base_file)) {
-        Ok(f) => f,
-        Err(e) => { eprintln!("Failed to open base obs: {}", e); return; }
-    };
-    let (base_epochs, base_header) = match gneiss_parsers::rinex::parse_rinex_obs(BufReader::new(base_f)) {
-        Ok(r) => r,
-        Err(e) => { eprintln!("Failed to parse base: {}", e); return; }
-    };
+    let Ok(rov_f) = File::open(dir.join(spec.rover_file)) else { return out; };
+    let Ok((rover_epochs, rover_header)) = gneiss_parsers::rinex::parse_rinex_obs(BufReader::new(rov_f)) else { return out; };
+    let Ok(base_f) = File::open(dir.join(spec.base_file)) else { return out; };
+    let Ok((base_epochs, base_header)) = gneiss_parsers::rinex::parse_rinex_obs(BufReader::new(base_f)) else { return out; };
 
     let base_pos = spec.base_pos_override.or_else(|| {
         base_header.approx_position.map(|p| Vector3::new(p[0], p[1], p[2]))
@@ -206,84 +246,21 @@ fn evaluate_dataset_spec(spec: &DatasetSpec) {
         initial_position: Some([base_pos.x, base_pos.y, base_pos.z]),
         ..Default::default()
     });
-
     let selected_rover = &rover_epochs[..rover_epochs.len().min(spec.max_epochs)];
 
-    // 1. Forward-only pass
-    let fwd_options = PostProcessOptions {
-        enable_bidirectional: false,
-        base_position: Some(base_pos),
-        initial_rover_position: rover_init_pos,
-        klobuchar_alpha: klobuchar.as_ref().map(|k| k.alpha),
-        klobuchar_beta: klobuchar.as_ref().map(|k| k.beta),
-        q_accel: None,
-        widelane_ar: spec.widelane_ar,
-        tropo_gradients: false,
-        network_sat_upd: None,
-        receiver_pcv: None,
-        dynamics: spec.dynamics,
-        enable_glonass: spec.enable_glonass,
-        continuity_gate: false,
-        precise_orbits: None,
-        precise_clocks: None,
-        sinex_bias: None,
-    };
-    let fwd_res = match execute_post_process(&config, &ephemerides, selected_rover, Some(&base_epochs), imu_samples.as_deref(), &fwd_options) {
-        Ok(r) => r,
-        Err(e) => { eprintln!("Forward pass failed: {}", e); return; }
-    };
-
-    let mut fwd_h = Vec::new();
-    let mut fwd_3d = Vec::new();
-    let mut fwd_fix = 0;
-    for ep in &fwd_res.trajectory {
-        let tow = ep.time.tow.round() as u32;
-        if ep.quality == 1 { fwd_fix += 1; }
-        if let Some(&t) = truth.get(&tow) {
-            let h = compute_horizontal_error(ep.position_ecef, t);
-            let d3 = compute_3d_error(ep.position_ecef, t);
-            if h < 100.0 { fwd_h.push(h); fwd_3d.push(d3); }
-        }
+    let fwd_opt = make_post_process_options(spec, base_pos, rover_init_pos, klobuchar.as_ref(), false);
+    if let Ok(fwd_res) = execute_post_process(&config, &ephemerides, selected_rover, Some(&base_epochs), imu_samples.as_deref(), &fwd_opt) {
+        let (h, d3, fix) = collect_trajectory_stats(&fwd_res.trajectory, &truth);
+        format_stats(&mut out, "Forward RTK Solution", h, d3, fix, fwd_res.trajectory.len());
     }
-    print_stats("Forward RTK Solution", fwd_h, fwd_3d, fwd_fix, fwd_res.trajectory.len());
 
-    // 2. Qinertia-Grade Bidirectional Smoothed PPK Pass
-    let smooth_options = PostProcessOptions {
-        enable_bidirectional: true,
-        base_position: Some(base_pos),
-        initial_rover_position: rover_init_pos,
-        klobuchar_alpha: klobuchar.as_ref().map(|k| k.alpha),
-        klobuchar_beta: klobuchar.as_ref().map(|k| k.beta),
-        q_accel: None,
-        widelane_ar: spec.widelane_ar,
-        tropo_gradients: false,
-        network_sat_upd: None,
-        receiver_pcv: None,
-        dynamics: spec.dynamics,
-        enable_glonass: spec.enable_glonass,
-        continuity_gate: false,
-        precise_orbits: None,
-        precise_clocks: None,
-        sinex_bias: None,
-    };
-    let smooth_res = match execute_post_process(&config, &ephemerides, selected_rover, Some(&base_epochs), imu_samples.as_deref(), &smooth_options) {
-        Ok(r) => r,
-        Err(e) => { eprintln!("Smoothed pass failed: {}", e); return; }
-    };
-
-    let mut smooth_h = Vec::new();
-    let mut smooth_3d = Vec::new();
-    let mut smooth_fix = 0;
-    for ep in &smooth_res.trajectory {
-        let tow = ep.time.tow.round() as u32;
-        if ep.quality == 1 { smooth_fix += 1; }
-        if let Some(&t) = truth.get(&tow) {
-            let h = compute_horizontal_error(ep.position_ecef, t);
-            let d3 = compute_3d_error(ep.position_ecef, t);
-            if h < 100.0 { smooth_h.push(h); smooth_3d.push(d3); }
-        }
+    let smooth_opt = make_post_process_options(spec, base_pos, rover_init_pos, klobuchar.as_ref(), true);
+    if let Ok(smooth_res) = execute_post_process(&config, &ephemerides, selected_rover, Some(&base_epochs), imu_samples.as_deref(), &smooth_opt) {
+        let (h, d3, fix) = collect_trajectory_stats(&smooth_res.trajectory, &truth);
+        format_stats(&mut out, "Qinertia-Grade Smoothed PPK Solution", h, d3, fix, smooth_res.trajectory.len());
     }
-    print_stats("Qinertia-Grade Smoothed PPK Solution", smooth_h, smooth_3d, smooth_fix, smooth_res.trajectory.len());
+
+    out
 }
 
 fn main() {
@@ -298,7 +275,6 @@ fn main() {
     println!("Gneiss vs Qinertia-Grade RTK/PPK Post-Processing Harness");
     println!("========================================================");
 
-    // 1. Odaiba (Urban Canyon with SPAN-CPT Truth)
     let default_base_arp = Vector3::new(-3961904.4341, 3348994.266, 3698211.7067);
     let default_base_llh = gneiss_core::coords::ecef_to_llh(default_base_arp);
     let ned_to_ecef = gneiss_core::coords::ecef_to_ned_matrix(default_base_llh).transpose();
@@ -318,9 +294,6 @@ fn main() {
         widelane_ar: false,
         enable_glonass: false,
     };
-    if Path::new(odaiba_spec.dir).exists() {
-        evaluate_dataset_spec(&odaiba_spec);
-    }
 
     let max_f9p = std::env::var("MAX_F9P_EPOCHS")
         .or_else(|_| std::env::var("MAX_EPOCHS"))
@@ -342,11 +315,7 @@ fn main() {
         widelane_ar: false,
         enable_glonass: true,
     };
-    if Path::new(f9p_spec.dir).exists() {
-        evaluate_dataset_spec(&f9p_spec);
-    }
 
-    // 3. Tier 1: NGS Ultra-Short Geodetic Baseline (TMG2 Base, TMGO Rover, 112.5m baseline)
     let cors_spec = DatasetSpec {
         name: "NGS Geodetic Baseline (TMG2 Base, TMGO Rover, 112.5m, 30s)",
         dir: "datasets/cors_short_baseline",
@@ -361,11 +330,7 @@ fn main() {
         widelane_ar: false,
         enable_glonass: false,
     };
-    if Path::new(cors_spec.dir).exists() {
-        evaluate_dataset_spec(&cors_spec);
-    }
 
-    // 4. NOAA CORS Medium Baseline (P181 Base, P224 Rover, 15.0 km, 30s)
     let p181_spec = DatasetSpec {
         name: "NOAA CORS Regional Baseline (P181 Base, P224 Rover, 15.0km, 30s)",
         dir: "datasets/cors_short_baseline",
@@ -380,7 +345,52 @@ fn main() {
         widelane_ar: false,
         enable_glonass: false,
     };
-    if Path::new(p181_spec.dir).exists() {
-        evaluate_dataset_spec(&p181_spec);
+
+    use rayon::prelude::*;
+    let specs = vec![odaiba_spec, f9p_spec, cors_spec, p181_spec];
+    let reports: Vec<String> = specs
+        .into_par_iter()
+        .filter(|s| Path::new(s.dir).exists())
+        .map(|s| evaluate_dataset_spec(&s))
+        .collect();
+
+    for report in reports {
+        print!("{}", report);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_format_stats_empty_is_noop() {
+        let mut out = String::new();
+        format_stats(&mut out, "Test", Vec::new(), Vec::new(), 0, 0);
+        assert!(out.is_empty());
+    }
+
+    #[test]
+    fn test_collect_trajectory_stats_counts_fixes() {
+        let mut truth = BTreeMap::new();
+        truth.insert(100, Vector3::new(100.0, 200.0, 300.0));
+        let ep1 = SmoothedEpoch {
+            time: gneiss_core::time::GpsTime::new(2000, 100.0),
+            position_ecef: Vector3::new(100.01, 200.0, 300.0),
+            velocity_ecef: Some(Vector3::zeros()),
+            attitude: None,
+            cov_position: nalgebra::Matrix3::identity(),
+            std_east: 0.01,
+            std_north: 0.01,
+            std_up: 0.01,
+            separation_3d: 0.005,
+            quality: 1,
+            n_satellites: 8,
+        };
+        let (h, d3, fixes) = collect_trajectory_stats(&[ep1], &truth);
+        assert_eq!(fixes, 1);
+        assert_eq!(h.len(), 1);
+        assert_eq!(d3.len(), 1);
+        assert!(h[0] < 0.02);
     }
 }
