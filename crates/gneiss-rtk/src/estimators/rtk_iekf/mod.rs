@@ -130,6 +130,8 @@ pub struct GnssRtkIekf {
     /// Elevation cut-off (rad) for AR participation when `ar_gate` is on.
     /// Defaults to `min_elevation_rad`, i.e. no additional restriction.
     pub ar_elevation_mask_rad: f64,
+    /// When true, fixed ambiguities constrain the filter state (fix-and-hold).
+    pub fix_and_hold: bool,
     /// This epoch's code-minus-phase divergences `(freq_band, cycles)` of
     /// the pairs tracked so far, used to coherently seed newly initialised
     /// ambiguities when `ar_gate` is on. Cleared each epoch.
@@ -175,6 +177,7 @@ impl GnssRtkIekf {
             receiver_pcv: None,
             ar_gate: std::env::var("GNEISS_AR_GATE").is_ok_and(|v| v == "1"),
             ar_elevation_mask_rad: Self::DEFAULT_MIN_ELEVATION_RAD,
+            fix_and_hold: std::env::var("GNEISS_FIX_AND_HOLD").is_ok_and(|v| v == "1"),
             code_phase_div: Vec::new(),
         }
     }
@@ -348,6 +351,9 @@ impl GnssRtkIekf {
         // When fixed, re-estimate the position from iono-free phase to
         // remove the DD ionosphere bias that grows with baseline length.
         let (pos_ecef, cov_pos) = if ar_res.is_fixed {
+            if self.fix_and_hold && ar_res.ratio >= 3.0 {
+                ar::condition_state_on_integers(&mut self.state, &ar_res.fixed_ambiguities);
+            }
             match iono_free::apply_fixed_iono_free(&self.state, &dd_meas.iono_free, &ar_res) {
                 iono_free::IonoFreeOutcome::Solution(pos, cov) => (pos, cov),
                 _ => (ar_res.position_ecef, ar_res.cov_position),

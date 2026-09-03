@@ -135,10 +135,12 @@ fn combine_bidirectional_epoch(
         }
     };
 
-    // Long-baseline honesty: when the passes disagree beyond the profile
-    // threshold, whichever side was picked cannot be trusted as fixed.
-    // Cap quality to float so downstream consumers see the uncertainty.
-    if strict && sep > limits.strict_m && q == 1 {
+    // Long-baseline honesty: when both passes claim fixed integers but disagree beyond
+    // the profile threshold, neither can be trusted as fixed.
+    // When only one pass is fixed, allow the fixed solution unless gross divergence (>2.0m).
+    let both_fixed = fwd.is_fixed && bwd.is_fixed;
+    let limit_m = if both_fixed { limits.strict_m } else { limits.strict_m.max(2.0) };
+    if strict && sep > limit_m && q == 1 {
         q = 2;
     }
 

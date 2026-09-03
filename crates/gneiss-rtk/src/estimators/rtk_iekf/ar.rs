@@ -172,6 +172,64 @@ pub(crate) fn project_subset_fixed(
     Some((fix_pos, p_xx))
 }
 
+fn compute_integer_conditioning(
+    state: &RtkState,
+    indices: &[usize],
+    a_fix: &[f64],
+) -> Option<(DVector<f64>, DMatrix<f64>)> {
+    let k = indices.len();
+    let mut q_aa = DMatrix::zeros(k, k);
+    for (r, &i) in indices.iter().enumerate() {
+        for (c, &j) in indices.iter().enumerate() {
+            q_aa[(r, c)] = state.cov[(i, j)];
+        }
+    }
+    let q_inv = q_aa.try_inverse()?;
+    let dim = state.dim();
+    let mut p_all_a = DMatrix::zeros(dim, k);
+    for r in 0..dim {
+        for (c, &idx) in indices.iter().enumerate() {
+            p_all_a[(r, c)] = state.cov[(r, idx)];
+        }
+    }
+    let x_vec = state.to_dvector();
+    let da = DVector::from_iterator(k, indices.iter().enumerate().map(|(i, &idx)| x_vec[idx] - a_fix[i]));
+    let dx = &p_all_a * &q_inv * &da;
+    let cov_red = &p_all_a * &q_inv * &p_all_a.transpose();
+    Some((dx, cov_red))
+}
+
+/// Condition state and covariance on fixed integer ambiguities (fix-and-hold).
+pub fn condition_state_on_integers(
+    state: &mut RtkState,
+    fixed_ambiguities: &[(DoubleDiffKey, f64)],
+) -> bool {
+    let mut indices = Vec::with_capacity(fixed_ambiguities.len());
+    let mut a_fix = Vec::with_capacity(fixed_ambiguities.len());
+    for (key, val) in fixed_ambiguities {
+        if let Some(idx) = state.get_amb_idx(key) {
+            indices.push(idx);
+            a_fix.push(*val);
+        }
+    }
+    if indices.is_empty() { return false; }
+    let Some((dx, cov_red)) = compute_integer_conditioning(state, &indices, &a_fix) else { return false; };
+    let dx_pos = (dx[0] * dx[0] + dx[1] * dx[1] + dx[2] * dx[2]).sqrt();
+    let float_pos_std = (state.cov[(0, 0)] + state.cov[(1, 1)] + state.cov[(2, 2)]).sqrt();
+    if dx_pos > (3.0 * float_pos_std).max(0.50) || dx_pos > 2.0 { return false; }
+
+    let mut x_vec = state.to_dvector() - dx;
+    for (i, &idx) in indices.iter().enumerate() { x_vec[idx] = a_fix[i]; }
+    state.update_from_dvector(&x_vec);
+
+    let mut new_cov = &state.cov - cov_red;
+    new_cov = 0.5 * (&new_cov + &new_cov.transpose());
+    for i in 0..state.dim() { new_cov[(i, i)] = new_cov[(i, i)].max(1e-6); }
+    for &idx in &indices { new_cov[(idx, idx)] = 1e-4; }
+    state.cov = new_cov;
+    true
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -207,5 +265,20 @@ mod tests {
         let res = resolve_ambiguities(&state, 4, 0.001);
         assert!(res.is_fixed, "PAR should fix the 4 clean ambiguities");
         assert_eq!(res.num_ambiguities, 4);
+    }
+
+    #[test]
+    fn test_condition_state_on_integers_updates_variance_and_position() {
+        let mut state = RtkState::new(Vector3::new(100.0, 200.0, 300.0), GpsTime::new(2000, 100.0));
+        let k1 = DoubleDiffKey { constellation_id: 0, sat: 2, ref_sat: 1, freq_band: 1 };
+        state.ensure_ambiguity(k1, 10.02, 0.04);
+        let idx = state.get_amb_idx(&k1).unwrap();
+        state.cov[(0, idx)] = 0.01;
+        state.cov[(idx, 0)] = 0.01;
+
+        let ok = condition_state_on_integers(&mut state, &[(k1, 10.0)]);
+        assert!(ok);
+        assert!((state.ambiguities[0].1 - 10.0).abs() < 1e-9);
+        assert_eq!(state.cov[(idx, idx)], 1e-4);
     }
 }

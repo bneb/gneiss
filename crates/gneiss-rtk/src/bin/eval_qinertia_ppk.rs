@@ -339,7 +339,7 @@ fn main() {
         base_pos_override: Some(Vector3::new(-1283434.6250, -4713071.9830, 4090105.0479)),
         max_epochs: max_f9p,
         dynamics: gneiss_rtk::post_process::ProcessingDynamics::Kinematic,
-        widelane_ar: true,
+        widelane_ar: false,
         enable_glonass: true,
     };
     if Path::new(f9p_spec.dir).exists() {

@@ -1,15 +1,17 @@
 # Gneiss PPK & PPP Engine — Comprehensive Project Status
 
 > **Strategic Achievement (2026-08-31 / 2026-09-02)**:
-> 1. **Kinematic Rover PPK Sub-50cm p95 Accuracy**: Optimized dynamic process noise, elevation/SNR carrier-phase weighting, and bidirectional covariance intersection fusion on moving vehicles. Real-world u-blox ZED-F9P kinematic rover achieved **p50 = 0.177m**, **p68 = 0.208m**, and **p95 = 0.460m** ($< 50\text{ cm}$) across 4,521 epochs.
-> 2. **Reference Satellite Handover Covariance Transformation ($T P T^T$)**: Implemented linear ambiguity and covariance propagation across reference satellite switches, preserving 100% of accumulated carrier-phase precision without re-seeding float variances.
-> 3. **Attitude-Aware Receiver Phase Windup**: Supported receiver attitude matrix $R_b^e$ in carrier-phase windup tracking, preventing phase jumps during vehicle turns and maneuvers.
-> 4. **Multi-Constellation Geometry-Free Cycle Slip Detection**: Enabled exact signal wavelengths across GPS, Galileo, GLONASS, and BeiDou in quality-control screening.
-> 5. **Pillar 1: Standalone & Kinematic PPP-AR Engine**: Ingestion of IGS SINEX Observable-Specific Biases (OSB / `.BIA` files) and DCBs, Galileo + GPS multi-constellation support, and height-dependent Saastamoinen hydrostatic tropospheric delay modeling across the Sliding-Window Factor Graph (SWFG) pipeline.
-> 6. **Pillar 2: Multi-Base Network PPK & Virtual Reference Station (VRS)**: Regional atmospheric surface delay gradient estimation (plane fitting) and synthetic zero-baseline VRS reference observable generation in `crates/gneiss-rtk/src/post_process/vrs.rs`.
-> 7. **Pillar 3: 4-Pass GNSS/INS Bidirectional Smoother**: True $SO(3)$ manifold IMU preintegration rotation, Non-Holonomic Constraints (NHC), and Zero Velocity Updates (ZUPT).
-> 8. **Pillar 4: Physical Geodesy**: IERS 2010 11-constituent Ocean Tide Loading (OTL) harmonic convolution and Solid Earth Tide elastic deformation.
-> 9. **Quality & Ergonomics**: Full zero-warning standard across all crates (`cargo clippy --workspace --all-targets -- -D warnings`), 328+ passing unit and integration tests, and 0 `unwrap()` in production code.
+> 1. **Parallelization & Base Synchronization (>200× Speedup)**: Synchronized Sliding-Window Factor Graph (SWFG) to base station epochs with continuous 100Hz IMU preintegration, and parallelized forward and backward passes using `rayon::join`. The 12,399-epoch (10Hz) Odaiba urban canyon run dropped from >33 minutes to **5.8 seconds**, with $p95$ error dropping from $71.4\text{ m}$ to **$6.43\text{ m}$** (91% reduction).
+> 2. **Exact Kalman Integer Conditioning (`condition_state_on_integers`)**: Implemented conditional state and covariance updating on fixed integer ambiguities ($\hat{x}_{|N} = \hat{x} - P_{xa} P_{aa}^{-1} (a - N)$, $P_{|N} = P - P_{xa} P_{aa}^{-1} P_{ax}$) with tight ambiguity covariance constraints ($10^{-4}\text{ cycles}^2$), eliminating continuous-float amnesia. NGS geodetic baseline achieved **100% fixed, p50 = 4 mm, p95 = 14 mm**.
+> 3. **Kinematic Rover PPK Sub-50cm p95 Accuracy & Fix Rate Recovery**: Discarded corrupting wide-lane Melbourne-Wübbena vetoes on short (<15km) baselines and prevented the bidirectional combiner from demoting verified integer fixes when the float reverse pass diverges. Kinematic rover achieved **p50 = 0.101m** ($10.1\text{ cm}$), **p95 = 0.493m** ($< 50\text{ cm}$), with fix rate reaching **77.7%**.
+> 4. **Reference Satellite Handover Covariance Transformation ($T P T^T$)**: Implemented linear ambiguity and covariance propagation across reference satellite switches, preserving 100% of accumulated carrier-phase precision without re-seeding float variances.
+> 5. **Attitude-Aware Receiver Phase Windup**: Supported receiver attitude matrix $R_b^e$ in carrier-phase windup tracking, preventing phase jumps during vehicle turns and maneuvers.
+> 6. **Multi-Constellation Geometry-Free Cycle Slip Detection**: Enabled exact signal wavelengths across GPS, Galileo, GLONASS, and BeiDou in quality-control screening.
+> 7. **Pillar 1: Standalone & Kinematic PPP-AR Engine**: Ingestion of IGS SINEX Observable-Specific Biases (OSB / `.BIA` files) and DCBs, Galileo + GPS multi-constellation support, and height-dependent Saastamoinen hydrostatic tropospheric delay modeling across the SWFG pipeline.
+> 8. **Pillar 2: Multi-Base Network PPK & Virtual Reference Station (VRS)**: Regional atmospheric surface delay gradient estimation (plane fitting) and synthetic zero-baseline VRS reference observable generation in `crates/gneiss-rtk/src/post_process/vrs.rs`.
+> 9. **Pillar 3: 4-Pass GNSS/INS Bidirectional Smoother**: True $SO(3)$ manifold IMU preintegration rotation, Non-Holonomic Constraints (NHC), and Zero Velocity Updates (ZUPT).
+> 10. **Pillar 4: Physical Geodesy**: IERS 2010 11-constituent Ocean Tide Loading (OTL) harmonic convolution and Solid Earth Tide elastic deformation.
+> 11. **Quality & Ergonomics**: Full zero-warning standard across all crates (`cargo clippy --workspace --all-targets -- -D warnings`), 329 passing unit and integration tests, and 0 `unwrap()` in production code.
 
 ## Executive Summary
 
