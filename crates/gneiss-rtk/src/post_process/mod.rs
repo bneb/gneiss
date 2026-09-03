@@ -121,6 +121,54 @@ pub struct ReceiverPcvPair {
     pub base: std::sync::Arc<gneiss_parsers::receiver_antenna::ReceiverAntenna>,
 }
 
+struct FilterDataset<'a> {
+    config: &'a EngineConfig,
+    ephemerides: &'a [Ephemeris],
+    klob: Option<([f64; 4], [f64; 4])>,
+    rover_epochs: &'a [EpochObs],
+    base_epochs: Option<&'a [EpochObs]>,
+    base_pos: Option<Vector3<f64>>,
+    imu_samples: Option<&'a [ImuSample]>,
+}
+
+fn run_filter_passes(
+    d: &FilterDataset<'_>,
+    options: &PostProcessOptions,
+) -> (Vec<iekf_pass::FilteredEpoch>, std::collections::BTreeMap<u64, iekf_pass::FilteredEpoch>) {
+    if options.enable_bidirectional {
+        let bwd_init_pos = d.rover_epochs.last()
+            .and_then(|e| crate::swfg::engine::epoch::compute_spp_seeding(e, d.ephemerides))
+            .or(options.initial_rover_position);
+        rayon::join(
+            || forward::run_forward_pass(
+                d.config, d.ephemerides, d.klob, d.rover_epochs, d.base_epochs, d.base_pos, d.imu_samples,
+                options.initial_rover_position, options.q_accel, options.dynamics,
+                options.widelane_ar, options.tropo_gradients,
+                options.network_sat_upd.clone(), options.receiver_pcv.clone(),
+                options.enable_glonass, options.precise_orbits.clone(),
+                options.precise_clocks.clone(), options.sinex_bias.clone(),
+            ),
+            || backward::run_backward_pass(
+                d.config, d.ephemerides, d.klob, d.rover_epochs, d.base_epochs, d.base_pos, d.imu_samples,
+                bwd_init_pos, options.q_accel, options.dynamics,
+                options.widelane_ar, options.tropo_gradients,
+                options.network_sat_upd.clone(), options.receiver_pcv.clone(),
+                options.enable_glonass,
+            ),
+        )
+    } else {
+        let fwd = forward::run_forward_pass(
+            d.config, d.ephemerides, d.klob, d.rover_epochs, d.base_epochs, d.base_pos, d.imu_samples,
+            options.initial_rover_position, options.q_accel, options.dynamics,
+            options.widelane_ar, options.tropo_gradients,
+            options.network_sat_upd.clone(), options.receiver_pcv.clone(),
+            options.enable_glonass, options.precise_orbits.clone(),
+            options.precise_clocks.clone(), options.sinex_bias.clone(),
+        );
+        (fwd, std::collections::BTreeMap::new())
+    }
+}
+
 /// Execute the complete offline post-processing pipeline.
 pub fn execute_post_process(
     config: &EngineConfig,
@@ -137,35 +185,16 @@ pub fn execute_post_process(
     // Pass 1: Screening & Quality Control
     let screening = screening::screen_dataset(rover_epochs, base_epochs, options.base_position);
     let base_pos = options.base_position.or(screening.refined_base_pos);
-
     let klob = match (options.klobuchar_alpha, options.klobuchar_beta) {
         (Some(a), Some(b)) => Some((a, b)),
         _ => None,
     };
 
-    // Pass 2: Forward Pass
-    let forward_traj = forward::run_forward_pass(
-        config, ephemerides, klob, rover_epochs, base_epochs, base_pos, imu_samples, options.initial_rover_position, options.q_accel, options.dynamics, options.widelane_ar, options.tropo_gradients,
-        options.network_sat_upd.clone(),
-        options.receiver_pcv.clone(),
-        options.enable_glonass,
-        options.precise_orbits.clone(),
-        options.precise_clocks.clone(),
-        options.sinex_bias.clone(),
-    );
-
-    // Pass 3: Backward Pass (if enabled)
-    let backward_map = if options.enable_bidirectional {
-        let initial_rover_pos = forward_traj.last().map(|e| e.position_ecef);
-        backward::run_backward_pass(
-            config, ephemerides, klob, rover_epochs, base_epochs, base_pos, imu_samples, initial_rover_pos, options.q_accel, options.dynamics, options.widelane_ar, options.tropo_gradients,
-            options.network_sat_upd.clone(),
-            options.receiver_pcv.clone(),
-            options.enable_glonass,
-        )
-    } else {
-        std::collections::BTreeMap::new()
+    // Pass 2 & 3: Forward and Backward Passes (Parallelized via rayon::join)
+    let dataset = FilterDataset {
+        config, ephemerides, klob, rover_epochs, base_epochs, base_pos, imu_samples,
     };
+    let (forward_traj, backward_map) = run_filter_passes(&dataset, options);
 
     // Pass 4: Optimal Bidirectional Fusion
     let smoothed_traj = combiner::combine_trajectories(
