@@ -13,7 +13,7 @@ use crate::swfg::variables::{VariableId, VariableValues};
 ///
 /// Each implementation is responsible for computing its own residual,
 /// Jacobian, and information matrix from the variable values.
-pub trait Factor: std::fmt::Debug {
+pub trait Factor: std::fmt::Debug + Send + Sync {
     /// The variables this factor connects to, in order.
     /// The order must match the column order in the Jacobian:
     ///   J = [∂r/∂v_0, ∂r/∂v_1, ..., ∂r/∂v_k]

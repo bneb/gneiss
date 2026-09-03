@@ -2,7 +2,7 @@ pub mod normal_eq;
 #[cfg(test)]
 mod tests;
 
-use normal_eq::{accumulate_factor_normal_equations, solve_linear_system};
+use normal_eq::{accumulate_factor_normal_equations, accumulate_factors_parallel, solve_linear_system};
 use nalgebra::{DMatrix, DVector};
 
 use crate::swfg::config::EngineConfig;
@@ -234,10 +234,8 @@ impl SlidingWindowSolver {
         let mut jtr = DVector::zeros(total_dim);
         let mut total_error = 0.0_f64;
 
-        // Accumulate from factors
-        for factor in &self.graph.factors {
-            total_error += accumulate_factor_normal_equations(factor.as_ref(), values, &mut jtj, &mut jtr);
-        }
+        // Accumulate from factors (parallelized when >= 8 factors)
+        total_error += accumulate_factors_parallel(&self.graph.factors, values, &mut jtj, &mut jtr);
 
         // Add marginal prior if present.  The prior's Hessian and gradient
         // are in the subspace of kept variables — we expand them to the
