@@ -102,6 +102,52 @@ impl SepLimits {
     }
 }
 
+fn select_fused_estimate(
+    fwd: &FilteredEpoch,
+    bwd: &FilteredEpoch,
+    sep: f64,
+    limits: &SepLimits,
+    strict: bool,
+) -> (Vector3<f64>, Matrix3<f64>, u8) {
+    let (pos, cov, mut q) = if fwd.is_fixed && bwd.is_fixed {
+        if sep < limits.both_fixed_fuse_m {
+            fuse_covariances(fwd, bwd, 1)
+        } else if fwd.cov_position.trace() <= bwd.cov_position.trace() {
+            (fwd.position_ecef, fwd.cov_position, 1)
+        } else {
+            (bwd.position_ecef, bwd.cov_position, 1)
+        }
+    } else if fwd.is_fixed && !bwd.is_fixed {
+        (fwd.position_ecef, fwd.cov_position, 1)
+    } else if bwd.is_fixed && !fwd.is_fixed {
+        (bwd.position_ecef, bwd.cov_position, 1)
+    } else {
+        let q_merged = 2.max(fwd.quality.min(bwd.quality));
+        if sep < 10.0 {
+            fuse_covariances(fwd, bwd, q_merged)
+        } else if fwd.cov_position.trace() <= bwd.cov_position.trace() {
+            (fwd.position_ecef, fwd.cov_position, q_merged)
+        } else {
+            (bwd.position_ecef, bwd.cov_position, q_merged)
+        }
+    };
+    let both_fixed = fwd.is_fixed && bwd.is_fixed;
+    let limit_m = if both_fixed { limits.strict_m } else { limits.strict_m.max(2.0) };
+    if strict && sep > limit_m && q == 1 {
+        q = 2;
+    }
+    (pos, cov, q)
+}
+
+fn fused_velocity(vf: Option<Vector3<f64>>, vb: Option<Vector3<f64>>) -> Option<Vector3<f64>> {
+    match (vf, vb) {
+        (Some(f), Some(b)) => Some(0.5 * f + 0.5 * b),
+        (Some(f), None) => Some(f),
+        (None, Some(b)) => Some(b),
+        (None, None) => None,
+    }
+}
+
 /// Helper to fuse forward and backward estimates for a single epoch.
 fn combine_bidirectional_epoch(
     fwd: &FilteredEpoch,
@@ -111,51 +157,13 @@ fn combine_bidirectional_epoch(
 ) -> SmoothedEpoch {
     let sep = (fwd.position_ecef - bwd.position_ecef).norm();
     let limits = SepLimits::for_profile(prof, fwd, bwd);
-
-    let (pos, cov, mut q) = if fwd.is_fixed && !bwd.is_fixed {
-        (fwd.position_ecef, fwd.cov_position, 1)
-    } else if bwd.is_fixed && !fwd.is_fixed {
-        (bwd.position_ecef, bwd.cov_position, 1)
-    } else if fwd.is_fixed && bwd.is_fixed {
-        if sep < limits.both_fixed_fuse_m {
-            fuse_covariances(fwd, bwd, 1)
-        } else if fwd.cov_position.trace() <= bwd.cov_position.trace() {
-            (fwd.position_ecef, fwd.cov_position, 1)
-        } else {
-            (bwd.position_ecef, bwd.cov_position, 1)
-        }
-    } else {
-        let q_merged = fwd.quality.min(bwd.quality);
-        if sep < 10.0 {
-            fuse_covariances(fwd, bwd, q_merged)
-        } else if fwd.cov_position.trace() <= bwd.cov_position.trace() {
-            (fwd.position_ecef, fwd.cov_position, q_merged)
-        } else {
-            (bwd.position_ecef, bwd.cov_position, q_merged)
-        }
-    };
-
-    // Long-baseline honesty: when both passes claim fixed integers but disagree beyond
-    // the profile threshold, neither can be trusted as fixed.
-    // When only one pass is fixed, allow the fixed solution unless gross divergence (>2.0m).
-    let both_fixed = fwd.is_fixed && bwd.is_fixed;
-    let limit_m = if both_fixed { limits.strict_m } else { limits.strict_m.max(2.0) };
-    if strict && sep > limit_m && q == 1 {
-        q = 2;
-    }
-
+    let (pos, cov, q) = select_fused_estimate(fwd, bwd, sep, &limits, strict);
     let (std_e, std_n, std_u) = gneiss_core::coords::ecef_cov_to_enu_std(pos, cov);
-    let vel = match (fwd.velocity_ecef, bwd.velocity_ecef) {
-        (Some(vf), Some(vb)) => Some(0.5 * vf + 0.5 * vb),
-        (Some(vf), None) => Some(vf),
-        (None, Some(vb)) => Some(vb),
-        (None, None) => None,
-    };
 
     SmoothedEpoch {
         time: fwd.time,
         position_ecef: pos,
-        velocity_ecef: vel,
+        velocity_ecef: fused_velocity(fwd.velocity_ecef, bwd.velocity_ecef),
         attitude: None,
         cov_position: cov,
         std_east: std_e,

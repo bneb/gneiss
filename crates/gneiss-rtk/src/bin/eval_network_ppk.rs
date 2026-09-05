@@ -185,16 +185,14 @@ fn collect_errors(traj: &[SmoothedEpoch], truth: &Truth) -> (Vec<f64>, Vec<f64>,
         if let Some(&t) = truth.get(&tow) {
             let t = truth_in_solution_frame(t, 2025.5);
             let h = horizontal_error(ep.position_ecef, t);
-            if h < 100.0 {
-                h_errs.push(h);
-                d3_errs.push((ep.position_ecef - t).norm());
-                up_errs.push(vertical_error(ep.position_ecef, t));
-                if ep.quality == 1 {
-                    if h > 0.30 {
-                        wrong_tows.push(tow);
-                    }
-                    fixed_errs.push(h);
+            h_errs.push(h);
+            d3_errs.push((ep.position_ecef - t).norm());
+            up_errs.push(vertical_error(ep.position_ecef, t));
+            if ep.quality == 1 {
+                if h > 0.30 {
+                    wrong_tows.push(tow);
                 }
+                fixed_errs.push(h);
             }
         }
     }
@@ -334,7 +332,7 @@ fn run_pass(
             }
         }
     }
-    let stats = print_stats(&format!("{} RTK [{}] ({:.1} km)", label, base.id, base.baseline_km), h, d3, up_errs, fix, traj.len());
+    let stats = print_stats(&format!("{} RTK [{}] ({:.1} km)", label, base.id, base.baseline_km), h, d3, up_errs, fix, rover.len());
     print_fixed_stats(label, fixed_errs);
     (stats, traj)
 }

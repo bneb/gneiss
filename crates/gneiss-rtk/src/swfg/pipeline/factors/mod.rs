@@ -161,7 +161,8 @@ impl Factor for CarrierPhaseFactor {
                 let lambda2 = gneiss_core::constants::SPEED_OF_LIGHT_M_S / self.obs.f2.max(1.0);
                 let cp1_m = self.obs.cp_l1.unwrap_or(0.0) * lambda;
                 let cp2_m = cp2_cycles * lambda2;
-                let cp_if_m = (gamma * cp1_m - cp2_m) / (gamma - 1.0) - self.windup_m;
+                let windup_if_m = self.windup_m * (self.obs.f1 / (self.obs.f1 + self.obs.f2.max(1.0)));
+                let cp_if_m = (gamma * cp1_m - cp2_m) / (gamma - 1.0) - windup_if_m;
                 let predicted = geometric_range
                     - self.obs.sat_clock_m
                     + rx_clk

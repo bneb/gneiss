@@ -201,6 +201,7 @@ fn compute_heights(pos: Vector3<f64>, geoid: Option<&GeoidGrid>) -> (f64, f64, f
 }
 
 /// Exports photogrammetry camera event records to CSV format.
+#[cfg(test)]
 pub fn export_camera_events(
     events: &[gneiss_rtk::events::CameraEventRecord],
     output_path: &Path,
@@ -289,5 +290,23 @@ mod tests {
         assert!(res.is_ok());
         let content = std::fs::read_to_string(tmp.path()).expect("read");
         assert!(content.contains("345600.000"));
+    }
+
+    #[test]
+    fn test_export_camera_events() {
+        let tmp = NamedTempFile::new().expect("tempfile");
+        let record = gneiss_rtk::events::CameraEventRecord {
+            event_id: 1,
+            time_gpst_s: 345600.0,
+            pos_ecef: [-1283433.0, -4713073.0, 4090105.0],
+            lat_deg: 35.0,
+            lon_deg: -115.0,
+            height_m: 500.0,
+            std_enu: [0.01, 0.01, 0.02],
+        };
+        let res = export_camera_events(&[record], tmp.path());
+        assert!(res.is_ok());
+        let content = std::fs::read_to_string(tmp.path()).expect("read");
+        assert!(content.contains("Camera Center Positions"));
     }
 }

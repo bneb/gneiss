@@ -2,7 +2,7 @@
 
 # Sprint Plan v11 — Merged Architecture
 
-**Sources**: Dellaert/Teunissen/Humphreys/Molteno/Dampf/Bisnath conference + type-state/Forster/AR refinement
+**Topic**: Merged Architecture — Factor Graph formulation, type-state design, and IMU preintegration
 **Status**: Sprint 1 executing
 
 ---

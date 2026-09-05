@@ -1,4 +1,4 @@
-//! Benchmark evaluation of Qinertia-grade 4-pass RTK/PPK post-processing engine.
+//! Benchmark evaluation of bidirectional RTK/PPK post-processing engine.
 //!
 //! Evaluates forward-only RTK vs 4-pass bidirectional smoothed PPK on real datasets.
 //!
@@ -180,10 +180,8 @@ fn collect_trajectory_stats(
         if let Some(&t) = truth.get(&tow) {
             let h = compute_horizontal_error(ep.position_ecef, t);
             let d3 = compute_3d_error(ep.position_ecef, t);
-            if h < 100.0 {
-                h_errs.push(h);
-                d3_errs.push(d3);
-            }
+            h_errs.push(h);
+            d3_errs.push(d3);
         }
     }
     (h_errs, d3_errs, fix_count)
@@ -252,13 +250,13 @@ fn evaluate_dataset_spec(spec: &DatasetSpec) -> String {
     let fwd_opt = make_post_process_options(spec, base_pos, rover_init_pos, klobuchar.as_ref(), false);
     if let Ok(fwd_res) = execute_post_process(&config, &ephemerides, selected_rover, Some(&base_epochs), imu_samples.as_deref(), &fwd_opt) {
         let (h, d3, fix) = collect_trajectory_stats(&fwd_res.trajectory, &truth);
-        format_stats(&mut out, "Forward RTK Solution", h, d3, fix, fwd_res.trajectory.len());
+        format_stats(&mut out, "Forward RTK Solution", h, d3, fix, selected_rover.len());
     }
 
     let smooth_opt = make_post_process_options(spec, base_pos, rover_init_pos, klobuchar.as_ref(), true);
     if let Ok(smooth_res) = execute_post_process(&config, &ephemerides, selected_rover, Some(&base_epochs), imu_samples.as_deref(), &smooth_opt) {
         let (h, d3, fix) = collect_trajectory_stats(&smooth_res.trajectory, &truth);
-        format_stats(&mut out, "Qinertia-Grade Smoothed PPK Solution", h, d3, fix, smooth_res.trajectory.len());
+        format_stats(&mut out, "Bidirectional Smoothed PPK Solution", h, d3, fix, selected_rover.len());
     }
 
     out

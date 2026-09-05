@@ -3,8 +3,9 @@
 > **Strategic Achievement (2026-08-31 / 2026-09-05)**:
 > 1. **Multi-Constellation Separation & Exact Satellite ANTEX PCO Integration**: Resolved cross-constellation ambiguity and tracking collisions by keying all SWFG ambiguity variables, cycle-slip trackers, and windup states by `(constellation_id, satellite)`. Wired exact frequency-dependent satellite Phase Center Offsets (PCO) from IGS ANTEX (`igs14.atx`) with ionosphere-free dual-frequency synthesis ($\mathbf{PCO}_{IF} = \frac{\gamma \mathbf{PCO}_1 - \mathbf{PCO}_2}{\gamma - 1}$), eliminating meter-scale nadir and Sun-pointing geometric distortions.
 > 2. **Real-Station Float PPP Benchmark Convergence**: Verified standalone float PPP convergence across multiple real-world IGS geodetic tracking stations:
->    - **WTZR (Wettzell, Germany)**: Dual-frequency GPS+Galileo 600-epoch standalone float PPP converged from raw broadcast initial position to **$p50 = 0.715\text{ m}$** horizontal, with final vertical error converging to $< 1.0\text{ m}$ and test passing.
->    - **ALIC (Alice Springs, Australia)**: Multi-hour float PPP recovered from a 3-meter perturbed seed coordinate down to **$17\text{ cm}$** final horizontal error ($p50 = 1.025\text{ m}$ across the convergence arc) with test passing.
+>    - **WTZR (Wettzell, Germany)**: Dual-frequency GPS+Galileo 600-epoch standalone float PPP converged from a 3-meter perturbed initial seed down to a minimum horizontal error of **$9.3\text{ cm}$**, final vertical error of **$22.5\text{ cm}$**, and arc **$p50 = 0.762\text{ m}$**.
+>    - **ALIC (Alice Springs, Australia)**: Multi-hour float PPP recovered from a 3-meter perturbed seed coordinate down to **$15.7\text{ cm}$** final horizontal error ($p50 = 1.333\text{ m}$ across the convergence arc) with test passing.
+>    - *Note on Commercial Tier-1 Positioning*: Current Gneiss standalone PPP achieves decimeter-level float tracking ($15\text{--}75\text{ cm}$). Full Tier-1 commercial survey accuracy ($1\text{--}3\text{ cm}$ static RMS) requires integer PPP-AR with narrow-lane fractional phase bias resolution.
 > 3. **Parallelization & Base Synchronization (>200× Speedup)**: Synchronized Sliding-Window Factor Graph (SWFG) to base station epochs with continuous 100Hz IMU preintegration, and parallelized forward and backward passes using `rayon::join`. The 12,399-epoch (10Hz) Odaiba urban canyon run dropped from >33 minutes to **5.8 seconds**, with $p95$ error dropping from $71.4\text{ m}$ to **$6.43\text{ m}$** (91% reduction).
 > 4. **Exact Kalman Integer Conditioning (`condition_state_on_integers`)**: Implemented conditional state and covariance updating on fixed integer ambiguities ($\hat{x}_{|N} = \hat{x} - P_{xa} P_{aa}^{-1} (a - N)$, $P_{|N} = P - P_{xa} P_{aa}^{-1} P_{ax}$) with tight ambiguity covariance constraints ($10^{-4}\text{ cycles}^2$), eliminating continuous-float amnesia. NGS geodetic baseline achieved **100% fixed, p50 = 4 mm, p95 = 14 mm**.
 > 5. **Kinematic Rover PPK Sub-50cm p95 Accuracy & Fix Rate Recovery**: Discarded corrupting wide-lane Melbourne-Wübbena vetoes on short (<15km) baselines and prevented the bidirectional combiner from demoting verified integer fixes when the float reverse pass diverges. Kinematic rover achieved **p50 = 0.101m** ($10.1\text{ cm}$), **p95 = 0.493m** ($< 50\text{ cm}$), with fix rate reaching **77.7%**.
@@ -1121,12 +1122,13 @@ Completed all 10 prioritized synthesis items from `docs/TIER1_ROADMAP.md`:
 8. **Real-World Benchmark Suite & Geodetic Integrity Audit**:
    - Expanded real-world benchmark matrix in `datasets/` with automated guard runners (`docs/BENCHMARK_SUITE.md`).
    - Rigorous geodetic frame & ANTEX phase-center audit confirming zero data leakage (`docs/GEODETIC_AUDIT.md`).
-9. **Verified Regression Guards &    - 740+ workspace unit tests passing, 0 compiler warnings, 0 clippy warnings across all targets.
-    - Full 6-guard regression suite passing cleanly (Datasets A & B, Profiles A, B, C, D).
+9. **Verified Regression Guards & Test Suite**:
+    - 335+ workspace unit and integration tests passing, 0 compiler warnings, 0 clippy warnings across all targets.
+    - Full regression suite passing cleanly (Datasets A & B, Profiles A, B, C, D).
 
 ---
 
-## Sprints 32–36: Extended Real-World Benchmarks & Production Hardening — COMPLETED (2026-08-30)
+## Sprints 32–36: Extended Real-World Benchmarks & Production Hardening (2026-08-30)
 
 1. **Sprint 32: Multi-Profile Real-World Benchmark Hardening & Scintillation Resilience**:
    - Enforced automated regression guards evaluating actual estimator output across 6 real and simulated profiles:
@@ -1139,9 +1141,9 @@ Completed all 10 prioritized synthesis items from `docs/TIER1_ROADMAP.md`:
 2. **Sprint 33: Tightly-Coupled GNSS/INS Field Validation & Urban Dynamics**:
    - Tuned Non-Holonomic Constraints (NHC) and Zero Velocity Updates (ZUPT) in `crates/gneiss-rtk/src/swfg/pipeline/factors/dynamics.rs`.
    - Verified photogrammetric boresight auto-estimation on multi-pass flight lines.
-3. **Sprint 34: Live Hardware-in-the-Loop (HITL), Serial RTCM3/UBX & Edge Execution**:
-   - Supported direct serial port binary streams (`/dev/ttyUSB*`, COM) and RTCM3 MSM decoding.
-   - High-concurrency async NTRIP v1/v2 client with automatic NMEA GGA feedback for VRS networks.
+3. **Sprint 34: Live Streaming RTK & Serial Ingestion (Under Active Development)**:
+   - Initial streaming engine abstractions and RTCM3/NTRIP architecture in development.
+   - Core CLI runner pending integration with serial ports and live networking.
 4. **Sprint 35: Visual GUI Workspace & Telemetry Diagnostics Polish**:
    - Embedded Web diagnostic GUI (`gneiss-cli gui`) with responsive polar skyplot, multi-channel carrier-phase residual charts, and live trajectory overlays.
    - One-click export to KML, GeoJSON, and Applanix SBET trajectory formats directly from UI.

@@ -1,4 +1,4 @@
-//! High-Fidelity Simulation Tests for World-Class Post-Processing RTK/PPK.
+//! Kinematic Simulation Tests for Post-Processing RTK/PPK.
 
 #[cfg(test)]
 mod tests {

@@ -111,7 +111,8 @@ pub fn build_undifferenced_factors(
                     let gamma = (obs.f1 / obs.f2.max(1.0)).powi(2);
                     let pr_if = (gamma * obs.pr_l1 - pr2) / (gamma - 1.0);
                     let lambda2 = gneiss_core::constants::SPEED_OF_LIGHT_M_S / obs.f2.max(1.0);
-                    let cp_if = (gamma * cp_l1 * lambda - cp2 * lambda2) / (gamma - 1.0) - windup_m;
+                    let windup_if = windup_m * (obs.f1 / (obs.f1 + obs.f2.max(1.0)));
+                    let cp_if = (gamma * cp_l1 * lambda - cp2 * lambda2) / (gamma - 1.0) - windup_if;
                     cp_if - pr_if
                 } else {
                     (cp_l1 * lambda - windup_m) - obs.pr_l1

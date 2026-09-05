@@ -40,15 +40,17 @@ pub fn tropo_nmf(params: &TropoParams, pos_llh: Vector3<f64>, el: f64, time: Gps
     }
 
     let hgt = pos_llh.z;
+    let p = params.press_hpa * libm::pow((1.0 - 0.000022557 * hgt).max(0.0), 5.2568);
+    let t = params.temp_k - 0.0065 * hgt;
     let (m_h, m_w) = nmf_impl(pos_llh, el, time);
 
-    let z_dry = 0.0022768 * params.press_hpa
+    let z_dry = 0.0022768 * p
         / (1.0 - 0.00266 * libm::cos(2.0 * pos_llh.x) - 0.00028 * hgt / 1000.0);
 
     let e = 6.108
-        * libm::exp((17.15 * params.temp_k - 4684.0) / (params.temp_k - 38.45))
+        * libm::exp((17.15 * t - 4684.0) / (t - 38.45))
         * params.hum_rel;
-    let z_wet = 0.002277 * (1255.0 / params.temp_k + 0.05) * e;
+    let z_wet = 0.002277 * (1255.0 / t + 0.05) * e;
 
     z_dry * m_h + z_wet * m_w
 }

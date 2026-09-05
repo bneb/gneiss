@@ -228,9 +228,10 @@ fn test_real_rinex_wtzr_float_ppp_convergence() {
         .and_then(|p| p.to_str().and_then(|s| gneiss_rtk::post_process::antenna::station_recv_pco_ecef(&obs_path, s, truth_station)))
         .unwrap_or_else(Vector3::zeros);
     let truth_apc = truth_station + recv_pco;
+    let perturbed_seed = Vector3::new(truth_station.x + 3.0, truth_station.y - 3.0, truth_station.z + 3.0);
 
     let config = EngineConfig::Ppp(gneiss_rtk::swfg::config::PppConfig {
-        initial_position: Some([truth_station.x, truth_station.y, truth_station.z]),
+        initial_position: Some([perturbed_seed.x, perturbed_seed.y, perturbed_seed.z]),
         window_size: 10,
         ..Default::default()
     });
@@ -264,7 +265,7 @@ fn test_real_rinex_wtzr_float_ppp_convergence() {
     let options = PostProcessOptions {
         enable_bidirectional: false,
         base_position: None,
-        initial_rover_position: Some(truth_station),
+        initial_rover_position: Some(perturbed_seed),
         klobuchar_alpha: klob.as_ref().map(|k| k.alpha),
         klobuchar_beta: klob.as_ref().map(|k| k.beta),
         q_accel: None,

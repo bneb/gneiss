@@ -100,7 +100,6 @@ enum Commands {
     },
 
     /// Interpolate camera shutter events for UAV photogrammetry
-    /// Interpolate camera shutter events for UAV photogrammetry
     Events {
         #[arg(short = 't', long, help = "Path to solution trajectory file (.pos)")]
         trajectory: String,
@@ -238,29 +237,11 @@ async fn main() {
 fn run_events_interpolation(
     _traj_path: &str,
     _events_path: &str,
-    output_path: &str,
-    lever_arm_str: Option<String>,
-    delay: f64,
+    _output_path: &str,
+    _lever_arm_str: Option<String>,
+    _delay: f64,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let lever_arm = if let Some(s) = lever_arm_str {
-        let parts: Vec<f64> = s.split(',').filter_map(|p| p.trim().parse().ok()).collect();
-        if parts.len() == 3 {
-            [parts[0], parts[1], parts[2]]
-        } else {
-            [0.0, 0.0, 0.0]
-        }
-    } else {
-        [0.0, 0.0, 0.0]
-    };
-
-    let _config = gneiss_rtk::events::CameraEventConfig {
-        lever_arm_body: lever_arm,
-        shutter_delay_s: delay,
-    };
-
-    export::export_camera_events(&[], Path::new(output_path))?;
-    println!("Exported camera event centers to {}", output_path);
-    Ok(())
+    Err("CLI events interpolation from files is under active development. Use gneiss_rtk::events::CameraEventInterpolator programmatically.".into())
 }
 
 async fn run_batch_mode(

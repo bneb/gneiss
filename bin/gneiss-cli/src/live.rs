@@ -51,9 +51,8 @@ pub async fn run_live_mode(args: LiveArgs) -> Result<(), Box<dyn std::error::Err
     }
 
     let engine = StreamingRtkEngine::new(config, ephems);
-
-    info!("Engine initialized with {} ephemerides. Ready for live epoch stream.", engine.ephemerides_len());
-    Ok(())
+    info!("Engine initialized with {} ephemerides.", engine.ephemerides_len());
+    Err("Live serial and NTRIP streaming runner is under active development. Direct execution from CLI is not yet implemented.".into())
 }
 
 /// Formats a streaming epoch position into a standard NMEA 0183 $GNGGA string.

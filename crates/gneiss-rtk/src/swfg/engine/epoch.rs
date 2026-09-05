@@ -185,6 +185,13 @@ fn sat_antex_freq_codes(
             ("E01", f2)
         }
         gneiss_core::sat::Constellation::Glonass => ("R01", "R02"),
+        gneiss_core::sat::Constellation::Beidou => {
+            let f1 = if ant.frequencies.contains_key("C02") { "C02" } else { "C01" };
+            let f2 = if ant.frequencies.contains_key("C06") { "C06" }
+            else if ant.frequencies.contains_key("C07") { "C07" }
+            else { "C02" };
+            (f1, f2)
+        }
         _ => ("G01", "G02"),
     }
 }
@@ -232,12 +239,17 @@ fn compute_sat_clock_delay(
     let tau = (rx_eff - sat_pos).norm() / gneiss_core::constants::SPEED_OF_LIGHT_M_S;
     let t_tx = time - tau;
     let sat_clock_s = src.position_at(sat, t_tx).map_or(0.0, |(_, c)| c);
-    let t_plus = t_tx + 0.5;
-    let t_minus = t_tx - 0.5;
-    let (sat_p_plus, _) = src.position_at(sat, t_plus).unwrap_or((sat_pos, 0.0));
-    let (sat_p_minus, _) = src.position_at(sat, t_minus).unwrap_or((sat_pos, 0.0));
-    let sat_vel = sat_p_plus - sat_p_minus;
-    let rel_corr = gneiss_geodesy::relativity::periodic_relativistic_range_correction(&sat_pos, &sat_vel);
+    let rel_corr = if src.com_referenced() {
+        let t_plus = t_tx + 0.5;
+        let t_minus = t_tx - 0.5;
+        let (sat_p_plus, _) = src.position_at(sat, t_plus).unwrap_or((sat_pos, 0.0));
+        let (sat_p_minus, _) = src.position_at(sat, t_minus).unwrap_or((sat_pos, 0.0));
+        let sat_vel = sat_p_plus - sat_p_minus;
+        gneiss_geodesy::relativity::periodic_relativistic_range_correction(&sat_pos, &sat_vel)
+    } else {
+        // Broadcast ephemeris clock fit already includes F * e * sqrt(a) * sin(E)
+        0.0
+    };
     let shapiro = gneiss_geodesy::relativity::gravitational_shapiro_delay(&sat_pos, &rx_eff);
     sat_clock_s * gneiss_core::constants::SPEED_OF_LIGHT_M_S + rel_corr - shapiro
 }
@@ -264,8 +276,9 @@ fn compute_tropo_delay(rx_pos: Vector3<f64>, sin_el: f64) -> (f64, f64) {
     let h_m = ref_llh.z.clamp(-1000.0, 10000.0);
     let p_hpa = 1013.25 * (1.0 - 2.2557e-5 * h_m).powi(5);
     let zdry_m = 0.002277 * p_hpa;
+    let m_dry = 1.001 / (0.002001 + sin_el * sin_el).sqrt();
     let m_wet = 1.001 / (0.002001 + sin_el * sin_el).sqrt();
-    (zdry_m * m_wet, m_wet)
+    (zdry_m * m_dry, m_wet)
 }
 
 fn select_sat_bands(sat_obs: &gneiss_core::obs::SatObs) -> (u8, u8, f64, f64) {

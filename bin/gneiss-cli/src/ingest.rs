@@ -9,7 +9,7 @@ use gneiss_parsers::ubx::{parse_rxm_rawx, parse_ubx_frame};
 
 pub type IngestResult = (Vec<EpochObs>, Option<[f64; 3]>);
 
-/// Universal observation reader capable of auto-detecting RINEX, u-blox UBX, and RTCM3.
+/// Observation reader supporting detection of RINEX and u-blox UBX formats.
 pub struct UniversalObsReader;
 
 impl UniversalObsReader {

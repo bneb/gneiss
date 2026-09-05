@@ -1,44 +1,34 @@
-> **Superseded.** This document describes an earlier architecture (pre network-RTK/PPK pivot) and is kept for historical record only. For current status and roadmap, see `docs/PROJECT_STATUS.md` and `docs/NETWORK_RTK_NEXT_STEPS.md`.
+> **Superseded.** This document describes an earlier architecture (pre network-RTK/PPK pivot) and is kept for historical record only. For current status and roadmap, see `docs/PROJECT_STATUS.md` and `docs/TIER1_ROADMAP.md`.
 
-# Sprint Plan v10 — The Conference Edition
+# Historical Architecture Notes: Transition to Sliding Window Factor Graph
 
-**Produced by**: Dellaert, Teunissen, Humphreys, Molteno, Dampf, Bisnath
-**Synthesized for**: Gneiss coding agent
-**Date**: 2026-07-24
-
----
-
-## Opening Remarks — Where We Actually Stand
-
-**Dampf opens with a reality check.** "I've read your codebase. You have a single-epoch IEKF with per-epoch SPP reset. That architecture has a ~5m accuracy floor no matter what you bolt onto it. NovAtel killed that approach in 2004. The fact that you beat RTKLIB on some modes is impressive — RTKLIB has the same architecture. But Qinertia doesn't. Qinertia carries position and ambiguity states across epochs without resetting. Until you do that, nothing else matters."
-
-**Teunissen nods.** "I also read your codebase. Your LAMBDA is correct. Your FFRT thresholds are correct. Your fix rate is 18.9% because your float ambiguity covariance is inflated by the per-epoch SPP reset. Every epoch, position jumps by ~5m, which feeds into the ambiguity update as process noise. The ambiguities never converge. Fix rate is a symptom, not a cause."
-
-**Dellaert draws on the whiteboard.** "What you have is a graphical model where the prior on position is independent at each epoch. What you need is a graphical model where position at epoch k is connected to position at epoch k+1 through a motion model. That's a factor graph. You already have the optimizer — your `estimators/factor_graph` module is correct. You already have the factors — `gnss_factors.rs` has pseudorange, carrier phase, and doppler. What's missing is sliding-window state management and marginalization. That's ~2000 lines of code, not a rewrite."
-
-**Bisnath adds:** "And once you have that, PPP-AR with precise products will get you to 4cm. The IGS final orbit/clock products are free. The CDDIS Earthdata registration is free. The problem isn't data availability — it's that your current architecture can't use the data effectively."
-
-**Humphreys pushes back gently.** "4cm is great for surveyors. But the market for this software is autonomous vehicles and smartphones — low-cost receivers in urban environments. For that market, you need to handle multipath, not just orbit error. Your PR validation gate is a step in the right direction. But the real win is IMU tight coupling — when GNSS drops out under a bridge, the IMU keeps the solution alive. Qinertia's primary value proposition isn't PPP accuracy — it's robustness in challenging environments."
-
-**Molteno, quietly:** "And none of this matters if the configuration is wrong. I've seen production GNSS systems fail because someone set `max_base_age_s` to 0.5 when the base station was 30 seconds away. Your `EngineConfig` has 60 flat fields with no validation. If you're going to redesign this, put the type system to work."
+**Topic**: Architectural analysis of GNSS state estimation: single-epoch filter limitations, factor graph formulation, and multi-epoch carrier tracking.  
+**Date**: 2026-07-24 (Archived)
 
 ---
 
-## Cocktail Hour — Raw, Unsolicited Individual Inputs
+## Technical Context — Architectural Limitations of Single-Epoch Estimation
 
-### Dampf (production firmware, 3 drinks in)
+An analysis of early single-epoch IEKF estimation architectures demonstrates why single-epoch filtering with per-epoch SPP resets has an inherent accuracy floor:
 
-"Here's what actually matters when you ship GNSS software:"
+1. **Covariance Inflation from Position Resets**: Resetting position priors at every epoch injects high process noise (~100 m²) into ambiguity states. This prevents carrier phase ambiguities from converging over time.
+2. **State Persistence Across Epochs**: Carrier-phase ambiguities, slant ionospheric delays, and zenith wet delays are physically continuous over multi-epoch arcs. An optimal estimator carries these states forward across a sliding window rather than treating each epoch as an independent problem.
+3. **Motion Constraints & Dynamic Conditioning**: Connecting successive poses through dynamic motion factors or IMU preintegration provides continuous geometric conditioning even when satellite visibility is degraded.
+
+---
+
+## Technical Design Considerations
+
+### Production API Design
+A robust GNSS estimation engine hides internal intermediate filter representations and exposes a clean, typed interface:
 
 ```rust
-// This is the only function signature your users care about:
 fn process_epoch(
     rover: &EpochObs,
     base: Option<&EpochObs>,
     imu: Option<&[ImuSample]>,
 ) -> Result<PositionSolution, EngineError>;
 
-// And this is all they want in the output:
 struct PositionSolution {
     time: GpsTime,
     ecef: Vector3<f64>,
@@ -48,15 +38,12 @@ struct PositionSolution {
     vpl: f64,
     n_sats: usize,
     fix_ratio: Option<f64>,
-    // That's it. Nothing else. No internal state leakage.
 }
 ```
 
-"Your current API exposes `RtkState` with 40 public fields. That's an abstraction violation. Every field you expose is a field you can never change. Hide the state. Expose the solution. Everything else is internal."
+The processing loop implements graceful degradation: if RTK integer resolution fails, fall back to float; if float fails, fall back to SPP; if SPP fails, coast on IMU.
 
-"Also, your error handling is wrong. GNSS is fundamentally unreliable — satellites go behind buildings, base stations drop out, IMUs drift. Your processing loop must never crash. Not on NaN. Not on empty observations. Not on singular matrices. Every error path must degrade gracefully to the next-best solution mode. If RTK fails, fall back to float. If float fails, fall back to SPP. If SPP fails, coast on IMU. If IMU diverges, output nothing and wait. This is the hierarchy. Every GNSS receiver implements it. Yours doesn't."
-
-### Teunissen (AR, nursing a single scotch)
+### Ambiguity Variance & Fix Rates
 
 "The 18.9% fix rate. Here's why."
 
@@ -68,23 +55,18 @@ struct PositionSolution {
 
 "The multi-epoch factor graph handles this naturally — every variable persists for the duration of the window. But you can also fix it in the IEKF by simply not calling `reset_to_spp` after epoch 1. The SPP prior becomes a one-time initialization, not a per-epoch anchor."
 
-### Humphreys (urban/low-cost, animated)
+### Low-Cost GNSS in Challenging Environments
 
-"Forget survey-grade. The market is u-blox F9P receivers in cars and drones. These receivers have 2-5m code multipath in urban environments. Single-epoch RTK is limited by code multipath, not by your estimation algorithm. Your own 2026-07-03 memo says this: 'AR is correct; float p50=1.5m is measurement-limited.'"
+In urban and cost-constrained applications (such as automotive and UAV navigation), multipath and signal blockage are the dominant error sources. For these environments, high-impact estimation strategies include:
 
-"So why are you spending 80% of your effort on features that only help when measurement quality is already good? IONEX, precise products, GLONASS IFB — these reduce the 5-20cm of residual ionosphere/orbit error. They don't touch the 2-5m of code multipath. For urban positioning, the highest-ROI improvements are:"
+1. **C/N0-based variance scaling**: Measurement variance scales inversely with signal-to-noise ratio.
+2. **Elevation-dependent weighting**: Satellites at lower elevations incur higher multipath and tropospheric residual errors; scaling variance by $1/\sin(\theta)$ is essential.
+3. **Tight IMU Coupling**: Inertial measurements bridge satellite outages and provide geometric constraints that keep the factor graph well-conditioned.
+4. **Robust measurement-domain loss functions**: Huber and Cauchy M-estimators downweight pseudorange and phase outliers.
 
-"1. **C/N0-based variance scaling.** Your measurement variance model uses `pr_base_var = 0.5 m²` for all satellites regardless of signal strength. A satellite at 25 dB-Hz has 10× the noise of one at 45 dB-Hz. Scale variance by C/N0. The SNR-based variance model already exists in `EkfTuningConfig` — use it."
+### Sliding Window Factor Graph Formulation
 
-"2. **Elevation-dependent variance.** Low-elevation satellites have more multipath and more atmospheric error. Scale variance by `1/sin(el)`. Every GNSS receiver does this. Yours doesn't."
-
-"3. **IMU tight coupling.** In urban canyons, you have 2-4 visible satellites on each side of the street. That's not enough for a position fix. The IMU bridges outages and provides the motion constraint that makes the factor graph well-conditioned with partial satellite visibility. This is the single biggest accuracy improvement for urban positioning."
-
-"4. **Robust estimation in the measurement domain, not the position domain.** Your chi-square gating rejects measurements that don't fit the current estimate. But in urban environments, the current estimate might be wrong because it's based on contaminated measurements. Use Huber/Cauchy M-estimation in the factor graph so that outliers are downweighted rather than rejected. You already have this infrastructure in `estimators/factor_graph` — use it for every measurement, not just the EKF fallback."
-
-### Dellaert (factor graphs, at the whiteboard at 11pm)
-
-"Let me show you the variable set. This is the whole design:"
+The factor graph state parameterization across a sliding window of epochs:
 
 ```rust
 /// A variable in the factor graph is identified by (type, satellite, time).
@@ -222,11 +204,11 @@ fn marginalize_oldest_epoch(&mut self) {
 }
 ```
 
-"This is the same technique that iSAM2, GTSAM, and every modern SLAM system uses. For a GNSS-only window with 10 epochs and 20 satellites, the total dimension is ~250 variables × ~3 dim each = ~750 parameters. Marginalizing one epoch takes ~50×50 Cholesky ≈ microseconds. The whole solve-marginalize cycle takes < 10ms on a modern CPU — well within real-time constraints at 10 Hz."
+This sliding window marginalization formulation follows standard smoothing techniques (e.g. iSAM2). For a GNSS-only window with 10 epochs and 20 satellites, the total dimension is ~250 variables (~750 parameters), allowing marginalization updates well within real-time constraints.
 
-### Molteno (Rust API design, over coffee the next morning)
+### Type-Safe Configuration Design
 
-"The biggest source of bugs in your current codebase isn't the math. It's the config. Here's what type-safe configuration looks like:"
+A type-safe configuration system structures parameters by engine mode:
 
 ```rust
 // Config that can't express nonsense.
