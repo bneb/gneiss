@@ -17,8 +17,8 @@ fn solver_creates_epoch_variables() {
 fn solver_ensure_ambiguity_is_idempotent() {
     let config = EngineConfig::Rtk(RtkConfig::default());
     let mut solver = SlidingWindowSolver::new(&config);
-    let id1 = solver.ensure_ambiguity(1, 1, 0);
-    let id2 = solver.ensure_ambiguity(1, 1, 0);
+    let id1 = solver.ensure_ambiguity(0, 1, 1, 0);
+    let id2 = solver.ensure_ambiguity(0, 1, 1, 0);
     assert_eq!(id1, id2, "second call should return existing ambiguity");
     assert_eq!(solver.graph.n_variables(), 1);
 }

@@ -128,9 +128,9 @@ pub fn compute_phase_centre(
 
     // Stage 2: clock-corrected transmit time (one refinement pass — the
     // contraction ratio v_los/c ≈ 1e-5 makes a second pass sub-nanometre).
-    let t_tx0 = GpsTime::new(t_rx.week, t_rx.tow - tau0);
+    let t_tx0 = t_rx - tau0;
     let (_p1, clk1) = src.position_at(sv, t_tx0).ok_or(PipeErr::NoClock)?;
-    let t_tx = GpsTime::new(t_rx.week, t_tx0.tow - clk1);
+    let t_tx = t_tx0 - clk1;
     let tx = TxTimeKnown { t_tx, tau_s: tau0 };
 
     // Stage 3: position at true transmit time.
@@ -171,9 +171,9 @@ pub fn compute_phase_centre_3d(
     let (p0, _clk0) = src.position_at(sv, t_rx).ok_or(PipeErr::NoPosition)?;
     let tau0 = (rx_pos - p0).norm() / SPEED_OF_LIGHT_M_S;
 
-    let t_tx0 = GpsTime::new(t_rx.week, t_rx.tow - tau0);
+    let t_tx0 = t_rx - tau0;
     let (_p1, clk1) = src.position_at(sv, t_tx0).ok_or(PipeErr::NoClock)?;
-    let t_tx = GpsTime::new(t_rx.week, t_tx0.tow - clk1);
+    let t_tx = t_tx0 - clk1;
     let tx = TxTimeKnown { t_tx, tau_s: tau0 };
 
     let (ptx, _) = src.position_at(sv, tx.t_tx).ok_or(PipeErr::NoPosition)?;

@@ -4,6 +4,7 @@ pub mod accumulator;
 pub mod ar_handler;
 pub mod builder;
 pub mod epoch;
+pub mod setup;
 pub mod uduc_builder;
 
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -43,17 +44,18 @@ pub struct SwfgEngine {
     prev_time: Option<GpsTime>,
     current_attitude: Option<nalgebra::UnitQuaternion<f64>>,
     initial_position: Option<Vector3<f64>>,
-    slip_counts: HashMap<u16, u32>,
+    slip_counts: HashMap<(u8, u16), u32>,
     ref_sat_per_constellation: HashMap<u8, u16>,
     elevation_mask_rad: f64,
     mw_accumulator: accumulator::DdPseudorangeAccumulator,
     is_ppp: bool,
     is_kinematic: bool,
     prev_zwd: Option<VariableId>,
-    windup_trackers: HashMap<u16, gneiss_geodesy::windup::PhaseWindupTracker>,
+    windup_trackers: HashMap<(u8, u16), gneiss_geodesy::windup::PhaseWindupTracker>,
     pub precise_orbits: Option<std::sync::Arc<gneiss_parsers::precise_orbit::PreciseOrbit>>,
     pub precise_clocks: Option<std::sync::Arc<gneiss_parsers::rinex_clk::RinexClock>>,
     pub sinex_bias: Option<std::sync::Arc<gneiss_parsers::sinex_bia::SinexBias>>,
+    pub antex_database: Option<std::sync::Arc<gneiss_parsers::antex::AntexDatabase>>,
 }
 
 impl SwfgEngine {
@@ -75,6 +77,7 @@ impl SwfgEngine {
             mw_accumulator: accumulator::DdPseudorangeAccumulator::new(10),
             is_ppp, is_kinematic, prev_zwd: None, windup_trackers: HashMap::new(),
             precise_orbits: None, precise_clocks: None, sinex_bias: None,
+            antex_database: None,
         }
     }
 
@@ -85,6 +88,10 @@ impl SwfgEngine {
 
     pub fn set_sinex_bias(&mut self, bias: std::sync::Arc<gneiss_parsers::sinex_bia::SinexBias>) {
         self.sinex_bias = Some(bias);
+    }
+
+    pub fn set_antex_database(&mut self, antex: std::sync::Arc<gneiss_parsers::antex::AntexDatabase>) {
+        self.antex_database = Some(antex);
     }
 
     fn get_initial_position(&self, rover: &EpochObs) -> Vector3<f64> {
@@ -136,8 +143,14 @@ impl SwfgEngine {
         let prev_pose_id = self.current_pose;
         self.current_pose = Some(pose_id);
 
-        self.setup_imu_and_rel_factors(epoch, pose_id, prev_pose_id, init_pos, &imu_preint);
-        self.setup_priors(epoch, pose_id, prev_pose_id, init_pos, has_imu);
+        setup::setup_imu_and_rel_factors(
+            &mut self.solver, &mut self.current_attitude, epoch, pose_id, prev_pose_id,
+            init_pos, &imu_preint, self.is_ppp, self.is_kinematic,
+        );
+        setup::setup_priors(
+            &mut self.solver, &self.current_attitude, epoch, pose_id, prev_pose_id,
+            init_pos, has_imu,
+        );
         let dt_sec = self.prev_time.map_or(1.0, |t| (rover.time.tow - t.tow).abs());
         let zwd_id = self.setup_zwd(epoch, is_rtk, dt_sec);
 
@@ -184,116 +197,6 @@ impl SwfgEngine {
         }
     }
 
-    fn setup_imu_and_rel_factors(
-        &mut self,
-        epoch: u32,
-        pose_id: VariableId,
-        prev_pose_id: Option<VariableId>,
-        init_pos: Vector3<f64>,
-        imu_preint: &Option<ImuPreintegration>,
-    ) {
-        if imu_preint.is_some() && self.current_attitude.is_none() {
-            let llh = gneiss_core::coords::ecef_to_llh(init_pos);
-            let ned_to_ecef = gneiss_core::coords::ecef_to_ned_matrix(llh).transpose();
-            let rot = nalgebra::Rotation3::from_matrix_unchecked(ned_to_ecef);
-            self.current_attitude = Some(nalgebra::UnitQuaternion::from_rotation_matrix(&rot));
-        }
-        if let (Some(preint), Some(prev_p)) = (imu_preint, prev_pose_id) {
-            self.add_imu_preintegration_factors(epoch, pose_id, prev_p, init_pos, preint);
-            self.current_attitude = self.current_attitude.map(|q| q * preint.dq);
-        } else if let Some(prev_p) = prev_pose_id {
-            if prev_p != pose_id && self.solver.graph.variables.contains_key(&prev_p) {
-                let mut rel_info = nalgebra::DMatrix::zeros(6, 6);
-                let q_pos = if self.is_ppp && !self.is_kinematic { 1.0 / 1e-4 } else { 1.0 / 25.0 };
-                for i in 0..3 { rel_info[(i, i)] = q_pos; }
-                for i in 3..6 { rel_info[(i, i)] = 1.0; }
-                let rel = crate::swfg::factor::RelativePoseFactor { vars: [prev_p, pose_id], information: rel_info };
-                self.solver.graph.add_factor(Box::new(rel));
-            }
-        }
-    }
-
-    fn add_imu_preintegration_factors(
-        &mut self, epoch: u32, pose_id: VariableId, prev_p: VariableId,
-        init_pos: Vector3<f64>, preint: &ImuPreintegration,
-    ) {
-        let vel_i = self.solver.graph.variables.iter()
-            .find(|(_, n)| matches!(n.kind, VariableKind::Velocity { epoch: e } if e == epoch - 1))
-            .map(|(id, _)| *id);
-        let vel_j = self.solver.graph.variables.iter()
-            .find(|(_, n)| matches!(n.kind, VariableKind::Velocity { epoch: e } if e == epoch))
-            .map(|(id, _)| *id);
-        let bias = self.solver.graph.variables.iter()
-            .find(|(_, n)| matches!(n.kind, VariableKind::ImuBias))
-            .map(|(id, _)| *id);
-
-        if let (Some(vi), Some(vj), Some(b)) = (vel_i, vel_j, bias) {
-            let att_i = self.current_attitude.unwrap_or_else(nalgebra::UnitQuaternion::identity);
-            let att_j = att_i * preint.dq;
-            let grav = -9.80665 * init_pos.normalize();
-            let fac = crate::swfg::imu_preintegration::ImuPreintegrationFactor::new(
-                preint.clone(), grav, Vector3::zeros(), Vector3::zeros(),
-                att_i, Vector3::zeros(), Vector3::zeros(),
-                att_j, Vector3::zeros(), Vector3::zeros(),
-                prev_p, vi, pose_id, vj, b,
-            );
-            self.solver.graph.add_factor(Box::new(fac));
-            let nhc = crate::swfg::pipeline::OdometerVelocityFactor::new(
-                pose_id, vj, Vector3::zeros(), Vector3::new(25.0, 0.0025, 0.0025),
-            );
-            self.solver.graph.add_factor(Box::new(nhc));
-            let speed = preint.dp.norm() / preint.dt.max(1e-3);
-            if preint.dt > 0.05 && speed < 0.15 {
-                let zupt = crate::swfg::pipeline::OdometerVelocityFactor::new(
-                    pose_id, vj, Vector3::zeros(), Vector3::new(0.0001, 0.0001, 0.0001),
-                );
-                self.solver.graph.add_factor(Box::new(zupt));
-            }
-        }
-    }
-
-    fn setup_priors(
-        &mut self, epoch: u32, pose_id: VariableId, prev_pose_id: Option<VariableId>,
-        init_pos: Vector3<f64>, has_imu: bool,
-    ) {
-        let rot_axis = if has_imu {
-            self.current_attitude.map(|q| q.scaled_axis()).unwrap_or_else(Vector3::zeros)
-        } else { Vector3::zeros() };
-        if epoch == 0 || prev_pose_id.is_none() || prev_pose_id != Some(pose_id) {
-            self.solver.graph.set_value(pose_id, &[init_pos.x, init_pos.y, init_pos.z, rot_axis.x, rot_axis.y, rot_axis.z]);
-        }
-
-        if epoch == 0 || prev_pose_id.is_none() {
-            let mut prior_info = nalgebra::DMatrix::zeros(6, 6);
-            for i in 0..3 { prior_info[(i, i)] = 1.0 / 100_000.0; }
-            if !has_imu { for i in 3..6 { prior_info[(i, i)] = 1.0; } }
-            let pos_prior = crate::swfg::factor::PriorFactor {
-                variable: pose_id,
-                mu: nalgebra::DVector::from_row_slice(&[init_pos.x, init_pos.y, init_pos.z, 0.0, 0.0, 0.0]),
-                information: prior_info,
-            };
-            self.solver.graph.add_factor(Box::new(pos_prior));
-            if has_imu {
-                if let Some(vel_id) = self.solver.graph.variables.iter()
-                    .find(|(_, n)| matches!(n.kind, VariableKind::Velocity { epoch: e } if e == epoch))
-                    .map(|(id, _)| *id)
-                {
-                    let vprior = crate::swfg::factor::PriorFactor::new(vel_id, nalgebra::DVector::zeros(3), 25.0);
-                    self.solver.graph.add_factor(Box::new(vprior));
-                }
-            }
-        } else if !has_imu && prev_pose_id != Some(pose_id) {
-            let mut att_info = nalgebra::DMatrix::zeros(6, 6);
-            for i in 3..6 { att_info[(i, i)] = 1.0; }
-            let att_prior = crate::swfg::factor::PriorFactor {
-                variable: pose_id,
-                mu: nalgebra::DVector::from_row_slice(&[init_pos.x, init_pos.y, init_pos.z, 0.0, 0.0, 0.0]),
-                information: att_info,
-            };
-            self.solver.graph.add_factor(Box::new(att_prior));
-        }
-    }
-
     fn setup_zwd(&mut self, epoch: u32, is_rtk: bool, dt_sec: f64) -> Option<VariableId> {
         if is_rtk { return None; }
         let id = self.solver.graph.variables.iter()
@@ -318,7 +221,9 @@ impl SwfgEngine {
             let src = crate::estimators::rtk_iekf::satpos::PreciseSrc {
                 orbits, clocks: self.precise_clocks.as_deref(),
             };
-            epoch::extract_raw_observations_with_source(obs, &src, Some(pos), self.sinex_bias.as_deref())
+            epoch::extract_raw_observations_with_source(
+                obs, &src, Some(pos), self.sinex_bias.as_deref(), self.antex_database.as_deref(),
+            )
         } else {
             epoch::extract_raw_observations(obs, &self.ephemerides, Some(pos))
         }

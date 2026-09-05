@@ -50,6 +50,8 @@ fn gated_update_matches_legacy_update_with_unit_scale() {
         lambda: 0.190,
         pr_var_m2: 0.04,
         cp_var_cycles2: 0.0001,
+        pr_ref_var_m2: 0.02,
+        cp_ref_var_cycles2: 0.00005,
         dm_wet_rov: 0.0,
         dgrad_n_rov: 0.0,
         dgrad_e_rov: 0.0,
@@ -93,6 +95,8 @@ fn test_iekf_update_reduces_position_error() {
         lambda: 0.190,
         pr_var_m2: 0.04,
         cp_var_cycles2: 0.0001,
+        pr_ref_var_m2: 0.02,
+        cp_ref_var_cycles2: 0.00005,
         dgrad_n_rov: 0.0,
         dgrad_e_rov: 0.0,
         tide_dd_m: 0.0,
@@ -138,6 +142,8 @@ fn test_zwd_state_tracks_wet_delay_ramp() {
             lambda: l1,
             pr_var_m2: 0.04,
             cp_var_cycles2: 1e-4,
+            pr_ref_var_m2: 0.02,
+            cp_ref_var_cycles2: 0.5e-4,
             dm_wet_rov: *dm,
             dgrad_n_rov: 0.0,
             dgrad_e_rov: 0.0,
@@ -210,6 +216,8 @@ fn if_meas_fixture(
                 lambda: lam,
                 pr_var_m2: 0.04,
                 cp_var_cycles2: 1e-4,
+                pr_ref_var_m2: 0.02,
+                cp_ref_var_cycles2: 0.5e-4,
                 dm_wet_rov: 0.0,
                 dgrad_n_rov: 0.0,
                 dgrad_e_rov: 0.0,
@@ -268,6 +276,8 @@ fn pcv_fixture(dd_pcv_m: f64) -> (RtkState, DoubleDiffMeasurement) {
         lambda: 0.190,
         pr_var_m2: 0.04,
         cp_var_cycles2: 1e-4,
+        pr_ref_var_m2: 0.02,
+        cp_ref_var_cycles2: 0.5e-4,
         dm_wet_rov: 0.0,
         dgrad_n_rov: 0.0,
         dgrad_e_rov: 0.0,
@@ -316,4 +326,44 @@ fn phase_innovation_shifts_exactly_by_dd_pcv_over_lambda() {
         (shift - expected).abs() < 1e-12,
         "shift={shift} expected={expected}"
     );
+}
+
+#[test]
+fn test_correlated_dd_covariance_matrix() {
+    let truth = Vector3::new(100.0, 200.0, 300.0);
+    let mut state = RtkState::new(truth, GpsTime::new(2000, 100.0));
+    let k2 = DoubleDiffKey { constellation_id: 0, sat: 2, ref_sat: 1, freq_band: 1 };
+    let k3 = DoubleDiffKey { constellation_id: 0, sat: 3, ref_sat: 1, freq_band: 1 };
+    state.ensure_ambiguity(k2, 5.0, 100.0);
+    state.ensure_ambiguity(k3, 8.0, 100.0);
+
+    let mk_meas = |key: DoubleDiffKey, dx: f64| DoubleDiffMeasurement {
+        key,
+        dd_pr_m: 10.0,
+        dd_cp_cycles: Some(50.0),
+        sat_pos: truth + Vector3::new(dx, 2e7, 1e7),
+        ref_pos: truth + Vector3::new(0.0, 2.5e7, 1e7),
+        base_pos: truth,
+        lambda: 0.190,
+        pr_var_m2: 0.05,
+        cp_var_cycles2: 0.0002,
+        pr_ref_var_m2: 0.02,
+        cp_ref_var_cycles2: 0.00008,
+        dm_wet_rov: 0.0,
+        dgrad_n_rov: 0.0,
+        dgrad_e_rov: 0.0,
+        tide_dd_m: 0.0,
+        dd_pcv_m: 0.0,
+    };
+    let meas = vec![mk_meas(k2, 1e6), mk_meas(k3, 2e6)];
+    let (_, _, r) = build_measurement_system(&state, &state.to_dvector(), &meas, 1.0);
+
+    assert_eq!(r.nrows(), 4);
+    assert!((r[(0, 2)] - 0.02).abs() < 1e-12, "PR cross-covariance");
+    assert!((r[(2, 0)] - 0.02).abs() < 1e-12, "PR symmetry");
+    assert!((r[(1, 3)] - 0.00008).abs() < 1e-12, "CP cross-covariance");
+    assert!((r[(3, 1)] - 0.00008).abs() < 1e-12, "CP symmetry");
+    assert_eq!(r[(0, 1)], 0.0, "PR-CP cross is zero");
+    assert_eq!(r[(0, 3)], 0.0, "PR-CP cross is zero");
+    assert!(r.cholesky().is_some(), "R must be positive definite");
 }

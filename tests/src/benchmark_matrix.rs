@@ -257,6 +257,10 @@ fn test_real_rinex_wtzr_float_ppp_convergence() {
     println!("Total epochs in WTZR: {}", obs_epochs.len());
     let selected_epochs = &obs_epochs[..obs_epochs.len().min(600)];
 
+    let antex_database = find_dataset_dir("datasets/igs/igs14.atx")
+        .and_then(|p| gneiss_parsers::antex::AntexDatabase::parse(p).ok())
+        .map(std::sync::Arc::new);
+
     let options = PostProcessOptions {
         enable_bidirectional: false,
         base_position: None,
@@ -274,6 +278,7 @@ fn test_real_rinex_wtzr_float_ppp_convergence() {
         precise_orbits,
         precise_clocks,
         sinex_bias: None,
+        antex_database: antex_database.clone(),
     };
 
     let result = execute_post_process(&config, &ephems, selected_epochs, None, None, &options)
@@ -295,7 +300,9 @@ fn test_real_rinex_wtzr_float_ppp_convergence() {
         errs.push(err);
         vert_errs.push(v_err);
     }
-    let p50 = errs[errs.len() / 2];
+    let mut sorted = errs.clone();
+    sorted.sort_by(|a, b| a.total_cmp(b));
+    let p50 = sorted[sorted.len() / 2];
     let final_v_err = *vert_errs.last().unwrap();
     println!("WTZR Real RINEX Float PPP: p50={:.4}m, min={:.4}m, last_horiz={:.4}m, last_vert={:.4}m",
         p50, errs.iter().cloned().fold(f64::INFINITY, f64::min), errs.last().unwrap(), final_v_err);
@@ -360,6 +367,10 @@ fn test_real_rinex_alic_float_ppp_convergence() {
 
     let selected_epochs = &obs_epochs[..obs_epochs.len().min(600)];
 
+    let antex_database = find_dataset_dir("datasets/igs/igs14.atx")
+        .and_then(|p| gneiss_parsers::antex::AntexDatabase::parse(p).ok())
+        .map(std::sync::Arc::new);
+
     let options = PostProcessOptions {
         enable_bidirectional: false,
         base_position: None,
@@ -377,6 +388,7 @@ fn test_real_rinex_alic_float_ppp_convergence() {
         precise_orbits,
         precise_clocks,
         sinex_bias: None,
+        antex_database: antex_database.clone(),
     };
 
     let result = execute_post_process(&config, &ephems, selected_epochs, None, None, &options)
@@ -388,8 +400,37 @@ fn test_real_rinex_alic_float_ppp_convergence() {
         let err = compute_horizontal_error(ep.position_ecef, truth_apc);
         errs.push(err);
     }
-    let p50 = errs[errs.len() / 2];
+    let mut sorted = errs.clone();
+    sorted.sort_by(|a, b| a.total_cmp(b));
+    let p50 = sorted[sorted.len() / 2];
     println!("ALIC Real RINEX Float PPP: p50={:.4}m, min={:.4}m, last={:.4}m",
         p50, errs.iter().cloned().fold(f64::INFINITY, f64::min), errs.last().unwrap());
     assert!(p50 < 1.50, "ALIC float PPP trajectory must recover from 3m perturbed seed to < 1.5m, got {:.4}m", p50);
+}
+
+#[test]
+fn test_diagnostic_sat_pcos() {
+    use gneiss_parsers::antex::AntexDatabase;
+    let path = match find_dataset_dir("datasets/igs") {
+        Some(d) => d.join("igs14.atx"),
+        None => return,
+    };
+    if !path.exists() { return; }
+    let db = AntexDatabase::parse(&path).expect("parse igs14.atx");
+    let t = gneiss_core::time::GpsTime::new(2137, 345600.0);
+
+    let sats = ["G08", "G10", "G15", "G16", "G18", "G20", "G23", "G26", "G27", "E07", "E12", "E14", "E24", "E25", "E26", "E31", "E33"];
+    println!("\n{:<6} {:<16} {:<10} {:<10} {:<10} | {:<10} {:<10} {:<10}", "SAT", "TYPE", "F1_N(X)", "F1_E(Y)", "F1_U(Z)", "F2_N(X)", "F2_E(Y)", "F2_U(Z)");
+    for s in sats {
+        if let Some(ant) = db.find_satellite_gps(s, t) {
+            let f1_code = if s.starts_with('G') { "G01" } else { "E01" };
+            let f2_code = if s.starts_with('G') { "G02" } else { "E05" };
+            let p1 = ant.frequencies.get(f1_code).map_or(nalgebra::Vector3::zeros(), |f| f.pco);
+            let p2 = ant.frequencies.get(f2_code).map_or(nalgebra::Vector3::zeros(), |f| f.pco);
+            println!("{:<6} {:<16} {:<10.2} {:<10.2} {:<10.2} | {:<10.2} {:<10.2} {:<10.2}",
+                s, ant.antenna_type, p1.x, p1.y, p1.z, p2.x, p2.y, p2.z);
+        } else {
+            println!("{:<6} NOT FOUND", s);
+        }
+    }
 }

@@ -251,8 +251,8 @@ mod tests {
     #[test]
     fn extract_ambiguity_state_from_graph() {
         let mut graph = EstimationGraph::new();
-        let amb1 = graph.add_variable(VariableKind::Ambiguity { satellite: 1, frequency: 1, arc: 0 });
-        let amb2 = graph.add_variable(VariableKind::Ambiguity { satellite: 2, frequency: 1, arc: 0 });
+        let amb1 = graph.add_variable(VariableKind::Ambiguity { constellation_id: 0, satellite: 1, frequency: 1, arc: 0 });
+        let amb2 = graph.add_variable(VariableKind::Ambiguity { constellation_id: 0, satellite: 2, frequency: 1, arc: 0 });
         graph.add_variable(VariableKind::Pose { epoch: 0 });
 
         // Set ambiguity values
@@ -284,8 +284,8 @@ mod tests {
     #[test]
     fn inject_fixed_priors_adds_factors() {
         let mut graph = EstimationGraph::new();
-        let amb1 = graph.add_variable(VariableKind::Ambiguity { satellite: 1, frequency: 1, arc: 0 });
-        let amb2 = graph.add_variable(VariableKind::Ambiguity { satellite: 2, frequency: 1, arc: 0 });
+        let amb1 = graph.add_variable(VariableKind::Ambiguity { constellation_id: 0, satellite: 1, frequency: 1, arc: 0 });
+        let amb2 = graph.add_variable(VariableKind::Ambiguity { constellation_id: 0, satellite: 2, frequency: 1, arc: 0 });
         let ids = vec![amb1, amb2];
         let fixed = DVector::from_vec(vec![1.0, -1.0]);
 

@@ -213,6 +213,7 @@ fn make_post_process_options(
         precise_orbits: None,
         precise_clocks: None,
         sinex_bias: None,
+        antex_database: None,
     }
 }
 

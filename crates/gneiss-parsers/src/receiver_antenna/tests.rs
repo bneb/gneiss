@@ -400,9 +400,7 @@
         // SD(zen) = PCV_trm(zen) - PCV_ash(zen); ref sat at 40 deg el ->
         // zen50, SD(zen50) = -8.82 - (-9.18) = +0.36 mm.
         // SD(zen80)=+1.79, SD(zen60)=+0.71, SD(zen30)=-0.20 mm.
-        assert!((d10 - 0.00143).abs() < 1e-4, "d10={:.6}", d10);
-        assert!((d30 - 0.00035).abs() < 1e-4, "d30={:.6}", d30);
-        assert!((d60 - (-0.00056)).abs() < 1e-4, "d60={:.6}", d60);
+        assert!((d10 - 0.00143).abs() < 1e-4 && (d30 - 0.00035).abs() < 1e-4 && (d60 - (-0.00056)).abs() < 1e-4);
         for d in [d10, d30, d60] {
             assert!(d.abs() > 1e-4 && d.abs() < 0.02, "magnitude {d:.6}");
         }
@@ -430,4 +428,70 @@
         let l1 = compute_dd_pcv_correction(&trm, &ash, "G01", els.0, els.1);
         let l2 = compute_dd_pcv_correction(&trm, &ash, "G02", els.0, els.1);
         assert!((l1 - l2).abs() > 1e-4, "L1={:.6} L2={:.6}", l1, l2);
+    }
+
+    #[test]
+    fn test_2d_pcv_bilinear_interpolation() {
+        let mut b = String::new();
+        b.push_str(&ant_line("", "START OF ANTENNA"));
+        b.push_str(&ant_line(&format!("{:<40}", "ANT2D"), "TYPE / SERIAL NO"));
+        b.push_str(&ant_line("    90.0", "DAZI"));
+        b.push_str(&ant_line("     0.0  10.0  10.0", "ZEN1 / ZEN2 / DZEN"));
+        b.push_str(&ant_line("   G01", "START OF FREQUENCY"));
+        b.push_str(&ant_line("      0.00      0.00      0.00", "NORTH / EAST / UP"));
+        b.push_str(&ant_line("   NOAZI    2.50    2.50", ""));
+        for (az, v0, v1) in [(0.0, 1.0, 2.0), (90.0, 3.0, 4.0), (180.0, 5.0, 6.0), (270.0, 7.0, 8.0), (360.0, 1.0, 2.0)] {
+            b.push_str(&ant_line(&format!("   {az:>4.1}    {v0:.2}    {v1:.2}"), ""));
+        }
+        b.push_str(&ant_line("", "END OF FREQUENCY"));
+        b.push_str(&ant_line("", "END OF ANTENNA"));
+
+        let db = db_from(&b);
+        let ant = ReceiverAntenna::from_antex(&db, "ANT2D", "NONE").unwrap();
+
+        // Node exact values
+        assert_eq!(ant.pcv_mm_az_zen("G01", 0.0, 0.0), Some(1.00));
+        assert_eq!(ant.pcv_mm_az_zen("G01", 90.0, 10.0), Some(4.00));
+        // Bilinear interpolation at center: az=45, zen=5
+        // (1.5 + 3.5) / 2 = 2.50 mm
+        let mid = ant.pcv_mm_az_zen("G01", 45.0, 5.0).unwrap();
+        assert!((mid - 2.50).abs() < 1e-4, "mid={mid}");
+
+        // Wrap test: az=315, zen=0 -> halfway between 270 (7.0) and 360 (1.0) = 4.0
+        let wrap = ant.pcv_mm_az_zen("G01", 315.0, 0.0).unwrap();
+        assert!((wrap - 4.00).abs() < 1e-4, "wrap={wrap}");
+    }
+
+    #[test]
+    fn test_compute_dd_pcv_correction_2d_azimuth_effect() {
+        let mut b = String::new();
+        b.push_str(&ant_line("", "START OF ANTENNA"));
+        b.push_str(&ant_line(&format!("{:<40}", "ANT2D_A"), "TYPE / SERIAL NO"));
+        b.push_str(&ant_line("    90.0", "DAZI"));
+        b.push_str(&ant_line("     0.0  90.0  10.0", "ZEN1 / ZEN2 / DZEN"));
+        b.push_str(&ant_line("   G01", "START OF FREQUENCY"));
+        b.push_str(&ant_line("      0.00      0.00      0.00", "NORTH / EAST / UP"));
+        b.push_str(&ant_line("   NOAZI    0.00    0.00    0.00    0.00    0.00", ""));
+        for az in [0.0f64, 90.0, 180.0, 270.0, 360.0] {
+            let m = if (az - 90.0).abs() < 1e-3 || (az - 270.0).abs() < 1e-3 { 2.0 } else { 1.0 };
+            b.push_str(&ant_line(&format!("   {az:>4.1}    0.00    {:.2}    {:.2}", 1.0 * m, 2.0 * m), ""));
+        }
+        b.push_str(&ant_line("", "END OF FREQUENCY"));
+        b.push_str(&ant_line("", "END OF ANTENNA"));
+
+        let db = db_from(&b);
+        let ant_a = ReceiverAntenna::from_antex(&db, "ANT2D_A", "NONE").unwrap();
+
+        // Second antenna has NOAZI only (DAZI = 0)
+        let db_b = db_from(&ramp_block("ANT1D_B", "NONE", 0.5, &[]));
+        let ant_b = ReceiverAntenna::from_antex(&db_b, "ANT1D_B", "NONE").unwrap();
+
+        let (el_s, el_r) = (45f64.to_radians(), 60f64.to_radians());
+        let corr_north = compute_dd_pcv_correction_2d(&ant_a, &ant_b, "G01", 0.0, el_s, 0.0, el_r, 0.0);
+        let corr_east = compute_dd_pcv_correction_2d(&ant_a, &ant_b, "G01", std::f64::consts::FRAC_PI_2, el_s, 0.0, el_r, 0.0);
+        let pi = std::f64::consts::PI;
+        let frac_pi_2 = std::f64::consts::FRAC_PI_2;
+        let corr_head_90 = compute_dd_pcv_correction_2d(&ant_a, &ant_b, "G01", pi, el_s, frac_pi_2, el_r, frac_pi_2);
+        assert!((corr_north - corr_east).abs() > 1e-4, "north={corr_north}, east={corr_east}");
+        assert!((corr_east - corr_head_90).abs() < 1e-6, "east={corr_east}, head_90={corr_head_90}");
     }

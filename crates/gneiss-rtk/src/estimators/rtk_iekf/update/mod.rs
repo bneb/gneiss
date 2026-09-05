@@ -31,6 +31,8 @@ pub struct DoubleDiffMeasurement {
     pub lambda: f64,
     pub pr_var_m2: f64,
     pub cp_var_cycles2: f64,
+    pub pr_ref_var_m2: f64,
+    pub cp_ref_var_cycles2: f64,
     pub dm_wet_rov: f64,
     pub dgrad_n_rov: f64,
     pub dgrad_e_rov: f64,

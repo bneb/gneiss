@@ -5,6 +5,20 @@ use crate::estimators::rtk_iekf::state::RtkState;
 use super::robust::robust_inflate;
 use super::{pcv_corrected_cp, DoubleDiffMeasurement};
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ObsKind {
+    Code,
+    Phase,
+}
+
+struct RowMeta {
+    constellation_id: u8,
+    ref_sat: u16,
+    freq_band: u8,
+    kind: ObsKind,
+    ref_var: f64,
+}
+
 /// Build measurement Jacobians, innovation residuals, and covariance matrix R.
 pub fn build_measurement_system(
     state: &RtkState,
@@ -15,15 +29,19 @@ pub fn build_measurement_system(
     let mut h_rows = Vec::new();
     let mut y_vals = Vec::new();
     let mut r_diag = Vec::new();
+    let mut row_metas = Vec::new();
 
     let cur_pos = Vector3::new(x_current[0], x_current[1], x_current[2]);
     let state_dim = state.dim();
 
     for m in measurements {
-        append_dd_meas_rows(m, cur_pos, state, x_current, state_dim, &mut h_rows, &mut y_vals, &mut r_diag, innov_gate_scale);
+        append_dd_meas_rows(
+            m, cur_pos, state, x_current, state_dim,
+            &mut h_rows, &mut y_vals, &mut r_diag, &mut row_metas, innov_gate_scale,
+        );
     }
 
-    assemble_matrices(h_rows, y_vals, r_diag, state_dim)
+    assemble_matrices(h_rows, y_vals, r_diag, &row_metas, state_dim)
 }
 
 /// Double-difference troposphere delay (Saastamoinen, RTKLIB coefficients).
@@ -53,6 +71,7 @@ fn append_dd_meas_rows(
     h_rows: &mut Vec<DVector<f64>>,
     y_vals: &mut Vec<f64>,
     r_diag: &mut Vec<f64>,
+    row_metas: &mut Vec<RowMeta>,
     innov_gate_scale: f64,
 ) {
     let base_dd = (m.sat_pos - m.base_pos).norm() - (m.ref_pos - m.base_pos).norm();
@@ -104,6 +123,13 @@ fn append_dd_meas_rows(
     let pr_r = m.pr_var_m2.max(0.01);
     y_vals.push(pr_y);
     r_diag.push(robust_inflate(pr_y, pr_r, innov_gate_scale));
+    row_metas.push(RowMeta {
+        constellation_id: m.key.constellation_id,
+        ref_sat: m.key.ref_sat,
+        freq_band: m.key.freq_band,
+        kind: ObsKind::Code,
+        ref_var: m.pr_ref_var_m2,
+    });
 
     if let (Some(cp_obs), Some(amb_idx)) = (pcv_corrected_cp(m), state.get_amb_idx(&m.key)) {
         let amb_val = x_current[amb_idx];
@@ -135,6 +161,13 @@ fn append_dd_meas_rows(
         let cp_r = m.cp_var_cycles2.max(1e-4);
         y_vals.push(cp_y);
         r_diag.push(robust_inflate(cp_y, cp_r, innov_gate_scale));
+        row_metas.push(RowMeta {
+            constellation_id: m.key.constellation_id,
+            ref_sat: m.key.ref_sat,
+            freq_band: m.key.freq_band,
+            kind: ObsKind::Phase,
+            ref_var: m.cp_ref_var_cycles2,
+        });
     }
 }
 
@@ -142,6 +175,7 @@ fn assemble_matrices(
     h_rows: Vec<DVector<f64>>,
     y_vals: Vec<f64>,
     r_diag: Vec<f64>,
+    metas: &[RowMeta],
     state_dim: usize,
 ) -> (DMatrix<f64>, DVector<f64>, DMatrix<f64>) {
     let n_meas = h_rows.len();
@@ -156,5 +190,22 @@ fn assemble_matrices(
         y[i] = y_vals[i];
         r[(i, i)] = r_diag[i];
     }
+    fill_dd_covariances(&mut r, metas);
     (h, y, r)
+}
+
+fn fill_dd_covariances(r: &mut DMatrix<f64>, metas: &[RowMeta]) {
+    for (i, mi) in metas.iter().enumerate() {
+        for (j, mj) in metas.iter().enumerate().skip(i + 1) {
+            let same_group = mi.kind == mj.kind
+                && mi.constellation_id == mj.constellation_id
+                && mi.ref_sat == mj.ref_sat
+                && mi.freq_band == mj.freq_band;
+            if same_group {
+                let cov = mi.ref_var.min(mj.ref_var);
+                r[(i, j)] = cov;
+                r[(j, i)] = cov;
+            }
+        }
+    }
 }

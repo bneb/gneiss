@@ -186,6 +186,7 @@ mod tests {
         let mut amb_node = VariableNode::new(
             amb_id,
             VariableKind::Ambiguity {
+                constellation_id: 0,
                 satellite: 1,
                 frequency: 1,
                 arc: 0,

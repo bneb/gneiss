@@ -142,6 +142,8 @@ mod tests {
             lambda: 0.19,
             pr_var_m2: 1.0,
             cp_var_cycles2: 1.0,
+            pr_ref_var_m2: 0.5,
+            cp_ref_var_cycles2: 0.5,
             dm_wet_rov: 0.0,
             dgrad_n_rov: 0.0,
             dgrad_e_rov: 0.0,

@@ -36,7 +36,7 @@ impl PhaseWindupTracker {
         rx_east: &Vector3<f64>,
         r_body_to_ecef: Option<&nalgebra::Matrix3<f64>>,
     ) -> f64 {
-        let los = sat_pos - rx_pos;
+        let los = rx_pos - sat_pos;
         let rho = vec_norm(&los);
         if rho < 1.0 {
             return self.prev_windup_rad;

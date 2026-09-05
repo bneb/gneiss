@@ -112,6 +112,7 @@ pub struct PostProcessOptions {
     pub precise_orbits: Option<std::sync::Arc<gneiss_parsers::precise_orbit::PreciseOrbit>>,
     pub precise_clocks: Option<std::sync::Arc<gneiss_parsers::rinex_clk::RinexClock>>,
     pub sinex_bias: Option<std::sync::Arc<gneiss_parsers::sinex_bia::SinexBias>>,
+    pub antex_database: Option<std::sync::Arc<gneiss_parsers::antex::AntexDatabase>>,
 }
 
 /// Paired receiver antenna PCV models consumed by the DD engine.
@@ -147,6 +148,7 @@ fn run_filter_passes(
                 options.network_sat_upd.clone(), options.receiver_pcv.clone(),
                 options.enable_glonass, options.precise_orbits.clone(),
                 options.precise_clocks.clone(), options.sinex_bias.clone(),
+                options.antex_database.clone(),
             ),
             || backward::run_backward_pass(
                 d.config, d.ephemerides, d.klob, d.rover_epochs, d.base_epochs, d.base_pos, d.imu_samples,
@@ -164,6 +166,7 @@ fn run_filter_passes(
             options.network_sat_upd.clone(), options.receiver_pcv.clone(),
             options.enable_glonass, options.precise_orbits.clone(),
             options.precise_clocks.clone(), options.sinex_bias.clone(),
+            options.antex_database.clone(),
         );
         (fwd, std::collections::BTreeMap::new())
     }

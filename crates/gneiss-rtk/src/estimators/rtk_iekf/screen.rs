@@ -90,6 +90,8 @@ mod gross_pr_error_tests {
             lambda: 0.190,
             pr_var_m2: 0.04,
             cp_var_cycles2: 0.0001,
+            pr_ref_var_m2: 0.02,
+            cp_ref_var_cycles2: 0.00005,
             dm_wet_rov: 0.0,
             dgrad_n_rov: 0.0,
             dgrad_e_rov: 0.0,

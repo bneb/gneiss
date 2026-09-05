@@ -36,6 +36,7 @@ impl From<IoError> for AntexError {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct AntexDatabase {
     pub antennas: Vec<AntennaPcv>,
     /// Index: antenna_type → position in `antennas` Vec. Built at end of parse.
@@ -153,15 +154,19 @@ impl AntexDatabase {
                     _ => {
                         if let Some(freq) = current_frequency.as_mut() {
                             if let Some(rest) = line.strip_prefix("   NOAZI") {
-                                // NOAZI records extend past the fixed 60-col
-                                // label boundary (up to ~152 chars); parse
-                                // the whole remainder or the grid is
-                                // silently truncated to ~6 nodes.
                                 let values: Vec<f64> = rest
                                     .split_whitespace()
                                     .filter_map(|s| s.parse().ok())
                                     .collect();
                                 freq.noazi = values;
+                            } else if ant.dazi > 0.0 {
+                                let mut tokens = line.split_whitespace();
+                                if let Some(_az) = tokens.next().and_then(|s| s.parse::<f64>().ok()) {
+                                    let row: Vec<f64> = tokens.filter_map(|s| s.parse().ok()).collect();
+                                    if !row.is_empty() {
+                                        freq.azi.get_or_insert_with(Vec::new).push(row);
+                                    }
+                                }
                             }
                         }
                     }
@@ -182,6 +187,13 @@ impl AntexDatabase {
                 if after_from && before_until { Some(a) } else { None }
             })
         })
+    }
+
+    /// Look up satellite calibration by PRN and [`gneiss_core::time::GpsTime`].
+    pub fn find_satellite_gps(&self, prn: &str, time: gneiss_core::time::GpsTime) -> Option<&AntennaPcv> {
+        let unix_s = 315_964_800 + (time.week as i64) * 604_800 + (time.tow as i64);
+        let dt = DateTime::from_timestamp(unix_s, 0)?;
+        self.find_satellite(prn, dt)
     }
 }
 
@@ -445,5 +457,36 @@ mod tests {
         assert_eq!(freq_g01.pco.x, 279.0);
         assert_eq!(freq_g01.pco.y, 0.0);
         assert_eq!(freq_g01.pco.z, 2319.5);
+    }
+
+    #[test]
+    fn test_parse_receiver_azimuth_grid() {
+        let mut content = String::new();
+        content.push_str(&ant_line("", "START OF ANTENNA"));
+        content.push_str(&ant_line(&format!("{:<40}", "RECV_WITH_AZI"), "TYPE / SERIAL NO"));
+        content.push_str(&ant_line("    90.0", "DAZI"));
+        content.push_str(&ant_line("     0.0  10.0  10.0", "ZEN1 / ZEN2 / DZEN"));
+        content.push_str(&ant_line("   G01", "START OF FREQUENCY"));
+        content.push_str(&ant_line("      1.00      2.00      3.00", "NORTH / EAST / UP"));
+        content.push_str(&ant_line("   NOAZI    1.00    2.00", ""));
+        content.push_str(&ant_line("     0.0    1.10    2.10", ""));
+        content.push_str(&ant_line("    90.0    1.20    2.20", ""));
+        content.push_str(&ant_line("   180.0    1.30    2.30", ""));
+        content.push_str(&ant_line("   270.0    1.40    2.40", ""));
+        content.push_str(&ant_line("   360.0    1.10    2.10", ""));
+        content.push_str(&ant_line("", "END OF FREQUENCY"));
+        content.push_str(&ant_line("", "END OF ANTENNA"));
+
+        let path = write_temp_antex(&content);
+        let db = AntexDatabase::parse(&path).unwrap();
+        std::fs::remove_file(&path).ok();
+
+        let freq = &db.antennas[0].frequencies["G01"];
+        assert_eq!(freq.noazi, vec![1.0, 2.0]);
+        let azi = freq.azi.as_ref().expect("azimuth grid should be parsed when present");
+        assert_eq!(azi.len(), 5); // 0, 90, 180, 270, 360
+        assert_eq!(azi[0], vec![1.10, 2.10]);
+        assert_eq!(azi[1], vec![1.20, 2.20]);
+        assert_eq!(azi[4], vec![1.10, 2.10]);
     }
 }

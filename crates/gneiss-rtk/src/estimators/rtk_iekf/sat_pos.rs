@@ -124,9 +124,9 @@ pub fn broadcast_position_for(
 fn compute_signal_sat_pos(s: &SatObs, eph: &Ephemeris, time: gneiss_core::time::GpsTime) -> Vector3<f64> {
     let pr_m = s.get_observable(1).or_else(|| s.get_observable(2)).unwrap_or(20_000_000.0);
     let tau = pr_m / SPEED_OF_LIGHT_M_S;
-    let t_tx = gneiss_core::time::GpsTime::new(time.week, time.tow - tau);
+    let t_tx = time - tau;
     let (_, _, sat_clk_err_rough, _) = eph.position(t_tx);
-    let t_tx_true = gneiss_core::time::GpsTime::new(time.week, t_tx.tow - sat_clk_err_rough);
+    let t_tx_true = t_tx - sat_clk_err_rough;
     let (sat_p, _, _, _) = eph.position(t_tx_true);
 
     let omega_tau = gneiss_core::constants::EARTH_ROTATION_RATE_RAD_S * tau;

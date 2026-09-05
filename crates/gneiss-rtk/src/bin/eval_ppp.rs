@@ -29,6 +29,7 @@ struct PppDatasetSpec {
     truth_file: Option<&'static str>,
     static_truth: Option<Vector3<f64>>,
     max_epochs: usize,
+    is_kinematic: bool,
 }
 
 fn compute_horizontal_error(pos: Vector3<f64>, truth: Vector3<f64>) -> f64 {
@@ -160,21 +161,33 @@ fn evaluate_ppp_dataset(spec: &PppDatasetSpec) {
         Ok(r) => r,
         Err(e) => { eprintln!("Failed to parse obs: {}", e); return; }
     };
-
     let (precise_orbits, precise_clocks, sinex_bias) = load_precise_products(spec.sp3_path, spec.clk_path, spec.bia_path);
     let truth_map = spec.truth_file.map(|f| parse_pos_truth(&dir.join(f))).unwrap_or_default();
 
-    let init_pos = spec.static_truth.or_else(|| {
-        obs_header.approx_position.map(|p| Vector3::new(p[0], p[1], p[2]))
-    }).unwrap_or_else(|| Vector3::new(0.0, 0.0, 0.0));
+    let init_pos = obs_header.approx_position
+        .map(|p| Vector3::new(p[0], p[1], p[2]))
+        .or(spec.static_truth)
+        .unwrap_or_else(|| Vector3::new(0.0, 0.0, 0.0));
 
+    let is_kinematic = spec.is_kinematic;
     let config = EngineConfig::Ppp(gneiss_rtk::swfg::config::PppConfig {
         initial_position: Some([init_pos.x, init_pos.y, init_pos.z]),
         window_size: 10,
+        is_kinematic,
         ..Default::default()
     });
 
-    let selected_epochs = &obs_epochs[..obs_epochs.len().min(spec.max_epochs)];
+    let max_epochs = std::env::var("MAX_EPOCHS")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(spec.max_epochs);
+    let selected_epochs = &obs_epochs[..obs_epochs.len().min(max_epochs)];
+    let antex_path = std::path::Path::new("datasets/igs/igs14.atx");
+    let antex_db = if antex_path.exists() {
+        gneiss_parsers::antex::AntexDatabase::parse(antex_path).ok().map(std::sync::Arc::new)
+    } else {
+        None
+    };
     let options = PostProcessOptions {
         enable_bidirectional: false,
         base_position: None,
@@ -186,12 +199,17 @@ fn evaluate_ppp_dataset(spec: &PppDatasetSpec) {
         tropo_gradients: false,
         network_sat_upd: None,
         receiver_pcv: None,
-        dynamics: Default::default(),
+        dynamics: if is_kinematic {
+            gneiss_rtk::post_process::dynamics::ProcessingDynamics::Kinematic
+        } else {
+            gneiss_rtk::post_process::dynamics::ProcessingDynamics::Static
+        },
         enable_glonass: false,
         continuity_gate: false,
-        precise_orbits,
-        precise_clocks,
-        sinex_bias,
+        precise_orbits: precise_orbits.clone(),
+        precise_clocks: precise_clocks.clone(),
+        sinex_bias: sinex_bias.clone(),
+        antex_database: antex_db.clone(),
     };
 
     let result = match execute_post_process(&config, &ephemerides, selected_epochs, None, None, &options) {
@@ -199,14 +217,86 @@ fn evaluate_ppp_dataset(spec: &PppDatasetSpec) {
         Err(e) => { eprintln!("PPP post-processing failed: {}", e); return; }
     };
 
+    let tide0 = gneiss_geodesy::tides::solid_earth_tide(init_pos, 345600.0, 2137);
+    let tide599 = gneiss_geodesy::tides::solid_earth_tide(init_pos, 363570.0, 2137);
+    println!("SOLID EARTH TIDE at Epoch 0:   [{:.4}, {:.4}, {:.4}], norm={:.4}m", tide0.x, tide0.y, tide0.z, tide0.norm());
+    println!("SOLID EARTH TIDE at Epoch 599: [{:.4}, {:.4}, {:.4}], norm={:.4}m", tide599.x, tide599.y, tide599.z, tide599.norm());
+    let antex_path = std::path::Path::new("datasets/igs/igs14.atx");
+    let recv_pco = if antex_path.exists() {
+        gneiss_rtk::post_process::antenna::station_recv_pco_ecef(
+            &dir.join(spec.obs_file),
+            antex_path.to_str().expect("Valid UTF-8 ANTEX path"),
+            init_pos,
+        ).unwrap_or_else(Vector3::zeros)
+    } else {
+        Vector3::zeros()
+    };
+    if recv_pco.norm() > 0.0 {
+        println!("Receiver PCO (ECEF): [{:.4}, {:.4}, {:.4}], norm={:.4}m", recv_pco.x, recv_pco.y, recv_pco.z, recv_pco.norm());
+        if let Some(st) = spec.static_truth {
+            let apc = st + recv_pco;
+            println!("Truth Monument: [{:.4}, {:.4}, {:.4}]", st.x, st.y, st.z);
+            println!("Truth APC:      [{:.4}, {:.4}, {:.4}]", apc.x, apc.y, apc.z);
+        }
+    }
+    let n_total = result.trajectory.len();
     let mut h_errs = Vec::new();
+    if let Some(truth) = spec.static_truth {
+        for (label, target_ep) in [("Epoch 0", obs_epochs.first()), ("Last Epoch", selected_epochs.last())] {
+            if let Some(ep) = target_ep {
+                if let Some(ref orbits) = precise_orbits {
+                    if let Ok(raw_sats) = gneiss_rtk::swfg::engine::epoch::extract_raw_observations_with_source(
+                        ep,
+                        &gneiss_rtk::estimators::rtk_iekf::satpos::PreciseSrc {
+                            orbits,
+                            clocks: precise_clocks.as_deref(),
+                        },
+                    Some(truth),
+                    sinex_bias.as_deref(),
+                    antex_db.as_deref(),
+                ) {
+                    println!("--- PREFIT RESIDUALS AT TRUTH ({}) ---", label);
+                    for s in &raw_sats {
+                        if let Some(pr2) = s.pr_l2 {
+                            let gamma = (s.f1 / s.f2).powi(2);
+                            let pr_if = (gamma * s.pr_l1 - pr2) / (gamma - 1.0);
+                            let range = (s.sat_pos_ecef - truth).norm();
+                            let modeled = range - s.sat_clock_m + s.tropo_dry_m;
+                            let res = pr_if - modeled;
+                            let cp_res_str = if let (Some(cp1), Some(cp2)) = (s.cp_l1, s.cp_l2) {
+                                let l1 = gneiss_core::constants::SPEED_OF_LIGHT_M_S / s.f1;
+                                let l2 = gneiss_core::constants::SPEED_OF_LIGHT_M_S / s.f2;
+                                let cp_if = (gamma * cp1 * l1 - cp2 * l2) / (gamma - 1.0);
+                                format!("{:8.3}m", cp_if - modeled)
+                            } else {
+                                "     N/A".to_string()
+                            };
+                            let (el_deg, az_deg) = (s.elevation_rad.to_degrees(), s.azimuth_rad.to_degrees());
+                            println!("Sat c={} p={:2}: el={:4.1} az={:5.1} | pr_res={:8.3}m  cp_res={}",
+                                s.constellation_id, s.satellite, el_deg, az_deg, res, cp_res_str);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    }
     let mut d3_errs = Vec::new();
-    for ep in &result.trajectory {
+    for (i, ep) in result.trajectory.iter().enumerate() {
         let tow = ep.time.tow.round() as u32;
         let truth_opt = spec.static_truth.or_else(|| truth_map.get(&tow).copied());
         if let Some(truth) = truth_opt {
-            h_errs.push(compute_horizontal_error(ep.position_ecef, truth));
-            d3_errs.push(compute_3d_error(ep.position_ecef, truth));
+            let h = compute_horizontal_error(ep.position_ecef, truth);
+            let d3 = compute_3d_error(ep.position_ecef, truth);
+            if i < 3 || i + 3 >= n_total {
+                println!("Epoch {} (TOW={}): sol=[{:.3}, {:.3}, {:.3}], truth=[{:.3}, {:.3}, {:.3}], diff=[{:.3}, {:.3}, {:.3}], h={:.3}m, 3D={:.3}m",
+                    i, tow, ep.position_ecef.x, ep.position_ecef.y, ep.position_ecef.z,
+                    truth.x, truth.y, truth.z,
+                    ep.position_ecef.x - truth.x, ep.position_ecef.y - truth.y, ep.position_ecef.z - truth.z,
+                    h, d3);
+            }
+            h_errs.push(h);
+            d3_errs.push(d3);
         }
     }
 
@@ -225,6 +315,8 @@ fn main() {
     println!("Gneiss Standalone & Kinematic PPP Evaluation Harness");
     println!("========================================================");
 
+    let only = std::env::var("PPP_ONLY").ok();
+
     // 1. Wettzell Geodetic Observatory (WTZR, Germany) - 5 Hours
     let wtzr_spec = PppDatasetSpec {
         name: "WTZR Geodetic Observatory (Germany, 30s, Float PPP)",
@@ -237,8 +329,9 @@ fn main() {
         truth_file: None,
         static_truth: Some(Vector3::new(4075580.8863, 931853.5784, 4801567.9707)),
         max_epochs: 600,
+        is_kinematic: false,
     };
-    if Path::new(wtzr_spec.dir).exists() {
+    if only.as_deref().is_none_or(|w| w == "wtzr") && Path::new(wtzr_spec.dir).exists() {
         evaluate_ppp_dataset(&wtzr_spec);
     }
 
@@ -254,8 +347,9 @@ fn main() {
         truth_file: None,
         static_truth: Some(Vector3::new(-4052052.7533, 4212835.9866, -2545104.6062)),
         max_epochs: 600,
+        is_kinematic: false,
     };
-    if Path::new(alic_spec.dir).exists() {
+    if only.as_deref().is_none_or(|w| w == "alic") && Path::new(alic_spec.dir).exists() {
         evaluate_ppp_dataset(&alic_spec);
     }
 
@@ -265,14 +359,15 @@ fn main() {
         dir: "datasets/rtkexplorer/sample_1/f9p_ppp_1224",
         obs_file: "rover.obs",
         nav_file: "BRDC00IGS_R_20203590000_01D_MN.rnx",
-        sp3_path: "datasets/rtkexplorer/sample_1/f9p_ppp_1224/COD0MGXFIN_20203590000_01D_05M_ORB.SP3",
-        clk_path: "datasets/rtkexplorer/sample_1/f9p_ppp_1224/COD0MGXFIN_20203590000_01D_30S_CLK.CLK",
+        sp3_path: "datasets/rtkexplorer/sample_1/f9p_ppp_1224/ESA0MGNFIN_20203590000_01D_05M_ORB.SP3",
+        clk_path: "datasets/rtkexplorer/sample_1/f9p_ppp_1224/ESA0MGNFIN_20203590000_01D_30S_CLK.CLK",
         bia_path: Some("datasets/rtkexplorer/sample_1/f9p_ppp_1224/COD0MGXFIN_20203590000_01D_01D_OSB.BIA"),
         truth_file: Some("rover_ppk.pos"),
         static_truth: None,
         max_epochs: 600,
+        is_kinematic: true,
     };
-    if Path::new(f9p_spec.dir).exists() {
+    if only.as_deref().is_none_or(|w| w == "f9p") && Path::new(f9p_spec.dir).exists() {
         evaluate_ppp_dataset(&f9p_spec);
     }
 }

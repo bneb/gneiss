@@ -140,6 +140,8 @@
             lambda: 0.19,
             pr_var_m2: 1.0,
             cp_var_cycles2: 1.0,
+            pr_ref_var_m2: 0.5,
+            cp_ref_var_cycles2: 0.5,
             dm_wet_rov: 0.0,
             dgrad_n_rov: 0.0,
             dgrad_e_rov: 0.0,
@@ -416,7 +418,7 @@
         else {
             return;
         };
-        use gneiss_parsers::receiver_antenna::{compute_dd_pcv_correction, ReceiverAntenna};
+        use gneiss_parsers::receiver_antenna::{compute_dd_pcv_correction_2d, ReceiverAntenna};
         let trm =
             Arc::new(ReceiverAntenna::lookup(&db, "TRM59800.00", "SCIT").expect("igs14 TRM"));
         let ash =
@@ -438,9 +440,9 @@
         eng.receiver_pcv = Some((trm.clone(), ash.clone()));
         let dd = eng.receiver_dd_pcv_m(sid, 1, sat_pos, ref_pos);
         let llh = gneiss_core::coords::ecef_to_llh(eng.state.pos_ecef);
-        let (_, el_s) = gneiss_core::coords::az_el(llh, eng.state.pos_ecef, sat_pos);
-        let (_, el_r) = gneiss_core::coords::az_el(llh, eng.state.pos_ecef, ref_pos);
-        let expected = compute_dd_pcv_correction(&trm, &ash, "G01", el_s, el_r);
+        let (az_s, el_s) = gneiss_core::coords::az_el(llh, eng.state.pos_ecef, sat_pos);
+        let (az_r, el_r) = gneiss_core::coords::az_el(llh, eng.state.pos_ecef, ref_pos);
+        let expected = compute_dd_pcv_correction_2d(&trm, &ash, "G01", az_s, el_s, az_r, el_r, eng.rover_heading_rad);
         assert!(dd.abs() > 1e-6, "cross-family correction must be non-zero: {dd}");
         assert!((dd - expected).abs() < 1e-12, "dd={dd} expected={expected}");
     }

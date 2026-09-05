@@ -49,6 +49,7 @@
 - [x] **Sprint 33: Tightly-Coupled GNSS/INS Field Validation** — Urban dynamics tuning (ZUPT/NHC) and photogrammetric boresight calibration.
 - [x] **Sprint 37: SWFG Float PPP & Multi-Station IGS Ground Truth** — Multi-hour IGS tracking on Wettzell (`WTZR`) and Alice Springs (`ALIC`), 1,200x Cholesky marginalization speedup, block-specific GPS PCO, cycle-slip arc tracking, and $30\text{–}50\text{ cm}$ float PPP convergence.
 - [x] **Sprint 38: Geodetic Normalizations, UDUC Decomposition & Benchmark Integrity** — Periodic relativistic eccentricity correction ($-2\mathbf{r}\cdot\mathbf{v}/c$), gravitational Shapiro delay, IERS Solid Earth Tides, continuous Wu (1993) phase windup, $50\text{ cm}$ unclipped carrier pull, persistent `StaticPose` SWFG formulation, and benchmark anti-reward-hacking audit (real CORS DD-RTK $3.9\text{ mm}$, real IGS float PPP $38.8\text{ cm}$).
+- [x] **Sprint 39: Exact ANTEX Satellite PCO Integration & Multi-Constellation Separation** — Constellation-separated ambiguity indexing `(constellation_id, satellite)`, exact frequency-dependent satellite PCO lookup from IGS ANTEX (`igs14.atx`) with ionosphere-free synthesis ($\mathbf{PCO}_{IF} = \frac{\gamma \mathbf{PCO}_1 - \mathbf{PCO}_2}{\gamma - 1}$), and multi-hour IGS tracking convergence validation on Wettzell and Alice Springs.
 
 ---
 

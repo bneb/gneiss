@@ -17,8 +17,8 @@ pub struct UducFactorContext<'a> {
     pub prev_epoch: Option<u32>,
     pub dt_sec: f64,
     pub norm: GeodeticNormalizations,
-    pub slip_counts: &'a mut HashMap<u16, u32>,
-    pub windup_trackers: &'a mut HashMap<u16, gneiss_geodesy::windup::PhaseWindupTracker>,
+    pub slip_counts: &'a mut HashMap<(u8, u16), u32>,
+    pub windup_trackers: &'a mut HashMap<(u8, u16), gneiss_geodesy::windup::PhaseWindupTracker>,
     pub rover_time: gneiss_core::time::GpsTime,
     pub rx_pos: Vector3<f64>,
 }
@@ -59,12 +59,20 @@ pub fn build_uduc_factors(
         };
 
         // Ensure per-satellite slant ionosphere state for this epoch
-        let iono_kind = VariableKind::IonosphereSlant { epoch: ctx.epoch, satellite: obs.satellite };
+        let iono_kind = VariableKind::IonosphereSlant {
+            epoch: ctx.epoch,
+            constellation_id: obs.constellation_id,
+            satellite: obs.satellite,
+        };
         let iono_id = solver.graph.add_variable(iono_kind);
         solver.graph.set_value(iono_id, &[obs.iono_l1_m]);
 
         if let Some(pe) = ctx.prev_epoch {
-            let prev_iono_kind = VariableKind::IonosphereSlant { epoch: pe, satellite: obs.satellite };
+            let prev_iono_kind = VariableKind::IonosphereSlant {
+                epoch: pe,
+                constellation_id: obs.constellation_id,
+                satellite: obs.satellite,
+            };
             if let Some((prev_id, _)) = solver.graph.variables.iter().find(|(_, n)| n.kind == prev_iono_kind) {
                 let rw_factor = SlantIonoRandomWalkFactor::new(*prev_id, iono_id, ctx.dt_sec, 4.0e-4);
                 solver.graph.add_factor(Box::new(rw_factor));
@@ -87,20 +95,21 @@ pub fn build_uduc_factors(
             solver.graph.add_factor(Box::new(pr2_factor));
         }
 
-        let tracker = ctx.windup_trackers.entry(obs.satellite).or_default();
+        let sat_key = (obs.constellation_id, obs.satellite);
+        let tracker = ctx.windup_trackers.entry(sat_key).or_default();
         let windup_rad = tracker.update(&obs.sat_pos_ecef, &sun_pos, &ctx.rx_pos, &rx_up, &rx_north, &rx_east);
 
         if obs.cp_l1_lli.unwrap_or(0) & 1 != 0 {
-            *ctx.slip_counts.entry(obs.satellite).or_insert(0) += 1;
+            *ctx.slip_counts.entry(sat_key).or_insert(0) += 1;
         }
-        let arc = *ctx.slip_counts.entry(obs.satellite).or_insert(0);
+        let arc = *ctx.slip_counts.entry(sat_key).or_insert(0);
 
         let sin_el = obs.elevation_rad.sin().max(0.1);
         let cp_var = (0.003 / sin_el).powi(2);
 
         // L1 Carrier phase factor
         if let Some(cp_l1) = obs.cp_l1 {
-            let amb_id = solver.ensure_ambiguity(obs.satellite, 1, arc);
+            let amb_id = solver.ensure_ambiguity(obs.constellation_id, obs.satellite, 1, arc);
             let lambda1 = gneiss_core::constants::SPEED_OF_LIGHT_M_S / obs.f1.max(1.0);
             let windup_m1 = (windup_rad / (2.0 * std::f64::consts::PI)) * lambda1;
 
@@ -123,7 +132,7 @@ pub fn build_uduc_factors(
 
         // L2 Carrier phase factor
         if let Some(cp_l2) = obs.cp_l2 {
-            let amb2_id = solver.ensure_ambiguity(obs.satellite, 2, arc);
+            let amb2_id = solver.ensure_ambiguity(obs.constellation_id, obs.satellite, 2, arc);
             let lambda2 = gneiss_core::constants::SPEED_OF_LIGHT_M_S / obs.f2.max(1.0);
             let windup_m2 = (windup_rad / (2.0 * std::f64::consts::PI)) * lambda2;
 

@@ -57,7 +57,7 @@ fn test_uduc_pseudorange_zero_residual_at_truth() {
     });
     graph_vars.insert(i_id, crate::swfg::variables::VariableNode {
         id: i_id,
-        kind: crate::swfg::variables::VariableKind::IonosphereSlant { epoch: 0, satellite: 1 },
+        kind: crate::swfg::variables::VariableKind::IonosphereSlant { constellation_id: 0, epoch: 0, satellite: 1 },
         value: DVector::from_vec(vec![4.50]),
     });
 
@@ -136,12 +136,12 @@ fn test_uduc_carrier_phase_zero_residual_at_truth() {
     });
     graph_vars.insert(i_id, crate::swfg::variables::VariableNode {
         id: i_id,
-        kind: crate::swfg::variables::VariableKind::IonosphereSlant { epoch: 0, satellite: 1 },
+        kind: crate::swfg::variables::VariableKind::IonosphereSlant { constellation_id: 0, epoch: 0, satellite: 1 },
         value: DVector::from_vec(vec![4.50]),
     });
     graph_vars.insert(a_id, crate::swfg::variables::VariableNode {
         id: a_id,
-        kind: crate::swfg::variables::VariableKind::Ambiguity { satellite: 1, frequency: 1, arc: 0 },
+        kind: crate::swfg::variables::VariableKind::Ambiguity { constellation_id: 0, satellite: 1, frequency: 1, arc: 0 },
         value: DVector::from_vec(vec![12345.0]),
     });
 

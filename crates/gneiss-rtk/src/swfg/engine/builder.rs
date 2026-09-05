@@ -17,6 +17,7 @@ use crate::swfg::variables::{VariableId, VariableKind};
 /// Measurements collected for post-fit residual checking.
 pub struct CpMeasurementRecord {
     pub sat: u16,
+    pub constellation_id: u8,
     pub var_amb: VariableId,
     pub dd_cp_m: f64,
     pub base_dd: f64,
@@ -66,8 +67,8 @@ pub fn build_undifferenced_factors(
     epoch: u32,
     pose_id: VariableId,
     zwd_id: Option<VariableId>,
-    slip_counts: &mut HashMap<u16, u32>,
-    windup_trackers: &mut HashMap<u16, gneiss_geodesy::windup::PhaseWindupTracker>,
+    slip_counts: &mut HashMap<(u8, u16), u32>,
+    windup_trackers: &mut HashMap<(u8, u16), gneiss_geodesy::windup::PhaseWindupTracker>,
     rover_time: gneiss_core::time::GpsTime,
     rx_pos: Vector3<f64>,
 ) {
@@ -92,14 +93,15 @@ pub fn build_undifferenced_factors(
         solver.graph.add_factor(pr_factor);
 
         if let Some(cp_l1) = obs.cp_l1 {
+            let sat_key = (obs.constellation_id, obs.satellite);
             if obs.cp_l1_lli.unwrap_or(0) & 1 != 0 {
-                *slip_counts.entry(obs.satellite).or_insert(0) += 1;
+                *slip_counts.entry(sat_key).or_insert(0) += 1;
             }
-            let arc = *slip_counts.entry(obs.satellite).or_insert(0);
-            let amb_id = solver.ensure_ambiguity(obs.satellite, 1, arc);
+            let arc = *slip_counts.entry(sat_key).or_insert(0);
+            let amb_id = solver.ensure_ambiguity(obs.constellation_id, obs.satellite, 1, arc);
             let lambda = gneiss_core::constants::SPEED_OF_LIGHT_M_S / obs.f1.max(1.0);
 
-            let tracker = windup_trackers.entry(obs.satellite).or_default();
+            let tracker = windup_trackers.entry(sat_key).or_default();
             let windup_rad = tracker.update(&obs.sat_pos_ecef, &sun_pos, &rx_pos, &rx_up, &rx_north, &rx_east);
             let windup_m = (windup_rad / (2.0 * std::f64::consts::PI)) * lambda;
 
@@ -284,6 +286,7 @@ fn build_sat_l2_carrier_phase(
 
     cp_records.push(CpMeasurementRecord {
         sat: obs.satellite,
+        constellation_id: obs.constellation_id,
         var_amb: var_amb2,
         dd_cp_m: dd_cp_m2,
         base_dd: base_dd_range,
@@ -299,7 +302,7 @@ pub fn build_rtk_dd_factors(
     solver: &mut SlidingWindowSolver,
     ctx: &RtkFactorContext<'_>,
     ref_sat_map: &mut HashMap<u8, u16>,
-    slip_counts: &mut HashMap<u16, u32>,
+    slip_counts: &mut HashMap<(u8, u16), u32>,
     mw_acc: &mut DdPseudorangeAccumulator,
 ) -> Vec<CpMeasurementRecord> {
     let mut cp_records = Vec::new();
@@ -374,10 +377,11 @@ pub fn build_rtk_dd_factors(
             }
 
             let has_slip = |lli: Option<u8>| lli.unwrap_or(0) & 1 != 0;
+            let sat_key = (obs.constellation_id, obs.satellite);
             if has_slip(obs.cp_l1_lli) || has_slip(ref_obs.cp_l1_lli) || has_slip(base_sat.cp_l1_lli) || has_slip(base_ref.cp_l1_lli) {
-                *slip_counts.entry(obs.satellite).or_insert(0) += 1;
+                *slip_counts.entry(sat_key).or_insert(0) += 1;
             }
-            let arc = *slip_counts.get(&obs.satellite).unwrap_or(&0);
+            let arc = *slip_counts.get(&sat_key).unwrap_or(&0);
 
             build_sat_carrier_phase(
                 solver, obs, ref_obs, base_sat, base_ref, ctx, arc,

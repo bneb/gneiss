@@ -62,13 +62,13 @@ pub enum VariableKind {
     IfbGlonass,
     /// Carrier-phase integer ambiguity (1-DOF, cycles) — undifferenced (PPP).
     /// Persists across ALL epochs of the continuous tracking arc.
-    Ambiguity { satellite: u16, frequency: u8, arc: u32 },
+    Ambiguity { constellation_id: u8, satellite: u16, frequency: u8, arc: u32 },
     /// Double-differenced ambiguity (1-DOF, cycles) — for RTK.
     /// Key: (sat, ref_sat) pair on a given frequency.
     DdAmbiguity { constellation_id: u8, satellite: u16, ref_satellite: u16, frequency: u8, arc: u32 },
     /// Per-satellite slant ionosphere delay on L1 (1-DOF, meters) — for UDUC PPP.
     /// Estimated as a random-walk variable across epochs.
-    IonosphereSlant { epoch: u32, satellite: u16 },
+    IonosphereSlant { epoch: u32, constellation_id: u8, satellite: u16 },
     /// Persistent 6-DOF static monument pose: [x, y, z, qx, qy, qz].
     /// Persists across the ENTIRE static session.
     StaticPose,
@@ -221,7 +221,7 @@ mod tests {
         let mut vars = BTreeMap::new();
         let k0 = VariableKind::Pose { epoch: 0 };
         let k1 = VariableKind::Velocity { epoch: 0 };
-        let k2 = VariableKind::Ambiguity { satellite: 1, frequency: 1, arc: 0 };
+        let k2 = VariableKind::Ambiguity { constellation_id: 0, satellite: 1, frequency: 1, arc: 0 };
 
         let id0 = VariableId::new(0);
         let id1 = VariableId::new(1);
@@ -265,9 +265,9 @@ mod tests {
             (VariableKind::ClockBias { epoch: 0, constellation_id: 0 }, 1),
             (VariableKind::TropoZwd { epoch: 0 }, 1),
             (VariableKind::IfbGlonass, 1),
-            (VariableKind::Ambiguity { satellite: 0, frequency: 0, arc: 0 }, 1),
+            (VariableKind::Ambiguity { constellation_id: 0, satellite: 0, frequency: 0, arc: 0 }, 1),
             (VariableKind::DdAmbiguity { constellation_id: 0, satellite: 1, ref_satellite: 0, frequency: 1, arc: 0 }, 1),
-            (VariableKind::IonosphereSlant { epoch: 0, satellite: 1 }, 1),
+            (VariableKind::IonosphereSlant { epoch: 0, constellation_id: 0, satellite: 1 }, 1),
         ];
         for (kind, expected) in &kinds {
             let node = VariableNode::new(VariableId::new(0), *kind);
@@ -281,9 +281,9 @@ mod tests {
         assert!(VariableKind::Velocity { epoch: 0 }.is_per_epoch());
         assert!(VariableKind::Attitude { epoch: 0 }.is_per_epoch());
         assert!(VariableKind::ClockBias { epoch: 0, constellation_id: 0 }.is_per_epoch());
-        assert!(VariableKind::IonosphereSlant { epoch: 0, satellite: 1 }.is_per_epoch());
+        assert!(VariableKind::IonosphereSlant { epoch: 0, constellation_id: 0, satellite: 1 }.is_per_epoch());
         assert!(!VariableKind::ImuBias.is_per_epoch());
-        assert!(!VariableKind::Ambiguity { satellite: 0, frequency: 0, arc: 0 }.is_per_epoch());
+        assert!(!VariableKind::Ambiguity { constellation_id: 0, satellite: 0, frequency: 0, arc: 0 }.is_per_epoch());
         assert!(!VariableKind::DdAmbiguity { constellation_id: 0, satellite: 1, ref_satellite: 0, frequency: 1, arc: 0 }.is_per_epoch());
     }
 }

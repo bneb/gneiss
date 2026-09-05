@@ -146,7 +146,7 @@ impl BatchFactorGraph {
             self.graph.add_factor(pr_factor);
 
             if c_obs.cp_l1.is_some() {
-                let amb_id = self.ensure_ambiguity(c_obs.satellite, 1, 0);
+                let amb_id = self.ensure_ambiguity(c_obs.constellation_id, c_obs.satellite, 1, 0);
                 let cp_factor = build_carrier_phase_factor(
                     c_obs, epoch_idx, pose_id, Some(clock_id), zwd_id, amb_id, None, 0.0,
                 );
@@ -159,15 +159,16 @@ impl BatchFactorGraph {
         pose_id
     }
 
-    fn ensure_ambiguity(&mut self, satellite: u16, frequency: u8, arc: u32) -> VariableId {
+    fn ensure_ambiguity(&mut self, constellation_id: u8, satellite: u16, frequency: u8, arc: u32) -> VariableId {
         let existing = self.graph.variables.iter().find_map(|(id, n)| match n.kind {
-            VariableKind::Ambiguity { satellite: s, frequency: f, arc: a } if s == satellite && f == frequency && a == arc => Some(*id),
+            VariableKind::Ambiguity { constellation_id: c, satellite: s, frequency: f, arc: a }
+                if c == constellation_id && s == satellite && f == frequency && a == arc => Some(*id),
             _ => None,
         });
         if let Some(id) = existing {
             id
         } else {
-            self.graph.add_variable(VariableKind::Ambiguity { satellite, frequency, arc })
+            self.graph.add_variable(VariableKind::Ambiguity { constellation_id, satellite, frequency, arc })
         }
     }
 

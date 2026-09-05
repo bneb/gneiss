@@ -13,8 +13,9 @@ use gneiss_core::constants::SPEED_OF_LIGHT_M_S;
 use gneiss_core::ephemeris::Ephemeris;
 use gneiss_core::obs::{EpochObs, SatObs};
 use gneiss_core::time::GpsTime;
-use gneiss_parsers::receiver_antenna::{compute_dd_pcv_correction, frequency_code};
+use gneiss_parsers::receiver_antenna::{compute_dd_pcv_correction_2d, frequency_code};
 
+use super::formation_cov::compute_dd_variances;
 use super::sat_pos::{extract_sat_positions, glo_freq_num};
 use super::update::GRAD_MIN_SIN_EL;
 use super::GnssRtkIekf;
@@ -211,7 +212,13 @@ impl GnssRtkIekf {
             freq_band,
         };
 
-        let (pr_var, cp_var) = self.compute_dd_variances(sat_pos, ref_pos, lambda);
+        let snrs = (
+            rov_s.get_snr(freq_band),
+            rov_ref.get_snr(freq_band),
+            bas_s.get_snr(freq_band),
+            bas_ref.get_snr(freq_band),
+        );
+        let dd_var = compute_dd_variances(self.state.pos_ecef, sat_pos, ref_pos, lambda, snrs);
         // Wet-mapping difference at the rover: sensitivity of this DD to the
         // rover ZWD residual state (long-baseline mode), plus the cot(el)
         // gradient mapping differences [north, east] for the same pair.
@@ -292,8 +299,10 @@ impl GnssRtkIekf {
             ref_pos,
             base_pos,
             lambda,
-            pr_var_m2: pr_var,
-            cp_var_cycles2: cp_var,
+            pr_var_m2: dd_var.pr_var_m2,
+            cp_var_cycles2: dd_var.cp_var_cycles2,
+            pr_ref_var_m2: dd_var.pr_ref_var_m2,
+            cp_ref_var_cycles2: dd_var.cp_ref_var_cycles2,
             dm_wet_rov,
             dgrad_n_rov,
             dgrad_e_rov,
@@ -331,9 +340,11 @@ impl GnssRtkIekf {
             return 0.0;
         };
         let llh = gneiss_core::coords::ecef_to_llh(self.state.pos_ecef);
-        let (_az_s, el_s) = gneiss_core::coords::az_el(llh, self.state.pos_ecef, sat_pos);
-        let (_az_r, el_r) = gneiss_core::coords::az_el(llh, self.state.pos_ecef, ref_pos);
-        let corr = compute_dd_pcv_correction(rov, bas, &code, el_s, el_r);
+        let (az_s, el_s) = gneiss_core::coords::az_el(llh, self.state.pos_ecef, sat_pos);
+        let (az_r, el_r) = gneiss_core::coords::az_el(llh, self.state.pos_ecef, ref_pos);
+        let corr = compute_dd_pcv_correction_2d(
+            rov, bas, &code, az_s, el_s, az_r, el_r, self.rover_heading_rad,
+        );
         if std::env::var("GNEISS_PCV_DEBUG").is_ok() && corr.abs() > 1e-12 {
             eprintln!("PCV [{}]: {:.4} mm (el_s={:.1} el_r={:.1})", sat_id, corr*1000.0, el_s.to_degrees(), el_r.to_degrees());
         }
@@ -471,20 +482,5 @@ impl GnssRtkIekf {
         let pwl_cycles = dd_cp1 - dd_cp2;
         let pw = pwl_cycles - ((rs - rr) - base_dd + tropo) / lambda_wl;
         self.pw_tracker.update(key, pw, 0.0, false);
-    }
-
-    pub(super) fn compute_dd_variances(&self, sat_pos: Vector3<f64>, ref_pos: Vector3<f64>, lambda: f64) -> (f64, f64) {
-        let rx_llh = gneiss_core::coords::ecef_to_llh(self.state.pos_ecef);
-        let (_az_s, el_s) = gneiss_core::coords::az_el(rx_llh, self.state.pos_ecef, sat_pos);
-        let (_az_r, el_r) = gneiss_core::coords::az_el(rx_llh, self.state.pos_ecef, ref_pos);
-
-        let sin_s = el_s.sin().max(0.1);
-        let sin_r = el_r.sin().max(0.1);
-        let pr_base = 0.20;
-        let pr_var = 2.0 * (pr_base * pr_base / (sin_s * sin_s) + pr_base * pr_base / (sin_r * sin_r));
-        let cp_base = 0.003 / lambda;
-        let cp_var = 2.0 * (cp_base * cp_base / (sin_s * sin_s) + cp_base * cp_base / (sin_r * sin_r));
-
-        (pr_var, cp_var)
     }
 }

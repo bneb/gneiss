@@ -61,10 +61,14 @@ pub struct ReceiverAntenna {
     pub zen1_deg: f64,
     /// Zenith grid step (deg).
     pub dzen_deg: f64,
+    /// Azimuth grid step (deg), 0.0 if NOAZI only.
+    pub dazi_deg: f64,
     /// All NOAZI grids keyed by ANTEX frequency code (`"G01"`, `"R02"`,
     /// ...) so constellations outside GPS L1/L2 stay reachable through
     /// [`ReceiverAntenna::pcv_mm`].
     grids: HashMap<String, Vec<f64>>,
+    /// Azimuth grids keyed by ANTEX frequency code.
+    azi_grids: HashMap<String, Vec<Vec<f64>>>,
 }
 
 impl ReceiverAntenna {
@@ -106,12 +110,31 @@ impl ReceiverAntenna {
         interp_grid(grid, self.zen1_deg, self.dzen_deg, zenith_deg)
     }
 
-
     /// NOAZI PCV in millimetres at a zenith angle for an explicit ANTEX
     /// frequency code (`"G01"`, `"R02"`, ...). `None` when the calibration
     /// has no table for that code.
     pub fn pcv_mm(&self, freq_code: &str, zenith_deg: f64) -> Option<f64> {
         interp_grid(self.grids.get(freq_code)?, self.zen1_deg, self.dzen_deg, zenith_deg)
+    }
+
+    /// PCV in millimetres at azimuth and zenith angles (degrees) for an explicit ANTEX
+    /// frequency code (`"G01"`, `"R02"`, ...).
+    /// Uses 2D bilinear interpolation if an azimuth grid is present;
+    /// otherwise falls back to 1D NOAZI interpolation.
+    pub fn pcv_mm_az_zen(&self, freq_code: &str, az_deg: f64, zen_deg: f64) -> Option<f64> {
+        if let Some(azi) = self.azi_grids.get(freq_code) {
+            if self.dazi_deg > 0.0 && !azi.is_empty() && self.dzen_deg > 0.0 {
+                return Some(interp_2d_grid(
+                    azi,
+                    self.dazi_deg,
+                    self.zen1_deg,
+                    self.dzen_deg,
+                    az_deg,
+                    zen_deg,
+                ));
+            }
+        }
+        self.pcv_mm(freq_code, zen_deg)
     }
 }
 
@@ -142,11 +165,14 @@ fn from_model(model: &AntennaPcv) -> ReceiverAntenna {
     };
     let l1 = model.frequencies.get("G01").or_else(|| model.frequencies.get("R01"));
     let pco_enu_mm = l1.map_or([0.0; 3], |f| [f.pco.y, f.pco.x, f.pco.z]);
-    let grids = model
-        .frequencies
-        .iter()
-        .map(|(code, freq)| (code.clone(), freq.noazi.clone()))
-        .collect();
+    let mut grids = HashMap::new();
+    let mut azi_grids = HashMap::new();
+    for (code, freq) in &model.frequencies {
+        grids.insert(code.clone(), freq.noazi.clone());
+        if let Some(ref azi) = freq.azi {
+            azi_grids.insert(code.clone(), azi.clone());
+        }
+    }
     let tokens: Vec<&str> = model.antenna_type.split_whitespace().collect();
     let (ant_type, radome) = match tokens.as_slice() {
         [t] => ((*t).to_string(), "NONE".to_string()),
@@ -161,7 +187,9 @@ fn from_model(model: &AntennaPcv) -> ReceiverAntenna {
         pcv_l2_grid: noazi(&["G02", "R02"]),
         zen1_deg: model.zen1,
         dzen_deg: model.dzen,
+        dazi_deg: model.dazi,
         grids,
+        azi_grids,
     }
 }
 
@@ -202,16 +230,84 @@ fn interp_grid(grid: &[f64], zen1_deg: f64, dzen_deg: f64, zenith_deg: f64) -> O
     Some(grid[i] + (t - i as f64) * (grid[i + 1] - grid[i]))
 }
 
+/// 2D bilinear interpolation of an azimuth-zenith grid with 360-deg azimuth wrapping.
+fn interp_2d_grid(
+    azi: &[Vec<f64>],
+    dazi_deg: f64,
+    zen_start_deg: f64,
+    zen_step_deg: f64,
+    az_deg: f64,
+    zen_deg: f64,
+) -> f64 {
+    let az_norm = az_deg.rem_euclid(360.0);
+    let n_azi = azi.len();
+    let n_zen = azi[0].len();
+    if n_zen == 0 || n_azi == 0 {
+        return 0.0;
+    }
+
+    let az_pos = az_norm / dazi_deg;
+    let az_i = (az_pos.floor() as usize) % n_azi;
+    let az_next = (az_i + 1) % n_azi;
+    let az_frac = az_pos - az_pos.floor();
+
+    let zen_last = (n_zen - 1) as f64;
+    let zen_pos = ((zen_deg - zen_start_deg) / zen_step_deg).clamp(0.0, zen_last);
+    let zen_i = zen_pos.floor() as usize;
+    let zen_next = (zen_i + 1).min(n_zen - 1);
+    let zen_frac = zen_pos - zen_i as f64;
+
+    let v00 = azi[az_i][zen_i];
+    let v01 = azi[az_i][zen_next];
+    let v10 = azi[az_next][zen_i];
+    let v11 = azi[az_next][zen_next];
+
+    let v0 = v00 * (1.0 - zen_frac) + v01 * zen_frac;
+    let v1 = v10 * (1.0 - zen_frac) + v11 * zen_frac;
+
+    v0 * (1.0 - az_frac) + v1 * az_frac
+}
+
+/// Differential receiver PCV with 2D azimuth and zenith interpolation, metres.
+///
+/// Sky azimuth and elevation angles are given in radians (local topocentric frame).
+/// Rover antenna azimuth is rotated by `rover_heading_rad` relative to North;
+/// base antenna is assumed North-aligned (heading 0).
+#[allow(clippy::too_many_arguments)]
+pub fn compute_dd_pcv_correction_2d(
+    rover_ant: &ReceiverAntenna,
+    base_ant: &ReceiverAntenna,
+    freq_code: &str,
+    az_sat_rad: f64,
+    el_sat_rad: f64,
+    az_ref_rad: f64,
+    el_ref_rad: f64,
+    rover_heading_rad: f64,
+) -> f64 {
+    let zen_sat = 90.0 - el_sat_rad.to_degrees();
+    let zen_ref = 90.0 - el_ref_rad.to_degrees();
+    let az_sat_rov = (az_sat_rad - rover_heading_rad).to_degrees();
+    let az_ref_rov = (az_ref_rad - rover_heading_rad).to_degrees();
+    let az_sat_bas = az_sat_rad.to_degrees();
+    let az_ref_bas = az_ref_rad.to_degrees();
+    let (Some(rov_s), Some(rov_r)) = (
+        rover_ant.pcv_mm_az_zen(freq_code, az_sat_rov, zen_sat),
+        rover_ant.pcv_mm_az_zen(freq_code, az_ref_rov, zen_ref),
+    ) else {
+        return 0.0;
+    };
+    let (Some(bas_s), Some(bas_r)) = (
+        base_ant.pcv_mm_az_zen(freq_code, az_sat_bas, zen_sat),
+        base_ant.pcv_mm_az_zen(freq_code, az_ref_bas, zen_ref),
+    ) else {
+        return 0.0;
+    };
+    ((rov_s - rov_r) - (bas_s - bas_r)) / 1000.0
+}
+
 /// Differential receiver PCV embedded in one DD phase observation, metres.
 ///
-/// For a DD formed between satellites at elevations `el_sat`/`el_ref`
-/// (radians, rover frame) with different rover/base antennas:
-/// `dd_phi contains ([PCV_rov(z_s) - PCV_rov(z_r)] - [PCV_base(z_s) -
-/// PCV_base(z_r)])` where `z = 90 deg - el`. Same-family pairs give ~0.
-/// The caller subtracts this from the DD phase cycles (`cp - corr/lambda`),
-/// matching the windup convention. Returns 0.0 when either calibration
-/// lacks the requested frequency: a one-sided correction would be worse
-/// than none.
+/// Retained for 1D elevation-only callers using NOAZI.
 pub fn compute_dd_pcv_correction(
     rover_ant: &ReceiverAntenna,
     base_ant: &ReceiverAntenna,

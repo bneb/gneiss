@@ -123,3 +123,21 @@
         let sol = engine.process_rtk_epoch(&rover, &base, base_pos).unwrap();
         assert!(sol.n_satellites >= 4);
     }
+
+    #[test]
+    fn engine_processes_ppp_epoch() {
+        use crate::swfg::config::PppConfig;
+        let time = GpsTime::new(2200, 100.0);
+        let ephs: Vec<Ephemeris> = (1..=20).map(|prn| {
+            let m0 = (prn as f64 - 1.0) * std::f64::consts::TAU / 20.0;
+            make_gps_eph(SatelliteId { constellation: Constellation::Gps, prn }, time, m0)
+        }).collect();
+
+        let r = gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M;
+        let config = EngineConfig::Ppp(PppConfig { initial_position: Some([r, 0.0, 0.0]), is_kinematic: false, ..PppConfig::default() });
+        let mut engine = SwfgEngine::new(&config, ephs);
+        let rover = make_epoch(time, 16);
+        let sol = engine.process_epoch(&rover);
+        println!("PPP test sol: {:?}", sol);
+        assert!(sol.is_ok(), "PPP solve failed: {:?}", sol.err());
+    }

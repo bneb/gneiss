@@ -4,6 +4,7 @@ pub mod ar;
 pub mod ar_gate;
 pub mod clk_datum;
 pub mod formation;
+pub mod formation_cov;
 pub mod iono_free;
 pub mod mw;
 pub mod predict;
@@ -132,6 +133,8 @@ pub struct GnssRtkIekf {
     pub ar_elevation_mask_rad: f64,
     /// When true, fixed ambiguities constrain the filter state (fix-and-hold).
     pub fix_and_hold: bool,
+    /// Rover antenna heading offset relative to True North (radians).
+    pub rover_heading_rad: f64,
     /// This epoch's code-minus-phase divergences `(freq_band, cycles)` of
     /// the pairs tracked so far, used to coherently seed newly initialised
     /// ambiguities when `ar_gate` is on. Cleared each epoch.
@@ -178,6 +181,7 @@ impl GnssRtkIekf {
             ar_gate: std::env::var("GNEISS_AR_GATE").is_ok_and(|v| v == "1"),
             ar_elevation_mask_rad: Self::DEFAULT_MIN_ELEVATION_RAD,
             fix_and_hold: std::env::var("GNEISS_FIX_AND_HOLD").is_ok_and(|v| v == "1"),
+            rover_heading_rad: 0.0,
             code_phase_div: Vec::new(),
         }
     }

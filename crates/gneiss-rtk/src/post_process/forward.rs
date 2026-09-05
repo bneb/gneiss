@@ -37,6 +37,7 @@ pub fn run_forward_pass(
     precise_orbits: Option<std::sync::Arc<gneiss_parsers::precise_orbit::PreciseOrbit>>,
     precise_clocks: Option<std::sync::Arc<gneiss_parsers::rinex_clk::RinexClock>>,
     sinex_bias: Option<std::sync::Arc<gneiss_parsers::sinex_bia::SinexBias>>,
+    antex_database: Option<std::sync::Arc<gneiss_parsers::antex::AntexDatabase>>,
 ) -> Vec<FilteredEpoch> {
     if imu_samples.is_none() && base_pos.is_some() && base_epochs.is_some() {
         if let Some(bp) = base_pos {
@@ -55,7 +56,7 @@ pub fn run_forward_pass(
         c.is_kinematic = dynamics.is_kinematic();
     }
 
-    run_forward_swfg(&cfg, ephemerides, klobuchar, rover_epochs, base_epochs, base_pos, imu_samples, precise_orbits, precise_clocks, sinex_bias)
+    run_forward_swfg(&cfg, ephemerides, klobuchar, rover_epochs, base_epochs, base_pos, imu_samples, precise_orbits, precise_clocks, sinex_bias, antex_database)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -176,6 +177,24 @@ pub fn run_forward_pass_collecting(
 }
 
 #[allow(clippy::too_many_arguments)]
+fn configure_swfg_engine(
+    config: &EngineConfig,
+    ephemerides: &[Ephemeris],
+    klobuchar: Option<([f64; 4], [f64; 4])>,
+    precise_orbits: Option<std::sync::Arc<gneiss_parsers::precise_orbit::PreciseOrbit>>,
+    precise_clocks: Option<std::sync::Arc<gneiss_parsers::rinex_clk::RinexClock>>,
+    sinex_bias: Option<std::sync::Arc<gneiss_parsers::sinex_bia::SinexBias>>,
+    antex_database: Option<std::sync::Arc<gneiss_parsers::antex::AntexDatabase>>,
+) -> SwfgEngine {
+    let mut engine = SwfgEngine::new(config, ephemerides.to_vec());
+    if let Some((alpha, beta)) = klobuchar { engine.set_klobuchar(alpha, beta); }
+    if let Some(orbits) = precise_orbits { engine.set_precise_products(orbits, precise_clocks); }
+    if let Some(bias) = sinex_bias { engine.set_sinex_bias(bias); }
+    if let Some(antex) = antex_database { engine.set_antex_database(antex); }
+    engine
+}
+
+#[allow(clippy::too_many_arguments)]
 fn run_forward_swfg(
     config: &EngineConfig,
     ephemerides: &[Ephemeris],
@@ -187,18 +206,11 @@ fn run_forward_swfg(
     precise_orbits: Option<std::sync::Arc<gneiss_parsers::precise_orbit::PreciseOrbit>>,
     precise_clocks: Option<std::sync::Arc<gneiss_parsers::rinex_clk::RinexClock>>,
     sinex_bias: Option<std::sync::Arc<gneiss_parsers::sinex_bia::SinexBias>>,
+    antex_database: Option<std::sync::Arc<gneiss_parsers::antex::AntexDatabase>>,
 ) -> Vec<FilteredEpoch> {
-    let mut engine = SwfgEngine::new(config, ephemerides.to_vec());
-    if let Some((alpha, beta)) = klobuchar {
-        engine.set_klobuchar(alpha, beta);
-    }
-    if let Some(orbits) = precise_orbits {
-        engine.set_precise_products(orbits, precise_clocks);
-    }
-    if let Some(bias) = sinex_bias {
-        engine.set_sinex_bias(bias);
-    }
-
+    let mut engine = configure_swfg_engine(
+        config, ephemerides, klobuchar, precise_orbits, precise_clocks, sinex_bias, antex_database,
+    );
     let mut imu_idx = 0usize;
     let mut results = Vec::with_capacity(rover_epochs.len());
     let mut prev_pos: Option<Vector3<f64>> = None;

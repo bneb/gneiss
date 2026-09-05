@@ -120,7 +120,7 @@ pub fn check_postfit_cycle_slips(
     solver: &mut SlidingWindowSolver,
     pos_ecef: Vector3<f64>,
     cp_records: &[CpMeasurementRecord],
-    slip_counts: &mut HashMap<u16, u32>,
+    slip_counts: &mut HashMap<(u8, u16), u32>,
 ) {
     let vals = VariableValues::build(&solver.graph.variables);
     for rec in cp_records {
@@ -131,7 +131,7 @@ pub fn check_postfit_cycle_slips(
             let predicted = expected_dd_cp + rec.lambda * amb_val[0];
             let residual = rec.dd_cp_m - predicted;
             if residual.abs() > 0.5 {
-                *slip_counts.entry(rec.sat).or_insert(0) += 1;
+                *slip_counts.entry((rec.constellation_id, rec.sat)).or_insert(0) += 1;
                 solver.graph.remove_variable(rec.var_amb);
             }
         }

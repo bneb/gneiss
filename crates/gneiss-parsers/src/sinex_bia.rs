@@ -199,53 +199,34 @@ impl SinexBias {
         if let Some(val) = self.get_exact_bias(sat, obs, t) {
             return Some(val);
         }
-
-        let fallback = match obs.to_string().as_str() {
-            "C1C" | "C1X" => {
-                if sat.constellation == Constellation::Gps {
-                    Some("C1W")
-                } else {
-                    Some("C1C")
-                }
-            }
-            "L1C" | "L1X" => {
-                if sat.constellation == Constellation::Gps {
-                    Some("L1W")
-                } else {
-                    Some("L1C")
-                }
-            }
-            "C2X" | "C2L" | "C2S" => {
-                if sat.constellation == Constellation::Gps {
-                    Some("C2W")
-                } else {
-                    Some("C2C")
-                }
-            }
-            "L2X" | "L2L" | "L2S" => {
-                if sat.constellation == Constellation::Gps {
-                    Some("L2W")
-                } else {
-                    Some("L2C")
-                }
-            }
-            "C5X" | "C5I" => Some("C5Q"),
-            "L5X" | "L5I" => Some("L5Q"),
-            "C7X" | "C7I" => Some("C7Q"),
-            "L7X" | "L7I" => Some("L7Q"),
-            "C8X" | "C8I" => Some("C8Q"),
-            "L8X" | "L8I" => Some("L8Q"),
-            _ => None,
-        };
-
-        if let Some(code_str) = fallback {
+        for &code_str in fallback_codes(sat.constellation, &obs.to_string()) {
             if let Ok(code) = ObsCode::from_str(code_str) {
-                return self.get_exact_bias(sat, code, t);
+                if let Some(val) = self.get_exact_bias(sat, code, t) {
+                    return Some(val);
+                }
             }
         }
-
         None
     }
+}
+
+fn fallback_codes(constellation: Constellation, obs_str: &str) -> &'static [&'static str] {
+    match obs_str {
+        "C1C" | "C1X" => if constellation == Constellation::Gps { &["C1W"] } else { &["C1C"] },
+        "L1C" | "L1X" => if constellation == Constellation::Gps { &["L1W"] } else { &["L1C"] },
+        "C2X" | "C2L" | "C2S" => if constellation == Constellation::Gps { &["C2C", "C2W"] } else { &["C2C"] },
+        "L2X" | "L2L" | "L2S" => if constellation == Constellation::Gps { &["L2C", "L2W"] } else { &["L2C"] },
+        "C5X" | "C5I" => &["C5Q"],
+        "L5X" | "L5I" => &["L5Q"],
+        "C7X" | "C7I" => &["C7Q"],
+        "L7X" | "L7I" => &["L7Q"],
+        "C8X" | "C8I" => &["C8Q"],
+        "L8X" | "L8I" => &["L8Q"],
+        _ => &[],
+    }
+}
+
+impl SinexBias {
 
     pub fn get_exact_bias(&self, sat: SatelliteId, obs: ObsCode, t: GpsTime) -> Option<f64> {
         for rec in &self.records {

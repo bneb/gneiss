@@ -168,21 +168,22 @@ impl SlidingWindowSolver {
     /// Create an ambiguity variable for a satellite-frequency pair.
     /// Create or retrieve an undifferenced ambiguity variable for a satellite and arc.
     /// These persist across ALL epochs of the tracking arc.
-    pub fn ensure_ambiguity(&mut self, satellite: u16, frequency: u8, arc: u32) -> VariableId {
+    pub fn ensure_ambiguity(&mut self, constellation_id: u8, satellite: u16, frequency: u8, arc: u32) -> VariableId {
         for node in self.graph.variables.values() {
             if let VariableKind::Ambiguity {
+                constellation_id: c,
                 satellite: s,
                 frequency: f,
                 arc: a,
             } = node.kind
             {
-                if s == satellite && f == frequency && a == arc {
+                if c == constellation_id && s == satellite && f == frequency && a == arc {
                     return node.id;
                 }
             }
         }
         self.graph
-            .add_variable(VariableKind::Ambiguity { satellite, frequency, arc })
+            .add_variable(VariableKind::Ambiguity { constellation_id, satellite, frequency, arc })
     }
 
     /// Create a double-differenced ambiguity variable for a (sat, ref_sat) pair.

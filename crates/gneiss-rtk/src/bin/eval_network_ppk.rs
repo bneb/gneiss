@@ -219,6 +219,10 @@ struct RunContext<'a> {
     tropo_gradients: bool,
     /// Rover motion model (GNEISS_DYNAMICS=kinematic opts in).
     dynamics: ProcessingDynamics,
+    /// IGS precise orbit product (SP3), loaded via GNEISS_SP3 env var.
+    precise_orbits: Option<std::sync::Arc<gneiss_parsers::precise_orbit::PreciseOrbit>>,
+    /// IGS precise clock product (RINEX CLK), loaded via GNEISS_CLK env var.
+    precise_clocks: Option<std::sync::Arc<gneiss_parsers::rinex_clk::RinexClock>>,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -271,9 +275,10 @@ fn run_pass(
         // Same env var, now applies uniformly to both passes and all
         // baseline lengths -- see PostProcessOptions::enable_glonass.
         enable_glonass: std::env::var("GNEISS_GLONASS").is_ok(),
-        precise_orbits: None,
-        precise_clocks: None,
+        precise_orbits: ctx.precise_orbits.clone(),
+        precise_clocks: ctx.precise_clocks.clone(),
         sinex_bias: None,
+        antex_database: None,
     };
     let res = match execute_post_process(config, ctx.ephemerides, rover, Some(base_epochs), None, &options) {
         Ok(r) => r,
@@ -382,13 +387,20 @@ fn run_base(
     let recv_pco_on = std::env::var("GNEISS_RECV_PCO_DISABLE").is_err();
     let base_pos_eff = if recv_pco_on {
         let rover_arp = ctx.truth.values().next().copied();
-        let antex = std::env::var("GNEISS_ANTEX")
-            .unwrap_or_else(|_| "datasets/igs14.atx".into());
+        let antex = std::env::var("GNEISS_ANTEX").unwrap_or_else(|_| {
+            if dir.join("igs20.atx").exists() {
+                dir.join("igs20.atx").to_string_lossy().to_string()
+            } else if Path::new("datasets/igs14.atx").exists() {
+                "datasets/igs14.atx".into()
+            } else {
+                "datasets/igs/igs14.atx".into()
+            }
+        });
         match (
             station_recv_pco_ecef(&dir.join(base.base_file), &antex, base.base_pos),
             rover_arp.and_then(|arp| {
                 let v = truth_in_solution_frame(arp, 2025.5);
-                station_recv_pco_ecef(Path::new("datasets/cors_short_baseline/p2241350.20o"), &antex, v)
+                station_recv_pco_ecef(&dir.join(rover_file), &antex, v)
             }),
         ) {
             (Some(d_base), Some(d_rover)) => {
@@ -410,8 +422,15 @@ fn run_base(
     };
     let receiver_pcv = if std::env::var("GNEISS_PCV").is_ok() {
         eprintln!("DEBUG: GNEISS_PCV detected");
-        let antex = std::env::var("GNEISS_ANTEX")
-            .unwrap_or_else(|_| "datasets/igs14.atx".into());
+        let antex = std::env::var("GNEISS_ANTEX").unwrap_or_else(|_| {
+            if dir.join("igs20.atx").exists() {
+                dir.join("igs20.atx").to_string_lossy().to_string()
+            } else if Path::new("datasets/igs14.atx").exists() {
+                "datasets/igs14.atx".into()
+            } else {
+                "datasets/igs/igs14.atx".into()
+            }
+        });
         load_receiver_pcv(&dir.join(rover_file), &dir.join(base.base_file), &antex)
     } else {
         None
@@ -567,7 +586,26 @@ fn main() {
     // Rover filter init is left to the SPP in broadcast frame (None): the
     // RINEX header approx is NAD83 and must not seed the filter.
     let tropo_gradients = multi2025 && std::env::var("GNEISS_TROPO_GRAD").as_deref() != Ok("0");
-    let ctx = RunContext { ephemerides: &data.ephemerides, truth: &data.truth, rover_init: None, klob: data.klob, tropo_gradients, dynamics };
+
+    // Optional precise products: GNEISS_SP3=/path/to/file.sp3 GNEISS_CLK=/path/to/file.clk
+    let precise_orbits = std::env::var("GNEISS_SP3").ok().and_then(|p| {
+        let f = File::open(&p).ok()?;
+        let epochs = gneiss_parsers::sp3::parse_sp3(BufReader::new(f)).ok()?;
+        let orbit = gneiss_parsers::precise_orbit::PreciseOrbit::new(epochs);
+        println!("Loaded SP3 precise orbits from {}", p);
+        Some(std::sync::Arc::new(orbit))
+    });
+    let precise_clocks = std::env::var("GNEISS_CLK").ok().and_then(|p| {
+        let clk_str = std::fs::read_to_string(&p).ok()?;
+        let clk = gneiss_parsers::rinex_clk::RinexClock::parse(&clk_str);
+        println!("Loaded RINEX CLK precise clocks from {}", p);
+        Some(std::sync::Arc::new(clk))
+    });
+
+    let ctx = RunContext {
+        ephemerides: &data.ephemerides, truth: &data.truth, rover_init: None,
+        klob: data.klob, tropo_gradients, dynamics, precise_orbits, precise_clocks,
+    };
     let selected_rover = select_rover_epochs(&data.rover_epochs);
     let mut results = Vec::new();
     let mut base_trajs: Vec<Vec<SmoothedEpoch>> = Vec::new();
