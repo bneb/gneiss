@@ -5,11 +5,8 @@ pub const FREQ_GPS_L2: f64 = 1227.60e6;
 pub const FREQ_GPS_L5: f64 = 1176.45e6;
 pub const FREQ_GAL_E5B: f64 = 1207.140e6;
 pub const FREQ_BDS_B1I: f64 = 1561.098e6;
-/// BDS-2 B2I frequency (NOT the same as Galileo E5b).
-/// BDS-3 uses B2b at 1207.140 MHz (same as Galileo E5b) or B2a at 1176.45 MHz.
-/// Without PRN-to-generation mapping, we default to the BDS-2 frequency which
-/// covers the majority of satellites in pre-2020 datasets.
-pub const FREQ_BDS_B2I: f64 = 1207.52e6;
+/// BDS B2I / B2b carrier frequency (1180 * 1.023 MHz = 1207.140 MHz).
+pub const FREQ_BDS_B2I: f64 = 1207.140e6;
 pub const FREQ_GLO_L1_NOMINAL: f64 = 1602.0e6;
 pub const FREQ_GLO_L2_NOMINAL: f64 = 1246.0e6;
 pub const FREQ_GLO_L1_DELTA: f64 = 0.5625e6;

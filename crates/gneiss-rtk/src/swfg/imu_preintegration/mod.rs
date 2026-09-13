@@ -17,6 +17,9 @@ use std::fmt;
 use crate::swfg::factor::Factor;
 use crate::swfg::variables::{VariableId, VariableValues};
 
+pub mod smoother;
+pub mod stationary;
+
 /// Preintegrated IMU measurements between two GNSS epochs.
 ///
 /// The preintegration is performed once when IMU data arrives (not during
@@ -46,6 +49,8 @@ pub struct ImuPreintegration {
 
     /// Preintegration covariance (15×15: [dp, dv, dq_axis_angle]).
     pub covariance: DMatrix<f64>,
+    /// Whether this epoch interval was identified as stationary (for ZUPT).
+    pub is_stationary: bool,
 }
 
 impl ImuPreintegration {
@@ -61,6 +66,7 @@ impl ImuPreintegration {
             dv_dbg: Matrix3::zeros(),
             dq_dbg: Matrix3::zeros(),
             covariance: DMatrix::identity(15, 15) * 1e-4,
+            is_stationary: false,
         }
     }
 
@@ -73,6 +79,7 @@ impl ImuPreintegration {
         if imu_data.len() < 2 {
             return;
         }
+        self.is_stationary = stationary::detect_stationary(imu_data);
         let mut prev_time = imu_data[0].time_us;
 
         for m in imu_data.iter().skip(1) {
@@ -120,6 +127,7 @@ impl ImuPreintegration {
             dq: dq_corr,
             dt: self.dt,
             covariance: self.covariance.clone(),
+            is_stationary: self.is_stationary,
         }
     }
 }
@@ -138,6 +146,7 @@ pub struct CorrectedPreintegration {
     pub dq: UnitQuaternion<f64>,
     pub dt: f64,
     pub covariance: DMatrix<f64>,
+    pub is_stationary: bool,
 }
 
 /// A single IMU sample at a known time.
@@ -148,15 +157,18 @@ pub struct ImuSample {
     /// Gyroscope measurement (rad/s, body frame).
     pub gyro: Vector3<f64>,
     /// Time tag in microseconds.
-    pub time_us: u32,
+    pub time_us: u64,
 }
 
-/// Compute time difference between two microsecond time tags, handling u32 wrap.
-fn time_diff_us(prev: u32, curr: u32) -> f64 {
+/// Compute time difference between two microsecond time tags, handling rollover or wrap.
+fn time_diff_us(prev: u64, curr: u64) -> f64 {
+    const WEEK_US: u64 = 604_800_000_000;
     if curr >= prev {
         (curr - prev) as f64 / 1_000_000.0
+    } else if prev <= WEEK_US && curr < 30_000_000 {
+        ((WEEK_US - prev) + curr) as f64 / 1_000_000.0
     } else {
-        ((u32::MAX as u64 - prev as u64) + curr as u64 + 1) as f64 / 1_000_000.0
+        ((u64::MAX - prev) + curr + 1) as f64 / 1_000_000.0
     }
 }
 

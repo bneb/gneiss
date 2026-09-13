@@ -158,8 +158,10 @@
         // RINEX 3 band 1 is BDS-3 B1C @1575.42 (attrs P/X/D) — NO variant here;
         // must resolve None, never B1I @1561.098 (14.3 MHz error otherwise).
         assert_maps(c, "C1P C1X L1D", None);
-        // B2a (band 5), B2b (band 7) also have no registry variant yet.
-        assert_maps(c, "C5 L5 C7 C7D L7 C3 C8", None);
+        // Band 7 carries BeiDou B2I @1207.14 MHz.
+        assert_maps(c, "C7 C7D L7", Some(Signal::BdsB2i));
+        // B2a (band 5), B1C (band 1) unmodelled.
+        assert_maps(c, "C5 L5 C3 C8", None);
     }
 
     #[test]
@@ -257,6 +259,7 @@
         // GPS secondary is L2 on band 2.
         assert_eq!(secondary_signal(Constellation::Gps), Some((2, Signal::GpsL2Cm)));
         assert_eq!(secondary_signal(Constellation::Glonass), Some((2, Signal::GloL2Of)));
+        assert_eq!(secondary_signal(Constellation::Beidou), Some((7, Signal::BdsB2i)));
     }
 
     #[test]

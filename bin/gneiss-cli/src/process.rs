@@ -40,6 +40,7 @@ pub struct ProcessArgs {
     pub clk: Option<String>,
     pub auto_cors: Option<usize>,
     pub auto_products: bool,
+    pub calibrate_passes: Option<usize>,
 }
 
 pub async fn run_process(args: ProcessArgs) -> Result<(), Box<dyn std::error::Error>> {
@@ -114,10 +115,7 @@ fn dispatch_engine_pipeline(
         run_network_pipeline(rover, bases, ephem, klob, cfg, rover_path, rover_pos, antex, args.glonass)
             .map_err(Into::into)
     } else if let Some(base_path) = bases.first() {
-        run_single_base_pipeline(
-            rover, base_path, ephem, klob, cfg, rover_path, rover_pos,
-            args.base_position.as_deref(), antex, args.glonass, args.enable_backward_smoothing,
-        )
+        run_single_base_pipeline(rover, base_path, ephem, klob, cfg, rover_path, rover_pos, antex, args)
     } else {
         run_spp_pipeline(cfg, ephem, klob, rover)
     }
@@ -263,6 +261,33 @@ fn solve_network_upd(
     Some(sol.sat_upd)
 }
 
+fn execute_base_ppk(
+    cfg: &EngineConfig,
+    ephem: &[Ephemeris],
+    rover: &[EpochObs],
+    base_obs: &[EpochObs],
+    opts: &PostProcessOptions,
+    passes: Option<usize>,
+) -> Result<Vec<SmoothedEpoch>, Box<dyn std::error::Error>> {
+    use gneiss_rtk::post_process::calibration::{
+        execute_calibrated_post_process, CalibrationConvergenceCriteria, MultiPassCalibrationOptions,
+    };
+    if let Some(n) = passes.filter(|&p| p >= 2) {
+        let crit = CalibrationConvergenceCriteria { max_iterations: n, ..Default::default() };
+        let calib_opts = MultiPassCalibrationOptions { criteria: crit, ..Default::default() };
+        let (res, rep) = execute_calibrated_post_process(cfg, ephem, rover, Some(base_obs), None, opts, &calib_opts)
+            .map_err(std::io::Error::other)?;
+        info!("Multi-pass calibration: {} passes (converged: {}), fix: {:.1}%",
+            rep.passes_executed, rep.converged, res.quality.fix_rate_pct);
+        Ok(res.trajectory)
+    } else {
+        let res = execute_post_process(cfg, ephem, rover, Some(base_obs), None, opts)
+            .map_err(std::io::Error::other)?;
+        info!("Single-base complete: {} epochs, fix: {:.1}%", res.trajectory.len(), res.quality.fix_rate_pct);
+        Ok(res.trajectory)
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn run_single_base_pipeline(
     rover: &[EpochObs],
@@ -272,32 +297,24 @@ fn run_single_base_pipeline(
     cfg: &EngineConfig,
     rover_path: &str,
     rover_pos: Option<[f64; 3]>,
-    custom_base_pos: Option<&str>,
     antex: &str,
-    glonass: bool,
-    backward: bool,
+    args: &ProcessArgs,
 ) -> Result<Vec<SmoothedEpoch>, Box<dyn std::error::Error>> {
-    let (base_obs, approx_bp) = UniversalObsReader::read_file(Path::new(base_path))?;
-    let parsed_bp = parse_coords(custom_base_pos).or(approx_bp);
-    let pco_pos = parsed_bp.map(|bp| pco_corrected_base_position(bp, rover_pos, rover_path, base_path, antex));
-
-    if backward {
-        let pcv = gneiss_rtk::post_process::antenna::load_receiver_pcv(
-            Path::new(rover_path), Path::new(base_path), antex,
-        );
-        let opts = backward_smoothing_options(
-            pco_pos, rover_pos, klob.map(|k| k.alpha), klob.map(|k| k.beta),
-            pcv, glonass, None,
-        );
-        let res = execute_post_process(cfg, ephem, rover, Some(&base_obs), None, &opts)
-            .map_err(std::io::Error::other)?;
-        info!("Single-base post-processing complete: {} epochs, fix rate: {:.1}%",
-            res.trajectory.len(), res.quality.fix_rate_pct);
-        Ok(res.trajectory)
-    } else {
+    if !args.enable_backward_smoothing {
         warn!("--single-pass: forward-only SWFG, no ambiguity resolution.");
-        run_spp_pipeline(cfg, ephem, klob, rover)
+        return run_spp_pipeline(cfg, ephem, klob, rover);
     }
+    let (base_obs, approx_bp) = UniversalObsReader::read_file(Path::new(base_path))?;
+    let parsed_bp = parse_coords(args.base_position.as_deref()).or(approx_bp);
+    let pco_pos = parsed_bp.map(|bp| pco_corrected_base_position(bp, rover_pos, rover_path, base_path, antex));
+    let pcv = gneiss_rtk::post_process::antenna::load_receiver_pcv(
+        Path::new(rover_path), Path::new(base_path), antex,
+    );
+    let opts = backward_smoothing_options(
+        pco_pos, rover_pos, klob.map(|k| k.alpha), klob.map(|k| k.beta),
+        pcv, args.glonass, None,
+    );
+    execute_base_ppk(cfg, ephem, rover, &base_obs, &opts, args.calibrate_passes)
 }
 
 fn run_spp_pipeline(
@@ -411,13 +428,8 @@ fn build_swfg_config(
 }
 
 fn parse_coords(s: Option<&str>) -> Option<[f64; 3]> {
-    let s = s?;
-    let parts: Vec<f64> = s.split(',').filter_map(|p| p.trim().parse().ok()).collect();
-    if parts.len() == 3 {
-        Some([parts[0], parts[1], parts[2]])
-    } else {
-        None
-    }
+    let parts: Vec<f64> = s?.split(',').filter_map(|p| p.trim().parse().ok()).collect();
+    (parts.len() == 3).then(|| [parts[0], parts[1], parts[2]])
 }
 
 fn pco_corrected_base_position(
@@ -451,18 +463,12 @@ fn backward_smoothing_options(
         initial_rover_position: rover_pos.map(|p| nalgebra::Vector3::new(p[0], p[1], p[2])),
         klobuchar_alpha: alpha,
         klobuchar_beta: beta,
-        q_accel: None,
+        enable_glonass,
         widelane_ar: true,
-        tropo_gradients: false,
-        network_sat_upd: net_upd,
         receiver_pcv: pcv,
         dynamics: ProcessingDynamics::from_env(),
-        enable_glonass,
-        continuity_gate: false,
-        precise_orbits: None,
-        precise_clocks: None,
-        sinex_bias: None,
-        antex_database: None,
+        network_sat_upd: net_upd,
+        ..Default::default()
     }
 }
 

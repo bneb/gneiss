@@ -191,6 +191,30 @@ impl ReceiverPcv {
         let bas_diff_mm = bas.interpolate_az_zen(az_bas_sat_deg, zen_bas_sat) - bas.interpolate_az_zen(az_bas_ref_deg, zen_bas_ref);
         (rov_diff_mm - bas_diff_mm) / MM_PER_M
     }
+
+    /// Compute standalone receiver PCO correction in metres projected along LOS towards satellite.
+    pub fn pco_correction_m(&self, az_deg: f64, el_deg: f64) -> f64 {
+        let az_rad = az_deg.to_radians();
+        let el_rad = el_deg.to_radians();
+        let north_m = self.pco_neu_mm.x * 1e-3;
+        let east_m = self.pco_neu_mm.y * 1e-3;
+        let up_m = self.pco_neu_mm.z * 1e-3;
+        let u_east = az_rad.sin() * el_rad.cos();
+        let u_north = az_rad.cos() * el_rad.cos();
+        let u_up = el_rad.sin();
+        east_m * u_east + north_m * u_north + up_m * u_up
+    }
+
+    /// Compute standalone receiver PCV correction in metres along LOS.
+    pub fn pcv_correction_m(&self, az_deg: f64, el_deg: f64) -> f64 {
+        let zen_deg = (90.0 - el_deg).max(0.0);
+        self.interpolate_az_zen(az_deg, zen_deg) / MM_PER_M
+    }
+
+    /// Total standalone receiver antenna correction in metres (PCO + PCV) along LOS.
+    pub fn total_correction_m(&self, az_deg: f64, el_deg: f64) -> f64 {
+        self.pco_correction_m(az_deg, el_deg) + self.pcv_correction_m(az_deg, el_deg)
+    }
 }
 
 /// Match a stored `TYPE / SERIAL NO` string against family + radome.

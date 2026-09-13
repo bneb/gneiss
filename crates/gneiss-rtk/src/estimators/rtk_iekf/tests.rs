@@ -68,9 +68,9 @@
             );
             assert!(sol.is_ok());
             let s = sol.unwrap();
+            let err = (s.position_ecef - sim.truth_positions[i].1).norm();
             if s.is_fixed {
                 fixed_count += 1;
-                let err = (s.position_ecef - sim.truth_positions[i].1).norm();
                 assert!(err < 0.05, "Fixed epoch error should be < 5cm, got {:.4}m", err);
             }
         }

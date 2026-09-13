@@ -9,12 +9,14 @@
 pub mod antenna;
 pub mod backward;
 pub mod boresight;
+pub mod calibration;
 pub mod combiner;
 pub mod dynamics;
 pub mod forward;
 pub mod iekf_pass;
 pub mod lever_arm;
 pub mod network;
+pub mod network_adj;
 pub mod quality;
 pub mod sbet;
 pub mod screening;
@@ -30,13 +32,21 @@ use crate::swfg::config::EngineConfig;
 use crate::swfg::imu_preintegration::ImuSample;
 
 pub use boresight::{BoresightCalibrationResult, BoresightEstimator, BoresightObservation};
+pub use calibration::{
+    execute_calibrated_post_process, CalibrationConvergenceCriteria, CalibrationParameters,
+    MultiPassCalibrationOptions, MultiPassCalibrationReport,
+};
 pub use combiner::SmoothedEpoch;
 pub use dynamics::ProcessingDynamics;
 pub use lever_arm::{LeverArmEstimate, LeverArmEstimator, LeverArmObservation};
+pub use network_adj::{CorsStation, NetworkAdjuster, NetworkAdjustmentResult, StationAtmosphere};
 pub use quality::QualityReport;
 pub use sbet::export_sbet_trajectory;
 pub use screening::ScreeningReport;
-pub use vrs::{synthesize_vrs_epoch, NetworkAtmosphereSurface, NetworkStation};
+pub use vrs::{
+    compute_ipp, synthesize_vrs_epoch, DelaunayAtmosphereModel, NetworkAtmosphereSurface,
+    NetworkStation, VrsSynthesizer,
+};
 
 /// Complete result of a post-processing run.
 #[derive(Debug, Clone)]
@@ -113,6 +123,8 @@ pub struct PostProcessOptions {
     pub precise_clocks: Option<std::sync::Arc<gneiss_parsers::rinex_clk::RinexClock>>,
     pub sinex_bias: Option<std::sync::Arc<gneiss_parsers::sinex_bia::SinexBias>>,
     pub antex_database: Option<std::sync::Arc<gneiss_parsers::antex::AntexDatabase>>,
+    /// Active calibration parameters for extrinsics, intrinsics, and biases.
+    pub calibration: Option<CalibrationParameters>,
 }
 
 /// Paired receiver antenna PCV models consumed by the DD engine.
@@ -203,7 +215,7 @@ pub fn execute_post_process(
     let smoothed_traj = combiner::combine_trajectories(
         &forward_traj,
         &backward_map,
-        options.widelane_ar,
+        true,
         options.dynamics,
     );
     let smoothed_traj = if options.continuity_gate {

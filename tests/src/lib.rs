@@ -2,6 +2,8 @@
 
 #[cfg(test)]
 pub mod benchmark_matrix;
+pub mod f9p_rover_benchmark;
+pub mod inertial_outage_simulation;
 pub mod post_process_simulation;
 
 #[cfg(test)]

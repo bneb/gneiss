@@ -24,6 +24,8 @@
 use super::state::DoubleDiffKey;
 use super::GnssRtkIekf;
 use gneiss_core::constants::SPEED_OF_LIGHT_M_S;
+use gneiss_core::time::GpsTime;
+use nalgebra::Vector3;
 
 /// Pure pair decision for the centered precise-clock DD correction.
 pub(crate) fn centered_pair_correction(
@@ -165,6 +167,60 @@ impl GnssRtkIekf {
                 self.clk_ref_switches, self.state.time.tow, key.constellation_id,
                 key.sat, key.freq_band, old_key.ref_sat, key.ref_sat,
                 old_datum, datum_m, step_cycles
+            );
+        }
+    }
+
+    pub(super) fn formation_clock_corr_m(
+        &self,
+        sat_id: gneiss_core::sat::SatelliteId,
+        ref_sat_id: u16,
+        rx_pos: Vector3<f64>,
+        sat_pos: Vector3<f64>,
+        ref_pos: Vector3<f64>,
+    ) -> f64 {
+        use gneiss_core::constants::SPEED_OF_LIGHT_M_S as C;
+        let Some(clk_prod) = &self.precise_clocks else {
+            return 0.0;
+        };
+        let tau_s = (rx_pos - sat_pos).norm() / C;
+        let tau_r = (rx_pos - ref_pos).norm() / C;
+        let t_s = GpsTime::new(self.state.time.week, self.state.time.tow - tau_s);
+        let t_r = GpsTime::new(self.state.time.week, self.state.time.tow - tau_r);
+        let ref_sv = super::ref_sat::prn_u16_to_sat(sat_id.constellation as u8, ref_sat_id);
+        let cs = clk_prod.centered_clock(sat_id, t_s);
+        let cr = clk_prod.centered_clock(ref_sv, t_r);
+        let (corr_m, tripped) = centered_pair_correction(cs, cr);
+        if tripped {
+            self.latch_clk_gate_warning(sat_id, ref_sv);
+        }
+        if std::env::var("GNEISS_CLK_TRACE").is_ok() {
+            clk_centering_trace(self.state.time.tow, sat_id, ref_sv, cs, cr, corr_m);
+        }
+        corr_m
+    }
+
+    pub(super) fn latch_clk_gate_warning(
+        &self,
+        sat_id: gneiss_core::sat::SatelliteId,
+        ref_sv: gneiss_core::sat::SatelliteId,
+    ) {
+        use std::sync::atomic::Ordering;
+        if self
+            .clk_gate_warned
+            .compare_exchange(false, true, Ordering::Relaxed, Ordering::Relaxed)
+            .is_ok()
+        {
+            eprintln!(
+                "CLK-GATE: precise-clock DD correction disabled: centered \
+                 inter-satellite spread exceeded {:.0} us (pathological \
+                 clock-product epoch); all further corrections on this \
+                 engine are suppressed [first trip: {:?}{:02}-{:02}, tow {:.0}]",
+                gneiss_parsers::clk_centering::MAX_CENTERED_SPREAD_S * 1e6,
+                sat_id.constellation,
+                sat_id.prn,
+                ref_sv.prn,
+                self.state.time.tow
             );
         }
     }

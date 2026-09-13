@@ -108,11 +108,22 @@ pub struct SatObs {
 }
 
 impl SatObs {
+    fn matches_band(&self, o_band: u8, o_attr: char, req_band: u8) -> bool {
+        if o_band == req_band {
+            return true;
+        }
+        if self.sat.constellation == crate::sat::Constellation::Beidou && o_attr == 'I' {
+            return (req_band == 1 && o_band == 2) || (req_band == 2 && o_band == 1);
+        }
+        false
+    }
+
     pub fn get_observable(&self, freq_band: u8) -> Option<f64> {
         self.observations
             .iter()
             .find(|o| {
-                o.code.obs_type == ObsType::Pseudorange && o.code.signal.freq_band == freq_band
+                o.code.obs_type == ObsType::Pseudorange
+                    && self.matches_band(o.code.signal.freq_band, o.code.signal.attribute, freq_band)
             })
             .map(|o| o.value)
     }
@@ -121,7 +132,8 @@ impl SatObs {
         self.observations
             .iter()
             .find(|o| {
-                o.code.obs_type == ObsType::CarrierPhase && o.code.signal.freq_band == freq_band
+                o.code.obs_type == ObsType::CarrierPhase
+                    && self.matches_band(o.code.signal.freq_band, o.code.signal.attribute, freq_band)
             })
             .map(|o| o.value)
     }
@@ -130,7 +142,8 @@ impl SatObs {
         self.observations
             .iter()
             .find(|o| {
-                o.code.obs_type == ObsType::CarrierPhase && o.code.signal.freq_band == freq_band
+                o.code.obs_type == ObsType::CarrierPhase
+                    && self.matches_band(o.code.signal.freq_band, o.code.signal.attribute, freq_band)
             })
             .map(|o| (o.value, o.lli))
     }
@@ -138,7 +151,10 @@ impl SatObs {
     pub fn get_doppler(&self, freq_band: u8) -> Option<f64> {
         self.observations
             .iter()
-            .find(|o| o.code.obs_type == ObsType::Doppler && o.code.signal.freq_band == freq_band)
+            .find(|o| {
+                o.code.obs_type == ObsType::Doppler
+                    && self.matches_band(o.code.signal.freq_band, o.code.signal.attribute, freq_band)
+            })
             .map(|o| o.value)
     }
 
@@ -146,7 +162,8 @@ impl SatObs {
         self.observations
             .iter()
             .find(|o| {
-                o.code.obs_type == ObsType::CarrierPhase && o.code.signal.freq_band == freq_band
+                o.code.obs_type == ObsType::CarrierPhase
+                    && self.matches_band(o.code.signal.freq_band, o.code.signal.attribute, freq_band)
             })
             .and_then(|o| o.lock_time)
     }
@@ -155,7 +172,8 @@ impl SatObs {
         self.observations
             .iter()
             .find(|o| {
-                o.code.obs_type == ObsType::CarrierPhase && o.code.signal.freq_band == freq_band
+                o.code.obs_type == ObsType::CarrierPhase
+                    && self.matches_band(o.code.signal.freq_band, o.code.signal.attribute, freq_band)
             })
             .and_then(|o| o.lli)
     }
@@ -163,7 +181,10 @@ impl SatObs {
     pub fn get_snr(&self, freq_band: u8) -> Option<u8> {
         self.observations
             .iter()
-            .find(|o| o.code.obs_type == ObsType::Snr && o.code.signal.freq_band == freq_band)
+            .find(|o| {
+                o.code.obs_type == ObsType::Snr
+                    && self.matches_band(o.code.signal.freq_band, o.code.signal.attribute, freq_band)
+            })
             .map(|o| o.value as u8)
     }
 }

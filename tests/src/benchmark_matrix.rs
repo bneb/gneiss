@@ -255,6 +255,16 @@ fn test_real_rinex_wtzr_float_ppp_convergence() {
         None
     };
 
+    let bia_path = dir.join("com21374.bia");
+    let sinex_bias = if bia_path.exists() {
+        File::open(&bia_path)
+            .ok()
+            .and_then(|f| gneiss_parsers::sinex_bia::SinexBias::parse(BufReader::new(f)).ok())
+            .map(std::sync::Arc::new)
+    } else {
+        None
+    };
+
     println!("Total epochs in WTZR: {}", obs_epochs.len());
     let selected_epochs = &obs_epochs[..obs_epochs.len().min(600)];
 
@@ -269,17 +279,18 @@ fn test_real_rinex_wtzr_float_ppp_convergence() {
         klobuchar_alpha: klob.as_ref().map(|k| k.alpha),
         klobuchar_beta: klob.as_ref().map(|k| k.beta),
         q_accel: None,
-        widelane_ar: false,
+        widelane_ar: true,
         tropo_gradients: false,
         network_sat_upd: None,
         receiver_pcv: None,
-        dynamics: Default::default(),
+        dynamics: gneiss_rtk::post_process::dynamics::ProcessingDynamics::Static,
         enable_glonass: false,
         continuity_gate: false,
         precise_orbits,
         precise_clocks,
-        sinex_bias: None,
+        sinex_bias,
         antex_database: antex_database.clone(),
+        calibration: None,
     };
 
     let result = execute_post_process(&config, &ephems, selected_epochs, None, None, &options)
@@ -390,6 +401,7 @@ fn test_real_rinex_alic_float_ppp_convergence() {
         precise_clocks,
         sinex_bias: None,
         antex_database: antex_database.clone(),
+        calibration: None,
     };
 
     let result = execute_post_process(&config, &ephems, selected_epochs, None, None, &options)

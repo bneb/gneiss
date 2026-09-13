@@ -14,6 +14,7 @@ use self::system::build_measurement_system;
 
 pub use self::robust::{
     if_residual_outliers, phase_innovation_outliers, robust_inflate, update_zwd_scalar,
+    validate_fixed_carrier_residuals, validate_fixed_pseudorange_residuals,
     GRAD_INIT_VAR_M2, GRAD_MIN_SIN_EL, GRAD_RW_M2_PER_S, MAX_ZWD_STEP_M,
     PHASE_INNOVATION_GATE_CYCLES, ROBUST_INNOVATION_THRESHOLD, ZWD_INIT_VAR_M2, ZWD_RW_M2_PER_S,
 };

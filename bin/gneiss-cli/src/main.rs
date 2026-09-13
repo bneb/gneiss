@@ -63,6 +63,8 @@ enum Commands {
         auto_cors: Option<usize>,
         #[arg(long, help = "Automatically fetch precise products (SP3/CLK/ANTEX)")]
         auto_products: bool,
+        #[arg(long, help = "Number of iterative calibration passes (e.g. --calibrate-passes 2)")]
+        calibrate_passes: Option<usize>,
     },
 
     /// Compute local site calibration from paired GNSS and Ground Control Points (CSV)
@@ -157,12 +159,13 @@ async fn main() {
             rover, base, nav, output, format, qc_report, geoid, config,
             single_pass, mode, max_epochs, systems, sp3, clk,
             base_position, antex, glonass, auto_cors, auto_products,
+            calibrate_passes,
         } => {
             let args = process::ProcessArgs {
                 rover, bases: base, nav, output, format, qc_report, geoid, config,
                 enable_backward_smoothing: !single_pass, mode, max_epochs,
                 base_position, systems, antex, glonass, sp3, clk,
-                auto_cors, auto_products,
+                auto_cors, auto_products, calibrate_passes,
             };
             if let Err(e) = process::run_process(args).await {
                 eprintln!("Error: {}", e);
@@ -288,6 +291,7 @@ async fn run_batch_mode(
                 clk: None,
                 auto_cors: None,
                 auto_products: false,
+                calibrate_passes: None,
             };
             process::run_process(args).await?;
         }

@@ -8,6 +8,7 @@ pub mod formation_cov;
 pub mod iono_free;
 pub mod mw;
 pub mod predict;
+pub mod ref_sat;
 pub mod sat_pco;
 pub mod sat_pos;
 pub mod satpos;
@@ -20,7 +21,7 @@ pub mod widelane;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use nalgebra::Vector3;
+use nalgebra::{Matrix3, Vector3};
 use gneiss_core::ephemeris::Ephemeris;
 use gneiss_core::obs::EpochObs;
 use gneiss_core::time::GpsTime;
@@ -36,7 +37,8 @@ pub use state::{DoubleDiffKey, RtkState};
 pub use update::{iekf_update, DoubleDiffMeasurement};
 
 pub(crate) use ar_gate::seed_ambiguity_variance_cycles2;
-pub(crate) use clk_datum::{centered_pair_correction, clk_centering_trace};
+#[cfg(test)]
+pub(crate) use clk_datum::centered_pair_correction;
 
 /// Double-Difference IEKF and RTS Smoother engine for RTK/PPK.
 pub struct GnssRtkIekf {
@@ -107,6 +109,8 @@ pub struct GnssRtkIekf {
     /// profile widens it so coherent model mismatch during acceleration
     /// does not deweight genuine measurements.
     pub robust_innov_scale: f64,
+    /// Kinematic profile flag for ambiguity resolution and process noise.
+    pub is_kinematic: bool,
     /// Rover ZWD residual (m zenith wet) scalar random-walk estimate.
     pub zwd_est_m: f64,
     pub zwd_var_m2: f64,
@@ -135,6 +139,9 @@ pub struct GnssRtkIekf {
     pub fix_and_hold: bool,
     /// Rover antenna heading offset relative to True North (radians).
     pub rover_heading_rad: f64,
+    /// Number of consecutive epochs with consistent fixed ambiguities.
+    pub consecutive_fixes: u32,
+    last_fixed_ambs: Vec<(DoubleDiffKey, f64)>,
     /// This epoch's code-minus-phase divergences `(freq_band, cycles)` of
     /// the pairs tracked so far, used to coherently seed newly initialised
     /// ambiguities when `ar_gate` is on. Cleared each epoch.
@@ -171,6 +178,7 @@ impl GnssRtkIekf {
             static_lock_after_s: None,
             static_lock_q_accel: 1e-9,
             robust_innov_scale: 1.0,
+            is_kinematic: false,
             zwd_est_m: 0.0,
             zwd_var_m2: update::ZWD_INIT_VAR_M2,
             prev_zwd_tow: start_time.tow,
@@ -182,6 +190,8 @@ impl GnssRtkIekf {
             ar_elevation_mask_rad: Self::DEFAULT_MIN_ELEVATION_RAD,
             fix_and_hold: std::env::var("GNEISS_FIX_AND_HOLD").is_ok_and(|v| v == "1"),
             rover_heading_rad: 0.0,
+            consecutive_fixes: 0,
+            last_fixed_ambs: Vec::new(),
             code_phase_div: Vec::new(),
         }
     }
@@ -284,87 +294,8 @@ impl GnssRtkIekf {
 
 
 
-        // AR eligibility gating: exclude pairs tracked for too few epochs.
-        if self.min_ar_lock_epochs > 0 {
-            let min_ep = self.min_ar_lock_epochs;
-            let eligible: Vec<DoubleDiffKey> = self.pair_epochs.iter()
-                .filter(|(_, &age)| age >= min_ep)
-                .map(|(k, _)| *k)
-                .collect();
-            self.state.retain_active_ambiguities(&eligible);
-        }
-        // Opt-in AR elevation mask (GNEISS_AR_GATE): resolve integers only
-        // from pairs whose both members sit above the higher AR cut-off.
-        // Non-destructive: only the LAMBDA input is restricted, the live
-        // state keeps every float so re-risen pairs resume where they left.
-        let ar_view_owned;
-        let ar_view = if self.ar_gate && self.ar_elevation_mask_rad > self.min_elevation_rad {
-            ar_view_owned = ar_gate::elevation_filtered_view(
-                &self.state, &dd_meas.dd, self.ar_elevation_mask_rad,
-            );
-            &ar_view_owned
-        } else {
-            &self.state
-        };
-        let mut ar_res = ar::resolve_ambiguities(ar_view, 3, self.target_pf);
-        if self.widelane_ar {
-            // A FAR fix contradicting a converged MW wide lane is a
-            // confidently-wrong fix (slow iono drift dragged the per-band
-            // floats past half-cycle; the ratio test cannot see it). Reject
-            // it and let the iono-immune cascade try instead.
-            let far_vetoed = ar_res.is_fixed
-                && !widelane::far_matches_widelanes(&self.wl_tracker, &ar_res);
-            if !ar_res.is_fixed || far_vetoed {
-                if tracing::enabled!(tracing::Level::DEBUG) {
-                    tracing::debug!(
-                        "ar-decision: tow={:.0} far_fixed={} vetoed={} cascade={}",
-                        rover.time.tow, ar_res.is_fixed, far_vetoed,
-                        widelane::resolve_cascade(&self.state, &self.wl_tracker)
-                            .map(|c| c.is_fixed).unwrap_or(false),
-                    );
-                }
-                ar_res = ar::float_result(&self.state);
-                if let Some(cascade) = widelane::resolve_cascade(&self.state, &self.wl_tracker) {
-                    ar_res = cascade;
-                }
-            }
-        }
-
-        // Experimental: post-fix iono-free residual screen. A same-cycle
-        // dual-frequency slip leaves MW (geometry-free) untouched but
-        // shifts the pair's IF ambiguity by whole lambda_IF cycles, so
-        // deviating pairs expose confidently-wrong fixes that carry no
-        // wide-lane contradiction signal.
-        if ar_res.is_fixed && std::env::var("GNEISS_IF_VETO").is_ok() {
-            let mut fixed_n1: HashMap<DoubleDiffKey, f64> = HashMap::new();
-            let mut fixed_n2: HashMap<DoubleDiffKey, f64> = HashMap::new();
-            for (k, v) in &ar_res.fixed_ambiguities {
-                if k.freq_band == 1 { fixed_n1.insert(*k, *v); }
-                if k.freq_band == 2 { fixed_n2.insert(DoubleDiffKey { freq_band: 1, ..*k }, *v); }
-            }
-            let suspects = update::if_residual_outliers(
-                ar_res.position_ecef, &dd_meas.dd, &fixed_n1, &fixed_n2,
-            );
-            if !suspects.is_empty() {
-                tracing::debug!("if-screen: tow={:.0} suspect pairs={} -> float",
-                    rover.time.tow, suspects.len());
-                ar_res = ar::float_result(&self.state);
-            }
-        }
-
-        // When fixed, re-estimate the position from iono-free phase to
-        // remove the DD ionosphere bias that grows with baseline length.
-        let (pos_ecef, cov_pos) = if ar_res.is_fixed {
-            if self.fix_and_hold && ar_res.ratio >= 3.0 {
-                ar::condition_state_on_integers(&mut self.state, &ar_res.fixed_ambiguities);
-            }
-            match iono_free::apply_fixed_iono_free(&self.state, &dd_meas.iono_free, &ar_res) {
-                iono_free::IonoFreeOutcome::Solution(pos, cov) => (pos, cov),
-                _ => (ar_res.position_ecef, ar_res.cov_position),
-            }
-        } else {
-            (ar_res.position_ecef, ar_res.cov_position)
-        };
+        let mut ar_res = self.resolve_ar_candidate(&dd_meas);
+        let (pos_ecef, cov_pos) = self.finalize_fixed_position(&mut ar_res, &dd_meas);
         let q_flag = if ar_res.is_fixed { 1 } else { 2 };
 
         self.history.push(IekfSnapshot {
@@ -396,25 +327,99 @@ impl GnssRtkIekf {
         })
     }
 
+    fn resolve_ar_candidate(&mut self, dd_meas: &formation::DdMeasurements) -> ar::ArResult {
+        if self.min_ar_lock_epochs > 0 {
+            let min_ep = self.min_ar_lock_epochs;
+            let eligible: Vec<DoubleDiffKey> = self.pair_epochs.iter()
+                .filter(|(_, &age)| age >= min_ep)
+                .map(|(k, _)| *k)
+                .collect();
+            self.state.retain_active_ambiguities(&eligible);
+        }
+        let ar_view_owned;
+        let ar_view = if self.ar_gate && self.ar_elevation_mask_rad > self.min_elevation_rad {
+            ar_view_owned = ar_gate::elevation_filtered_view(
+                &self.state, &dd_meas.dd, self.ar_elevation_mask_rad,
+            );
+            &ar_view_owned
+        } else {
+            &self.state
+        };
+        let mut ar_res = ar::resolve_ambiguities(ar_view, 3, self.target_pf, self.is_kinematic);
+        if self.widelane_ar {
+            let far_vetoed = ar_res.is_fixed
+                && !widelane::far_matches_widelanes(&self.wl_tracker, &ar_res);
+            if !ar_res.is_fixed || far_vetoed {
+                ar_res = ar::float_result(&self.state);
+                if let Some(cascade) = widelane::resolve_cascade(&self.state, &self.wl_tracker) {
+                    ar_res = cascade;
+                }
+            }
+        }
+        self.screen_fixed_residuals(&mut ar_res, &dd_meas.dd);
+        ar_res
+    }
+
+    fn screen_fixed_residuals(&self, ar_res: &mut ar::ArResult, dd: &[DoubleDiffMeasurement]) {
+        if !ar_res.is_fixed {
+            return;
+        }
+        let max_carrier_res = if self.is_kinematic { 0.08 } else { 0.05 };
+        let (max_code_rms, max_code_res) = if self.is_kinematic { (6.0, 18.0) } else { (4.0, 12.0) };
+        let carrier_ok = update::validate_fixed_carrier_residuals(
+            ar_res.position_ecef,
+            dd,
+            &ar_res.fixed_ambiguities,
+            max_carrier_res,
+        );
+        let pr_ok = update::validate_fixed_pseudorange_residuals(
+            ar_res.position_ecef,
+            dd,
+            max_code_rms,
+            max_code_res,
+        );
+        if !carrier_ok || !pr_ok {
+            *ar_res = ar::float_result(&self.state);
+        }
+    }
+
+    fn finalize_fixed_position(
+        &mut self,
+        ar_res: &mut ar::ArResult,
+        dd_meas: &formation::DdMeasurements,
+    ) -> (Vector3<f64>, Matrix3<f64>) {
+        if !ar_res.is_fixed {
+            ar::reset_fix_hysteresis(&mut self.consecutive_fixes, &mut self.last_fixed_ambs);
+            return (ar_res.position_ecef, ar_res.cov_position);
+        }
+        ar::update_fix_hysteresis(&mut self.consecutive_fixes, &mut self.last_fixed_ambs, &ar_res.fixed_ambiguities);
+        if self.fix_and_hold
+            && ar_res.ratio >= 3.0
+            && self.consecutive_fixes >= 3
+            && !ar::condition_state_on_integers(&mut self.state, &ar_res.fixed_ambiguities)
+        {
+            *ar_res = ar::float_result(&self.state);
+            ar::reset_fix_hysteresis(&mut self.consecutive_fixes, &mut self.last_fixed_ambs);
+            return (ar_res.position_ecef, ar_res.cov_position);
+        }
+        match iono_free::apply_fixed_iono_free(&self.state, &dd_meas.iono_free, ar_res) {
+            iono_free::IonoFreeOutcome::Solution(pos, cov) => (pos, cov),
+            _ => (ar_res.position_ecef, ar_res.cov_position),
+        }
+    }
+
     /// Run RTS backward smoothing on all processed epochs.
     pub fn smooth(&self) -> Vec<SmoothedEpoch> {
         smoother::run_rts_smoother(&self.history)
     }
 
     /// Constellations that participate in DD formation, sorted by id.
-    /// GLONASS requires the opt-in FDMA policy (see `enable_glonass`).
-    fn select_constellations(
+    pub fn select_constellations(
         sat_info: &[(gneiss_core::sat::SatelliteId, Vector3<f64>)],
         glo: bool,
     ) -> Vec<u8> {
-        let mut v: Vec<u8> = sat_info.iter().map(|(s, _)| s.constellation as u8).collect();
-        v.sort_unstable();
-        v.dedup();
-        let glo_id = gneiss_core::sat::Constellation::Glonass as u8;
-        v.retain(|&c| c != glo_id || glo);
-        v
+        ref_sat::select_constellations(sat_info, glo)
     }
-
 
     /// Seeds or resets an ambiguity using [`seed_ambiguity_variance_cycles2`]
     /// for its initial uncertainty rather than a fixed constant -- see that
@@ -467,26 +472,7 @@ impl GnssRtkIekf {
             self.code_phase_div.push((band, divergence));
         }
     }
-
-    fn select_reference_satellite_hys(
-        &mut self,
-        const_id: u8,
-        sats: &[(gneiss_core::sat::SatelliteId, Vector3<f64>)],
-    ) -> u16 {
-        if let Some(&prev) = self.ref_sats.get(&const_id) {
-            if sats.iter().any(|(s, _)| s.prn as u16 == prev) {
-                return prev;
-            }
-        }
-        let chosen = sats.first().map_or(0, |(s, _)| s.prn as u16);
-        if chosen > 0 {
-            self.ref_sats.insert(const_id, chosen);
-        }
-        chosen
-    }
 }
-
-
 
 #[cfg(test)]
 mod tests;

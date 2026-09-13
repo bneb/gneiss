@@ -76,6 +76,12 @@ pub fn form_iono_free_dd(
         && bas_ref.get_observable_phase(2).is_some()
     {
         2
+    } else if rov_s.get_observable_phase(7).is_some()
+        && bas_s.get_observable_phase(7).is_some()
+        && rov_ref.get_observable_phase(7).is_some()
+        && bas_ref.get_observable_phase(7).is_some()
+    {
+        7
     } else {
         5
     };

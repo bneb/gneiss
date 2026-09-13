@@ -1,12 +1,14 @@
 #![cfg_attr(test, allow(clippy::unwrap_used))]
 
 pub mod ambiguity;
+pub mod composite;
 pub mod estimators;
 pub mod events;
 pub mod math;
 pub mod measurements;
 pub mod post_process;
 pub mod sim;
+pub mod spatial;
 pub mod streaming;
 pub mod swfg;
 

@@ -12,10 +12,13 @@ use nalgebra::Vector3;
 use gneiss_core::constants::SPEED_OF_LIGHT_M_S;
 use gneiss_core::ephemeris::Ephemeris;
 use gneiss_core::obs::{EpochObs, SatObs};
-use gneiss_core::time::GpsTime;
 use gneiss_parsers::receiver_antenna::{compute_dd_pcv_correction_2d, frequency_code};
 
 use super::formation_cov::compute_dd_variances;
+use super::ref_sat::{
+    prn_u16_to_sat, sat_matches_id, sat_to_prn_u16, select_constellations,
+    select_ref_sat_with_hysteresis,
+};
 use super::sat_pos::{extract_sat_positions, glo_freq_num};
 use super::update::GRAD_MIN_SIN_EL;
 use super::GnssRtkIekf;
@@ -47,15 +50,22 @@ impl GnssRtkIekf {
 
         if std::env::var("GNEISS_GLO_DEBUG").is_ok() {
             let glo_in_sat_info = sat_info.iter().filter(|(s, _)| s.constellation == gneiss_core::sat::Constellation::Glonass).count();
-            let selected = Self::select_constellations(sat_info.as_slice(), self.enable_glonass);
+            let selected = select_constellations(sat_info.as_slice(), self.enable_glonass);
             eprintln!("GLO-DEBUG enable_glonass={} sat_info_total={} glo_in_sat_info={} selected_constellations={:?}",
                 self.enable_glonass, sat_info.len(), glo_in_sat_info, selected);
         }
-        for const_id in Self::select_constellations(sat_info.as_slice(), self.enable_glonass) {
+        for const_id in select_constellations(sat_info.as_slice(), self.enable_glonass) {
 
             let const_sats: Vec<(gneiss_core::sat::SatelliteId, Vector3<f64>)> = sat_info
                 .iter()
-                .filter(|(s, _)| s.constellation as u8 == const_id)
+                .filter(|(s, _)| {
+                    if const_id == gneiss_core::sat::Constellation::Gps as u8 {
+                        s.constellation == gneiss_core::sat::Constellation::Gps
+                            || s.constellation == gneiss_core::sat::Constellation::Qzss
+                    } else {
+                        s.constellation as u8 == const_id
+                    }
+                })
                 .cloned()
                 .collect();
 
@@ -64,7 +74,12 @@ impl GnssRtkIekf {
             }
 
             let old_ref_opt = self.ref_sats.get(&const_id).copied();
-            let ref_sat_id = self.select_reference_satellite_hys(const_id, &const_sats);
+            let ref_sat_id = select_ref_sat_with_hysteresis(
+                const_id,
+                &const_sats,
+                self.state.pos_ecef,
+                &mut self.ref_sats,
+            );
             if ref_sat_id == 0 {
                 continue;
             }
@@ -76,20 +91,20 @@ impl GnssRtkIekf {
                 }
             }
 
-            let ref_pos = match const_sats.iter().find(|(s, _)| s.prn as u16 == ref_sat_id) {
+            let ref_pos = match const_sats.iter().find(|(s, _)| sat_to_prn_u16(*s) == ref_sat_id) {
                 Some((_, p)) => *p,
                 None => continue,
             };
 
-            let ref_rov = rover.satellites.iter().find(|s| s.sat.constellation as u8 == const_id && s.sat.prn as u16 == ref_sat_id);
-            let ref_bas = base.satellites.iter().find(|s| s.sat.constellation as u8 == const_id && s.sat.prn as u16 == ref_sat_id);
+            let ref_rov = rover.satellites.iter().find(|s| sat_matches_id(s.sat, const_id, ref_sat_id));
+            let ref_bas = base.satellites.iter().find(|s| sat_matches_id(s.sat, const_id, ref_sat_id));
             let (r_rov, r_bas) = match (ref_rov, ref_bas) {
                 (Some(r), Some(b)) => (r, b),
                 _ => continue,
             };
 
             for (sat_id, sat_pos) in &const_sats {
-                if sat_id.prn as u16 == ref_sat_id {
+                if sat_to_prn_u16(*sat_id) == ref_sat_id {
                     continue;
                 }
                 let rov_s = rover.satellites.iter().find(|s| s.sat == *sat_id);
@@ -129,6 +144,9 @@ impl GnssRtkIekf {
                             (Some(r), Some(b)) if
                                 r.get_observable_phase(2).is_some()
                                 && b.get_observable_phase(2).is_some() => 2,
+                            (Some(r), Some(b)) if
+                                r.get_observable_phase(7).is_some()
+                                && b.get_observable_phase(7).is_some() => 7,
                             _ => 5,
                         };
                         if let (Some(cp1), Some(cp2)) =
@@ -144,7 +162,12 @@ impl GnssRtkIekf {
                     if let Some(m) = iono_free::form_iono_free_dd(
                         *sat_id, rs, bs, r_rov, r_bas, *sat_pos, ref_pos, base_pos,
                         self.state.pos_ecef,
-                        DoubleDiffKey { constellation_id: sat_id.constellation as u8, sat: sat_id.prn as u16, ref_sat: ref_sat_id, freq_band: 1 },
+                        DoubleDiffKey {
+                            constellation_id: const_id,
+                            sat: sat_to_prn_u16(*sat_id),
+                            ref_sat: ref_sat_id,
+                            freq_band: 1,
+                        },
                         glo_freq_num(ephems, *sat_id),
                     ) {
                         if_meas.push(m);
@@ -205,9 +228,14 @@ impl GnssRtkIekf {
             _ => None,
         };
 
+        let const_id = if sat_id.constellation == gneiss_core::sat::Constellation::Qzss {
+            gneiss_core::sat::Constellation::Gps as u8
+        } else {
+            sat_id.constellation as u8
+        };
         let key = DoubleDiffKey {
-            constellation_id: sat_id.constellation as u8,
-            sat: sat_id.prn as u16,
+            constellation_id: const_id,
+            sat: sat_to_prn_u16(sat_id),
             ref_sat: ref_sat_id,
             freq_band,
         };
@@ -249,10 +277,7 @@ impl GnssRtkIekf {
             let (gn_r, ge_r) = grad_term(az_ref, el_ref);
             (w_sat - w_ref, gn_s - gn_r, ge_s - ge_r)
         };
-        let ref_sat_struct = gneiss_core::sat::SatelliteId {
-            constellation: sat_id.constellation,
-            prn: ref_sat_id as u8,
-        };
+        let ref_sat_struct = prn_u16_to_sat(const_id, ref_sat_id);
         let mut cur_arc = self.slip_detector.get_arc(sat_id)
             + self.slip_detector.get_arc(ref_sat_struct);
         if self.widelane_ar {
@@ -352,76 +377,6 @@ impl GnssRtkIekf {
     }
 
 
-    /// Differential precise-satellite-clock correction (metres of range),
-    /// constellation-median centered with spread gating.
-    ///
-    /// Each satellite's clock bias is evaluated at its approximate transmit
-    /// time and CENTERED by the median across its constellation mates at
-    /// that instant (removes the product's arbitrary timescale datum), then
-    /// the pair correction `c · (dt_sat − dt_ref)` is formed from the
-    /// centered biases. If the centered inter-satellite spread exceeds 100
-    /// µs the product epoch is pathological: the pair correction is
-    /// suppressed (0.0) and a latched warning prints once per engine.
-    /// Returns 0.0 when no product is loaded or either lookup is missing.
-    pub(super) fn formation_clock_corr_m(
-        &self,
-        sat_id: gneiss_core::sat::SatelliteId,
-        ref_sat_id: u16,
-        rx_pos: Vector3<f64>,
-        sat_pos: Vector3<f64>,
-        ref_pos: Vector3<f64>,
-    ) -> f64 {
-        use gneiss_core::constants::SPEED_OF_LIGHT_M_S as C;
-        let Some(clk_prod) = &self.precise_clocks else {
-            return 0.0;
-        };
-        let tau_s = (rx_pos - sat_pos).norm() / C;
-        let tau_r = (rx_pos - ref_pos).norm() / C;
-        let t_s = GpsTime::new(self.state.time.week, self.state.time.tow - tau_s);
-        let t_r = GpsTime::new(self.state.time.week, self.state.time.tow - tau_r);
-        let ref_sv = gneiss_core::sat::SatelliteId {
-            constellation: sat_id.constellation,
-            prn: ref_sat_id as u8,
-        };
-        let cs = clk_prod.centered_clock(sat_id, t_s);
-        let cr = clk_prod.centered_clock(ref_sv, t_r);
-        let (corr_m, tripped) = super::centered_pair_correction(cs, cr);
-        if tripped {
-            self.latch_clk_gate_warning(sat_id, ref_sv);
-        }
-        if std::env::var("GNEISS_CLK_TRACE").is_ok() {
-            super::clk_centering_trace(self.state.time.tow, sat_id, ref_sv, cs, cr, corr_m);
-        }
-        corr_m
-    }
-
-    /// Print the one-shot spread-gate warning (latched per engine instance
-    /// via an atomic flag, so concurrent epochs cannot double-print).
-    pub(super) fn latch_clk_gate_warning(
-        &self,
-        sat_id: gneiss_core::sat::SatelliteId,
-        ref_sv: gneiss_core::sat::SatelliteId,
-    ) {
-        use std::sync::atomic::Ordering;
-        if self
-            .clk_gate_warned
-            .compare_exchange(false, true, Ordering::Relaxed, Ordering::Relaxed)
-            .is_ok()
-        {
-            eprintln!(
-                "CLK-GATE: precise-clock DD correction disabled: centered \
-                 inter-satellite spread exceeded {:.0} us (pathological \
-                 clock-product epoch); all further corrections on this \
-                 engine are suppressed [first trip: {:?}{:02}-{:02}, tow {:.0}]",
-                gneiss_parsers::clk_centering::MAX_CENTERED_SPREAD_S * 1e6,
-                sat_id.constellation,
-                sat_id.prn,
-                ref_sv.prn,
-                self.state.time.tow
-            );
-        }
-    }
-
     /// Phase innovations with sensitivity to the rover ZWD residual.
     pub(super) fn zwd_innovation_pairs(
         &self,
@@ -464,9 +419,14 @@ impl GnssRtkIekf {
         b2: u8,
         glo_k: i8,
     ) {
+        let const_id = if sat_id.constellation == gneiss_core::sat::Constellation::Qzss {
+            gneiss_core::sat::Constellation::Gps as u8
+        } else {
+            sat_id.constellation as u8
+        };
         let key = DoubleDiffKey {
-            constellation_id: sat_id.constellation as u8,
-            sat: sat_id.prn as u16,
+            constellation_id: const_id,
+            sat: sat_to_prn_u16(sat_id),
             ref_sat: ref_sat_id,
             freq_band: 1,
         };

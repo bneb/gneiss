@@ -58,7 +58,7 @@ fn compute_initial_position(
     ephemerides: &[Ephemeris],
     fallback: Vector3<f64>,
 ) -> Vector3<f64> {
-    for ep in rover_epochs.iter().rev().take(10) {
+    for ep in rover_epochs.iter().rev().take(50) {
         if let Ok(spp) = crate::estimators::spp::compute_spp(
             ep,
             ephemerides,
@@ -66,7 +66,12 @@ fn compute_initial_position(
             &crate::estimators::spp::SppConfig::default(),
             None,
         ) {
-            return spp.position.vector;
+            let pos = spp.position.vector;
+            let r = pos.norm();
+            let dist = (pos - fallback).norm();
+            if (r - 6_371_000.0).abs() < 25_000.0 && dist < 50_000.0 {
+                return pos;
+            }
         }
     }
     fallback
@@ -216,7 +221,7 @@ fn group_imu_by_epoch(
     let mut cur_idx = 0usize;
     for epoch in rover_epochs {
         let tow_ms = (epoch.time.tow * 1000.0).round() as u64;
-        let cur_us = (epoch.time.tow * 1_000_000.0) as u32;
+        let cur_us = (epoch.time.tow * 1_000_000.0).round() as u64;
         let mut slice = Vec::new();
         while cur_idx < samples.len() && samples[cur_idx].time_us <= cur_us {
             slice.push(samples[cur_idx]);

@@ -3,6 +3,7 @@
 pub mod antex;
 pub mod blq;
 pub mod clk_centering;
+pub mod csrs_pos;
 pub mod ionex;
 pub mod lnav;
 pub mod rinex;

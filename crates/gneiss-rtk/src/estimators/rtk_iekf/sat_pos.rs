@@ -37,6 +37,7 @@ pub(crate) fn extract_sat_positions(
                 gneiss_core::sat::Constellation::Glonass => 'R',
                 gneiss_core::sat::Constellation::Galileo => 'E',
                 gneiss_core::sat::Constellation::Beidou => 'C',
+                gneiss_core::sat::Constellation::Qzss => 'J',
                 _ => 'G',
             };
             let sv_name = format!("{}{:02}", sys_char, s.sat.prn);

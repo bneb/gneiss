@@ -40,6 +40,7 @@ pub enum Signal {
     GalE6Cs,
     // BeiDou
     BdsB1i,
+    BdsB2i,
     BdsB3i,
 }
 
@@ -55,6 +56,7 @@ impl Signal {
             Signal::GalE5b => 1207.14e6,
             Signal::GalE6Cs => 1278.75e6,
             Signal::BdsB1i => 1561.098e6,
+            Signal::BdsB2i => 1207.14e6,
             Signal::BdsB3i => 1268.52e6,
         }
     }
@@ -225,7 +227,8 @@ fn beidou_signal(code: &RinexCode) -> Option<Signal> {
         1 if !b1c_attr => Some(Signal::BdsB1i), // RINEX 2 legacy slot only
         2 => Some(Signal::BdsB1i),              // RINEX 3 B1I (e.g. "C2I")
         6 => Some(Signal::BdsB3i),
-        _ => None, // bands 1(B1C)/5(B2a)/7(B2b) unmodelled
+        7 => Some(Signal::BdsB2i),              // RINEX 3 B2I (e.g. "C7I")
+        _ => None,
     }
 }
 
@@ -251,6 +254,7 @@ pub fn secondary_signal(c: crate::sat::Constellation) -> Option<(u8, Signal)> {
         Constellation::Gps | Constellation::Qzss => Some((2, Signal::GpsL2Cm)),
         Constellation::Glonass => Some((2, Signal::GloL2Of)),
         Constellation::Galileo => Some((5, Signal::GalE5a)),
+        Constellation::Beidou => Some((7, Signal::BdsB2i)),
         _ => None,
     }
 }
@@ -289,7 +293,9 @@ pub fn signal_for_band(c: crate::sat::Constellation, band: u8) -> Option<Signal>
         (Constellation::Galileo, 6) => Some(Signal::GalE6Cs),
         (Constellation::Galileo, 7) => Some(Signal::GalE5b),
         (Constellation::Beidou, 1) => Some(Signal::BdsB1i),
+        (Constellation::Beidou, 2) => Some(Signal::BdsB1i),
         (Constellation::Beidou, 5) => Some(Signal::BdsB3i),
+        (Constellation::Beidou, 7) => Some(Signal::BdsB2i),
         _ => None,
     }
 }

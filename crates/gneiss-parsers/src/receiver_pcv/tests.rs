@@ -406,3 +406,23 @@
         // Azimuth wrap: az 360 -> az 0
         assert_near(pcv.interpolate_az_zen(360.0, 10.0), 2.0, TOL, "wrap 360");
     }
+
+    #[test]
+    fn test_standalone_receiver_pco_pcv() {
+        let pcv = ReceiverPcv {
+            ant_type: "STANDALONE_TEST".into(),
+            radome: "NONE".into(),
+            pco_neu_mm: nalgebra::Vector3::new(10.0, 20.0, 30.0),
+            pcv_grid_mm: vec![1.0, 2.0, 3.0],
+            azi_grid_mm: None,
+            dazi_deg: 0.0,
+            zen_start_deg: 0.0,
+            zen_step_deg: 10.0,
+        };
+
+        let pco_zen = pcv.pco_correction_m(0.0, 90.0);
+        assert_near(pco_zen, 0.030, TOL, "pco at zenith");
+        let pcv_zen = pcv.pcv_correction_m(0.0, 90.0);
+        assert_near(pcv_zen, 0.001, TOL, "pcv at zenith");
+        assert_near(pcv.total_correction_m(0.0, 90.0), 0.031, TOL, "total at zenith");
+    }

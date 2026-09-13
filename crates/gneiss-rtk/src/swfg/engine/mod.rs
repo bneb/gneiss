@@ -197,19 +197,29 @@ impl SwfgEngine {
         }
     }
 
+    fn initial_zwd_for_pos(&self) -> f64 {
+        if let Some(p) = self.prev_position.or(self.initial_position) {
+            let llh = gneiss_core::coords::ecef_to_llh(p);
+            (0.10 * (-llh.z.max(0.0) / 2000.0).exp()).clamp(0.01, 0.15)
+        } else {
+            0.10
+        }
+    }
+
     fn setup_zwd(&mut self, epoch: u32, is_rtk: bool, dt_sec: f64) -> Option<VariableId> {
         if is_rtk { return None; }
         let id = self.solver.graph.variables.iter()
             .find(|(_, n)| matches!(n.kind, VariableKind::TropoZwd { epoch: e } if e == epoch))
             .map(|(id, _)| *id)?;
-        self.solver.graph.set_value(id, &[0.1]);
+        let init_zwd = self.initial_zwd_for_pos();
+        self.solver.graph.set_value(id, &[init_zwd]);
         if let Some(prev_id) = self.prev_zwd {
             let rw_factor = crate::swfg::pipeline::tropo_factors::ZwdRandomWalkFactor::new(
-                prev_id, id, dt_sec.max(1.0), 1e-8,
+                prev_id, id, dt_sec.max(1.0), 1e-4,
             );
             self.solver.graph.add_factor(Box::new(rw_factor));
         } else {
-            let zwd_prior = crate::swfg::factor::PriorFactor::new(id, nalgebra::DVector::from_element(1, 0.1), 0.04);
+            let zwd_prior = crate::swfg::factor::PriorFactor::new(id, nalgebra::DVector::from_element(1, init_zwd), 0.04);
             self.solver.graph.add_factor(Box::new(zwd_prior));
         }
         self.prev_zwd = Some(id);
@@ -356,6 +366,13 @@ impl SwfgEngine {
         }
         if pos_ecef.x.is_nan() || pos_ecef.y.is_nan() || pos_ecef.z.is_nan() || pos_ecef.norm() < 1e6 {
             pos_ecef = self.prev_position.unwrap_or(init_pos);
+        }
+        if std::env::var("PPP_DEBUG_ZWD").is_ok() {
+            if let Some(z_id) = self.prev_zwd {
+                if let Some(zv) = vals.get(z_id) {
+                    eprintln!("EPOCH {} ZWD: {:.4}m", epoch, zv[0]);
+                }
+            }
         }
 
         if let Some(pose_val) = self.solver.graph.variables.get(&pose_id).map(|n| &n.value) {

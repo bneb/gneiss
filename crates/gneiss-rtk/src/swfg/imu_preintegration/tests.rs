@@ -115,6 +115,6 @@ use std::collections::BTreeMap;
 
     #[test]
     fn time_diff_wraps_correctly() {
-        let dt = time_diff_us(u32::MAX - 1000, 1000);
+        let dt = time_diff_us(u64::MAX - 1000, 1000);
         assert!((dt - 2001.0 / 1_000_000.0).abs() < 1e-9);
     }

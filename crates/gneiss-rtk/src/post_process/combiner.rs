@@ -109,7 +109,7 @@ fn select_fused_estimate(
     limits: &SepLimits,
     strict: bool,
 ) -> (Vector3<f64>, Matrix3<f64>, u8) {
-    let (pos, cov, mut q) = if fwd.is_fixed && bwd.is_fixed {
+    let (mut pos, mut cov, mut q) = if fwd.is_fixed && bwd.is_fixed {
         if sep < limits.both_fixed_fuse_m {
             fuse_covariances(fwd, bwd, 1)
         } else if fwd.cov_position.trace() <= bwd.cov_position.trace() {
@@ -135,6 +135,13 @@ fn select_fused_estimate(
     let limit_m = if both_fixed { limits.strict_m } else { limits.strict_m.max(2.0) };
     if strict && sep > limit_m && q == 1 {
         q = 2;
+        if fwd.cov_position.trace() <= bwd.cov_position.trace() {
+            pos = fwd.position_ecef;
+            cov = fwd.cov_position;
+        } else {
+            pos = bwd.position_ecef;
+            cov = bwd.cov_position;
+        }
     }
     (pos, cov, q)
 }

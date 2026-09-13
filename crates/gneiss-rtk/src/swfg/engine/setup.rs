@@ -94,11 +94,12 @@ fn add_motion_constraints(
     preint: &ImuPreintegration,
 ) {
     let nhc = crate::swfg::pipeline::OdometerVelocityFactor::new(
-        pose_id, vj, Vector3::zeros(), Vector3::new(25.0, 0.0025, 0.0025),
+        pose_id, vj, Vector3::zeros(), Vector3::new(25.0, 0.01, 0.01),
     );
     solver.graph.add_factor(Box::new(nhc));
     let speed = preint.dp.norm() / preint.dt.max(1e-3);
-    if preint.dt > 0.05 && speed < 0.15 {
+    let is_static = preint.is_stationary || (preint.dt > 0.05 && speed < 0.15);
+    if is_static {
         let zupt = crate::swfg::pipeline::OdometerVelocityFactor::new(
             pose_id, vj, Vector3::zeros(), Vector3::new(0.0001, 0.0001, 0.0001),
         );

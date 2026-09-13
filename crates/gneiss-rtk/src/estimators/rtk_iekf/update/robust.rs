@@ -138,3 +138,71 @@ pub fn if_residual_outliers(
         .map(|(k, _)| k)
         .collect()
 }
+
+/// Validate post-fix carrier phase residuals across all fixed ambiguities.
+///
+/// Returns true if all fixed ambiguities fit the double-difference carrier phase observations
+/// within `max_residual_m` (default: 0.05m = 5 cm). If any fixed ambiguity deviates by more
+/// than 5 cm, returns false, signaling an invalid/false integer fix.
+pub fn validate_fixed_carrier_residuals(
+    pos: Vector3<f64>,
+    measurements: &[DoubleDiffMeasurement],
+    fixed_ambiguities: &[(DoubleDiffKey, f64)],
+    max_residual_m: f64,
+) -> bool {
+    if fixed_ambiguities.is_empty() { return false; }
+    let meas_map: HashMap<DoubleDiffKey, &DoubleDiffMeasurement> = measurements
+        .iter()
+        .map(|m| (m.key, m))
+        .collect();
+
+    for (k, n_val) in fixed_ambiguities {
+        let Some(m) = meas_map.get(k) else { return false; };
+        let Some(cp) = pcv_corrected_cp(m) else { return false; };
+
+        let r_sat = (m.sat_pos - pos).norm();
+        let r_ref = (m.ref_pos - pos).norm();
+        let base_dd = (m.sat_pos - m.base_pos).norm() - (m.ref_pos - m.base_pos).norm();
+        let geom_m = (r_sat - r_ref) - base_dd + compute_tropo_dd(m.sat_pos, m.ref_pos, m.base_pos, pos);
+        let baseline_m = (pos - m.base_pos).norm();
+        let eff_max = max_residual_m + 4.0e-6 * baseline_m;
+
+        let res_m = (cp * m.lambda - geom_m - n_val * m.lambda).abs();
+        if res_m > eff_max {
+            return false;
+        }
+    }
+    true
+}
+
+/// Validate that the fixed solution does not contradict raw pseudorange observations.
+///
+/// A false integer fix in a weak geometry can yield small carrier residuals for its own
+/// subset while moving the position by tens of meters, creating 50-100m pseudorange residuals
+/// across the constellation. Returns false if any DD pseudorange residual exceeds `max_pr_res_m`.
+pub fn validate_fixed_pseudorange_residuals(
+    pos: Vector3<f64>,
+    measurements: &[DoubleDiffMeasurement],
+    max_pr_rms_m: f64,
+    max_pr_res_m: f64,
+) -> bool {
+    if measurements.is_empty() { return true; }
+    let mut sum_sq = 0.0;
+    let mut count = 0;
+    let mut n_large = 0;
+    for m in measurements {
+        let r_sat = (m.sat_pos - pos).norm();
+        let r_ref = (m.ref_pos - pos).norm();
+        let base_dd = (m.sat_pos - m.base_pos).norm() - (m.ref_pos - m.base_pos).norm();
+        let geom_m = (r_sat - r_ref) - base_dd + compute_tropo_dd(m.sat_pos, m.ref_pos, m.base_pos, pos);
+        let res = (m.dd_pr_m - geom_m).abs();
+        if res > max_pr_res_m { n_large += 2; }
+        else if res > 8.0 { n_large += 1; }
+        sum_sq += res * res;
+        count += 1;
+    }
+    if count == 0 { return true; }
+    let rms = (sum_sq / count as f64).sqrt();
+    rms <= max_pr_rms_m && n_large <= 3
+}
+

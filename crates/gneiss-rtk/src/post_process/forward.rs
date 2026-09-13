@@ -110,7 +110,7 @@ fn compute_initial_position(
     ephemerides: &[Ephemeris],
     fallback: Vector3<f64>,
 ) -> Vector3<f64> {
-    for ep in rover_epochs.iter().take(10) {
+    for ep in rover_epochs.iter().take(50) {
         let seed = crate::estimators::spp::SppState::new(
             gneiss_core::coords::Coordinate::new(
                 fallback,
@@ -130,8 +130,13 @@ fn compute_initial_position(
             &crate::estimators::spp::SppConfig::default(),
             Some(&seed),
         ) {
-            println!("SPP initialization successful: [{:.2}, {:.2}, {:.2}]", spp.position.vector.x, spp.position.vector.y, spp.position.vector.z);
-            return spp.position.vector;
+            let pos = spp.position.vector;
+            let r = pos.norm();
+            let dist = (pos - fallback).norm();
+            if (r - 6_371_000.0).abs() < 25_000.0 && dist < 50_000.0 {
+                println!("SPP initialization successful: [{:.2}, {:.2}, {:.2}]", pos.x, pos.y, pos.z);
+                return pos;
+            }
         }
     }
     fallback
@@ -279,7 +284,7 @@ fn extract_imu_slice(
     imu_idx: &mut usize,
 ) -> Option<ImuPreintegration> {
     let samples = imu_samples?;
-    let cur_us = (epoch.time.tow * 1_000_000.0) as u32;
+    let cur_us = (epoch.time.tow * 1_000_000.0).round() as u64;
     let mut epoch_samples = Vec::new();
 
     while *imu_idx < samples.len() && samples[*imu_idx].time_us <= cur_us {

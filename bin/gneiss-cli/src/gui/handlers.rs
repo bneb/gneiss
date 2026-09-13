@@ -117,6 +117,7 @@ pub async fn handle_solve_request(
         clk: None,
         auto_cors: req.auto_cors,
         auto_products: req.auto_products,
+        calibrate_passes: None,
     };
     crate::process::run_process(args).await.map_err(|e| e.to_string())?;
     let epochs = super::server::load_trajectory_file(&tmp_out).map_err(|e| e.to_string())?;

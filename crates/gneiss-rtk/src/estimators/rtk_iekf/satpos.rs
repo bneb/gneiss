@@ -90,10 +90,18 @@ impl EphSource for PreciseSrc<'_> {
             gneiss_core::sat::Constellation::Glonass => 'R',
             gneiss_core::sat::Constellation::Galileo => 'E',
             gneiss_core::sat::Constellation::Beidou => 'C',
+            gneiss_core::sat::Constellation::Qzss => 'J',
             _ => return None,
         };
         let (pos, sp3_clk) = self.orbits.position_at(&format!("{}{:02}", sys_char, sv.prn), t)?;
-        let clk = self.clocks.and_then(|c| c.get_clock_bias(*sv, t)).unwrap_or(sp3_clk);
+        let clk = match self.clocks.and_then(|c| c.get_clock_bias(*sv, t)) {
+            Some(c) => c,
+            None if !sp3_clk.is_nan() => sp3_clk,
+            _ => return None,
+        };
+        if clk.is_nan() || clk.abs() > 1.0 {
+            return None;
+        }
         Some((pos, clk))
     }
     fn com_referenced(&self) -> bool {
@@ -114,6 +122,31 @@ pub enum PipeErr {
 ///
 /// `pco_z_m`: nadir-direction CoM→L1-phase-centre offset in metres; used
 /// only when the source is CoM-referenced (SP3). Pass 0.0 otherwise.
+fn solve_tx_sagnac_pos(
+    src: &dyn EphSource,
+    sv: &SatelliteId,
+    t_rx: GpsTime,
+    rx_pos: Vector3<f64>,
+) -> Result<Vector3<f64>, PipeErr> {
+    let (p0, _) = src.position_at(sv, t_rx).ok_or(PipeErr::NoPosition)?;
+    let tau0 = (rx_pos - p0).norm() / SPEED_OF_LIGHT_M_S;
+    let t_tx0 = t_rx - tau0;
+    let (_, clk1) = src.position_at(sv, t_tx0).ok_or(PipeErr::NoClock)?;
+    let t_tx = t_tx0 - clk1;
+    let tx = TxTimeKnown { t_tx, tau_s: tau0 };
+
+    let (ptx, _) = src.position_at(sv, tx.t_tx).ok_or(PipeErr::NoPosition)?;
+    let pos_tx = PosAtTx(ptx);
+    let wt = EARTH_ROTATION_RATE_RAD_S * tx.tau_s;
+    let (sw, cw) = libm::sincos(wt);
+    let r = pos_tx.0;
+    Ok(Vector3::new(
+        r.x * cw + r.y * sw,
+        -r.x * sw + r.y * cw,
+        r.z,
+    ))
+}
+
 pub fn compute_phase_centre(
     src: &dyn EphSource,
     sv: &SatelliteId,
@@ -121,38 +154,12 @@ pub fn compute_phase_centre(
     rx_pos: Vector3<f64>,
     pco_z_m: f64,
 ) -> Result<PhaseCentre, PipeErr> {
-    // Stage 1 → 2: τ from receive-time position seed.
-    let (p0, _clk0) = src.position_at(sv, t_rx).ok_or(PipeErr::NoPosition)?;
-    let _raw = RawAtRx(p0);
-    let tau0 = (rx_pos - p0).norm() / SPEED_OF_LIGHT_M_S;
-
-    // Stage 2: clock-corrected transmit time (one refinement pass — the
-    // contraction ratio v_los/c ≈ 1e-5 makes a second pass sub-nanometre).
-    let t_tx0 = t_rx - tau0;
-    let (_p1, clk1) = src.position_at(sv, t_tx0).ok_or(PipeErr::NoClock)?;
-    let t_tx = t_tx0 - clk1;
-    let tx = TxTimeKnown { t_tx, tau_s: tau0 };
-
-    // Stage 3: position at true transmit time.
-    let (ptx, _) = src.position_at(sv, tx.t_tx).ok_or(PipeErr::NoPosition)?;
-    let pos_tx = PosAtTx(ptx);
-
-    // Stage 4: Sagnac rotation into receive-epoch ECEF.
-    let wt = EARTH_ROTATION_RATE_RAD_S * tx.tau_s;
-    let (sw, cw) = libm::sincos(wt);
-    let r = pos_tx.0;
-    let sagnac = SagnacApplied(Vector3::new(
-        r.x * cw + r.y * sw,
-        -r.x * sw + r.y * cw,
-        r.z,
-    ));
-
-    // Stage 5: CoM → phase centre along nadir (only for CoM sources).
+    let sagnac = solve_tx_sagnac_pos(src, sv, t_rx, rx_pos)?;
     let final_pos = if src.com_referenced() && pco_z_m.abs() > 0.0 {
-        let n = sagnac.0.normalize();
-        sagnac.0 + (-n) * pco_z_m
+        let n = sagnac.normalize();
+        sagnac + (-n) * pco_z_m
     } else {
-        sagnac.0
+        sagnac
     };
     Ok(PhaseCentre(final_pos))
 }
@@ -168,34 +175,38 @@ pub fn compute_phase_centre_3d(
     rx_pos: Vector3<f64>,
     pco_body_m: Vector3<f64>,
 ) -> Result<PhaseCentre, PipeErr> {
-    let (p0, _clk0) = src.position_at(sv, t_rx).ok_or(PipeErr::NoPosition)?;
-    let tau0 = (rx_pos - p0).norm() / SPEED_OF_LIGHT_M_S;
-
-    let t_tx0 = t_rx - tau0;
-    let (_p1, clk1) = src.position_at(sv, t_tx0).ok_or(PipeErr::NoClock)?;
-    let t_tx = t_tx0 - clk1;
-    let tx = TxTimeKnown { t_tx, tau_s: tau0 };
-
-    let (ptx, _) = src.position_at(sv, tx.t_tx).ok_or(PipeErr::NoPosition)?;
-    let pos_tx = PosAtTx(ptx);
-
-    let wt = EARTH_ROTATION_RATE_RAD_S * tx.tau_s;
-    let (sw, cw) = libm::sincos(wt);
-    let r = pos_tx.0;
-    let sagnac = SagnacApplied(Vector3::new(
-        r.x * cw + r.y * sw,
-        -r.x * sw + r.y * cw,
-        r.z,
-    ));
-
-    let final_pos = if src.com_referenced() && (pco_body_m.x.abs() > 0.0 || pco_body_m.y.abs() > 0.0 || pco_body_m.z.abs() > 0.0) {
+    let sagnac = solve_tx_sagnac_pos(src, sv, t_rx, rx_pos)?;
+    let has_pco = pco_body_m.x.abs() > 0.0 || pco_body_m.y.abs() > 0.0 || pco_body_m.z.abs() > 0.0;
+    let final_pos = if src.com_referenced() && has_pco {
         let (sun_pos, _) = gneiss_geodesy::tides::solar_lunar_positions(t_rx.tow, t_rx.week);
-        let pco_ecef = gneiss_geodesy::project_satellite_pco_to_ecef(&sagnac.0, &sun_pos, &pco_body_m);
-        sagnac.0 + pco_ecef
+        let pco_ecef = gneiss_geodesy::project_satellite_pco_to_ecef(&sagnac, &sun_pos, &pco_body_m);
+        sagnac + pco_ecef
     } else {
-        sagnac.0
+        sagnac
     };
     Ok(PhaseCentre(final_pos))
+}
+
+/// Run pipeline with 3D PCO and nadir-dependent PCV projected along line of sight.
+pub fn compute_phase_centre_3d_with_pcv(
+    src: &dyn EphSource,
+    sv: &SatelliteId,
+    t_rx: GpsTime,
+    rx_pos: Vector3<f64>,
+    pco_body_m: Vector3<f64>,
+    pcv_nadir_m: f64,
+) -> Result<PhaseCentre, PipeErr> {
+    let pc = compute_phase_centre_3d(src, sv, t_rx, rx_pos, pco_body_m)?;
+    let sat_pos = pc.0;
+    let los = rx_pos - sat_pos;
+    let dist = los.norm();
+    let pos_with_pcv = if dist > 1.0 && pcv_nadir_m.abs() > 0.0 {
+        let u_los = los / dist;
+        sat_pos + pcv_nadir_m * u_los
+    } else {
+        sat_pos
+    };
+    Ok(PhaseCentre(pos_with_pcv))
 }
 
 #[cfg(test)]
@@ -311,6 +322,18 @@ mod tests {
         let pco_body = Vector3::new(0.1, 0.2, 1.5);
         let pc = compute_phase_centre_3d(&FakeSrc, &sv, t_rx, rx, pco_body)
             .expect("3D PCO calculation must resolve");
+        assert!(pc.0.norm() < 26_000_000.0);
+    }
+
+    #[test]
+    fn test_compute_phase_centre_3d_with_pcv() {
+        let sv = SatelliteId { constellation: gneiss_core::sat::Constellation::Gps, prn: 7 };
+        let t_rx = GpsTime::new(2370, 43_200.0);
+        let rx = Vector3::new(-2_688_201.0, -4_265_643.0, 3_893_778.0);
+        let pco_body = Vector3::new(0.0, 0.0, 1.5);
+        let pcv_nadir = 0.005; // 5 mm
+        let pc = compute_phase_centre_3d_with_pcv(&FakeSrc, &sv, t_rx, rx, pco_body, pcv_nadir)
+            .expect("3D PCO+PCV calculation must resolve");
         assert!(pc.0.norm() < 26_000_000.0);
     }
 }

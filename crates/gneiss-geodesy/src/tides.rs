@@ -19,39 +19,49 @@ fn deg2rad(deg: f64) -> f64 {
     deg * (PI / 180.0)
 }
 
-/// Compute solar and lunar approximate ECEF coordinates at a given GPS time.
-pub fn solar_lunar_positions(gps_tow: f64, gps_week: u32) -> (Vector3<f64>, Vector3<f64>) {
-    let t_days = (gps_week as f64) * 7.0 + gps_tow / 86400.0;
-    let t_cent = (t_days - 7305.0) / 36525.0;
+#[inline]
+fn rotate_eci_to_ecef(v: &Vector3<f64>, gmst_rad: f64) -> Vector3<f64> {
+    let (s, c) = libm::sincos(gmst_rad);
+    Vector3::new(c * v.x + s * v.y, -s * v.x + c * v.y, v.z)
+}
 
-    // Solar mean longitude and anomaly
+fn compute_sun_eci(t_cent: f64, eps: f64) -> Vector3<f64> {
     let l_sun = deg2rad(280.460 + 36000.770 * t_cent);
     let g_sun = deg2rad(357.528 + 35999.050 * t_cent);
     let lambda_sun = l_sun + deg2rad(1.915 * libm::sin(g_sun) + 0.020 * libm::sin(2.0 * g_sun));
     let r_sun = 1.495978707e11 * (1.00014 - 0.01671 * libm::cos(g_sun) - 0.00014 * libm::cos(2.0 * g_sun));
-
-    // Obliquity of ecliptic
-    let eps = deg2rad(23.439291 - 0.0130042 * t_cent);
-
-    let sun_pos = Vector3::new(
+    Vector3::new(
         r_sun * libm::cos(lambda_sun),
         r_sun * libm::sin(lambda_sun) * libm::cos(eps),
         r_sun * libm::sin(lambda_sun) * libm::sin(eps),
-    );
+    )
+}
 
-    // Lunar mean longitude
+fn compute_moon_eci(t_cent: f64, eps: f64) -> Vector3<f64> {
     let l_moon = deg2rad(218.316 + 481267.881 * t_cent);
     let m_moon = deg2rad(134.963 + 477198.867 * t_cent);
     let lambda_moon = l_moon + deg2rad(6.289 * libm::sin(m_moon));
     let r_moon = 384400000.0 * (1.0 - 0.0549 * libm::cos(m_moon));
-
-    let moon_pos = Vector3::new(
+    Vector3::new(
         r_moon * libm::cos(lambda_moon),
         r_moon * libm::sin(lambda_moon) * libm::cos(eps),
         r_moon * libm::sin(lambda_moon) * libm::sin(eps),
-    );
+    )
+}
 
-    (sun_pos, moon_pos)
+/// Compute solar and lunar approximate ECEF coordinates at a given GPS time.
+pub fn solar_lunar_positions(gps_tow: f64, gps_week: u32) -> (Vector3<f64>, Vector3<f64>) {
+    let t_days = (gps_week as f64) * 7.0 + gps_tow / 86400.0;
+    let d_j2000 = t_days - 7300.5;
+    let t_cent = d_j2000 / 36525.0;
+    let eps = deg2rad(23.439291 - 0.0130042 * t_cent);
+
+    let sun_eci = compute_sun_eci(t_cent, eps);
+    let moon_eci = compute_moon_eci(t_cent, eps);
+
+    let gmst_rad = deg2rad((280.46061837 + 360.98564736629 * d_j2000) % 360.0);
+
+    (rotate_eci_to_ecef(&sun_eci, gmst_rad), rotate_eci_to_ecef(&moon_eci, gmst_rad))
 }
 
 #[derive(Debug, Clone, Copy)]

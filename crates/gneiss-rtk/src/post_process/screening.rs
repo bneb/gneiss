@@ -4,7 +4,7 @@
 //! satellite arc segmentation, stationary (ZUPT) interval detection,
 //! and base coordinate refinement.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use nalgebra::Vector3;
 
 use gneiss_core::obs::EpochObs;
@@ -30,6 +30,7 @@ pub struct ScreeningReport {
 pub struct CycleSlipDetector {
     prev_gf_m: HashMap<SatelliteId, f64>,
     prev_cp_tow: HashMap<SatelliteId, (f64, f64)>,
+    prev_cp_dop: HashMap<(SatelliteId, u8), (f64, f64, f64)>,
     slip_counts: HashMap<SatelliteId, u32>,
     /// Nominal epoch spacing in seconds. None (default) keeps the exact
     /// legacy fixed 2 s gap rule; slow-cadence streams (e.g. 30 s CORS)
@@ -46,19 +47,52 @@ impl CycleSlipDetector {
     /// Check for cycle slips in a single epoch.
     pub fn check_epoch(&mut self, epoch: &EpochObs) -> usize {
         let mut slips = 0;
+        let dop_slips = self.check_doppler_slips(epoch);
         for sat_obs in &epoch.satellites {
             let sat = sat_obs.sat;
             let (_pr1, _pr2, cp1, cp2, lli) = extract_pr_cp(sat_obs);
             let has_lli_slip = lli.unwrap_or(0) & 1 != 0;
             let gf_slip = self.check_gf_slip(sat, cp1, cp2);
             let dt_slip = self.check_time_gap(sat, cp1, epoch.time.tow);
+            let dop_slip = dop_slips.contains(&sat);
 
-            if has_lli_slip || gf_slip || dt_slip {
+            if has_lli_slip || gf_slip || dt_slip || dop_slip {
                 *self.slip_counts.entry(sat).or_insert(0) += 1;
                 slips += 1;
             }
         }
         slips
+    }
+
+    fn check_doppler_slips(&mut self, epoch: &EpochObs) -> HashSet<SatelliteId> {
+        let mut slips = HashSet::new();
+        for band in [1, 2, 7] {
+            let band_slips = self.check_band_doppler_slips(epoch, band);
+            slips.extend(band_slips);
+        }
+        slips
+    }
+
+    fn check_band_doppler_slips(&mut self, epoch: &EpochObs, band: u8) -> Vec<SatelliteId> {
+        let mut discs = Vec::new();
+        for sat_obs in &epoch.satellites {
+            let sat = sat_obs.sat;
+            let (cp, dop) = match (sat_obs.get_observable_phase(band), sat_obs.get_doppler(band)) {
+                (Some(c), Some(d)) => (c, d),
+                _ => continue,
+            };
+            if let Some(&(prev_cp, prev_dop, prev_tow)) = self.prev_cp_dop.get(&(sat, band)) {
+                let dt = (epoch.time.tow - prev_tow).abs();
+                if (0.05..=2.0).contains(&dt) {
+                    let d_phi = cp - prev_cp;
+                    let dop_avg = 0.5 * (dop + prev_dop);
+                    let pred_d_phi = -dop_avg * dt;
+                    discs.push((sat, d_phi - pred_d_phi, dt));
+                }
+            }
+            self.prev_cp_dop.insert((sat, band), (cp, dop, epoch.time.tow));
+        }
+        evaluate_doppler_residuals(&discs)
     }
 
     fn check_gf_slip(&mut self, sat: SatelliteId, cp1: Option<f64>, cp2: Option<f64>) -> bool {
@@ -100,6 +134,25 @@ impl CycleSlipDetector {
     pub fn get_arc(&self, sat: SatelliteId) -> u32 {
         *self.slip_counts.get(&sat).unwrap_or(&0)
     }
+}
+
+fn evaluate_doppler_residuals(discs: &[(SatelliteId, f64, f64)]) -> Vec<SatelliteId> {
+    if discs.len() < 3 {
+        return Vec::new();
+    }
+    let mut vals: Vec<f64> = discs.iter().map(|(_, d, _)| *d).collect();
+    vals.sort_by(|a, b| a.total_cmp(b));
+    let median = vals[vals.len() / 2];
+
+    let mut slipped = Vec::new();
+    for &(sat, d, dt) in discs {
+        let residual = (d - median).abs();
+        let thresh = (1.0 * dt).max(1.0);
+        if residual > thresh {
+            slipped.push(sat);
+        }
+    }
+    slipped
 }
 
 type ExtractedPrCp = (Option<f64>, Option<f64>, Option<f64>, Option<f64>, Option<u8>);
@@ -291,5 +344,81 @@ mod tests {
         let report = screen_dataset(std::slice::from_ref(&ep), Some(std::slice::from_ref(&ep)), Some(Vector3::zeros()));
         assert_eq!(report.total_epochs, 1);
         assert_eq!(report.refined_base_pos, Some(Vector3::zeros()));
+    }
+
+    fn make_test_obs(sat_prn: u8, cp: f64, dop: f64) -> gneiss_core::obs::SatObs {
+        use std::str::FromStr;
+        let sat = SatelliteId { constellation: Constellation::Gps, prn: sat_prn };
+        let mut obs = gneiss_core::obs::SatObs { sat, observations: Vec::new() };
+        obs.observations.push(gneiss_core::obs::Observation {
+            code: gneiss_core::obs::ObsCode::from_str("L1C").expect("valid code"),
+            value: cp,
+            lock_time: None,
+            lli: None,
+        });
+        obs.observations.push(gneiss_core::obs::Observation {
+            code: gneiss_core::obs::ObsCode::from_str("D1C").expect("valid code"),
+            value: dop,
+            lock_time: None,
+            lli: None,
+        });
+        obs
+    }
+
+    #[test]
+    fn test_doppler_slip_detected_on_single_sat() {
+        let mut detector = CycleSlipDetector::new();
+        let ep1 = EpochObs {
+            time: GpsTime::new(2000, 100.0),
+            satellites: vec![
+                make_test_obs(1, 1000.0, 100.0),
+                make_test_obs(2, 2000.0, -50.0),
+                make_test_obs(3, 3000.0, 25.0),
+                make_test_obs(4, 4000.0, -10.0),
+            ],
+        };
+        assert_eq!(detector.check_epoch(&ep1), 0);
+
+        let ep2 = EpochObs {
+            time: GpsTime::new(2000, 100.2),
+            satellites: vec![
+                make_test_obs(1, 980.0, 100.0),
+                make_test_obs(2, 2010.0, -50.0),
+                make_test_obs(3, 2998.0, 25.0), // +3 cycles slip
+                make_test_obs(4, 4002.0, -10.0),
+            ],
+        };
+        let slips = detector.check_epoch(&ep2);
+        assert_eq!(slips, 1);
+        let sat3 = SatelliteId { constellation: Constellation::Gps, prn: 3 };
+        assert_eq!(detector.get_arc(sat3), 1);
+    }
+
+    #[test]
+    fn test_doppler_clock_jump_no_false_slip() {
+        let mut detector = CycleSlipDetector::new();
+        let ep1 = EpochObs {
+            time: GpsTime::new(2000, 100.0),
+            satellites: vec![
+                make_test_obs(1, 1000.0, 100.0),
+                make_test_obs(2, 2000.0, -50.0),
+                make_test_obs(3, 3000.0, 25.0),
+                make_test_obs(4, 4000.0, -10.0),
+            ],
+        };
+        assert_eq!(detector.check_epoch(&ep1), 0);
+
+        // Epoch 2: All satellites jump by +500 cycles due to receiver clock jump!
+        let ep2 = EpochObs {
+            time: GpsTime::new(2000, 100.2),
+            satellites: vec![
+                make_test_obs(1, 980.0 + 500.0, 100.0),
+                make_test_obs(2, 2010.0 + 500.0, -50.0),
+                make_test_obs(3, 2995.0 + 500.0, 25.0),
+                make_test_obs(4, 4002.0 + 500.0, -10.0),
+            ],
+        };
+        let slips = detector.check_epoch(&ep2);
+        assert_eq!(slips, 0, "common-mode clock jump must not declare false slips");
     }
 }

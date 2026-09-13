@@ -62,67 +62,74 @@ pub fn compute_tropo_dd(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn append_dd_meas_rows(
+struct MeasGeom {
+    geom_dd: f64,
+    d_geom_dpos: Vector3<f64>,
+    zwd_val: f64,
+    grad_pr: f64,
+    iono_val: f64,
+    sat_iono_dd: f64,
+    zwd_idx: Option<usize>,
+    grad_idx: Option<(usize, usize)>,
+    sat_iono_idxs: (Option<usize>, Option<usize>),
+}
+
+fn compute_meas_geom(
     m: &DoubleDiffMeasurement,
     cur_pos: Vector3<f64>,
     state: &RtkState,
-    x_current: &DVector<f64>,
-    state_dim: usize,
-    h_rows: &mut Vec<DVector<f64>>,
-    y_vals: &mut Vec<f64>,
-    r_diag: &mut Vec<f64>,
-    row_metas: &mut Vec<RowMeta>,
-    innov_gate_scale: f64,
-) {
+    x: &DVector<f64>,
+) -> MeasGeom {
     let base_dd = (m.sat_pos - m.base_pos).norm() - (m.ref_pos - m.base_pos).norm();
     let r_sat = (m.sat_pos - cur_pos).norm();
     let r_ref = (m.ref_pos - cur_pos).norm();
     let trop_dd = compute_tropo_dd(m.sat_pos, m.ref_pos, m.base_pos, cur_pos);
     let geom_dd = (r_sat - r_ref) - base_dd + trop_dd + m.tide_dd_m;
-
-    let los_sat = (m.sat_pos - cur_pos) / r_sat.max(1e-3);
-    let los_ref = (m.ref_pos - cur_pos) / r_ref.max(1e-3);
-    let d_geom_dpos = los_ref - los_sat;
-
+    let d_geom_dpos = (m.ref_pos - cur_pos) / r_ref.max(1e-3) - (m.sat_pos - cur_pos) / r_sat.max(1e-3);
     let zwd_idx = state.zwd_idx();
-    let zwd_val = zwd_idx.map(|i| x_current[i]).unwrap_or(0.0);
-    let (grad_idx, grad_n_val, grad_e_val) = match state.grad_idx() {
-        Some((gn, ge)) => (Some((gn, ge)), x_current[gn], x_current[ge]),
+    let zwd_val = zwd_idx.map(|i| x[i]).unwrap_or(0.0);
+    let (grad_idx, gn_val, ge_val) = match state.grad_idx() {
+        Some((gn, ge)) => (Some((gn, ge)), x[gn], x[ge]),
         None => (None, 0.0, 0.0),
     };
-    let iono_val = state.get_iono_idx(&m.key)
-        .map(|ii| x_current[ii])
-        .unwrap_or(0.0);
-
-    let si_is = state.get_sat_iono_key_idx(m.key.constellation_id, m.key.sat)
-        .or_else(|| state.get_sat_iono_idx(m.key.sat));
-    let si_ir = state.get_sat_iono_key_idx(m.key.constellation_id, m.key.ref_sat)
-        .or_else(|| state.get_sat_iono_idx(m.key.ref_sat));
+    let iono_val = state.get_iono_idx(&m.key).map(|ii| x[ii]).unwrap_or(0.0);
+    let si_is = state.get_sat_iono_key_idx(m.key.constellation_id, m.key.sat).or_else(|| state.get_sat_iono_idx(m.key.sat));
+    let si_ir = state.get_sat_iono_key_idx(m.key.constellation_id, m.key.ref_sat).or_else(|| state.get_sat_iono_idx(m.key.ref_sat));
     let sat_iono_dd = match (si_is, si_ir) {
-        (Some(a), Some(b)) => x_current[a] - x_current[b],
+        (Some(a), Some(b)) => x[a] - x[b],
         _ => 0.0,
     };
+    let grad_pr = m.dgrad_n_rov * gn_val + m.dgrad_e_rov * ge_val;
+    MeasGeom { geom_dd, d_geom_dpos, zwd_val, grad_pr, iono_val, sat_iono_dd, zwd_idx, grad_idx, sat_iono_idxs: (si_is, si_ir) }
+}
 
-    let mut pr_h = DVector::zeros(state_dim);
-    pr_h[0] = d_geom_dpos.x;
-    pr_h[1] = d_geom_dpos.y;
-    pr_h[2] = d_geom_dpos.z;
-    if let Some(zi) = zwd_idx {
-        pr_h[zi] = m.dm_wet_rov;
-    }
-    if let Some((gn, ge)) = grad_idx {
-        pr_h[gn] = m.dgrad_n_rov;
-        pr_h[ge] = m.dgrad_e_rov;
-    }
-    if let Some(ii) = state.get_iono_idx(&m.key) {
-        pr_h[ii] = 1.0;
-    }
-    h_rows.push(pr_h);
-    let grad_pr = m.dgrad_n_rov * grad_n_val + m.dgrad_e_rov * grad_e_val;
-    let pr_y = m.dd_pr_m - geom_dd - m.dm_wet_rov * zwd_val - grad_pr - iono_val - sat_iono_dd;
+#[allow(clippy::too_many_arguments)]
+fn append_dd_code_row(
+    m: &DoubleDiffMeasurement,
+    g: &MeasGeom,
+    state: &RtkState,
+    state_dim: usize,
+    h_rows: &mut Vec<DVector<f64>>,
+    y_vals: &mut Vec<f64>,
+    r_diag: &mut Vec<f64>,
+    row_metas: &mut Vec<RowMeta>,
+    gate_scale: f64,
+) {
+    let pr_y = m.dd_pr_m - g.geom_dd - m.dm_wet_rov * g.zwd_val - g.grad_pr - g.iono_val - g.sat_iono_dd;
     let pr_r = m.pr_var_m2.max(0.01);
+    if pr_y.abs() > 30.0 && (pr_y * pr_y / pr_r) > 100.0 {
+        return; // RAIM: exclude gross pseudorange multipath blunders
+    }
+    let mut pr_h = DVector::zeros(state_dim);
+    pr_h[0] = g.d_geom_dpos.x;
+    pr_h[1] = g.d_geom_dpos.y;
+    pr_h[2] = g.d_geom_dpos.z;
+    if let Some(zi) = g.zwd_idx { pr_h[zi] = m.dm_wet_rov; }
+    if let Some((gn, ge)) = g.grad_idx { pr_h[gn] = m.dgrad_n_rov; pr_h[ge] = m.dgrad_e_rov; }
+    if let Some(ii) = state.get_iono_idx(&m.key) { pr_h[ii] = 1.0; }
+    h_rows.push(pr_h);
     y_vals.push(pr_y);
-    r_diag.push(robust_inflate(pr_y, pr_r, innov_gate_scale));
+    r_diag.push(robust_inflate(pr_y, pr_r, gate_scale));
     row_metas.push(RowMeta {
         constellation_id: m.key.constellation_id,
         ref_sat: m.key.ref_sat,
@@ -130,45 +137,65 @@ fn append_dd_meas_rows(
         kind: ObsKind::Code,
         ref_var: m.pr_ref_var_m2,
     });
+}
 
-    if let (Some(cp_obs), Some(amb_idx)) = (pcv_corrected_cp(m), state.get_amb_idx(&m.key)) {
-        let amb_val = x_current[amb_idx];
-        let pred_cp = geom_dd / m.lambda + amb_val
-            + (m.dm_wet_rov * zwd_val + grad_pr) / m.lambda
-            - iono_val / m.lambda
-            - sat_iono_dd / m.lambda;
-        let mut cp_h = DVector::zeros(state_dim);
-        cp_h[0] = d_geom_dpos.x / m.lambda;
-        cp_h[1] = d_geom_dpos.y / m.lambda;
-        cp_h[2] = d_geom_dpos.z / m.lambda;
-        cp_h[amb_idx] = 1.0;
-        if let Some(ii) = state.get_iono_idx(&m.key) {
-            cp_h[ii] = -1.0 / m.lambda;
-        }
-        if let (Some(a), Some(b)) = (si_is, si_ir) {
-            cp_h[a] -= 1.0 / m.lambda;
-            cp_h[b] += 1.0 / m.lambda;
-        }
-        if let Some(zi) = zwd_idx {
-            cp_h[zi] = m.dm_wet_rov / m.lambda;
-        }
-        if let Some((gn, ge)) = grad_idx {
-            cp_h[gn] = m.dgrad_n_rov / m.lambda;
-            cp_h[ge] = m.dgrad_e_rov / m.lambda;
-        }
-        h_rows.push(cp_h);
-        let cp_y = cp_obs - pred_cp;
-        let cp_r = m.cp_var_cycles2.max(1e-4);
-        y_vals.push(cp_y);
-        r_diag.push(robust_inflate(cp_y, cp_r, innov_gate_scale));
-        row_metas.push(RowMeta {
-            constellation_id: m.key.constellation_id,
-            ref_sat: m.key.ref_sat,
-            freq_band: m.key.freq_band,
-            kind: ObsKind::Phase,
-            ref_var: m.cp_ref_var_cycles2,
-        });
-    }
+#[allow(clippy::too_many_arguments)]
+fn append_dd_phase_row(
+    m: &DoubleDiffMeasurement,
+    g: &MeasGeom,
+    state: &RtkState,
+    x: &DVector<f64>,
+    state_dim: usize,
+    h_rows: &mut Vec<DVector<f64>>,
+    y_vals: &mut Vec<f64>,
+    r_diag: &mut Vec<f64>,
+    row_metas: &mut Vec<RowMeta>,
+    gate_scale: f64,
+) {
+    let (Some(cp_obs), Some(amb_idx)) = (pcv_corrected_cp(m), state.get_amb_idx(&m.key)) else { return };
+    let pred_cp = g.geom_dd / m.lambda + x[amb_idx]
+        + (m.dm_wet_rov * g.zwd_val + g.grad_pr) / m.lambda
+        - g.iono_val / m.lambda
+        - g.sat_iono_dd / m.lambda;
+    let mut cp_h = DVector::zeros(state_dim);
+    cp_h[0] = g.d_geom_dpos.x / m.lambda;
+    cp_h[1] = g.d_geom_dpos.y / m.lambda;
+    cp_h[2] = g.d_geom_dpos.z / m.lambda;
+    cp_h[amb_idx] = 1.0;
+    if let Some(ii) = state.get_iono_idx(&m.key) { cp_h[ii] = -1.0 / m.lambda; }
+    if let (Some(a), Some(b)) = g.sat_iono_idxs { cp_h[a] -= 1.0 / m.lambda; cp_h[b] += 1.0 / m.lambda; }
+    if let Some(zi) = g.zwd_idx { cp_h[zi] = m.dm_wet_rov / m.lambda; }
+    if let Some((gn, ge)) = g.grad_idx { cp_h[gn] = m.dgrad_n_rov / m.lambda; cp_h[ge] = m.dgrad_e_rov / m.lambda; }
+    h_rows.push(cp_h);
+    let cp_y = cp_obs - pred_cp;
+    let cp_r = m.cp_var_cycles2.max(1e-4);
+    y_vals.push(cp_y);
+    r_diag.push(robust_inflate(cp_y, cp_r, gate_scale));
+    row_metas.push(RowMeta {
+        constellation_id: m.key.constellation_id,
+        ref_sat: m.key.ref_sat,
+        freq_band: m.key.freq_band,
+        kind: ObsKind::Phase,
+        ref_var: m.cp_ref_var_cycles2,
+    });
+}
+
+#[allow(clippy::too_many_arguments)]
+fn append_dd_meas_rows(
+    m: &DoubleDiffMeasurement,
+    cur_pos: Vector3<f64>,
+    state: &RtkState,
+    x: &DVector<f64>,
+    state_dim: usize,
+    h_rows: &mut Vec<DVector<f64>>,
+    y_vals: &mut Vec<f64>,
+    r_diag: &mut Vec<f64>,
+    row_metas: &mut Vec<RowMeta>,
+    gate_scale: f64,
+) {
+    let geom = compute_meas_geom(m, cur_pos, state, x);
+    append_dd_code_row(m, &geom, state, state_dim, h_rows, y_vals, r_diag, row_metas, gate_scale);
+    append_dd_phase_row(m, &geom, state, x, state_dim, h_rows, y_vals, r_diag, row_metas, gate_scale);
 }
 
 fn assemble_matrices(

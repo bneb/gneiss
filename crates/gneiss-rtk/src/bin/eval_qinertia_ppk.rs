@@ -112,7 +112,7 @@ fn parse_imu(imu_path: &Path) -> Vec<ImuSample> {
                 samples.push(ImuSample {
                     accel: Vector3::new(ax, ay, az),
                     gyro: Vector3::new(gx, gy, gz),
-                    time_us: (tow * 1_000_000.0) as u32,
+                    time_us: (tow * 1_000_000.0).round() as u64,
                 });
             }
         }
@@ -212,6 +212,7 @@ fn make_post_process_options(
         precise_clocks: None,
         sinex_bias: None,
         antex_database: None,
+        calibration: None,
     }
 }
 

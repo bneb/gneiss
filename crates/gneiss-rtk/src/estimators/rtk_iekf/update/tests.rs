@@ -367,3 +367,31 @@ fn test_correlated_dd_covariance_matrix() {
     assert_eq!(r[(0, 3)], 0.0, "PR-CP cross is zero");
     assert!(r.cholesky().is_some(), "R must be positive definite");
 }
+
+#[test]
+fn test_validate_fixed_carrier_residuals_detects_one_cycle_false_fix() {
+    let truth = Vector3::new(100.0, 200.0, 300.0);
+    let k = DoubleDiffKey { constellation_id: 0, sat: 2, ref_sat: 1, freq_band: 1 };
+    let sat = truth + Vector3::new(1e6, 2e7, 1e7);
+    let r_sat = (sat - truth).norm();
+    let ref_sat = truth + Vector3::new(0.0, 2.5e7, 1e7);
+    let r_ref = (ref_sat - truth).norm();
+    let base = truth + Vector3::new(500.0, -200.0, 100.0);
+    let base_dd = (sat - base).norm() - (ref_sat - base).norm();
+    let geom_m = (r_sat - r_ref) - base_dd;
+    let lambda = 0.190293672798365;
+    let true_n = 123.0;
+    let true_cp = (geom_m + true_n * lambda) / lambda;
+
+    let meas = vec![DoubleDiffMeasurement {
+        key: k, dd_pr_m: geom_m, dd_cp_cycles: Some(true_cp),
+        sat_pos: sat, ref_pos: ref_sat, base_pos: base, lambda,
+        pr_var_m2: 0.05, cp_var_cycles2: 0.0001, pr_ref_var_m2: 0.02, cp_ref_var_cycles2: 0.00005,
+        dm_wet_rov: 0.0, dgrad_n_rov: 0.0, dgrad_e_rov: 0.0, tide_dd_m: 0.0, dd_pcv_m: 0.0,
+    }];
+
+    assert!(super::robust::validate_fixed_carrier_residuals(truth, &meas, &[(k, true_n)], 0.04));
+    assert!(!super::robust::validate_fixed_carrier_residuals(truth, &meas, &[(k, true_n + 1.0)], 0.04));
+    assert!(!super::robust::validate_fixed_carrier_residuals(truth, &meas, &[(k, true_n - 1.0)], 0.04));
+}
+

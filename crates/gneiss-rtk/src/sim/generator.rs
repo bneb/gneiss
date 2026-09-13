@@ -246,6 +246,19 @@ fn get_dropped_sats(t_s: f64, outages: &[(f64, f64, Vec<u8>)]) -> Vec<u8> {
     Vec::new()
 }
 
+fn compute_satellite_range(eph: &Ephemeris, time: GpsTime, rx_pos: Vector3<f64>) -> f64 {
+    let (sat_p_rough, _, _, _) = eph.position(time);
+    let tau = (sat_p_rough - rx_pos).norm() / SPEED_OF_LIGHT_M_S;
+    let (sat_p, _, _, _) = eph.position(GpsTime::new(time.week, time.tow - tau));
+    let om = gneiss_core::constants::EARTH_ROTATION_RATE_RAD_S * tau;
+    let sat_p_rot = Vector3::new(
+        sat_p.x * om.cos() + sat_p.y * om.sin(),
+        -sat_p.x * om.sin() + sat_p.y * om.cos(),
+        sat_p.z,
+    );
+    (sat_p_rot - rx_pos).norm()
+}
+
 #[allow(clippy::too_many_arguments)]
 fn generate_epoch_pair(
     time: GpsTime,
@@ -270,37 +283,25 @@ fn generate_epoch_pair(
             continue;
         }
 
-        let (sat_p_rough, _, _, _) = eph.position(time);
-        let tau_base = (sat_p_rough - base_pos).norm() / SPEED_OF_LIGHT_M_S;
-        let tau_rov = (sat_p_rough - rover_pos).norm() / SPEED_OF_LIGHT_M_S;
+        let r_base = compute_satellite_range(eph, time, base_pos);
+        let r_rov = compute_satellite_range(eph, time, rover_pos);
 
-        let (sat_p_base, _, _, _) = eph.position(GpsTime::new(time.week, time.tow - tau_base));
-        let (sat_p_rov, _, _, _) = eph.position(GpsTime::new(time.week, time.tow - tau_rov));
+        let dt = 0.005;
+        let t_p = GpsTime::new(time.week, time.tow - dt);
+        let t_n = GpsTime::new(time.week, time.tow + dt);
+        let rov_p_prev = rover_pos - rover_vel * dt;
+        let rov_p_next = rover_pos + rover_vel * dt;
 
-        let om_b = gneiss_core::constants::EARTH_ROTATION_RATE_RAD_S * tau_base;
-        let sat_p_b_rot = Vector3::new(
-            sat_p_base.x * om_b.cos() + sat_p_base.y * om_b.sin(),
-            -sat_p_base.x * om_b.sin() + sat_p_base.y * om_b.cos(),
-            sat_p_base.z,
-        );
+        let r_dot_base = (compute_satellite_range(eph, t_n, base_pos) - compute_satellite_range(eph, t_p, base_pos)) / (2.0 * dt);
+        let r_dot_rov = (compute_satellite_range(eph, t_n, rov_p_next) - compute_satellite_range(eph, t_p, rov_p_prev)) / (2.0 * dt);
 
-        let om_r = gneiss_core::constants::EARTH_ROTATION_RATE_RAD_S * tau_rov;
-        let sat_p_r_rot = Vector3::new(
-            sat_p_rov.x * om_r.cos() + sat_p_rov.y * om_r.sin(),
-            -sat_p_rov.x * om_r.sin() + sat_p_rov.y * om_r.cos(),
-            sat_p_rov.z,
-        );
-
-        let r_base = (sat_p_b_rot - base_pos).norm();
-        let r_rov = (sat_p_r_rot - rover_pos).norm();
-
-        let los_rov = (sat_p_r_rot - rover_pos).normalize();
-        let dop_rov = -rover_vel.dot(&los_rov) / lambda_l1;
+        let dop_base = -r_dot_base / lambda_l1;
+        let dop_rov = -r_dot_rov / lambda_l1;
 
         let amb1 = ambs[i] as f64;
         let amb2 = (80_000 + (i as i32) * 4231) as f64;
 
-        base_sats.push(build_sat_obs(eph.sat(), r_base, 0.0, 0.0, 0.0, lambda_l1, lambda_l2, cfg, rng));
+        base_sats.push(build_sat_obs(eph.sat(), r_base, dop_base, 0.0, 0.0, lambda_l1, lambda_l2, cfg, rng));
         rover_sats.push(build_sat_obs(eph.sat(), r_rov, dop_rov, amb1, amb2, lambda_l1, lambda_l2, cfg, rng));
     }
 

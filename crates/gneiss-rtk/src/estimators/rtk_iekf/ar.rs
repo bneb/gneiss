@@ -23,34 +23,61 @@ pub struct ArResult {
 /// off their float values (the float DD ambiguities carry unmodeled bias),
 /// which biases the conditional position by decimetres. The joint threshold
 /// is conservative but only ever fixes near-integer subsets.
-pub fn resolve_ambiguities(state: &RtkState, min_ambiguities: usize, target_pf: f64) -> ArResult {
+pub fn resolve_ambiguities(
+    state: &RtkState,
+    min_ambiguities: usize,
+    target_pf: f64,
+    is_kinematic: bool,
+) -> ArResult {
     let (a_float, q_amb) = state.extract_amb_block();
     let n_amb = a_float.len();
-    let float_pos = state.pos_ecef;
-    let float_cov = state.extract_pos_cov();
-
-    if n_amb < min_ambiguities || n_amb < 3 {
-        return build_float_result(float_pos, float_cov, 0.0, n_amb);
+    let (pos, cov) = (state.pos_ecef, state.extract_pos_cov());
+    let float_trace = cov[(0, 0)] + cov[(1, 1)] + cov[(2, 2)];
+    let max_float_trace = if is_kinematic { 1.50 } else { 25.0 };
+    if n_amb < min_ambiguities || n_amb < 3 || float_trace > max_float_trace {
+        return build_float_result(pos, cov, 0.0, n_amb);
     }
-
-    // 1. Full Ambiguity Resolution (FAR)
-    if let Ok(l_res) = lambda::resolve_lambda(&a_float, &q_amb) {
-        let thresh = ffrt::calculate_threshold(n_amb, target_pf);
-        if l_res.ratio >= thresh {
-            let full_idx: Vec<usize> = (0..n_amb).collect();
-            let fixed = fixed_subset_ambiguities(state, &full_idx, &l_res.best_integers);
-            if let Some((pos, cov)) = project_subset_fixed(state, &a_float, &l_res.best_integers, &q_amb, &full_idx) {
-                return ArResult { position_ecef: pos, cov_position: cov, ratio: l_res.ratio, is_fixed: true, num_ambiguities: n_amb, fixed_ambiguities: fixed };
-            }
-        }
+    if let Some(far_res) = try_full_ar(state, &a_float, &q_amb, target_pf, is_kinematic) {
+        return far_res;
     }
-
-    // 2. Partial Ambiguity Resolution (PAR)
-    if let Some(par_res) = try_partial_ar(state, &a_float, &q_amb, min_ambiguities, target_pf) {
+    if let Some(par_res) = try_partial_ar(state, &a_float, &q_amb, min_ambiguities, target_pf, is_kinematic) {
         return par_res;
     }
+    build_float_result(pos, cov, 0.0, n_amb)
+}
 
-    build_float_result(float_pos, float_cov, 0.0, n_amb)
+fn try_full_ar(
+    state: &RtkState,
+    a_float: &DVector<f64>,
+    q_amb: &DMatrix<f64>,
+    target_pf: f64,
+    is_kinematic: bool,
+) -> Option<ArResult> {
+    let n_amb = a_float.len();
+    if is_kinematic && (0..n_amb).any(|i| q_amb[(i, i)] > 1.0) {
+        return None;
+    }
+    let l_res = lambda::resolve_lambda(a_float, q_amb).ok()?;
+    let thresh = ffrt::calculate_threshold(n_amb, target_pf);
+    let min_ratio = if is_kinematic {
+        thresh.max(2.0)
+    } else {
+        thresh
+    };
+    if l_res.ratio < min_ratio {
+        return None;
+    }
+    let full_idx: Vec<usize> = (0..n_amb).collect();
+    let (pos, cov) = project_subset_fixed(state, a_float, &l_res.best_integers, q_amb, &full_idx)?;
+    let fixed = fixed_subset_ambiguities(state, &full_idx, &l_res.best_integers);
+    Some(ArResult {
+        position_ecef: pos,
+        cov_position: cov,
+        ratio: l_res.ratio,
+        is_fixed: true,
+        num_ambiguities: n_amb,
+        fixed_ambiguities: fixed,
+    })
 }
 
 pub(crate) fn float_result(state: &RtkState) -> ArResult {
@@ -74,44 +101,97 @@ fn fixed_subset_ambiguities(state: &RtkState, indices: &[usize], integers: &DVec
         .collect()
 }
 
+fn select_par_subset_indices(
+    a_float: &DVector<f64>,
+    q_amb: &DMatrix<f64>,
+    min_ambs: usize,
+    is_kinematic: bool,
+) -> (Vec<usize>, usize) {
+    let n_amb = a_float.len();
+    if is_kinematic {
+        let score = |i: usize| {
+            let frac = (a_float[i] - a_float[i].round()).abs();
+            frac + q_amb[(i, i)].sqrt() * 0.5
+        };
+        let min_k = min_ambs.max(6);
+        let mut c: Vec<usize> = (0..n_amb)
+            .filter(|&i| q_amb[(i, i)] <= 1.0)
+            .collect();
+        if c.len() < min_k {
+            c = (0..n_amb).collect();
+        }
+        c.sort_by(|&i, &j| score(i).total_cmp(&score(j)));
+        let m = c.len().min(16);
+        (c, m)
+    } else {
+        let mut idx: Vec<usize> = (0..n_amb).collect();
+        idx.sort_by(|&i, &j| q_amb[(i, i)].total_cmp(&q_amb[(j, j)]));
+        let m = (n_amb - 1).min(16);
+        (idx, m)
+    }
+}
+
 fn try_partial_ar(
     state: &RtkState,
     a_float: &DVector<f64>,
     q_amb: &DMatrix<f64>,
     min_ambs: usize,
     target_pf: f64,
+    is_kinematic: bool,
 ) -> Option<ArResult> {
     let n_amb = a_float.len();
     let float_trace = state.cov[(0, 0)] + state.cov[(1, 1)] + state.cov[(2, 2)];
-    if n_amb <= 4 || float_trace > 25.0 {
+    let max_float_trace = if is_kinematic { 1.50 } else { 25.0 };
+    if n_amb <= 4 || float_trace > max_float_trace {
         return None;
     }
-
-    // Sort ambiguity indices by diagonal variance ascending
-    let mut sorted_indices: Vec<usize> = (0..n_amb).collect();
-    sorted_indices.sort_by(|&i, &j| q_amb[(i, i)].total_cmp(&q_amb[(j, j)]));
-
-    for k in (min_ambs.max(4)..n_amb).rev() {
-        let subset_idx = &sorted_indices[0..k];
-        let (sub_a, sub_q) = extract_subset(a_float, q_amb, subset_idx);
-        if let Ok(l_res) = lambda::resolve_lambda(&sub_a, &sub_q) {
-            let thresh = ffrt::calculate_threshold(k, target_pf);
-            if l_res.ratio >= thresh {
-                if let Some((pos, cov)) = project_subset_fixed(state, &sub_a, &l_res.best_integers, &sub_q, subset_idx) {
-                    let fixed = fixed_subset_ambiguities(state, subset_idx, &l_res.best_integers);
-                    return Some(ArResult {
-                        position_ecef: pos,
-                        cov_position: cov,
-                        ratio: l_res.ratio,
-                        is_fixed: true,
-                        num_ambiguities: k,
-                        fixed_ambiguities: fixed,
-                    });
-                }
-            }
+    let (sorted_indices, max_k) = select_par_subset_indices(a_float, q_amb, min_ambs, is_kinematic);
+    let min_k = if is_kinematic {
+        min_ambs.max(6)
+    } else {
+        min_ambs.max(4)
+    };
+    if max_k < min_k {
+        return None;
+    }
+    for k in (min_k..=max_k).rev() {
+        if let Some(res) = eval_par_subset(state, a_float, q_amb, &sorted_indices[..k], target_pf, is_kinematic) {
+            return Some(res);
         }
     }
     None
+}
+
+fn eval_par_subset(
+    state: &RtkState,
+    a_float: &DVector<f64>,
+    q_amb: &DMatrix<f64>,
+    subset_idx: &[usize],
+    target_pf: f64,
+    is_kinematic: bool,
+) -> Option<ArResult> {
+    let k = subset_idx.len();
+    let (sub_a, sub_q) = extract_subset(a_float, q_amb, subset_idx);
+    let l_res = lambda::resolve_lambda(&sub_a, &sub_q).ok()?;
+    let thresh = ffrt::calculate_threshold(k, target_pf);
+    let min_ratio = if is_kinematic {
+        thresh.max(2.0)
+    } else {
+        thresh
+    };
+    if l_res.ratio < min_ratio {
+        return None;
+    }
+    let (pos, cov) = project_subset_fixed(state, &sub_a, &l_res.best_integers, &sub_q, subset_idx)?;
+    let fixed = fixed_subset_ambiguities(state, subset_idx, &l_res.best_integers);
+    Some(ArResult {
+        position_ecef: pos,
+        cov_position: cov,
+        ratio: l_res.ratio,
+        is_fixed: true,
+        num_ambiguities: k,
+        fixed_ambiguities: fixed,
+    })
 }
 
 fn extract_subset(
@@ -230,6 +310,31 @@ pub fn condition_state_on_integers(
     true
 }
 
+/// Check candidate integers consistency across consecutive epochs.
+/// Returns true if candidate integers match previous epoch, incrementing `consecutive`.
+/// Resets to 1 if integers changed or first epoch.
+pub fn update_fix_hysteresis(
+    consecutive: &mut u32,
+    last_ambs: &mut Vec<(DoubleDiffKey, f64)>,
+    current_ambs: &[(DoubleDiffKey, f64)],
+) {
+    let matched = !last_ambs.is_empty()
+        && current_ambs.iter().all(|(k, v)| {
+            last_ambs.iter().find(|(pk, _)| pk == k).is_none_or(|(_, pv)| (v - pv).abs() < 1e-3)
+        });
+    *consecutive = if matched { *consecutive + 1 } else { 1 };
+    *last_ambs = current_ambs.to_vec();
+}
+
+/// Reset the fix hysteresis counter and previous ambiguities.
+pub fn reset_fix_hysteresis(
+    consecutive: &mut u32,
+    last_ambs: &mut Vec<(DoubleDiffKey, f64)>,
+) {
+    *consecutive = 0;
+    last_ambs.clear();
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -242,7 +347,7 @@ mod tests {
         let k1 = DoubleDiffKey { constellation_id: 0, sat: 2, ref_sat: 1, freq_band: 1 };
         state.ensure_ambiguity(k1, 10.2, 0.05);
 
-        let res = resolve_ambiguities(&state, 4, 0.001);
+        let res = resolve_ambiguities(&state, 4, 0.001, false);
         assert!(!res.is_fixed);
         assert_eq!(res.num_ambiguities, 1);
     }
@@ -262,7 +367,7 @@ mod tests {
         let k_dirty = DoubleDiffKey { constellation_id: 0, sat: 6, ref_sat: 1, freq_band: 1 };
         state.ensure_ambiguity(k_dirty, 45.5, 100.0);
 
-        let res = resolve_ambiguities(&state, 4, 0.001);
+        let res = resolve_ambiguities(&state, 4, 0.001, false);
         assert!(res.is_fixed, "PAR should fix the 4 clean ambiguities");
         assert_eq!(res.num_ambiguities, 4);
     }
@@ -280,5 +385,34 @@ mod tests {
         assert!(ok);
         assert!((state.ambiguities[0].1 - 10.0).abs() < 1e-9);
         assert_eq!(state.cov[(idx, idx)], 1e-4);
+    }
+
+    #[test]
+    fn test_fix_hysteresis_tracking() {
+        let mut consecutive = 0;
+        let mut last_ambs = Vec::new();
+        let k1 = DoubleDiffKey { constellation_id: 0, sat: 2, ref_sat: 1, freq_band: 1 };
+        let k2 = DoubleDiffKey { constellation_id: 0, sat: 3, ref_sat: 1, freq_band: 1 };
+
+        // Epoch 1: first fix
+        update_fix_hysteresis(&mut consecutive, &mut last_ambs, &[(k1, 10.0), (k2, -5.0)]);
+        assert_eq!(consecutive, 1);
+
+        // Epoch 2: matching fix
+        update_fix_hysteresis(&mut consecutive, &mut last_ambs, &[(k1, 10.0), (k2, -5.0)]);
+        assert_eq!(consecutive, 2);
+
+        // Epoch 3: matching fix
+        update_fix_hysteresis(&mut consecutive, &mut last_ambs, &[(k1, 10.0), (k2, -5.0)]);
+        assert_eq!(consecutive, 3);
+
+        // Epoch 4: integer jump on k2 -> resets to 1
+        update_fix_hysteresis(&mut consecutive, &mut last_ambs, &[(k1, 10.0), (k2, -4.0)]);
+        assert_eq!(consecutive, 1);
+
+        // Reset on float
+        reset_fix_hysteresis(&mut consecutive, &mut last_ambs);
+        assert_eq!(consecutive, 0);
+        assert!(last_ambs.is_empty());
     }
 }

@@ -80,6 +80,7 @@ pub(crate) fn configure_iekf(
     let mut iekf = GnssRtkIekf::new(init_pos, start_time, q_accel);
     // Profile-gated robust weighting: 1.0 (Static) is bit-identical legacy.
     iekf.robust_innov_scale = dynamics.innovation_gate_scale();
+    iekf.is_kinematic = dynamics.is_kinematic();
     apply_env_overrides(&mut iekf);
     iekf.widelane_ar = widelane_ar;
     apply_cadence_and_upd(&mut iekf, rover_epochs, sat_upd);
