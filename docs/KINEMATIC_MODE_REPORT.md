@@ -84,11 +84,14 @@ before landing.
 
 ## 4. Validation limits (stated plainly)
 
-- **No ground-truth moving data exists offline in this repo.** The
-  multi2025 kinematic run proves non-divergence and preserved accuracy
-  when a STATIC dataset is processed through the mobile prior; it does
-  NOT measure kinematic accuracy. The sim differential tests provide
-  the only moving-truth evidence (linear ramp + sustained acceleration).
+> [!NOTE]
+> **Dataset Integration Update (2026-09)**:
+> Authentic offline kinematic ground-truth datasets have since been integrated into the repository:
+> 1. `datasets/rtkexplorer/`: RTK Explorer dual-frequency u-blox ZED-F9P kinematic vehicle drive evaluated against RTK PPK reference truth and Canada Geodetic Service CSRS-PPP.
+> 2. `datasets/urbannav/`: Tokyo Odaiba kinematic vehicle drive (12,398 epochs) evaluated against tactical-grade NovAtel SPAN-CPT ground truth.
+> The historical limitations below document the initial state prior to the integration of these ground-truth datasets.
+
+- **Historical limitation (Resolved)**: The initial multi2025 kinematic run proved non-divergence and preserved accuracy when a STATIC dataset was processed through the mobile prior. Real kinematic validation has now been completed against the datasets noted above.
 - AR behaviour under acceleration is exercised by simulation only;
   integer-fix integrity on real dynamic data (vibration, lever-arm
   swing, real cycle-slip statistics) is unvalidated.

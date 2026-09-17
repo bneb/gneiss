@@ -54,26 +54,36 @@ impl ReferenceFrame for Wgs84Broadcast {
     const HELMERT_TO_ITRF2014: Option<HelmertParams> = Some(ITRF2020_TO_ITRF2014);
 }
 
+/// NAD83(2011) realization (epoch 2010.0).
+///
+/// 14-parameter time-dependent Helmert parameters mapping NAD83(2011) to ITRF2014
+/// at epoch `t` (yr).
+///
+/// Citations:
+/// - IOGP EPSG Dataset: Coordinate Transformation EPSG:8970 (Method 1056).
+/// - NOAA NGS HTDP (Horizontal Time-Dependent Positioning), Pearson & Snay (2012),
+///   Soler & Snay (2004).
+/// - Benchmark validation: Station SALT AIR at epochs 2010.0 and 2020.0.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Nad83_2011;
 impl ReferenceFrame for Nad83_2011 {
     const NAME: &'static str = "NAD83(2011)";
     const HELMERT_TO_ITRF2014: Option<HelmertParams> = Some(HelmertParams {
-        tx_mm: 0.99,
-        ty_mm: -1.91,
-        tz_mm: -0.51,
-        scale_ppb: -1.65,
-        rx_mas: 0.0267,
-        ry_mas: 0.0005,
-        rz_mas: 0.0074,
+        tx_mm: -1005.3,
+        ty_mm: 1909.2,
+        tz_mm: 541.6,
+        scale_ppb: -0.37,
+        rx_mas: 26.78,
+        ry_mas: -0.42,
+        rz_mas: 10.93,
         ref_epoch_yr: 2010.0,
-        tx_rate: -0.067,
-        ty_rate: 0.757,
-        tz_rate: 0.019,
-        rx_rate: 0.0,
-        ry_rate: 0.0,
-        rz_rate: 0.0,
-        scale_rate: 0.102,
+        tx_rate: -0.79,
+        ty_rate: 0.60,
+        tz_rate: 1.44,
+        rx_rate: 0.067,
+        ry_rate: -0.757,
+        rz_rate: -0.051,
+        scale_rate: 0.072,
     });
 }
 

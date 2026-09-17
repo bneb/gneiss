@@ -69,6 +69,7 @@ use nalgebra::Vector3;
             assert_round_trip::<Itrf2020, Igs20>(v, t);
             assert_round_trip::<Wgs84Broadcast, Itrf2014>(v, t);
             assert_round_trip::<Itrf2020, Itrf2014>(v, t);
+            assert_round_trip::<Nad83_2011, Itrf2014>(v, t);
         }
     }
 
@@ -193,22 +194,19 @@ use nalgebra::Vector3;
     }
     #[test]
     fn test_nad83_epoch_propagation_accumulates() {
-        // NAD83(2011) is aligned to ITRF2014 at epoch 2010.0 (~mm offset),
-        // but plate-motion RATES cause the offset to grow over time.
-        // By 2025 (15 yr later): ~11 mm in Y from vy_rate=0.757 mm/yr.
+        // NAD83(2011) has an origin offset (~1.49 m) and plate rotation from ITRF2014 at epoch 2010.0,
+        // and plate-motion rates cause the coordinates to drift over time (~1-2 cm/yr).
         let pos_nad83 = EcefPos::<Nad83_2011>::new(Vector3::new(
             -2_688_201.0, -4_265_643.0, 3_893_778.0, // P224
         ));
         let at_ref = pos_nad83.convert_to::<Itrf2014>(2010.0);
         let at_late = pos_nad83.convert_to::<Itrf2014>(2025.0);
         let d_ref = (at_ref.vector() - pos_nad83.vector()).norm();
-        let d_late = (at_late.vector() - pos_nad83.vector()).norm();
-        // Both epochs should produce cm-level shifts (frame alignment).
-        // The offset may not grow monotonically — the 14-parameter model
-        // rotates the differential vector, so magnitude can decrease even
-        // as individual components grow.
-        assert!(d_ref < 0.02, "reference epoch offset {} m too large", d_ref);
-        assert!(d_late < 0.05, "late epoch offset {} m too large", d_late);
+        let drift_15yr = (at_late.vector() - at_ref.vector()).norm();
+        // At reference epoch 2010.0, the physical datum shift is ~1.49 m.
+        assert!((d_ref - 1.488).abs() < 0.01, "reference epoch offset {d_ref} m unexpected");
+        // Over 15 years, plate motion accumulates ~24 cm of drift at P224.
+        assert!(drift_15yr > 0.15 && drift_15yr < 0.35, "drift {drift_15yr} m outside expected 15-35 cm");
     }
 
     #[test]
@@ -272,3 +270,73 @@ use nalgebra::Vector3;
         let ep_arp_back = ep_apc.to_arp(pco_neu_mm, llh_rad);
         assert!((ep_arp_back.pos.0 - ep_arp.pos.0).norm() < 1e-9, "Exact roundtrip");
     }
+
+    #[test]
+    fn test_ecef_pos_conversions_and_traits() {
+        let v = Vector3::new(100.0, 200.0, 300.0);
+        let pos: EcefPos<Itrf2014> = v.into();
+        assert_eq!(pos.into_vector(), v);
+        assert_eq!(*pos, v);
+        let back: Vector3<f64> = pos.into();
+        assert_eq!(back, v);
+        assert_eq!(pos, pos.clone());
+        let dbg = format!("{:?}", pos);
+        assert!(dbg.contains("ITRF2014"));
+
+        let ep = EpochPosition::<Itrf2014, Arp>::new(pos, 2020.0, None);
+        let ep_later = ep.at_epoch(2025.0);
+        assert_eq!(ep_later.pos, pos);
+
+        let ep_nad83: EpochPosition<Nad83_2011, Arp> = ep.convert_frame();
+        assert!((ep_nad83.pos.into_vector() - v).norm() > 1.0);
+    }
+
+    #[test]
+    fn test_realization_helmert_parameters_exact() {
+        let itrf20 = Itrf2020::HELMERT_TO_ITRF2014.expect("ITRF2020 params");
+        assert_eq!(itrf20.tx_mm, -1.4);
+        assert_eq!(itrf20.ty_mm, -0.9);
+        assert_eq!(itrf20.scale_ppb, -0.42);
+        assert_eq!(itrf20.ty_rate, -0.1);
+
+        let nad = Nad83_2011::HELMERT_TO_ITRF2014.expect("NAD83 params");
+        assert_eq!(nad.tx_mm, -1005.3);
+        assert_eq!(nad.scale_ppb, -0.37);
+        assert_eq!(nad.ry_mas, -0.42);
+        assert_eq!(nad.tx_rate, -0.79);
+        assert_eq!(nad.ry_rate, -0.757);
+        assert_eq!(nad.rz_rate, -0.051);
+
+        let etr = Etrs89::HELMERT_TO_ITRF2014.expect("ETRS params");
+        assert_eq!(etr.tz_mm, -58.5);
+        assert_eq!(etr.scale_ppb, -1.04);
+        assert_eq!(etr.rz_mas, -8.71);
+        assert_eq!(etr.tz_rate, -1.8);
+        assert_eq!(etr.scale_rate, -0.08);
+    }
+
+    #[test]
+    fn test_nad83_2011_to_itrf2014_htdp_benchmark() {
+        // Canonical benchmark test point from NOAA NGS HTDP / EPSG:8970 (Station SALT AIR):
+        let p_nad = Vector3::new(-86682.104, -5394026.861, 3391189.647);
+        let ep_2010 = EpochPosition::<Nad83_2011, Arp>::new(EcefPos::new(p_nad), 2010.0, None);
+        let ep_itrf_2010: EpochPosition<Itrf2014, Arp> = ep_2010.convert_frame();
+
+        // At epoch 2010.0 (reference epoch):
+        let itrf_2010_expected = Vector3::new(-86682.8303, -5394025.3947, 3391189.4868);
+        let diff_2010 = (ep_itrf_2010.pos.into_vector() - itrf_2010_expected).norm();
+        assert!(diff_2010 < 1e-3, "2010.0 diff was {diff_2010} m");
+
+        // At epoch 2020.0 (10 years secular plate rotation):
+        let ep_2020 = EpochPosition::<Nad83_2011, Arp>::new(EcefPos::new(p_nad), 2020.0, None);
+        let ep_itrf_2020: EpochPosition<Itrf2014, Arp> = ep_2020.convert_frame();
+        let itrf_2020_expected = Vector3::new(-86682.9761, -5394025.4034, 3391189.4830);
+        let diff_2020 = (ep_itrf_2020.pos.into_vector() - itrf_2020_expected).norm();
+        assert!(diff_2020 < 1e-3, "2020.0 diff was {diff_2020} m");
+
+        // Verify round-trip conversion closure (< 0.1 mm):
+        let round_trip: EpochPosition<Nad83_2011, Arp> = ep_itrf_2020.convert_frame();
+        let rt_diff = (round_trip.pos.into_vector() - p_nad).norm();
+        assert!(rt_diff < 1e-4, "round trip closure was {rt_diff} m");
+    }
+

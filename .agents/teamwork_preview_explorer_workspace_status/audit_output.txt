@@ -1,0 +1,303 @@
+Auditing 262 active workspace Rust files...
+
+==================================================
+--- File Size Violations (>= 500 LOC) ---: 8
+==================================================
+  crates/gneiss-rtk/src/estimators/spp/tests.rs: 1539 LOC
+  crates/gneiss-parsers/src/rinex/obs/tests.rs: 884 LOC
+  crates/gneiss-parsers/src/rtcm3/msm/tests.rs: 861 LOC
+  crates/gneiss-rtk/src/bin/eval_network_ppk.rs: 805 LOC
+  crates/gneiss-core/src/ephemeris/tests.rs: 790 LOC
+  crates/gneiss-rtk/src/estimators/rtk_iekf/tests.rs: 638 LOC
+  crates/gneiss-parsers/src/rinex/nav/tests.rs: 510 LOC
+  crates/gneiss-rtk/src/ambiguity/ppp_ar.rs: 506 LOC
+
+==================================================
+--- unwrap() in Production Code ---: 0
+==================================================
+
+==================================================
+--- Production functions >= 32 LOC ---: 198
+==================================================
+  bin/gneiss-cli/src/evaluator.rs:11 'evaluate' (329 LOC)
+  crates/gneiss-rtk/src/bin/eval_odaiba_kf.rs:20 'main' (224 LOC)
+  crates/gneiss-rtk/src/bin/eval_ppp.rs:190 'evaluate_ppp_dataset' (180 LOC)
+  crates/gneiss-rtk/src/bin/eval_swfg.rs:74 'evaluate_dataset' (177 LOC)
+  crates/gneiss-rtk/src/bin/eval_network_ppk.rs:547 'main' (164 LOC)
+  crates/gneiss-rtk/src/estimators/rtk_iekf/formation.rs:183 'build_single_dd_pair' (159 LOC)
+  bin/gneiss-cli/src/gui/server.rs:23 'run_gui_server' (150 LOC)
+  crates/gneiss-rtk/src/estimators/rtk_iekf/formation.rs:37 'build_dd_measurements' (144 LOC)
+  crates/gneiss-parsers/src/ionex.rs:47 'parse_ionex' (140 LOC)
+  crates/gneiss-rtk/src/swfg/engine/uduc_builder.rs:27 'build_uduc_factors' (131 LOC)
+  crates/gneiss-rtk/src/swfg/engine/epoch.rs:28 'extract_raw_observations' (124 LOC)
+  crates/gneiss-rtk/src/swfg/benchmark.rs:47 'process_epoch' (115 LOC)
+  crates/gneiss-rtk/src/bin/eval_network_ppk.rs:230 'run_pass' (113 LOC)
+  crates/gneiss-parsers/src/antex.rs:69 'parse' (110 LOC)
+  crates/gneiss-rtk/src/swfg/marginalization.rs:77 'marginalize' (110 LOC)
+  bin/gneiss-cli/src/calibrate.rs:18 'run_calibrate' (107 LOC)
+  crates/gneiss-rtk/src/bin/eval_odaiba.rs:13 'main' (105 LOC)
+  crates/gneiss-parsers/src/rtcm3/msm/decoder.rs:11 'into_epoch_obs' (102 LOC)
+  crates/gneiss-rtk/src/swfg/smoothing.rs:63 'add_epoch' (98 LOC)
+  crates/gneiss-rtk/src/ambiguity/lambda/mod.rs:258 'search_recursive' (95 LOC)
+  crates/gneiss-rtk/src/bin/eval_qinertia_ppk.rs:266 'main' (95 LOC)
+  crates/gneiss-rtk/src/swfg/engine/builder.rs:206 'build_sat_l2_carrier_phase' (93 LOC)
+  crates/gneiss-rtk/src/swfg/engine/builder.rs:302 'build_rtk_dd_factors' (93 LOC)
+  bin/gneiss-cli/src/main.rs:148 'main' (91 LOC)
+  crates/gneiss-ntrip/src/client.rs:27 'connect' (91 LOC)
+  crates/gneiss-parsers/src/ubx/mod.rs:152 'into_epoch_obs' (91 LOC)
+  crates/gneiss-parsers/src/sp3.rs:17 'parse_sp3' (90 LOC)
+  crates/gneiss-core/src/atmosphere/mapping.rs:25 'nmf_impl' (86 LOC)
+  crates/gneiss-geodesy/src/site_calibration.rs:57 'fit' (86 LOC)
+  crates/gneiss-rtk/src/swfg/imu_preintegration/mod.rs:325 'jacobian' (83 LOC)
+  crates/gneiss-rtk/src/post_process/boresight.rs:42 'estimate' (82 LOC)
+  crates/gneiss-rtk/src/estimators/rtk_iekf/iono_free.rs:57 'form_iono_free_dd' (80 LOC)
+  crates/gneiss-rtk/src/measurements/multipath.rs:97 'correct_epoch' (80 LOC)
+  crates/gneiss-rtk/src/post_process/sbet.rs:15 'export_sbet_trajectory' (80 LOC)
+  crates/gneiss-fetch/src/sources/noaa.rs:109 'fetch_station_coordinate' (79 LOC)
+  crates/gneiss-rtk/src/estimators/spp/measurements.rs:9 'build_single_measurement' (78 LOC)
+  crates/gneiss-parsers/src/rtcm3/station.rs:17 'parse_station_arp' (75 LOC)
+  crates/gneiss-core/src/keplerian.rs:116 'calc_keplerian' (74 LOC)
+  crates/gneiss-fetch/src/sources/noaa.rs:24 'fetch_base_obs' (74 LOC)
+  crates/gneiss-parsers/src/rinex/obs/rinex2.rs:9 'parse_rinex_2_obs' (74 LOC)
+  crates/gneiss-parsers/src/rinex/obs/header.rs:66 'parse_rinex_3_header' (73 LOC)
+  crates/gneiss-rtk/src/swfg/engine/ar_handler.rs:31 'execute_ar_step' (73 LOC)
+  crates/gneiss-rtk/src/swfg/engine/ar_handler.rs:105 'execute_ppp_ar_step' (73 LOC)
+  crates/gneiss-core/src/sun.rs:49 'moon_position_eci' (72 LOC)
+  crates/gneiss-rtk/src/swfg/engine/builder.rs:64 'build_undifferenced_factors' (72 LOC)
+  crates/gneiss-geodesy/src/geoid/byn.rs:11 'parse_byn' (71 LOC)
+  crates/gneiss-rtk/src/bin/eval_network_ppk.rs:380 'run_base' (71 LOC)
+  crates/gneiss-rtk/src/bin/eval_ppp.rs:371 'main' (71 LOC)
+  crates/gneiss-rtk/src/estimators/rtk_iekf/iono_free.rs:156 'apply_fixed_iono_free' (71 LOC)
+  crates/gneiss-rtk/src/estimators/rtk_iekf/sat_pos.rs:23 'extract_sat_positions' (70 LOC)
+  crates/gneiss-core/src/windup.rs:8 'phase_windup' (69 LOC)
+  crates/gneiss-fetch/src/sources/bkg.rs:132 'fetch_precise_products' (68 LOC)
+  bin/gneiss-parse-rtcm3/src/main.rs:4 'main' (67 LOC)
+  crates/gneiss-rtk/src/events.rs:90 'interpolate_single' (66 LOC)
+  bin/gneiss-cli/src/qc.rs:50 'compute' (65 LOC)
+  crates/gneiss-fetch/src/sources/bkg.rs:15 'fetch_base_obs' (64 LOC)
+  crates/gneiss-rtk/src/swfg/engine/builder.rs:139 'build_sat_carrier_phase' (64 LOC)
+  crates/gneiss-parsers/examples/pcv_check.rs:14 'main' (63 LOC)
+  crates/gneiss-rtk/src/swfg/kalman_smoother.rs:140 'update' (62 LOC)
+  crates/gneiss-parsers/src/lnav.rs:101 'build_ephemeris_from_sfrbx' (59 LOC)
+  crates/gneiss-rtk/src/ambiguity/ppp_ar.rs:232 'resolve_sd_with_fixed_wl' (59 LOC)
+  crates/gneiss-rtk/src/post_process/lever_arm.rs:45 'estimate' (59 LOC)
+  crates/gneiss-rtk/src/swfg/engine/epoch.rs:395 'extract_single_sat_with_source' (59 LOC)
+  crates/gneiss-parsers/src/rinex/obs/header.rs:7 'parse_rinex_2_header' (58 LOC)
+  crates/gneiss-core/src/coords.rs:88 'ecef_to_llh_with_model' (57 LOC)
+  crates/gneiss-parsers/src/rinex_clk.rs:17 'parse' (57 LOC)
+  crates/gneiss-rtk/src/swfg/kalman_smoother.rs:204 'smooth' (57 LOC)
+  crates/gneiss-core/src/atmosphere/ionosphere.rs:102 'iono_ionex' (56 LOC)
+  crates/gneiss-parsers/examples/sp3_diag.rs:4 'main' (56 LOC)
+  crates/gneiss-parsers/src/ubx/mod.rs:363 'parse_esf_meas' (56 LOC)
+  crates/gneiss-geodesy/src/windup.rs:30 'update_with_attitude' (55 LOC)
+  crates/gneiss-rtk/src/swfg/engine/ar_handler.rs:229 'apply_validated_fix' (55 LOC)
+  crates/gneiss-geodesy/src/projections/transverse_mercator.rs:138 'inverse' (53 LOC)
+  crates/gneiss-parsers/examples/precise_fetch_check.rs:9 'main' (53 LOC)
+  crates/gneiss-rtk/src/estimators/rtk_iekf/predict.rs:53 'build_process_noise' (53 LOC)
+  crates/gneiss-rtk/src/composite/tc_rtk.rs:206 'formulate_dd_measurements' (52 LOC)
+  crates/gneiss-rtk/src/estimators/rtk_iekf/widelane.rs:38 'resolve_cascade' (52 LOC)
+  crates/gneiss-rtk/src/estimators/spp/solver.rs:35 'spp_wnlls_step' (52 LOC)
+  crates/gneiss-rtk/src/post_process/network.rs:164 'consensus_epoch' (52 LOC)
+  bin/gneiss-cli/src/main.rs:250 'run_batch_mode' (51 LOC)
+  crates/gneiss-rtk/src/estimators/rtk_iekf/iono_free.rs:231 'solve_position_lsq' (51 LOC)
+  crates/gneiss-rtk/src/estimators/rtk_iekf/update/robust.rs:90 'if_residual_outliers' (51 LOC)
+  crates/gneiss-rtk/src/swfg/imu_preintegration/mod.rs:273 'residual' (51 LOC)
+  crates/gneiss-rtk/src/swfg/pipeline/factors/dynamics.rs:41 'jacobian' (51 LOC)
+  crates/gneiss-rtk/src/estimators/spp/solver.rs:121 'build_design_matrix' (50 LOC)
+  crates/gneiss-rtk/src/post_process/mod.rs:188 'execute_post_process' (50 LOC)
+  crates/gneiss-rtk/src/sim/generator.rs:263 'generate_epoch_pair' (50 LOC)
+  crates/gneiss-rtk/src/swfg/ar_integration.rs:129 'attempt_partial_ar_fix' (50 LOC)
+  crates/gneiss-fetch/src/sources/bkg.rs:80 'fetch_ephemeris' (49 LOC)
+  crates/gneiss-rtk/src/swfg/engine/mod.rs:130 'process_impl' (49 LOC)
+  bin/gneiss-cli/src/live.rs:60 'format_nmea_gga' (48 LOC)
+  crates/gneiss-core/src/atmosphere/ionosphere.rs:9 'iono_klobuchar' (48 LOC)
+  crates/gneiss-rtk/src/swfg/engine/mod.rs:337 'extract_and_finalize_solution' (48 LOC)
+  bin/gneiss-cli/src/gui/server.rs:210 'load_ascii_pos_trajectory' (47 LOC)
+  crates/gneiss-geodesy/src/projections/lambert_conformal.rs:26 'new' (47 LOC)
+  crates/gneiss-rtk/src/sim/generator.rs:181 'generate_simulation_dataset' (47 LOC)
+  crates/gneiss-rtk/src/swfg/marginalization.rs:24 'partition_variables' (47 LOC)
+  crates/gneiss-parsers/src/rtcm3/ephemeris.rs:85 'parse_1019' (46 LOC)
+  crates/gneiss-rtk/src/ambiguity/lambda/mod.rs:143 'decorrelate' (46 LOC)
+  crates/gneiss-rtk/src/bin/eval_qinertia_ppk.rs:219 'evaluate_dataset_spec' (46 LOC)
+  crates/gneiss-rtk/src/bin/eval_swfg.rs:18 'load_ground_truth_pos' (46 LOC)
+  crates/gneiss-rtk/src/estimators/spp/raim.rs:23 'compute_seed_clocks' (46 LOC)
+  crates/gneiss-rtk/src/post_process/quality.rs:25 'generate_quality_report' (46 LOC)
+  crates/gneiss-rtk/src/swfg/imu_preintegration/smoother.rs:140 'update_nhc' (46 LOC)
+  crates/gneiss-geodesy/src/projections/transverse_mercator.rs:91 'forward' (45 LOC)
+  crates/gneiss-parsers/src/blq.rs:66 'parse_station_block' (45 LOC)
+  crates/gneiss-parsers/src/rtcm3/msm/signals.rs:12 'msm_signal_rinex_code' (45 LOC)
+  crates/gneiss-rtk/src/bin/eval_f9p_rover.rs:226 'extract_errors' (45 LOC)
+  crates/gneiss-rtk/src/sim/generator.rs:134 'generate_synthetic_ephemerides' (45 LOC)
+  bin/gneiss-cli/src/qc.rs:170 'write_html' (44 LOC)
+  crates/gneiss-fetch/src/hatanaka.rs:6 'decompress' (44 LOC)
+  crates/gneiss-rtk/src/ambiguity/par.rs:10 'select_ils_subset' (44 LOC)
+  crates/gneiss-rtk/src/post_process/backward.rs:81 'run_backward_iekf' (44 LOC)
+  crates/gneiss-rtk/src/post_process/forward.rs:63 'run_forward_iekf' (44 LOC)
+  crates/gneiss-rtk/src/post_process/forward.rs:235 'process_single_fwd' (44 LOC)
+  crates/gneiss-rtk/src/swfg/solver/normal_eq.rs:31 'accumulate_factor_normal_equations' (44 LOC)
+  crates/gneiss-rtk/src/swfg/solver/normal_eq.rs:83 'compute_factor_contribution' (44 LOC)
+  crates/gneiss-rtk/src/estimators/rtk_iekf/state/mod.rs:375 'retain_active_ambiguities' (43 LOC)
+  crates/gneiss-rtk/src/post_process/combiner.rs:105 'select_fused_estimate' (43 LOC)
+  crates/gneiss-rtk/src/swfg/ar_integration.rs:41 'extract_ambiguity_state' (43 LOC)
+  crates/gneiss-rtk/src/bin/eval_network_ppk.rs:504 'load_dataset' (42 LOC)
+  crates/gneiss-rtk/src/estimators/rtk_iekf/satpos.rs:125 'compute_phase_centre' (42 LOC)
+  crates/gneiss-rtk/src/post_process/network_adj.rs:82 'adjust_epoch' (42 LOC)
+  bin/gneiss-cli/src/process.rs:124 'export_results' (41 LOC)
+  crates/gneiss-core/src/atmosphere/ionosphere.rs:58 'bilinear_interpolate_tec' (41 LOC)
+  crates/gneiss-parsers/src/ubx/mod.rs:99 'parse_rxm_sfrbx' (41 LOC)
+  crates/gneiss-rtk/src/post_process/iekf_pass.rs:67 'configure_iekf' (41 LOC)
+  crates/gneiss-rtk/src/post_process/iekf_pass.rs:201 'dump_amb_history' (41 LOC)
+  bin/gneiss-cli/src/process.rs:352 'run_ppp_pipeline' (40 LOC)
+  crates/gneiss-core/src/metrics.rs:75 'compute_statistics' (40 LOC)
+  crates/gneiss-rtk/src/post_process/forward.rs:21 'run_forward_pass' (40 LOC)
+  crates/gneiss-parsers/src/rinex_clk.rs:75 'get_clock_bias' (39 LOC)
+  crates/gneiss-rtk/src/estimators/rtk_iekf/ar.rs:215 'project_subset_fixed' (39 LOC)
+  crates/gneiss-rtk/src/estimators/rtk_iekf/update/system.rs:143 'append_dd_phase_row' (39 LOC)
+  crates/gneiss-rtk/src/post_process/mod.rs:147 'run_filter_passes' (39 LOC)
+  crates/gneiss-rtk/src/swfg/imu_preintegration/mod.rs:78 'integrate' (39 LOC)
+  crates/gneiss-rtk/src/swfg/imu_preintegration/mod.rs:218 'new' (39 LOC)
+  crates/gneiss-parsers/src/rinex/nav/builder.rs:132 'build_beidou_ephemeris' (38 LOC)
+  crates/gneiss-rtk/src/bin/eval_network_ppk.rs:176 'collect_errors' (38 LOC)
+  crates/gneiss-rtk/src/swfg/pipeline/factors/uduc.rs:242 'jacobian' (38 LOC)
+  crates/gneiss-parsers/src/receiver_antenna/mod.rs:158 'from_model' (37 LOC)
+  crates/gneiss-parsers/src/rinex/nav/builder.rs:56 'build_gps_ephemeris' (37 LOC)
+  crates/gneiss-parsers/src/rinex/nav/builder.rs:94 'build_galileo_ephemeris' (37 LOC)
+  crates/gneiss-parsers/src/rinex/nav/builder.rs:171 'build_qzss_ephemeris' (37 LOC)
+  crates/gneiss-parsers/src/rtcm3/mod.rs:35 'parse_rtcm3_frame' (37 LOC)
+  crates/gneiss-parsers/src/ubx/mod.rs:283 'parse_rxm_rawx_block' (37 LOC)
+  crates/gneiss-rtk/src/swfg/ar_integration.rs:89 'attempt_ar_fix' (37 LOC)
+  crates/gneiss-rtk/src/swfg/pipeline/factors/uduc.rs:173 'new' (37 LOC)
+  bin/gneiss-cli/src/live.rs:21 'run_live_mode' (36 LOC)
+  crates/gneiss-fetch/src/sources/cddis.rs:21 'download_and_decompress' (36 LOC)
+  crates/gneiss-parsers/src/receiver_antenna/mod.rs:234 'interp_2d_grid' (36 LOC)
+  crates/gneiss-parsers/src/ubx/mod.rs:246 'parse_rxm_rawx' (36 LOC)
+  crates/gneiss-rtk/src/ambiguity/lambda/mod.rs:68 'run_lambda_search' (36 LOC)
+  crates/gneiss-rtk/src/bin/eval_odaiba_ins.rs:320 'run_inertial_pipeline' (36 LOC)
+  crates/gneiss-rtk/src/bin/eval_qinertia_ppk.rs:133 'format_stats' (36 LOC)
+  crates/gneiss-rtk/src/estimators/rtk_iekf/formation.rs:410 'update_phase_wl' (36 LOC)
+  crates/gneiss-rtk/src/estimators/rtk_iekf/satpos.rs:172 'compute_phase_centre_3d' (36 LOC)
+  crates/gneiss-rtk/src/estimators/rtk_iekf/widelane.rs:137 'far_matches_widelanes' (36 LOC)
+  crates/gneiss-rtk/src/post_process/forward.rs:108 'compute_initial_position' (36 LOC)
+  crates/gneiss-rtk/src/swfg/pipeline/mod.rs:53 'process' (36 LOC)
+  crates/gneiss-geodesy/src/geoid/gtx.rs:10 'parse_gtx' (35 LOC)
+  crates/gneiss-rtk/src/composite/tc_ppp.rs:203 'formulate_measurements' (35 LOC)
+  crates/gneiss-rtk/src/estimators/rtk_iekf/smoother.rs:78 'build_single_smoothed_epoch' (35 LOC)
+  crates/gneiss-rtk/src/post_process/backward.rs:127 'run_backward_swfg' (35 LOC)
+  crates/gneiss-rtk/src/post_process/forward.rs:148 'run_forward_pass_collecting' (35 LOC)
+  crates/gneiss-rtk/src/swfg/pipeline/factors/uduc.rs:111 'jacobian' (35 LOC)
+  crates/gneiss-rtk/src/swfg/smoothing.rs:187 'solve' (35 LOC)
+  bin/gneiss-cli/src/process.rs:167 'run_network_pipeline' (34 LOC)
+  crates/gneiss-parsers/examples/glo_diag.rs:5 'main' (34 LOC)
+  crates/gneiss-parsers/src/rinex/obs/rinex3.rs:10 'parse_rinex_3_obs' (34 LOC)
+  crates/gneiss-rtk/src/estimators/rtk_iekf/update/system.rs:107 'append_dd_code_row' (34 LOC)
+  crates/gneiss-rtk/src/estimators/spp/raim.rs:106 'filter_raim_outliers' (34 LOC)
+  crates/gneiss-rtk/src/post_process/backward.rs:163 'process_single_bwd' (34 LOC)
+  crates/gneiss-rtk/src/sim/generator.rs:315 'build_sat_obs' (34 LOC)
+  crates/gneiss-rtk/src/swfg/imu_preintegration/smoother.rs:188 'update_zupt' (34 LOC)
+  crates/gneiss-rtk/src/swfg/pipeline/aux_factors.rs:65 'jacobian' (34 LOC)
+  crates/gneiss-core/src/dop.rs:24 'compute_dop' (33 LOC)
+  crates/gneiss-geodesy/src/tides.rs:23 'solar_lunar_positions' (33 LOC)
+  crates/gneiss-parsers/src/rtcm3/msm/decoder.rs:144 'push_carrier_phase_obs' (33 LOC)
+  crates/gneiss-rtk/src/ambiguity/ppp_ar.rs:93 'fix_narrow_lane' (33 LOC)
+  crates/gneiss-rtk/src/bin/eval_f9p_rover.rs:331 'run_dataset_pipeline' (33 LOC)
+  crates/gneiss-rtk/src/bin/eval_network_ppk.rs:712 'run_vrs_benchmark' (33 LOC)
+  crates/gneiss-rtk/src/composite/tc_rtk.rs:109 'process_epoch' (33 LOC)
+  crates/gneiss-rtk/src/estimators/rtk_iekf/ar.rs:49 'try_full_ar' (33 LOC)
+  crates/gneiss-rtk/src/post_process/network.rs:130 'apply_continuity_gate_dynamics' (33 LOC)
+  crates/gneiss-rtk/src/swfg/engine/epoch.rs:204 'compute_sat_pco_from_antex' (33 LOC)
+  crates/gneiss-rtk/src/swfg/engine/mod.rs:288 'build_observation_factors' (33 LOC)
+  crates/gneiss-rtk/src/swfg/engine/setup.rs:56 'add_imu_preintegration_factors' (33 LOC)
+  bin/gneiss-cli/src/gui/handlers.rs:96 'handle_solve_request' (32 LOC)
+  crates/gneiss-core/src/signal.rs:29 'get_frequency' (32 LOC)
+  crates/gneiss-parsers/src/rinex/obs/header.rs:140 'parse_rinex_3_obs_types_list' (32 LOC)
+  crates/gneiss-parsers/src/rtcm3/ssr.rs:170 'parse_code_bias_sat' (32 LOC)
+  crates/gneiss-rtk/src/bin/eval_network_ppk.rs:763 'run_vrs_ppk' (32 LOC)
+  crates/gneiss-rtk/src/bin/eval_ppp.rs:87 'evaluate_csrs_comparison' (32 LOC)
+  crates/gneiss-rtk/src/bin/eval_ppp.rs:157 'load_precise_products' (32 LOC)
+  crates/gneiss-rtk/src/estimators/spp/solver.rs:216 'compute_atmospheric_delays' (32 LOC)
+  crates/gneiss-rtk/src/post_process/backward.rs:23 'run_backward_pass' (32 LOC)
+  crates/gneiss-rtk/src/swfg/solver/normal_eq.rs:132 'accumulate_factors_parallel' (32 LOC)
+
+==================================================
+--- Nesting Depth Violations (>= 3 in prod) ---: 520
+==================================================
+Total nesting depth >= 3 lines in production: 520
+  crates/gneiss-rtk/src/swfg/engine/epoch.rs: 25 occurrences
+  crates/gneiss-parsers/src/antex.rs: 24 occurrences
+  crates/gneiss-parsers/src/ionex.rs: 23 occurrences
+  bin/gneiss-cli/src/evaluator.rs: 22 occurrences
+  bin/gneiss-cli/src/gui/server.rs: 21 occurrences
+  crates/gneiss-parsers/src/rinex/obs/header.rs: 20 occurrences
+  crates/gneiss-rtk/src/bin/eval_network_ppk.rs: 20 occurrences
+  crates/gneiss-rtk/src/swfg/engine/builder.rs: 19 occurrences
+  bin/gneiss-cli/src/process.rs: 15 occurrences
+  crates/gneiss-rtk/src/estimators/rtk_iekf/formation.rs: 15 occurrences
+  crates/gneiss-rtk/src/bin/eval_ppp.rs: 14 occurrences
+  crates/gneiss-rtk/src/bin/eval_swfg.rs: 14 occurrences
+  bin/gneiss-cli/src/main.rs: 12 occurrences
+  bin/gneiss-parse-rtcm3/src/main.rs: 11 occurrences
+  crates/gneiss-parsers/src/sp3.rs: 11 occurrences
+  crates/gneiss-rtk/src/post_process/network_adj.rs: 11 occurrences
+  crates/gneiss-parsers/src/ubx/mod.rs: 10 occurrences
+  crates/gneiss-rtk/src/ambiguity/ppp_ar.rs: 9 occurrences
+  crates/gneiss-rtk/src/swfg/engine/ar_handler.rs: 9 occurrences
+  crates/gneiss-parsers/src/rinex/obs/rinex2.rs: 8 occurrences
+  crates/gneiss-rtk/src/estimators/spp/measurements.rs: 8 occurrences
+  crates/gneiss-rtk/src/estimators/spp/raim.rs: 8 occurrences
+  crates/gneiss-rtk/src/post_process/vrs.rs: 8 occurrences
+  crates/gneiss-fetch/src/sources/noaa.rs: 7 occurrences
+  crates/gneiss-geodesy/src/geoid/byn.rs: 7 occurrences
+  crates/gneiss-rtk/src/estimators/rtk_iekf/sat_pos.rs: 7 occurrences
+  crates/gneiss-rtk/src/measurements/multipath.rs: 7 occurrences
+  crates/gneiss-parsers/examples/sp3_diag.rs: 6 occurrences
+  crates/gneiss-parsers/src/rtcm3/msm/decoder.rs: 6 occurrences
+  crates/gneiss-rtk/src/bin/eval_f9p_rover.rs: 6 occurrences
+  crates/gneiss-rtk/src/post_process/calibration.rs: 6 occurrences
+  crates/gneiss-rtk/src/post_process/iekf_pass.rs: 6 occurrences
+  crates/gneiss-rtk/src/swfg/ar_integration.rs: 6 occurrences
+  crates/gneiss-rtk/src/swfg/engine/mod.rs: 6 occurrences
+  bin/gneiss-cli/src/ingest.rs: 5 occurrences
+  crates/gneiss-ntrip/src/client.rs: 5 occurrences
+  crates/gneiss-parsers/src/rinex_clk.rs: 5 occurrences
+  crates/gneiss-parsers/src/sbf.rs: 5 occurrences
+  crates/gneiss-rtk/src/bin/eval_odaiba.rs: 5 occurrences
+  crates/gneiss-rtk/src/bin/eval_odaiba_kf.rs: 5 occurrences
+  crates/gneiss-rtk/src/estimators/rtk_iekf/state/mod.rs: 5 occurrences
+  crates/gneiss-rtk/src/post_process/network.rs: 5 occurrences
+  crates/gneiss-rtk/src/swfg/engine/uduc_builder.rs: 5 occurrences
+  crates/gneiss-rtk/src/swfg/smoothing.rs: 5 occurrences
+  crates/gneiss-parsers/examples/gal_band_check.rs: 4 occurrences
+  crates/gneiss-rtk/src/post_process/screening.rs: 4 occurrences
+  crates/gneiss-core/src/atmosphere/ionosphere.rs: 3 occurrences
+  crates/gneiss-parsers/examples/pcv_check.rs: 3 occurrences
+  crates/gneiss-parsers/src/sinex_bia.rs: 3 occurrences
+  crates/gneiss-rtk/src/bin/eval_qinertia_ppk.rs: 3 occurrences
+  crates/gneiss-rtk/src/composite/tc_rtk.rs: 3 occurrences
+  crates/gneiss-rtk/src/post_process/backward.rs: 3 occurrences
+  bin/gneiss-cli/src/calibrate.rs: 2 occurrences
+  crates/gneiss-core/src/frequencies/mod.rs: 2 occurrences
+  crates/gneiss-core/src/signal.rs: 2 occurrences
+  crates/gneiss-parsers/src/rinex/obs/rinex3.rs: 2 occurrences
+  crates/gneiss-parsers/src/rtcm3/mod.rs: 2 occurrences
+  crates/gneiss-rtk/src/estimators/rtk_iekf/clk_datum.rs: 2 occurrences
+  crates/gneiss-rtk/src/post_process/boresight.rs: 2 occurrences
+  crates/gneiss-rtk/src/post_process/forward.rs: 2 occurrences
+  crates/gneiss-rtk/src/sim/generator.rs: 2 occurrences
+  crates/gneiss-rtk/src/swfg/solver/normal_eq.rs: 2 occurrences
+  crates/gneiss-core/src/hatch.rs: 1 occurrences
+  crates/gneiss-geodesy/src/site_calibration.rs: 1 occurrences
+  crates/gneiss-parsers/examples/glo_diag.rs: 1 occurrences
+  crates/gneiss-parsers/src/lnav.rs: 1 occurrences
+  crates/gneiss-parsers/src/precise_orbit.rs: 1 occurrences
+  crates/gneiss-rtk/src/ambiguity/lambda/mod.rs: 1 occurrences
+  crates/gneiss-rtk/src/ambiguity/par.rs: 1 occurrences
+  crates/gneiss-rtk/src/estimators/rtk_iekf/ref_sat.rs: 1 occurrences
+  crates/gneiss-rtk/src/estimators/rtk_iekf/update/robust.rs: 1 occurrences
+  crates/gneiss-rtk/src/estimators/rtk_iekf/update/system.rs: 1 occurrences
+  crates/gneiss-rtk/src/estimators/spp/solver.rs: 1 occurrences
+  crates/gneiss-rtk/src/post_process/combiner.rs: 1 occurrences
+  crates/gneiss-rtk/src/post_process/sbet.rs: 1 occurrences
+  crates/gneiss-rtk/src/streaming.rs: 1 occurrences
+  crates/gneiss-rtk/src/swfg/benchmark.rs: 1 occurrences
+  crates/gneiss-rtk/src/swfg/kalman_smoother.rs: 1 occurrences
+  crates/gneiss-rtk/src/swfg/marginalization.rs: 1 occurrences

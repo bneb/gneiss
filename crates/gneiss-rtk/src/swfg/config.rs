@@ -56,6 +56,9 @@ pub struct PppConfig {
     pub window_size: usize,
     pub ar: Option<ArConfig>,
     pub is_kinematic: bool,
+    pub enable_glonass: bool,
+    pub enable_galileo: bool,
+    pub initial_pos_sigma_m: Option<f64>,
 }
 
 impl Default for PppConfig {
@@ -67,6 +70,9 @@ impl Default for PppConfig {
             window_size: 10,
             ar: None,
             is_kinematic: false,
+            enable_glonass: false,
+            enable_galileo: false,
+            initial_pos_sigma_m: None,
         }
     }
 }

@@ -278,19 +278,13 @@ fn test_real_rinex_wtzr_float_ppp_convergence() {
         initial_rover_position: Some(perturbed_seed),
         klobuchar_alpha: klob.as_ref().map(|k| k.alpha),
         klobuchar_beta: klob.as_ref().map(|k| k.beta),
-        q_accel: None,
         widelane_ar: true,
-        tropo_gradients: false,
-        network_sat_upd: None,
-        receiver_pcv: None,
         dynamics: gneiss_rtk::post_process::dynamics::ProcessingDynamics::Static,
-        enable_glonass: false,
-        continuity_gate: false,
         precise_orbits,
         precise_clocks,
         sinex_bias,
         antex_database: antex_database.clone(),
-        calibration: None,
+        ..Default::default()
     };
 
     let result = execute_post_process(&config, &ephems, selected_epochs, None, None, &options)
@@ -389,19 +383,11 @@ fn test_real_rinex_alic_float_ppp_convergence() {
         initial_rover_position: Some(perturbed_seed),
         klobuchar_alpha: klob.as_ref().map(|k| k.alpha),
         klobuchar_beta: klob.as_ref().map(|k| k.beta),
-        q_accel: None,
-        widelane_ar: false,
-        tropo_gradients: false,
-        network_sat_upd: None,
-        receiver_pcv: None,
         dynamics: Default::default(),
-        enable_glonass: false,
-        continuity_gate: false,
         precise_orbits,
         precise_clocks,
-        sinex_bias: None,
         antex_database: antex_database.clone(),
-        calibration: None,
+        ..Default::default()
     };
 
     let result = execute_post_process(&config, &ephems, selected_epochs, None, None, &options)

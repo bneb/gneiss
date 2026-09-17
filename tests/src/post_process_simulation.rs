@@ -186,4 +186,31 @@ mod tests {
         println!("Outage Post-Processed RTK: RMS={:.4}m", rms_h);
         assert!(rms_h < 0.015, "Outage post-processing RMS must be < 1.5cm, got {:.4}m", rms_h);
     }
+
+    #[test]
+    fn test_post_process_multi_pass_initialization_converges() {
+        let cfg = SimulationConfig {
+            duration_s: 10.0,
+            epoch_rate_hz: 1.0,
+            profile: TrajectoryProfile::Linear {
+                start_offset_ned: Vector3::new(10.0, 0.0, 0.0),
+                velocity_ned: Vector3::zeros(),
+            },
+            ..Default::default()
+        };
+        let sim = generate_simulation_dataset(&cfg);
+        let engine_cfg = EngineConfig::Rtk(RtkConfig {
+            initial_position: Some([cfg.base_ecef.x + 10.0, cfg.base_ecef.y, cfg.base_ecef.z]),
+            ..Default::default()
+        });
+        let options = PostProcessOptions {
+            enable_bidirectional: false,
+            base_position: Some(cfg.base_ecef),
+            init_passes: 2,
+            ..Default::default()
+        };
+        let res = execute_post_process(&engine_cfg, &sim.ephemerides, &sim.rover_epochs, Some(&sim.base_epochs), None, &options)
+            .expect("Multi-pass initialization succeeds");
+        assert_eq!(res.trajectory.len(), 10);
+    }
 }

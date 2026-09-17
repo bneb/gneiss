@@ -5,14 +5,15 @@
 //! securing fixes that the forward pass missed.
 
 use std::collections::BTreeMap;
-use nalgebra::Vector3;
+use nalgebra::{Matrix3, Vector3};
 
 use gneiss_core::ephemeris::Ephemeris;
 use gneiss_core::obs::EpochObs;
 
 use crate::post_process::dynamics::{ProcessingDynamics, Q_ACCEL_UNSET_FALLBACK};
 use crate::post_process::iekf_pass::{
-    configure_iekf, dump_amb_history, estimate_epoch_covariance, find_matched_base, FilteredEpoch,
+    configure_iekf, dump_amb_history, estimate_swfg_epoch_covariance, find_matched_base,
+    FilteredEpoch,
 };
 use crate::swfg::config::EngineConfig;
 use crate::swfg::engine::SwfgEngine;
@@ -36,6 +37,10 @@ pub fn run_backward_pass(
     sat_upd: Option<std::collections::HashMap<u16, f64>>,
     receiver_pcv: Option<std::sync::Arc<super::ReceiverPcvPair>>,
     enable_glonass: bool,
+    precise_orbits: Option<std::sync::Arc<gneiss_parsers::precise_orbit::PreciseOrbit>>,
+    precise_clocks: Option<std::sync::Arc<gneiss_parsers::rinex_clk::RinexClock>>,
+    sinex_bias: Option<std::sync::Arc<gneiss_parsers::sinex_bia::SinexBias>>,
+    antex_database: Option<std::sync::Arc<gneiss_parsers::antex::AntexDatabase>>,
 ) -> BTreeMap<u64, FilteredEpoch> {
     if imu_samples.is_none() && base_pos.is_some() && base_epochs.is_some() {
         if let Some(bp) = base_pos {
@@ -50,6 +55,7 @@ pub fn run_backward_pass(
 
     run_backward_swfg(
         config, ephemerides, klobuchar, rover_epochs, base_epochs, base_pos, imu_samples, initial_rover_pos,
+        dynamics, precise_orbits, precise_clocks, sinex_bias, antex_database,
     )
 }
 
@@ -133,12 +139,16 @@ fn run_backward_swfg(
     base_pos: Option<Vector3<f64>>,
     imu_samples: Option<&[ImuSample]>,
     initial_rover_pos: Option<Vector3<f64>>,
+    dynamics: ProcessingDynamics,
+    precise_orbits: Option<std::sync::Arc<gneiss_parsers::precise_orbit::PreciseOrbit>>,
+    precise_clocks: Option<std::sync::Arc<gneiss_parsers::rinex_clk::RinexClock>>,
+    sinex_bias: Option<std::sync::Arc<gneiss_parsers::sinex_bia::SinexBias>>,
+    antex_database: Option<std::sync::Arc<gneiss_parsers::antex::AntexDatabase>>,
 ) -> BTreeMap<u64, FilteredEpoch> {
-    let bwd_config = configure_backward_engine(config, initial_rover_pos);
-    let mut engine = SwfgEngine::new(&bwd_config, ephemerides.to_vec());
-    if let Some((alpha, beta)) = klobuchar {
-        engine.set_klobuchar(alpha, beta);
-    }
+    let bwd_config = configure_backward_engine(config, initial_rover_pos, dynamics);
+    let mut engine = crate::post_process::forward::configure_swfg_engine(
+        &bwd_config, ephemerides, klobuchar, precise_orbits, precise_clocks, sinex_bias, antex_database,
+    );
 
     let epoch_imu_map = group_imu_by_epoch(rover_epochs, imu_samples);
     let mut results = BTreeMap::new();
@@ -147,12 +157,12 @@ fn run_backward_swfg(
     let mut rev_epochs = rover_epochs.to_vec();
     rev_epochs.reverse();
 
-    for epoch in &rev_epochs {
+    for (epoch_idx, epoch) in rev_epochs.iter().enumerate() {
         let tow_ms = (epoch.time.tow * 1000.0).round() as u64;
         let preint = extract_backward_imu_slice(tow_ms, &epoch_imu_map);
         let base_ep = find_matched_base(epoch.time.tow, base_epochs);
         if let Some(filtered) = process_single_bwd(
-            &mut engine, epoch, base_ep, base_pos, preint, &mut prev_pos, imu_samples.is_some(),
+            &mut engine, epoch, base_ep, base_pos, preint, &mut prev_pos, imu_samples.is_some(), epoch_idx,
         ) {
             results.insert(tow_ms, filtered);
         }
@@ -160,6 +170,22 @@ fn run_backward_swfg(
     results
 }
 
+fn compute_bwd_epoch_cov(
+    engine: &SwfgEngine,
+    n_sats: usize,
+    has_base: bool,
+    is_fix: bool,
+    epoch_idx: usize,
+) -> Matrix3<f64> {
+    let epochs_tracked = if engine.is_ppp() && engine.initial_pos_sigma_m.is_some() {
+        600
+    } else {
+        epoch_idx
+    };
+    estimate_swfg_epoch_covariance(n_sats, has_base, is_fix, engine.is_ppp(), epochs_tracked)
+}
+
+#[allow(clippy::too_many_arguments)]
 fn process_single_bwd(
     engine: &mut SwfgEngine,
     epoch: &EpochObs,
@@ -168,41 +194,47 @@ fn process_single_bwd(
     preint: Option<ImuPreintegration>,
     prev_pos: &mut Option<Vector3<f64>>,
     has_imu: bool,
+    epoch_idx: usize,
 ) -> Option<FilteredEpoch> {
     let sol_res = match (base, base_pos) {
         (Some(b), Some(bp)) => engine.process_rtk_epoch_with_imu(epoch, b, bp, preint),
         _ => engine.process_epoch(epoch),
     };
     let sol = sol_res.ok()?;
-    if sol.n_satellites < 4 && !has_imu {
-        return None;
-    }
+    if sol.n_satellites < 4 && !has_imu { return None; }
     let is_fix = sol.error.is_some_and(|e| e < 0.05);
-    let cov = estimate_epoch_covariance(sol.n_satellites, base_pos.is_some(), is_fix);
+    let cov = compute_bwd_epoch_cov(engine, sol.n_satellites, base_pos.is_some(), is_fix, epoch_idx);
     let q = if is_fix { 1 } else if base_pos.is_some() { 2 } else { 4 };
     let vel = prev_pos.map(|p| sol.position_ecef - p);
     *prev_pos = Some(sol.position_ecef);
 
     Some(FilteredEpoch {
-        time: epoch.time,
-        position_ecef: sol.position_ecef,
-        velocity_ecef: vel,
-        attitude: None,
-        cov_position: cov,
-        n_satellites: sol.n_satellites,
-        quality: q,
-        is_fixed: is_fix,
+        time: epoch.time, position_ecef: sol.position_ecef,
+        velocity_ecef: vel, attitude: None, cov_position: cov,
+        n_satellites: sol.n_satellites, quality: q, is_fixed: is_fix,
     })
 }
 
-fn configure_backward_engine(config: &EngineConfig, initial_pos: Option<Vector3<f64>>) -> EngineConfig {
+fn configure_backward_engine(
+    config: &EngineConfig,
+    initial_pos: Option<Vector3<f64>>,
+    dynamics: ProcessingDynamics,
+) -> EngineConfig {
     let mut cfg = config.clone();
     let pos_arr = initial_pos.map(|p| [p.x, p.y, p.z]);
+    let has_seed = initial_pos.is_some();
     match &mut cfg {
         EngineConfig::Rtk(c) => c.initial_position = pos_arr.or(c.initial_position),
         EngineConfig::RtkIns(c) => c.rtk.initial_position = pos_arr.or(c.rtk.initial_position),
-        EngineConfig::Ppp(c) => c.initial_position = pos_arr.or(c.initial_position),
-        EngineConfig::PppIns(c) => c.ppp.initial_position = pos_arr.or(c.ppp.initial_position),
+        EngineConfig::Ppp(c) => {
+            c.initial_position = pos_arr.or(c.initial_position);
+            c.is_kinematic = dynamics.is_kinematic();
+            if has_seed { c.initial_pos_sigma_m = Some(0.15); }
+        }
+        EngineConfig::PppIns(c) => {
+            c.ppp.initial_position = pos_arr.or(c.ppp.initial_position);
+            if has_seed { c.ppp.initial_pos_sigma_m = Some(0.15); }
+        }
         EngineConfig::Spp(c) => c.initial_position = pos_arr.or(c.initial_position),
     }
     cfg
@@ -277,7 +309,7 @@ mod tests {
     #[test]
     fn test_empty_backward_pass_runs() {
         let config = EngineConfig::Spp(Default::default());
-        let results = run_backward_pass(&config, &[], None, &[], None, None, None, None, None, ProcessingDynamics::Static, false, false, None, None, false);
+        let results = run_backward_pass(&config, &[], None, &[], None, None, None, None, None, ProcessingDynamics::Static, false, false, None, None, false, None, None, None, None);
         assert!(results.is_empty());
     }
 }

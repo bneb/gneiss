@@ -208,11 +208,8 @@ fn make_post_process_options(
         dynamics: spec.dynamics,
         enable_glonass: spec.enable_glonass,
         continuity_gate: false,
-        precise_orbits: None,
-        precise_clocks: None,
-        sinex_bias: None,
-        antex_database: None,
-        calibration: None,
+        init_passes: 1,
+        ..Default::default()
     }
 }
 

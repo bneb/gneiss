@@ -126,9 +126,28 @@ impl SinexBias {
     pub fn new(records: Vec<BiasRecord>) -> Self {
         let mut by_sat_obs: HashMap<(SatelliteId, ObsCode), Vec<usize>> = HashMap::new();
         for (i, r) in records.iter().enumerate() {
-            by_sat_obs.entry((r.sat, r.obs1)).or_default().push(i);
+            if r.station.is_none() {
+                by_sat_obs.entry((r.sat, r.obs1)).or_default().push(i);
+            }
         }
         Self { records, by_sat_obs }
+    }
+
+    pub fn append_records(&mut self, new_records: Vec<BiasRecord>) {
+        let start_idx = self.records.len();
+        for (i, r) in new_records.iter().enumerate() {
+            if r.station.is_none() {
+                self.by_sat_obs.entry((r.sat, r.obs1)).or_default().push(start_idx + i);
+            }
+        }
+        self.records.extend(new_records);
+    }
+
+    pub fn load_bernese_dcb<R: BufRead>(&mut self, reader: R) -> Result<usize, String> {
+        let recs = crate::bernese_dcb::parse_bernese_dcb(reader)?;
+        let count = recs.len();
+        self.append_records(recs);
+        Ok(count)
     }
 
     pub fn get_bias(&self, sat: SatelliteId, obs: ObsCode, t: GpsTime) -> Option<f64> {
@@ -230,8 +249,8 @@ fn fallback_codes(constellation: Constellation, obs_str: &str) -> &'static [&'st
     match obs_str {
         "C1C" | "C1X" => if constellation == Constellation::Gps { &["C1W"] } else { &["C1C"] },
         "L1C" | "L1X" => if constellation == Constellation::Gps { &["L1W"] } else { &["L1C"] },
-        "C2X" | "C2L" | "C2S" => if constellation == Constellation::Gps { &["C2W"] } else { &["C2C"] },
-        "L2X" | "L2L" | "L2S" => if constellation == Constellation::Gps { &["L2W"] } else { &["L2C"] },
+        "C2X" | "C2L" | "C2S" => if constellation == Constellation::Gps { &["C2C", "C2W"] } else { &["C2C"] },
+        "L2X" | "L2L" | "L2S" => if constellation == Constellation::Gps { &["L2C", "L2W"] } else { &["L2C"] },
         "C5X" | "C5I" => &["C5Q"],
         "L5X" | "L5I" => &["L5Q"],
         "C7X" | "C7I" => &["C7Q"],

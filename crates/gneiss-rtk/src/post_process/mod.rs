@@ -125,6 +125,9 @@ pub struct PostProcessOptions {
     pub antex_database: Option<std::sync::Arc<gneiss_parsers::antex::AntexDatabase>>,
     /// Active calibration parameters for extrinsics, intrinsics, and biases.
     pub calibration: Option<CalibrationParameters>,
+    /// Number of initialization passes to execute before the final solve (default: 1).
+    /// When > 1, passes 1..N-1 iteratively refine initial position and convergence state.
+    pub init_passes: usize,
 }
 
 /// Paired receiver antenna PCV models consumed by the DD engine.
@@ -144,43 +147,76 @@ struct FilterDataset<'a> {
     imu_samples: Option<&'a [ImuSample]>,
 }
 
+fn call_forward_pass(
+    d: &FilterDataset<'_>,
+    options: &PostProcessOptions,
+) -> Vec<iekf_pass::FilteredEpoch> {
+    forward::run_forward_pass(
+        d.config, d.ephemerides, d.klob, d.rover_epochs, d.base_epochs, d.base_pos, d.imu_samples,
+        options.initial_rover_position, options.q_accel, options.dynamics,
+        options.widelane_ar, options.tropo_gradients,
+        options.network_sat_upd.clone(), options.receiver_pcv.clone(),
+        options.enable_glonass, options.precise_orbits.clone(),
+        options.precise_clocks.clone(), options.sinex_bias.clone(),
+        options.antex_database.clone(),
+    )
+}
+
+fn call_backward_pass(
+    d: &FilterDataset<'_>,
+    options: &PostProcessOptions,
+    bwd_init_pos: Option<Vector3<f64>>,
+) -> std::collections::BTreeMap<u64, iekf_pass::FilteredEpoch> {
+    backward::run_backward_pass(
+        d.config, d.ephemerides, d.klob, d.rover_epochs, d.base_epochs, d.base_pos, d.imu_samples,
+        bwd_init_pos, options.q_accel, options.dynamics,
+        options.widelane_ar, options.tropo_gradients,
+        options.network_sat_upd.clone(), options.receiver_pcv.clone(),
+        options.enable_glonass, options.precise_orbits.clone(),
+        options.precise_clocks.clone(), options.sinex_bias.clone(),
+        options.antex_database.clone(),
+    )
+}
+
 fn run_filter_passes(
     d: &FilterDataset<'_>,
     options: &PostProcessOptions,
 ) -> (Vec<iekf_pass::FilteredEpoch>, std::collections::BTreeMap<u64, iekf_pass::FilteredEpoch>) {
-    if options.enable_bidirectional {
-        let bwd_init_pos = d.rover_epochs.last()
-            .and_then(|e| crate::swfg::engine::epoch::compute_spp_seeding(e, d.ephemerides))
-            .or(options.initial_rover_position);
-        rayon::join(
-            || forward::run_forward_pass(
-                d.config, d.ephemerides, d.klob, d.rover_epochs, d.base_epochs, d.base_pos, d.imu_samples,
-                options.initial_rover_position, options.q_accel, options.dynamics,
-                options.widelane_ar, options.tropo_gradients,
-                options.network_sat_upd.clone(), options.receiver_pcv.clone(),
-                options.enable_glonass, options.precise_orbits.clone(),
-                options.precise_clocks.clone(), options.sinex_bias.clone(),
-                options.antex_database.clone(),
-            ),
-            || backward::run_backward_pass(
-                d.config, d.ephemerides, d.klob, d.rover_epochs, d.base_epochs, d.base_pos, d.imu_samples,
-                bwd_init_pos, options.q_accel, options.dynamics,
-                options.widelane_ar, options.tropo_gradients,
-                options.network_sat_upd.clone(), options.receiver_pcv.clone(),
-                options.enable_glonass,
-            ),
-        )
+    let fwd = call_forward_pass(d, options);
+    if !options.enable_bidirectional {
+        return (fwd, std::collections::BTreeMap::new());
+    }
+    let bwd_init_pos = fwd.last().map(|e| e.position_ecef)
+        .or_else(|| d.rover_epochs.last().and_then(|e| crate::swfg::engine::epoch::compute_spp_seeding(e, d.ephemerides)))
+        .or(options.initial_rover_position);
+    let bwd = call_backward_pass(d, options, bwd_init_pos);
+    (fwd, bwd)
+}
+
+fn refine_initial_passes(
+    dataset: &FilterDataset<'_>,
+    options: &PostProcessOptions,
+) -> (Vec<iekf_pass::FilteredEpoch>, std::collections::BTreeMap<u64, iekf_pass::FilteredEpoch>) {
+    let mut current_opts = options.clone();
+    for _ in 0..options.init_passes.saturating_sub(1) {
+        let (pre_fwd, _) = run_filter_passes(dataset, &current_opts);
+        if let Some(refined_init) = pre_fwd.first().map(|e| e.position_ecef) {
+            current_opts.initial_rover_position = Some(refined_init);
+        }
+    }
+    run_filter_passes(dataset, &current_opts)
+}
+
+fn finalize_trajectory(
+    fwd: &[iekf_pass::FilteredEpoch],
+    bwd: &std::collections::BTreeMap<u64, iekf_pass::FilteredEpoch>,
+    options: &PostProcessOptions,
+) -> Vec<SmoothedEpoch> {
+    let smoothed = combiner::combine_trajectories(fwd, bwd, true, options.dynamics);
+    if options.continuity_gate {
+        network::apply_continuity_gate_dynamics(smoothed, network::CONTINUITY_MAX_DT_S, options.dynamics)
     } else {
-        let fwd = forward::run_forward_pass(
-            d.config, d.ephemerides, d.klob, d.rover_epochs, d.base_epochs, d.base_pos, d.imu_samples,
-            options.initial_rover_position, options.q_accel, options.dynamics,
-            options.widelane_ar, options.tropo_gradients,
-            options.network_sat_upd.clone(), options.receiver_pcv.clone(),
-            options.enable_glonass, options.precise_orbits.clone(),
-            options.precise_clocks.clone(), options.sinex_bias.clone(),
-            options.antex_database.clone(),
-        );
-        (fwd, std::collections::BTreeMap::new())
+        smoothed
     }
 }
 
@@ -197,43 +233,17 @@ pub fn execute_post_process(
         return Err("No rover epochs provided".to_string());
     }
 
-    // Pass 1: Screening & Quality Control
     let screening = screening::screen_dataset(rover_epochs, base_epochs, options.base_position);
     let base_pos = options.base_position.or(screening.refined_base_pos);
-    let klob = match (options.klobuchar_alpha, options.klobuchar_beta) {
-        (Some(a), Some(b)) => Some((a, b)),
-        _ => None,
-    };
-
-    // Pass 2 & 3: Forward and Backward Passes (Parallelized via rayon::join)
+    let klob = options.klobuchar_alpha.zip(options.klobuchar_beta);
     let dataset = FilterDataset {
         config, ephemerides, klob, rover_epochs, base_epochs, base_pos, imu_samples,
     };
-    let (forward_traj, backward_map) = run_filter_passes(&dataset, options);
+    let (forward_traj, backward_map) = refine_initial_passes(&dataset, options);
+    let trajectory = finalize_trajectory(&forward_traj, &backward_map, options);
+    let quality = quality::generate_quality_report(&trajectory);
 
-    // Pass 4: Optimal Bidirectional Fusion
-    let smoothed_traj = combiner::combine_trajectories(
-        &forward_traj,
-        &backward_map,
-        true,
-        options.dynamics,
-    );
-    let smoothed_traj = if options.continuity_gate {
-        network::apply_continuity_gate_dynamics(
-            smoothed_traj,
-            network::CONTINUITY_MAX_DT_S,
-            options.dynamics,
-        )
-    } else {
-        smoothed_traj
-    };
-    let quality_rep = quality::generate_quality_report(&smoothed_traj);
-
-    Ok(PostProcessResult {
-        screening,
-        trajectory: smoothed_traj,
-        quality: quality_rep,
-    })
+    Ok(PostProcessResult { screening, trajectory, quality })
 }
 
 /// Nearest-rank percentile of a pre-sorted slice (`q` in `[0.0, 1.0]`).
@@ -268,5 +278,48 @@ mod tests {
         let options = PostProcessOptions { enable_bidirectional: false, ..Default::default() };
         let res = execute_post_process(&config, &[], &rover, None, None, &options);
         assert!(res.is_ok());
+    }
+
+    #[test]
+    fn test_post_process_multi_pass_initialization() {
+        let config = EngineConfig::Spp(Default::default());
+        let rover = vec![EpochObs { time: GpsTime::new(2000, 100.0), satellites: Vec::new() }];
+        let options = PostProcessOptions {
+            enable_bidirectional: false,
+            init_passes: 3,
+            initial_rover_position: Some(Vector3::new(100.0, 200.0, 300.0)),
+            ..Default::default()
+        };
+        let res = execute_post_process(&config, &[], &rover, None, None, &options);
+        assert!(res.is_ok());
+    }
+
+    #[test]
+    fn test_post_process_bidirectional_and_continuity_gate() {
+        let config = EngineConfig::Spp(Default::default());
+        let rover = vec![EpochObs { time: GpsTime::new(2000, 100.0), satellites: Vec::new() }];
+        let options = PostProcessOptions {
+            enable_bidirectional: true,
+            continuity_gate: true,
+            init_passes: 2,
+            ..Default::default()
+        };
+        let res = execute_post_process(&config, &[], &rover, None, None, &options);
+        assert!(res.is_ok());
+    }
+
+    #[test]
+    fn test_percentile_and_finalize_trajectory() {
+        assert_eq!(percentile(&[], 0.5), 0.0);
+        let vals = [1.0, 2.0, 3.0, 4.0, 5.0];
+        assert_eq!(percentile(&vals, 0.5), 3.0);
+
+        let opts_gate = PostProcessOptions { continuity_gate: true, ..Default::default() };
+        let traj_gate = finalize_trajectory(&[], &std::collections::BTreeMap::new(), &opts_gate);
+        assert!(traj_gate.is_empty());
+
+        let opts_no_gate = PostProcessOptions { continuity_gate: false, ..Default::default() };
+        let traj_no_gate = finalize_trajectory(&[], &std::collections::BTreeMap::new(), &opts_no_gate);
+        assert!(traj_no_gate.is_empty());
     }
 }

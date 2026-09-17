@@ -10,7 +10,7 @@ pub mod positions;
 #[cfg(test)]
 mod tests;
 
-pub use helmert::{HelbertParams, HelmertParams};
+pub use helmert::HelmertParams;
 pub use realizations::{
     Etrs89, Gda2020, Igs20, Itrf2014, Itrf2020, Jgd2011, Nad83_2011, ReferenceFrame,
     Wgs84Broadcast,

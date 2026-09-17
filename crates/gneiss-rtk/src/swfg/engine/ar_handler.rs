@@ -45,7 +45,8 @@ pub fn execute_ar_step(
     }
 
     if !is_rtk {
-        if epoch >= 10 {
+        let min_epoch = std::env::var("PPP_AR_MIN_EPOCH").ok().and_then(|v| v.parse().ok()).unwrap_or(1800);
+        if epoch >= min_epoch {
             execute_ppp_ar_step(solver, pose_id, init_pos, &all_amb_ids);
         }
         return;

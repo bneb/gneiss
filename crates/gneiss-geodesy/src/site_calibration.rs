@@ -173,10 +173,59 @@ impl SiteCalibration {
     }
 }
 
+/// Rigid 3D translation offset between global GNSS coordinates and a local monument or station frame.
+///
+/// Models fixed physical datum shifts, base station monument ties, and antenna phase center offsets
+/// without requiring multi-point network adjustment.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LocalDatumTie {
+    /// Rigid 3D translation (target - source, in meters).
+    pub translation: Vector3<f64>,
+}
+
+impl LocalDatumTie {
+    /// Creates a new datum tie with a known 3D translation offset.
+    #[must_use]
+    pub const fn new(translation: Vector3<f64>) -> Self {
+        Self { translation }
+    }
+
+    /// Estimates the mean 3D rigid translation from one or more (source, target) coordinate pairs.
+    ///
+    /// Returns `None` if `pairs` is empty.
+    pub fn estimate(pairs: &[(Vector3<f64>, Vector3<f64>)]) -> Option<Self> {
+        if pairs.is_empty() {
+            return None;
+        }
+        let sum = pairs.iter().fold(Vector3::zeros(), |acc, (src, tgt)| acc + (tgt - src));
+        Some(Self {
+            translation: sum / (pairs.len() as f64),
+        })
+    }
+
+    /// Transforms source coordinates into target coordinates by applying the rigid translation.
+    #[must_use]
+    pub fn transform(&self, source: Vector3<f64>) -> Vector3<f64> {
+        source + self.translation
+    }
+
+    /// Computes 3D residual errors across point pairs.
+    pub fn compute_residuals(&self, pairs: &[(Vector3<f64>, Vector3<f64>)]) -> Vec<f64> {
+        pairs
+            .iter()
+            .map(|(src, tgt)| vec3_norm(self.transform(*src) - tgt))
+            .collect()
+    }
+}
+
+fn vec3_norm(v: Vector3<f64>) -> f64 {
+    libm::sqrt(v.x * v.x + v.y * v.y + v.z * v.z)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use alloc::vec;
+    use alloc::{format, vec};
 
     #[test]
     fn test_site_calibration_exact_fit() {
@@ -199,5 +248,51 @@ mod tests {
             assert!(h_err < 1e-4, "Horizontal error < 0.1 mm");
             assert!(v_err.abs() < 1e-4, "Vertical error < 0.1 mm");
         }
+    }
+
+    #[test]
+    fn test_local_datum_tie_new_and_transform() {
+        let offset = Vector3::new(-0.278, -0.100, 0.096);
+        let tie = LocalDatumTie::new(offset);
+        let p = Vector3::new(100.0, 200.0, 300.0);
+        let p_trans = tie.transform(p);
+        assert!(vec3_norm(p_trans - (p + offset)) < 1e-12);
+        assert_eq!(tie, tie.clone());
+        assert!(format!("{:?}", tie).contains("translation"));
+
+        let zero_tie = LocalDatumTie::new(Vector3::zeros());
+        assert_eq!(zero_tie.transform(p), p);
+    }
+
+    #[test]
+    fn test_local_datum_tie_estimation_and_residuals() {
+        let p1 = Vector3::new(1000.0, 2000.0, 3000.0);
+        let p2 = Vector3::new(1050.0, 2050.0, 3050.0);
+        let offset = Vector3::new(-0.278, -0.100, 0.096);
+
+        let pairs = vec![(p1, p1 + offset), (p2, p2 + offset)];
+        let tie = LocalDatumTie::estimate(&pairs).expect("estimate tie");
+        assert!(vec3_norm(tie.translation - offset) < 1e-12);
+
+        let res = tie.compute_residuals(&pairs);
+        assert_eq!(res.len(), 2);
+        assert!(res[0] < 1e-12 && res[1] < 1e-12);
+
+        assert_eq!(LocalDatumTie::estimate(&[]), None);
+        let single_tie = LocalDatumTie::estimate(&[(p1, p1 + offset)]).expect("single pair");
+        assert_eq!(single_tie, tie);
+    }
+
+    #[test]
+    fn test_vec3_norm_exact_values() {
+        let v = Vector3::new(1.0, 2.0, 2.0);
+        let n = vec3_norm(v);
+        assert!((n - 3.0).abs() < 1e-12);
+
+        let pairs = vec![(Vector3::zeros(), Vector3::new(1.0, 2.0, 2.0))];
+        let tie = LocalDatumTie::new(Vector3::zeros());
+        let res = tie.compute_residuals(&pairs);
+        assert_eq!(res.len(), 1);
+        assert!((res[0] - 3.0).abs() < 1e-12);
     }
 }

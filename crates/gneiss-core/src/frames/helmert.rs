@@ -26,8 +26,6 @@ pub struct HelmertParams {
     pub rz_rate: f64,
 }
 
-pub type HelbertParams = HelmertParams;
-
 impl HelmertParams {
     #[must_use]
     pub const fn identity_at(t_yr: f64) -> Self {

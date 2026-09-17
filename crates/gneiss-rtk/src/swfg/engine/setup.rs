@@ -107,6 +107,7 @@ fn add_motion_constraints(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn setup_priors(
     solver: &mut SlidingWindowSolver,
     current_attitude: &Option<nalgebra::UnitQuaternion<f64>>,
@@ -115,6 +116,7 @@ pub fn setup_priors(
     prev_pose_id: Option<VariableId>,
     init_pos: Vector3<f64>,
     has_imu: bool,
+    pos_sigma_m: Option<f64>,
 ) {
     let rot_axis = if has_imu {
         current_attitude.map(|q| q.scaled_axis()).unwrap_or_else(Vector3::zeros)
@@ -124,7 +126,7 @@ pub fn setup_priors(
     }
 
     if epoch == 0 || prev_pose_id.is_none() {
-        setup_initial_priors(solver, epoch, pose_id, init_pos, has_imu);
+        setup_initial_priors(solver, epoch, pose_id, init_pos, has_imu, pos_sigma_m);
     } else if !has_imu && prev_pose_id != Some(pose_id) {
         add_attitude_prior(solver, pose_id, init_pos);
     }
@@ -136,9 +138,11 @@ fn setup_initial_priors(
     pose_id: VariableId,
     init_pos: Vector3<f64>,
     has_imu: bool,
+    pos_sigma_m: Option<f64>,
 ) {
     let mut prior_info = nalgebra::DMatrix::zeros(6, 6);
-    for i in 0..3 { prior_info[(i, i)] = 1.0 / 100_000.0; }
+    let pos_info = pos_sigma_m.map_or(1.0 / 100_000.0, |s| 1.0 / (s * s));
+    for i in 0..3 { prior_info[(i, i)] = pos_info; }
     if !has_imu { for i in 3..6 { prior_info[(i, i)] = 1.0; } }
     let pos_prior = crate::swfg::factor::PriorFactor {
         variable: pose_id,

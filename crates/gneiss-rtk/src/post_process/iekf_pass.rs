@@ -250,15 +250,32 @@ pub(crate) fn find_matched_base(tow: f64, base_epochs: Option<&[EpochObs]>) -> O
         })
 }
 
-/// Helper to compute representative covariance matrix for position.
+#[cfg(test)]
 pub(crate) fn estimate_epoch_covariance(n_sats: usize, is_rtk: bool, is_fixed: bool) -> Matrix3<f64> {
+    estimate_swfg_epoch_covariance(n_sats, is_rtk, is_fixed, false, 0)
+}
+
+/// Compute representative covariance matrix for SWFG epochs, taking into account
+/// convergence duration for PPP float solutions.
+pub(crate) fn estimate_swfg_epoch_covariance(
+    n_sats: usize,
+    is_rtk: bool,
+    is_fixed: bool,
+    is_ppp: bool,
+    epochs_tracked: usize,
+) -> Matrix3<f64> {
     let geom_factor = (8.0 / (n_sats.max(4) as f64)).max(0.5);
     let sigma = if is_fixed {
-        0.01 * geom_factor // 1cm fixed RTK
+        0.01 * geom_factor
     } else if is_rtk {
-        0.50 * geom_factor // 50cm float RTK
+        0.50 * geom_factor
+    } else if is_ppp {
+        let conv_m = 0.15;
+        let init_m = 2.50;
+        let decay = 1.0 / (1.0 + epochs_tracked as f64 / 60.0);
+        (conv_m + (init_m - conv_m) * decay) * geom_factor
     } else {
-        2.5 * geom_factor // 2.5m SPP
+        2.5 * geom_factor
     };
     let var = sigma * sigma;
     Matrix3::new(

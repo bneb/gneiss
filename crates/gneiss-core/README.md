@@ -1,24 +1,25 @@
 # gneiss-core
 
-The geodetic bedrock of the Gneiss engine. This crate provides the physical constants and coordinate transformations required for high-precision navigation.
+`gneiss-core` provides the foundational data structures, reference frame realizations, time systems, and physical models for the Gneiss positioning engine.
 
-## Overview
+## Key Subsystems
 
-Accuracy is a consequence of correct foundations. `gneiss-core` provides the following:
+### 1. Reference Frames & Realizations (`frames/`)
+- Type-safe reference frame tags and 14-parameter time-dependent Helmert transformations with plate tectonic velocity models.
+- Realizations include `ITRF2014`, `ITRF2020`, `IGS14`, `IGS20`, `WGS84`, `Nad83_2011`, `Etrs89`, and `Gda2020`.
+- Mathematical alignment with IOGP EPSG:8970 (Method 1056) and NOAA NGS HTDP standards.
 
-- **Coordinate Systems**: Rigorous transformations between Earth-Centered Earth-Fixed (ECEF), Geodetic, and local tangent plane (NED) frames.
-- **Time Management**: Handling of Global Positioning System (GPS) time, including week rollovers and leap seconds.
-- **Physical Models**: WGS84 gravity harmonics and atmospheric delay models (Saastamoinen troposphere, Klobuchar ionosphere).
+### 2. Coordinate Types & Geometric Transformations (`coordinates/`)
+- Strongly-typed coordinate containers: `EcefPos`, `GeodeticPos`, `NedPos`, and `EpochPosition`.
+- WGS84, GRS80, and IERS reference ellipsoid transformations with zero heap allocation.
+- Local tangent plane projections (North-East-Down, East-North-Up).
 
-## Visualizing the Bedrock
+### 3. Time Systems & Ephemerides (`time/`, `ephemeris/`)
+- High-precision time representations (`GpsTime`, UTC conversions, leap-second offsets).
+- Broadcast navigation message decoders and satellite orbit/clock propagation routines.
+- Transmit-time iteration with Earth rotation (Sagnac effect) compensation.
 
-```mermaid
-graph LR
-    A(Geodetic: Lat, Lon, H) <--> B(ECEF: X, Y, Z)
-    B <--> C(Local NED: North, East, Down)
-    B <--> D(Body Frame: Fwd, Right, Down)
-```
-
----
-
-*Gneiss-core: Earth is round-ish. We have the equations for that.*
+### 4. Physical & Atmospheric Models
+- Tropospheric delay modeling: Saastamoinen zenith hydrostatic and wet delays with Vienna/Niell mapping functions.
+- Ionospheric delay estimation: Dual-frequency ionosphere-free linear combinations and Klobuchar single-frequency broadcast model.
+- IERS 2010 Solid Earth Tide models driven by solar and lunar ephemerides.

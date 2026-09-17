@@ -1,6 +1,7 @@
 #![cfg_attr(test, allow(clippy::unwrap_used))]
 
 pub mod antex;
+pub mod bernese_dcb;
 pub mod blq;
 pub mod clk_centering;
 pub mod csrs_pos;

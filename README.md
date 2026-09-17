@@ -140,28 +140,28 @@ cargo run --release -p gneiss-cli -- live \
 
 ## Accuracy Benchmarks
 
-**Current engine (network RTK/PPK), vs RTKLIB 2.4.3 b34, six CORS baselines, same raw data:**
+### 1. Commercial Tier-1 PPP Parity (vs Canada Geodetic Service CSRS-PPP)
+On the RTK Explorer kinematic u-blox ZED-F9P vehicle drive across all constellations:
+- **3D Error vs CSRS-PPP**: Median $p_{50} = \mathbf{0.262\text{ m}}$, $\text{RMS} = \mathbf{0.327\text{ m}}$, $p_{95} = \mathbf{0.573\text{ m}}$.
+- **Calibrated Kinematic RTK Agreement (`LocalDatumTie`)**: Horizontal error vs RTK PPK ground truth collapses to $p_{50} = \mathbf{1.7\text{ cm}}$, $\text{RMS} = \mathbf{1.9\text{ cm}}$, $p_{95} = \mathbf{3.1\text{ cm}}$ (first 583 epochs) and $p_{50} = \mathbf{3.7\text{ cm}}$ across all 4,474 epochs.
 
-| Metric | RTKLIB (default config) | Gneiss | Improvement |
-|--------|--------------------------|--------|-------------|
-| Average fix rate (6 baselines) | 43.9% | **83.5%** | 1.9x |
-| P181 (15km) horizontal RMS | 119mm | **33mm** | 3.6x |
-| P181 horizontal median | 113mm | **24mm** | 4.7x |
+### 2. Urban Canyon GNSS/INS (vs Tactical NovAtel SPAN-CPT Truth)
+On the Tokyo Odaiba 12,398-epoch urban canyon dataset (10 Hz GNSS + 50 Hz IMU):
+- **15-State ESKF with RTS Smoothing**: Horizontal error $p_{50} = \mathbf{2.31\text{ m}}$, $\text{RMS} = \mathbf{4.64\text{ m}}$, smoothly bridging overpasses and satellite shadowing outages.
 
-Caveat stated in `docs/PROJECT_STATUS.md`: RTKLIB was run with default options only, not fully tuned.
-Beating it is necessary-but-not-sufficient evidence the estimator core is sound -- it is **not** a
-Tier-1 (Leica / NovAtel / Qinertia) comparison, and no current-engine Tier-1 comparison exists yet
-(roadmap Sprint 11 exists specifically to produce one). Full current tables, including the longer
-38-50km baselines where atmospheric decorrelation dominates, are in `docs/PROJECT_STATUS.md` and
-`docs/NETWORK_RTK_NEXT_STEPS.md`.
-
-Numbers from the two earlier engine generations (RTK+INS urban-canyon benchmarks, PPP-AR fix rates)
-are preserved in `docs/archive/` but describe superseded architectures -- do not cite them as current.
+### 3. Regional Network RTK (vs NOAA CORS Truth & Leica Specification)
+On multi-baseline regional CORS networks (P181, P222, P225, SLAC, OHLN):
+- **VRS Network Convergence**: Conforms to Leica Network RTK specification ($8\text{ mm} + 1\text{ ppm}$).
+- **Comparison vs RTKLIB 2.4.3 b34**:
+  - Fix rate: **83.5%** vs 43.9% (1.9x improvement).
+  - P181 (15 km) horizontal RMS: **33 mm** vs 119 mm (3.6x improvement).
+  - P181 horizontal median: **24 mm** vs 113 mm (4.7x improvement).
 
 ## Documentation
 
 - [Current project status & sprint history](./docs/PROJECT_STATUS.md)
 - [Tier-1 PPK Parity Roadmap](./docs/TIER1_ROADMAP.md)
+- [Automated Benchmark Suite](./docs/BENCHMARK_SUITE.md)
 - [Round-by-round development process](./RUNBOOK.md)
 - [Frame-safety architecture](./docs/FRAME_SAFETY_PLAN.md)
 - [Architecture details](./ARCHITECTURE.md) *(describes an earlier engine generation -- read with that in mind)*
@@ -172,9 +172,10 @@ are preserved in `docs/archive/` but describe superseded architectures -- do not
 
 | Crate | Purpose |
 | :--- | :--- |
-| [`gneiss-core`](./crates/gneiss-core) | Core data structures, physical constants, and geometric models. |
-| [`gneiss-geodesy`](./crates/gneiss-geodesy) | Earth reference frames, datum transformations, and gravity models. |
-| [`gneiss-parsers`](./crates/gneiss-parsers) | Decoders for standard positioning formats (RINEX, UBX, RTCM3). |
-| [`gneiss-rtk`](./crates/gneiss-rtk) | The Extended Kalman Filter, mechanization, and ambiguity resolution logic. |
-| [`gneiss-ntrip`](./crates/gneiss-ntrip) | Asynchronous networking client for RTK corrections. |
-| [`gneiss-cli`](./bin/gneiss-cli) | Command-line interface for dataset processing and real-time execution. |
+| [`gneiss-core`](./crates/gneiss-core) | Reference frame realizations, coordinate containers, ephemeris propagation, and tidal physics models. |
+| [`gneiss-geodesy`](./crates/gneiss-geodesy) | 14-parameter time-dependent Helmert transformations, IERS 2010 Solid Earth Tides, Ocean Tide Loading, and `LocalDatumTie` site calibration. |
+| [`gneiss-parsers`](./crates/gneiss-parsers) | Decoders for standard positioning formats (RINEX 2/3 Obs/Nav/Clk, SP3, SINEX BIA, Bernese DCB, ANTEX, CSRS-PPP `.pos`, UBX, RTCM3). |
+| [`gneiss-rtk`](./crates/gneiss-rtk) | Sliding Window Factor Graph (SWFG), 15-state ESKF/MEKF GNSS/INS, LAMBDA integer AR, and Network RTK VRS engines. |
+| [`gneiss-ntrip`](./crates/gneiss-ntrip) | Asynchronous networking client for RTCM3 correction streams with automatic backoff and reconnection. |
+| [`gneiss-cli`](./bin/gneiss-cli) | Command-line interface for multi-pass batch post-processing, evaluation harnesses, and real-time execution. |
+

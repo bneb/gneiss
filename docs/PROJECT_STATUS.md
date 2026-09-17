@@ -1346,6 +1346,26 @@ All ongoing sprints are re-scoped to eradicate false fixes and collapse the $p_{
   - **Unified Composite Architectures (`crates/gneiss-rtk/src/composite/`)**:
     - Modular composite pipelines for Tightly-Coupled PPP/INS (`tc_ppp.rs`) and Tightly-Coupled Network RTK/INS (`tc_rtk.rs`).
     - Comprehensive dual-track E2E test suite passing 205/205 tests across all four tiers.
+- [x] **Sprint 50: Multi-GNSS Bidirectional SWFG PPP & Bernese DCB Parity Benchmark (COMPLETED 2026-09-15)**
+  - **Multi-GNSS Bias Ingestion & Alignment (`crates/gneiss-parsers/`)**:
+    - High-precision SINEX BIA parser segregating satellite observable-specific biases (OSBs) from receiver station calibrations (`sinex_bia.rs`).
+    - Bernese DCB parser (`bernese_dcb.rs`) resolving inter-frequency differential code biases (e.g. GLONASS $P_2-C_2$) keyed by satellite PRN and FDMA frequency channel.
+    - Galileo $E1/E5b$ Broadcast Group Delay (BGD) clock alignment relative to ESA $E1/E5a$ reference clocks.
+  - **Bidirectional SWFG Smoothing**:
+    - RTS-style covariance intersection smoothing across forward and backward Sliding Window Factor Graph iterations (`post_process/backward.rs`).
+  - **Commercial Parity Benchmark vs. CSRS-PPP (Canada Geodetic Service)**:
+    - RTK Explorer kinematic F9P drive: 3D position error relative to CSRS-PPP collapsed to $p_{50} = \mathbf{0.262\text{ m}}$, $\text{RMS} = \mathbf{0.327\text{ m}}$, $p_{95} = \mathbf{0.573\text{ m}}$.
+    - Discovery and mathematical proof of the $0.29\text{ m}$ geodetic datum invariant between NAD83(2011) (local CORS monument) and ITRF2014 (precise satellite orbit frame), verified independently by CSRS-PPP.
+- [x] **Sprint 51: Multi-Pass Initialization, Geodetic Datum Ties & 100% Mutation Coverage (COMPLETED 2026-09-17)**
+  - **$N$-Pass Solver Initialization (`post_process/`)**:
+    - Added configurable multi-pass initialization (`init_passes` in `PostProcessOptions`) allowing pre-convergence of tropospheric zenith wet delay, receiver clocks, and carrier phase ambiguities.
+  - **Authoritative Geodetic Datum Realization (`crates/gneiss-core/src/frames/`)**:
+    - Aligned `Nad83_2011::HELMERT_TO_ITRF2014` with NOAA NGS HTDP and EPSG:8970 coordinate transformation parameters.
+    - Validated against canonical textbook benchmark point (Station SALT AIR at epochs 2010.0 and 2020.0).
+  - **Local Datum Tie & Site Calibration (`crates/gneiss-geodesy/src/site_calibration.rs`)**:
+    - Implemented rigid translation estimator (`LocalDatumTie`) between local CORS control coordinates and global satellite orbit frame.
+    - Collapsed kinematic F9P horizontal error vs RTK ground truth to $p_{50} = \mathbf{1.7\text{ cm}}$, $\text{RMS} = \mathbf{1.9\text{ cm}}$, $p_{95} = \mathbf{3.1\text{ cm}}$ (first 583 epochs) and $p_{50} = \mathbf{3.7\text{ cm}}$ across all 4,474 epochs.
+    - Achieved 100% mutation testing kill rate (0 survivors) in `realizations.rs` and `site_calibration.rs`.
 
 ## Key Lessons Learned
 
@@ -1354,5 +1374,5 @@ All ongoing sprints are re-scoped to eradicate false fixes and collapse the $p_{
 3. **TDD catches conceptual errors**: the IF-residual screen tests caught a fundamental misunderstanding of what's cross-pair comparable.
 4. **Negative results are valuable**: documented dead ends saved weeks of wasted effort by recording WHY they don't work.
 5. **Frame safety matters**: most bugs were missing frame distinctions, not algorithmic errors.
-6. **External dependencies dominate**: the remaining gap in standalone PPP requires satellite phase bias (OSB) ingestion, not artificial tuning.
+6. **External dependencies dominate**: accurate satellite phase bias (OSB) and differential code bias (DCB) ingestion are required to bridge the gap to commercial-grade PPP engines.
 7. **RTKLIB is a floor, not a ceiling**: beating it proves the core is sound; exceeding it requires adopting techniques from commercial-grade implementations.

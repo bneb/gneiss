@@ -278,9 +278,8 @@ fn run_pass(
         enable_glonass: std::env::var("GNEISS_GLONASS").is_ok(),
         precise_orbits: ctx.precise_orbits.clone(),
         precise_clocks: ctx.precise_clocks.clone(),
-        sinex_bias: None,
-        antex_database: None,
-        calibration: None,
+        init_passes: std::env::var("INIT_PASSES").ok().and_then(|v| v.parse().ok()).unwrap_or(1),
+        ..Default::default()
     };
     let res = match execute_post_process(config, ctx.ephemerides, rover, Some(base_epochs), None, &options) {
         Ok(r) => r,

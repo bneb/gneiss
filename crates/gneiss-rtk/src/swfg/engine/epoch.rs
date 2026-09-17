@@ -25,128 +25,71 @@ pub fn select_best_ephemeris(
         })
 }
 
+fn apply_sagnac(sat_pos: Vector3<f64>, pr_m: f64) -> Vector3<f64> {
+    let flight_time = pr_m / gneiss_core::constants::SPEED_OF_LIGHT_M_S;
+    let omega_tau = gneiss_core::constants::EARTH_ROTATION_RATE_RAD_S * flight_time;
+    let (cos_wt, sin_wt) = (omega_tau.cos(), omega_tau.sin());
+    Vector3::new(sat_pos.x * cos_wt + sat_pos.y * sin_wt, -sat_pos.x * sin_wt + sat_pos.y * cos_wt, sat_pos.z)
+}
+
+fn compute_obs_noise(el_rad: f64, snr: f64) -> (f64, f64, f64) {
+    let sin_el = el_rad.sin().max(0.17);
+    let snr_pen = if snr < 40.0 { 10.0_f64.powf((40.0 - snr) / 10.0) } else { 1.0 };
+    let v_pr = (1.0 / (sin_el * sin_el) * snr_pen).clamp(0.5, 100.0);
+    let v_cp = (9e-6 / (sin_el * sin_el) * snr_pen).clamp(9e-6, 1e-3);
+    (v_pr, v_cp, sin_el)
+}
+
+fn extract_broadcast_sat(
+    sat_obs: &gneiss_core::obs::SatObs,
+    ephemerides: &[Ephemeris],
+    rover: &EpochObs,
+    rx_pos: Vector3<f64>,
+) -> Option<RawObservation> {
+    let eph = select_best_ephemeris(ephemerides, sat_obs.sat, rover.time)?;
+    let (f1, f2) = gneiss_core::signal::satellite_frequencies(sat_obs.sat, eph.freq_num());
+    let p1_band = match sat_obs.sat.constellation {
+        gneiss_core::sat::Constellation::Beidou => 2,
+        _ => 1,
+    };
+    let pr_m = match sat_obs.get_observable(p1_band) {
+        Some(pr) if pr > 1e6 => pr,
+        _ => return None,
+    };
+    let t_tx = rover.time - (pr_m / gneiss_core::constants::SPEED_OF_LIGHT_M_S);
+    let (_, _, sat_clk_rough, _) = eph.position(t_tx);
+    let (sat_pos_raw, sat_vel, clk_err, _) = eph.position(t_tx - sat_clk_rough);
+    let sat_clock_m = clk_err * gneiss_core::constants::SPEED_OF_LIGHT_M_S;
+    let sat_pos = apply_sagnac(sat_pos_raw, pr_m);
+    let (el_rad, az_rad) = compute_el_az(rx_pos, sat_pos);
+    if sat_pos.norm() >= 1e6 && el_rad < 10.0_f64.to_radians() { return None; }
+    let snr = sat_obs.get_snr(1).map_or(40.0, |s| s as f64);
+    let (variance_m2, cp_variance_m2, sin_el) = compute_obs_noise(el_rad, snr);
+    Some(RawObservation {
+        satellite: sat_obs.sat.prn as u16, constellation_id: sat_obs.sat.constellation as u8,
+        pr_l1: pr_m, pr_l2: sat_obs.get_observable(2),
+        cp_l1: sat_obs.get_observable_phase_lli(1).map(|(cp, _)| cp),
+        cp_l1_lli: sat_obs.get_observable_phase_lli(1).and_then(|(_, lli)| lli),
+        cp_l2: sat_obs.get_observable_phase(2),
+        doppler: sat_obs.get_doppler(1).unwrap_or(0.0), snr_dbhz: snr,
+        sat_pos_ecef: sat_pos, sat_vel_ecef: sat_vel, sat_clock_m, f1, f2,
+        freq_num: eph.freq_num(), elevation_rad: el_rad, azimuth_rad: az_rad,
+        tropo_dry_m: 0.0, tropo_map_wet: 1.0 / sin_el, iono_l1_m: 0.0,
+        variance_m2, cp_variance_m2,
+    })
+}
+
 pub fn extract_raw_observations(
     rover: &EpochObs,
     ephemerides: &[Ephemeris],
     approx_rx_pos: Option<Vector3<f64>>,
 ) -> Result<Vec<RawObservation>, String> {
-    use gneiss_core::signal::satellite_frequencies;
-
-    let mut raw_obs = Vec::new();
     let rx_pos = approx_rx_pos.unwrap_or_else(|| Vector3::new(
         gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0,
     ));
-
-    for sat_obs in &rover.satellites {
-        let eph = match select_best_ephemeris(ephemerides, sat_obs.sat, rover.time) {
-            Some(e) => e,
-            None => continue,
-        };
-
-        let (f1, f2) = satellite_frequencies(sat_obs.sat, eph.freq_num());
-
-        // Read L1 pseudorange. BeiDou uses RINEX band 2 for B1I.
-        let p1_band = match sat_obs.sat.constellation {
-            gneiss_core::sat::Constellation::Beidou => 2,
-            _ => 1,
-        };
-        let pr_m = match sat_obs.get_observable(p1_band) {
-            Some(pr) if pr > 1e6 => pr,
-            _ => continue,
-        };
-
-        // Two-pass light-time correction (follows spp.rs:206-236).
-        // Pass 1: approximate transmit time from pseudorange.
-        let t_tx = rover.time - (pr_m / gneiss_core::constants::SPEED_OF_LIGHT_M_S);
-
-        // Get rough satellite clock to refine transmit time.
-        let (_, _, sat_clk_err_rough, _) = eph.position(t_tx);
-
-        // Pass 2: refine transmit time with satellite clock correction.
-        let t_tx_true = t_tx - sat_clk_err_rough;
-        let (mut sat_pos, sat_vel, clk_err, _clk_drift) = eph.position(t_tx_true);
-        let sat_clock_m = clk_err * gneiss_core::constants::SPEED_OF_LIGHT_M_S;
-
-        // Apply Earth rotation (Sagnac) correction to satellite position
-        let flight_time = pr_m / gneiss_core::constants::SPEED_OF_LIGHT_M_S;
-        let omega_tau = gneiss_core::constants::EARTH_ROTATION_RATE_RAD_S * flight_time;
-        let cos_wt = omega_tau.cos();
-        let sin_wt = omega_tau.sin();
-        sat_pos = Vector3::new(
-            sat_pos.x * cos_wt + sat_pos.y * sin_wt,
-            -sat_pos.x * sin_wt + sat_pos.y * cos_wt,
-            sat_pos.z,
-        );
-
-        let pr_l2 = sat_obs.get_observable(2);
-        let (cp_l1, cp_l1_lli) = match sat_obs.get_observable_phase_lli(1) {
-            Some((cp, lli)) => (Some(cp), lli),
-            None => (None, None),
-        };
-        let cp_l2 = sat_obs.get_observable_phase(2);
-        let snr = sat_obs.get_snr(1).map_or(40.0, |s| s as f64);
-
-        let (el_rad, az_rad) = if sat_pos.norm() < 1e6 {
-            (std::f64::consts::FRAC_PI_2, 0.0)
-        } else {
-            let ref_llh = gneiss_core::coords::ecef_to_llh(rx_pos);
-            let dx = sat_pos.x - rx_pos.x;
-            let dy = sat_pos.y - rx_pos.y;
-            let dz = sat_pos.z - rx_pos.z;
-            let sin_lat = ref_llh.x.sin();
-            let cos_lat = ref_llh.x.cos();
-            let sin_lon = ref_llh.y.sin();
-            let cos_lon = ref_llh.y.cos();
-
-            let e = -sin_lon * dx + cos_lon * dy;
-            let n = -sin_lat * cos_lon * dx - sin_lat * sin_lon * dy + cos_lat * dz;
-            let u = cos_lat * cos_lon * dx + cos_lat * sin_lon * dy + sin_lat * dz;
-            let dist = (e * e + n * n + u * u).sqrt().max(1.0);
-            let el = (u / dist).clamp(-1.0, 1.0).asin();
-            let az = e.atan2(n);
-            (el, az)
-        };
-
-        // Filter satellites below elevation mask
-        if sat_pos.norm() >= 1e6 && el_rad < 10.0_f64.to_radians() {
-            continue;
-        }
-
-        let sin_el = el_rad.sin().max(0.17);
-        let snr_penalty = if snr < 40.0 {
-            10.0_f64.powf((40.0 - snr) / 10.0)
-        } else {
-            1.0
-        };
-        let variance_m2 = (1.0 / (sin_el * sin_el) * snr_penalty).clamp(0.5, 100.0);
-        let cp_variance_m2 = (9e-6 / (sin_el * sin_el) * snr_penalty).clamp(9e-6, 1e-3);
-
-        raw_obs.push(RawObservation {
-            satellite: sat_obs.sat.prn as u16,
-            constellation_id: sat_obs.sat.constellation as u8,
-            pr_l1: pr_m,
-            pr_l2,
-            cp_l1,
-            cp_l1_lli,
-            cp_l2,
-            doppler: sat_obs.get_doppler(1).unwrap_or(0.0),
-            snr_dbhz: snr,
-            sat_pos_ecef: sat_pos,
-            sat_vel_ecef: sat_vel,
-            sat_clock_m,
-            f1,
-            f2,
-            freq_num: eph.freq_num(),
-            elevation_rad: el_rad,
-            azimuth_rad: az_rad,
-            tropo_dry_m: 0.0,
-            tropo_map_wet: 1.0 / sin_el,
-            iono_l1_m: 0.0,
-            variance_m2,
-            cp_variance_m2,
-        });
-    }
-
+    let raw_obs = rover.satellites.iter()
+        .filter_map(|sat_obs| extract_broadcast_sat(sat_obs, ephemerides, rover, rx_pos))
+        .collect();
     Ok(raw_obs)
 }
 
@@ -257,7 +200,7 @@ fn compute_tropo_delay(rx_pos: Vector3<f64>, sin_el: f64) -> (f64, f64) {
     (0.002277 * p_hpa * m, m)
 }
 
-fn select_sat_bands(sat_obs: &gneiss_core::obs::SatObs) -> (u8, Option<u8>, f64, f64) {
+fn select_sat_bands(sat_obs: &gneiss_core::obs::SatObs, freq_num: i8) -> (u8, Option<u8>, f64, f64) {
     let obs = &sat_obs.observations;
     match sat_obs.sat.constellation {
         gneiss_core::sat::Constellation::Beidou => {
@@ -269,11 +212,18 @@ fn select_sat_bands(sat_obs: &gneiss_core::obs::SatObs) -> (u8, Option<u8>, f64,
             (p1, p2, 1561.098e6, f2)
         }
         gneiss_core::sat::Constellation::Galileo => {
-            let (p2, f2) = if obs.iter().any(|o| o.code.signal.freq_band == 7) { (Some(7), 1207.140e6) }
-            else if obs.iter().any(|o| o.code.signal.freq_band == 5) { (Some(5), 1176.450e6) }
+            let (p2, f2) = if obs.iter().any(|o| o.code.signal.freq_band == 5) { (Some(5), 1176.450e6) }
+            else if obs.iter().any(|o| o.code.signal.freq_band == 7) { (Some(7), 1207.140e6) }
             else if obs.iter().any(|o| o.code.signal.freq_band == 6) { (Some(6), 1278.750e6) }
             else { (None, 0.0) };
             (1, p2, 1575.42e6, f2)
+        }
+        gneiss_core::sat::Constellation::Glonass => {
+            let k = freq_num as f64;
+            let f1 = 1602.0e6 + k * 0.5625e6;
+            let f2 = 1246.0e6 + k * 0.4375e6;
+            let p2 = obs.iter().find(|o| o.code.signal.freq_band == 2).map(|_| 2);
+            (1, p2, f1, f2)
         }
         _ => {
             let (p2, f2) = if obs.iter().any(|o| o.code.signal.freq_band == 2) { (Some(2), 1227.60e6) }
@@ -362,6 +312,39 @@ fn compute_sat_nadir_pcv(
     db.satellite_pcv_nadir_m(&prn_str, rover_time, nadir_deg, c1)
 }
 
+fn compute_sat_pos_and_clock(
+    src: &dyn crate::estimators::rtk_iekf::satpos::EphSource,
+    sat: &SatelliteId,
+    rx_pos: Vector3<f64>,
+    rover_time: GpsTime,
+    f1: f64,
+    f2: f64,
+    antex: Option<&gneiss_parsers::antex::AntexDatabase>,
+) -> Option<(Vector3<f64>, f64)> {
+    let tide_m = if rx_pos.norm() > 1e6 {
+        gneiss_geodesy::tides::solid_earth_tide(rx_pos, rover_time.tow, rover_time.week)
+    } else {
+        Vector3::zeros()
+    };
+    let rx_eff = rx_pos + tide_m;
+    let pco_body = antex.map_or_else(|| compute_sat_pco_body(sat), |db| compute_sat_pco_from_antex(db, sat, rover_time, f1, f2));
+    let pc_init = crate::estimators::rtk_iekf::satpos::compute_phase_centre_3d(src, sat, rover_time, rx_eff, pco_body).ok()?;
+    let pcv_nadir_m = compute_sat_nadir_pcv(antex, sat, rover_time, rx_pos, pc_init.0);
+    let pc = crate::estimators::rtk_iekf::satpos::compute_phase_centre_3d_with_pcv(src, sat, rover_time, rx_eff, pco_body, pcv_nadir_m).ok()?;
+    let sat_pos = pc.0;
+    let sat_clock_m = compute_sat_clock_delay(src, sat, rx_eff, sat_pos, rover_time);
+    Some((sat_pos, sat_clock_m))
+}
+
+fn galileo_bgd_offset_m(ephs: Option<&[Ephemeris]>, sat: SatelliteId, t: GpsTime, f2: f64) -> f64 {
+    if (f2 - 1207.140e6).abs() > 1e5 { return 0.0; }
+    let Some(e) = ephs.and_then(|e| select_best_ephemeris(e, sat, t)) else { return 0.0; };
+    let k_5a = 1176.45_f64.powi(2) / (1575.42_f64.powi(2) - 1176.45_f64.powi(2));
+    let k_5b = 1207.14_f64.powi(2) / (1575.42_f64.powi(2) - 1207.14_f64.powi(2));
+    -gneiss_core::constants::SPEED_OF_LIGHT_M_S * (k_5a * e.tgd() - k_5b * e.bgd_e5b())
+}
+
+#[allow(clippy::too_many_arguments)]
 fn extract_single_sat_with_source(
     sat_obs: &gneiss_core::obs::SatObs,
     src: &dyn crate::estimators::rtk_iekf::satpos::EphSource,
@@ -369,40 +352,44 @@ fn extract_single_sat_with_source(
     rover_time: GpsTime,
     sinex_bias: Option<&gneiss_parsers::sinex_bia::SinexBias>,
     antex: Option<&gneiss_parsers::antex::AntexDatabase>,
+    ephemerides: Option<&[Ephemeris]>,
+    enable_glonass: bool,
+    enable_galileo: bool,
     ep: u32,
 ) -> Option<RawObservation> {
     let c = sat_obs.sat.constellation;
-    let is_supp = matches!(c, gneiss_core::sat::Constellation::Gps);
+    let is_supp = match c {
+        gneiss_core::sat::Constellation::Gps => true,
+        gneiss_core::sat::Constellation::Glonass => enable_glonass,
+        gneiss_core::sat::Constellation::Galileo => enable_galileo,
+        _ => false,
+    };
     if !is_supp { return None; }
-    let (p1_b, p2_b, f1, f2) = select_sat_bands(sat_obs);
+    let freq_num = if c == gneiss_core::sat::Constellation::Glonass {
+        ephemerides.and_then(|ephs| select_best_ephemeris(ephs, sat_obs.sat, rover_time))
+            .map(|e| e.freq_num()).unwrap_or(0)
+    } else { 0 };
+    let (p1_b, p2_b, f1, f2) = select_sat_bands(sat_obs, freq_num);
     let (pr_l1, pr_l2) = extract_code_obs(sat_obs, p1_b, p2_b, sinex_bias, rover_time)?;
     let (cp_l1, cp_l1_lli, cp_l2) = extract_phase_obs(sat_obs, p1_b, p2_b, f1, f2, sinex_bias, rover_time);
     if pr_l2.is_none() || cp_l2.is_none() { return None; }
     record_mw_if_dual_freq(sat_obs.sat, cp_l1, cp_l2, pr_l1, pr_l2, f1, f2, cp_l1_lli, ep);
 
-    let tide_m = if rx_pos.norm() > 1e6 { gneiss_geodesy::tides::solid_earth_tide(rx_pos, rover_time.tow, rover_time.week) } else { Vector3::zeros() };
-    let rx_eff = rx_pos + tide_m;
-    let pco_body = antex.map_or_else(|| compute_sat_pco_body(&sat_obs.sat), |db| compute_sat_pco_from_antex(db, &sat_obs.sat, rover_time, f1, f2));
-    let pc_init = crate::estimators::rtk_iekf::satpos::compute_phase_centre_3d(src, &sat_obs.sat, rover_time, rx_eff, pco_body).ok()?;
-    let pcv_nadir_m = compute_sat_nadir_pcv(antex, &sat_obs.sat, rover_time, rx_pos, pc_init.0);
-    let pc = crate::estimators::rtk_iekf::satpos::compute_phase_centre_3d_with_pcv(src, &sat_obs.sat, rover_time, rx_eff, pco_body, pcv_nadir_m).ok()?;
-    let sat_pos = pc.0;
-    let sat_clock_m = compute_sat_clock_delay(src, &sat_obs.sat, rx_eff, sat_pos, rover_time);
-
+    let (sat_pos, base_clk_m) = compute_sat_pos_and_clock(src, &sat_obs.sat, rx_pos, rover_time, f1, f2, antex)?;
+    let sat_clock_m = base_clk_m + if c == gneiss_core::sat::Constellation::Galileo {
+        galileo_bgd_offset_m(ephemerides, sat_obs.sat, rover_time, f2)
+    } else { 0.0 };
     let (el_rad, az_rad) = compute_el_az(rx_pos, sat_pos);
     if sat_pos.norm() >= 1e6 && el_rad < 15.0_f64.to_radians() { return None; }
     let snr = sat_obs.get_snr(1).map_or(40.0, |s| s as f64);
-    let sin_el = el_rad.sin().max(0.17);
-    let snr_penalty = if snr < 40.0 { 10.0_f64.powf((40.0 - snr) / 10.0) } else { 1.0 };
+    let (variance_m2, cp_variance_m2, sin_el) = compute_obs_noise(el_rad, snr);
     let (tropo_dry_m, tropo_map_wet) = compute_tropo_delay(rx_pos, sin_el);
-    let variance_m2 = (1.0 / (sin_el * sin_el) * snr_penalty).clamp(0.5, 100.0);
-    let cp_variance_m2 = (9e-6 / (sin_el * sin_el) * snr_penalty).clamp(9e-6, 1e-3);
 
     Some(RawObservation {
         satellite: sat_obs.sat.prn as u16, constellation_id: sat_obs.sat.constellation as u8,
         pr_l1, pr_l2, cp_l1, cp_l1_lli, cp_l2, doppler: sat_obs.get_doppler(1).unwrap_or(0.0),
         snr_dbhz: snr, sat_pos_ecef: sat_pos, sat_vel_ecef: Vector3::zeros(),
-        sat_clock_m, f1, f2, freq_num: 0, elevation_rad: el_rad, azimuth_rad: az_rad,
+        sat_clock_m, f1, f2, freq_num, elevation_rad: el_rad, azimuth_rad: az_rad,
         tropo_dry_m, tropo_map_wet, iono_l1_m: 0.0, variance_m2, cp_variance_m2,
     })
 }
@@ -465,12 +452,16 @@ fn estimate_rx_clock_bias_s(
     diffs[diffs.len() / 2] / gneiss_core::constants::SPEED_OF_LIGHT_M_S
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn extract_raw_observations_with_source(
     rover: &EpochObs,
     src: &dyn crate::estimators::rtk_iekf::satpos::EphSource,
     approx_rx_pos: Option<Vector3<f64>>,
     sinex_bias: Option<&gneiss_parsers::sinex_bia::SinexBias>,
     antex: Option<&gneiss_parsers::antex::AntexDatabase>,
+    ephemerides: Option<&[Ephemeris]>,
+    enable_glonass: bool,
+    enable_galileo: bool,
 ) -> Result<Vec<RawObservation>, String> {
     let rx_pos = approx_rx_pos.unwrap_or_else(|| Vector3::new(
         gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0,
@@ -479,7 +470,9 @@ pub fn extract_raw_observations_with_source(
     let true_time = rover.time - rx_clk_s;
     let ep = advance_epoch(rover.time.tow);
     let raw_obs = rover.satellites.iter()
-        .filter_map(|sat_obs| extract_single_sat_with_source(sat_obs, src, rx_pos, true_time, sinex_bias, antex, ep))
+        .filter_map(|sat_obs| extract_single_sat_with_source(
+            sat_obs, src, rx_pos, true_time, sinex_bias, antex, ephemerides, enable_glonass, enable_galileo, ep,
+        ))
         .collect();
     Ok(raw_obs)
 }

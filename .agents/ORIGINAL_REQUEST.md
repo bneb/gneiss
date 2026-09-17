@@ -128,3 +128,63 @@ The following bugs have ALREADY been fixed in the working tree (uncommitted) sin
 **Constraint:** `vel_att = f_e_skew * dt` in predictor.rs must remain POSITIVE. Do not change it.
 
 Run `cargo test --workspace` before starting to confirm current state. All tests should pass.
+
+## Follow-up — 2026-09-12T16:39:43Z
+
+Use a very large team of agents. Implement all three Tier-1 commercial GNSS/INS frontiers in parallel across the Gneiss positioning engine codebase: (1) 15-state Error-State Kalman Filter (ESKF/MEKF) with closed-loop attitude and bias updates, (2) Integer PPP-AR engine with SINEX OSB phase bias ingestion, and (3) Network RTK Virtual Reference Station (VRS) spatial atmospheric engine, merging them into composite tightly-coupled modes.
+
+Working directory: /Users/kevin/projects/gneiss
+Integrity mode: development
+
+## Requirements
+
+### R1. 15-State Error-State Kalman Filter (ESKF/MEKF) for GNSS/INS
+Expand the inertial filter state from 6-DOF ($p, v$) to a full 15-state Error-State Kalman Filter ($\delta \mathbf{p}^e, \delta \mathbf{v}^e, \delta \boldsymbol{\theta}, \delta \mathbf{b}_a, \delta \mathbf{b}_g$) with:
+- Error-quaternion feedback to nominal attitude $\mathbf{q} \leftarrow \mathbf{q} \otimes \delta\mathbf{q}$.
+- Closed-loop online accelerometer and gyroscope bias estimation driven by GNSS position and velocity innovations.
+- Full 15-state backward Rauch-Tung-Striebel (RTS) smoother over forward filter history.
+- Dynamic vehicle Non-Holonomic Constraints (NHC) and Zero-Velocity Updates (ZUPT) integrated into the 15-state covariance.
+
+### R2. Integer PPP-AR Engine via SINEX OSB Ingestion
+Implement an autonomous integer-fixing Precise Point Positioning (PPP-AR) engine:
+- Ingest satellite Observation-Specific Bias (OSB) and fractional phase bias products from SINEX files (`.BIA` / `.OSB`).
+- Formulate un-differenced carrier-phase and pseudorange observation equations with exact satellite and receiver phase center offsets/variations (PCO/PCV).
+- Recover integer wide-lane (Melbourne-Wübbena) and narrow-lane ambiguities via LAMBDA search on single-difference or receiver-clock-decoupled ambiguities without physical base stations.
+- Maintain continuous carrier tracking through satellite constellations (GPS, Galileo, BeiDou, QZSS).
+
+### R3. Network RTK Virtual Reference Station (VRS) Atmospheric Engine
+Build a multi-station regional CORS network atmospheric engine:
+- Ingest 5–10 regional CORS base station observation streams simultaneously.
+- Formulate multi-baseline double-difference network adjustment to solve for integer ambiguities across network baselines.
+- Generate spatial 2D/3D Delaunay triangulation models for ionospheric delay pierce points and tropospheric zenith wet delay (ZWD) gradients.
+- Synthesize localized Virtual Reference Station (VRS) observation data at the rover's approximate position, reducing effective baseline length to $< 1\text{ km}$ on 15–50 km regional networks.
+
+### R4. Unified Composite Integration
+Provide modular, clean interfaces that allow composing the 15-state ESKF with:
+- Integer PPP-AR to provide Tightly-Coupled PPP/INS for base-station-free navigation.
+- Network RTK VRS to provide Tightly-Coupled Network RTK/INS for metropolitan/survey navigation.
+
+## Verification Resources
+
+The codebase already contains benchmark evaluation harnesses and ground-truth datasets:
+- `crates/gneiss-rtk/src/bin/eval_odaiba_ins.rs`: Tokyo Odaiba 10Hz GNSS / 50Hz MEMS IMU urban canyon dataset with NovAtel SPAN reference truth.
+- `crates/gneiss-rtk/src/bin/eval_ppp.rs`: RTK Explorer F9P vehicle dataset with Canadian Geodetic Service `rover_csrs.pos` and RTK truth.
+- `crates/gneiss-rtk/src/bin/eval_network_ppk.rs`: Multi-station regional CORS baselines (P181, P224, P225, P222, SLAC, CAPO).
+- `scripts/check_network_benchmark.py`: Smoke and full regression guard suite for network RTK.
+- `scripts/check_multignss_benchmark.py`: Smoke and full regression guard suite for multi-constellation RTK.
+
+## Acceptance Criteria
+
+### Performance & Parity Targets
+- [ ] **Odaiba GNSS/INS**: 15-state ESKF with RTS smoothing achieves $p_{50} < 2.5\text{ m}$ and RMS $< 5.2\text{ m}$ across the full 12,398-epoch 10Hz trajectory, improving on the 6-DOF baseline.
+- [ ] **Kinematic PPP-AR**: Resolves integer ambiguities on the F9P kinematic drive, closing the discrepancy vs CSRS-PPP ($0.296\text{ m}$ RMS) to sub-meter kinematic accuracy.
+- [ ] **Network RTK VRS**: Reduces baseline ppm error across 15–50 km CORS baselines (P181, P222, P225), achieving closer parity with Leica single-baseline specs ($8\text{ mm} + 1\text{ ppm})$.
+- [ ] **Composite Modes**: Demonstrates successful execution of Tightly-Coupled PPP/INS and VRS-assisted RTK/INS pipelines.
+
+### Code Quality & CI Invariants ([AGENTS.md](file:///Users/kevin/projects/gneiss/AGENTS.md))
+- [ ] All code strictly adheres to file size $< 500$ LOC and function size $< 32$ LOC.
+- [ ] Nesting depth strictly $< 3$ levels across all modified and new files.
+- [ ] `cargo clippy --workspace --all-targets -- -D warnings` passes with exactly 0 warnings.
+- [ ] Exactly 0 `unwrap()` calls in production code (`match`, `if let`, `ok_or()?`, or descriptive `.expect()` only).
+- [ ] All unit and integration tests (`cargo test --workspace`) pass with 0 failures.
+- [ ] Both regression guard scripts (`check_network_benchmark.py --smoke` and `check_multignss_benchmark.py --smoke`) pass cleanly.

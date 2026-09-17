@@ -50,6 +50,9 @@ pub struct SwfgEngine {
     mw_accumulator: accumulator::DdPseudorangeAccumulator,
     is_ppp: bool,
     is_kinematic: bool,
+    pub enable_glonass: bool,
+    pub enable_galileo: bool,
+    pub initial_pos_sigma_m: Option<f64>,
     prev_zwd: Option<VariableId>,
     windup_trackers: HashMap<(u8, u16), gneiss_geodesy::windup::PhaseWindupTracker>,
     pub precise_orbits: Option<std::sync::Arc<gneiss_parsers::precise_orbit::PreciseOrbit>>,
@@ -60,12 +63,12 @@ pub struct SwfgEngine {
 
 impl SwfgEngine {
     pub fn new(config: &EngineConfig, ephemerides: Vec<Ephemeris>) -> Self {
-        let (pipeline, initial_position, elevation_mask_deg, is_ppp, is_kinematic) = match config {
-            EngineConfig::Ppp(c) => (MeasurementPipeline::ppp_mode(), c.initial_position.map(|p| Vector3::new(p[0], p[1], p[2])), c.elevation_mask_deg, true, c.is_kinematic),
-            EngineConfig::Rtk(c) => (MeasurementPipeline::rtk_mode(), c.initial_position.map(|p| Vector3::new(p[0], p[1], p[2])), c.elevation_mask_deg, false, false),
-            EngineConfig::Spp(c) => (MeasurementPipeline::spp_mode(), c.initial_position.map(|p| Vector3::new(p[0], p[1], p[2])), c.elevation_mask_deg, false, false),
-            EngineConfig::RtkIns(c) => (MeasurementPipeline::rtk_mode(), c.rtk.initial_position.map(|p| Vector3::new(p[0], p[1], p[2])), c.rtk.elevation_mask_deg, false, true),
-            EngineConfig::PppIns(c) => (MeasurementPipeline::ppp_mode(), None, c.ppp.elevation_mask_deg, true, c.ppp.is_kinematic),
+        let (pipeline, initial_position, elevation_mask_deg, is_ppp, is_kinematic, enable_glonass, enable_galileo, initial_pos_sigma_m) = match config {
+            EngineConfig::Ppp(c) => (MeasurementPipeline::ppp_mode(), c.initial_position.map(|p| Vector3::new(p[0], p[1], p[2])), c.elevation_mask_deg, true, c.is_kinematic, c.enable_glonass, c.enable_galileo, c.initial_pos_sigma_m),
+            EngineConfig::Rtk(c) => (MeasurementPipeline::rtk_mode(), c.initial_position.map(|p| Vector3::new(p[0], p[1], p[2])), c.elevation_mask_deg, false, false, false, false, None),
+            EngineConfig::Spp(c) => (MeasurementPipeline::spp_mode(), c.initial_position.map(|p| Vector3::new(p[0], p[1], p[2])), c.elevation_mask_deg, false, false, false, false, None),
+            EngineConfig::RtkIns(c) => (MeasurementPipeline::rtk_mode(), c.rtk.initial_position.map(|p| Vector3::new(p[0], p[1], p[2])), c.rtk.elevation_mask_deg, false, true, false, false, None),
+            EngineConfig::PppIns(c) => (MeasurementPipeline::ppp_mode(), None, c.ppp.elevation_mask_deg, true, c.ppp.is_kinematic, c.ppp.enable_glonass, c.ppp.enable_galileo, c.ppp.initial_pos_sigma_m),
         };
         Self {
             solver: SlidingWindowSolver::new(config),
@@ -75,7 +78,8 @@ impl SwfgEngine {
             ref_sat_per_constellation: HashMap::new(),
             elevation_mask_rad: elevation_mask_deg.to_radians(),
             mw_accumulator: accumulator::DdPseudorangeAccumulator::new(10),
-            is_ppp, is_kinematic, prev_zwd: None, windup_trackers: HashMap::new(),
+            is_ppp, is_kinematic, enable_glonass, enable_galileo, initial_pos_sigma_m,
+            prev_zwd: None, windup_trackers: HashMap::new(),
             precise_orbits: None, precise_clocks: None, sinex_bias: None,
             antex_database: None,
         }
@@ -92,6 +96,10 @@ impl SwfgEngine {
 
     pub fn set_antex_database(&mut self, antex: std::sync::Arc<gneiss_parsers::antex::AntexDatabase>) {
         self.antex_database = Some(antex);
+    }
+
+    pub fn is_ppp(&self) -> bool {
+        self.is_ppp
     }
 
     fn get_initial_position(&self, rover: &EpochObs) -> Vector3<f64> {
@@ -149,7 +157,7 @@ impl SwfgEngine {
         );
         setup::setup_priors(
             &mut self.solver, &self.current_attitude, epoch, pose_id, prev_pose_id,
-            init_pos, has_imu,
+            init_pos, has_imu, self.initial_pos_sigma_m,
         );
         let dt_sec = self.prev_time.map_or(1.0, |t| (rover.time.tow - t.tow).abs());
         let zwd_id = self.setup_zwd(epoch, is_rtk, dt_sec);
@@ -233,6 +241,7 @@ impl SwfgEngine {
             };
             epoch::extract_raw_observations_with_source(
                 obs, &src, Some(pos), self.sinex_bias.as_deref(), self.antex_database.as_deref(),
+                Some(&self.ephemerides), self.enable_glonass, self.enable_galileo,
             )
         } else {
             epoch::extract_raw_observations(obs, &self.ephemerides, Some(pos))

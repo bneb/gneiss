@@ -10,7 +10,8 @@ use gneiss_core::obs::EpochObs;
 
 use crate::post_process::dynamics::{ProcessingDynamics, Q_ACCEL_UNSET_FALLBACK};
 use crate::post_process::iekf_pass::{
-    configure_iekf, dump_amb_history, estimate_epoch_covariance, find_matched_base, FilteredEpoch,
+    configure_iekf, dump_amb_history, estimate_swfg_epoch_covariance, find_matched_base,
+    FilteredEpoch,
 };
 use crate::swfg::config::EngineConfig;
 use crate::swfg::engine::SwfgEngine;
@@ -182,7 +183,7 @@ pub fn run_forward_pass_collecting(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn configure_swfg_engine(
+pub(crate) fn configure_swfg_engine(
     config: &EngineConfig,
     ephemerides: &[Ephemeris],
     klobuchar: Option<([f64; 4], [f64; 4])>,
@@ -220,11 +221,11 @@ fn run_forward_swfg(
     let mut results = Vec::with_capacity(rover_epochs.len());
     let mut prev_pos: Option<Vector3<f64>> = None;
 
-    for epoch in rover_epochs {
+    for (epoch_idx, epoch) in rover_epochs.iter().enumerate() {
         let preint = extract_imu_slice(epoch, imu_samples, &mut imu_idx);
         let base_ep = find_matched_base(epoch.time.tow, base_epochs);
         if let Some(filtered) = process_single_fwd(
-            &mut engine, epoch, base_ep, base_pos, preint, &mut prev_pos, imu_samples.is_some(),
+            &mut engine, epoch, base_ep, base_pos, preint, &mut prev_pos, imu_samples.is_some(), epoch_idx,
         ) {
             results.push(filtered);
         }
@@ -232,6 +233,16 @@ fn run_forward_swfg(
     results
 }
 
+fn debug_log_swfg_epoch(epoch: &EpochObs, sol_res: &Result<crate::swfg::engine::SwfgSolution, String>) {
+    if std::env::var("GNEISS_SWFG_DEBUG").is_ok() {
+        match sol_res {
+            Ok(s) => eprintln!("SWFG tow={:.0} n_sat={} err={:?}", epoch.time.tow, s.n_satellites, s.error),
+            Err(e) => eprintln!("SWFG tow={:.0} ERR={}", epoch.time.tow, e),
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 fn process_single_fwd(
     engine: &mut SwfgEngine,
     epoch: &EpochObs,
@@ -240,40 +251,27 @@ fn process_single_fwd(
     preint: Option<ImuPreintegration>,
     prev_pos: &mut Option<Vector3<f64>>,
     has_imu: bool,
+    epoch_idx: usize,
 ) -> Option<FilteredEpoch> {
     let sol_res = match (base, base_pos) {
         (Some(b), Some(bp)) => engine.process_rtk_epoch_with_imu(epoch, b, bp, preint),
         _ => engine.process_epoch(epoch),
     };
-    // Per-epoch SWFG outcome trace (docs/SOLVER_MODE_MATRIX.md): the
-    // rover-only/PPP path silently drops every failed epoch with no log
-    // line anywhere, which is how the IfbGlonass orphan-variable crash
-    // went unnoticed as "0 epochs processed" instead of a visible error.
-    if std::env::var("GNEISS_SWFG_DEBUG").is_ok() {
-        match &sol_res {
-            Ok(s) => eprintln!("SWFG tow={:.0} n_sat={} err={:?}", epoch.time.tow, s.n_satellites, s.error),
-            Err(e) => eprintln!("SWFG tow={:.0} ERR={}", epoch.time.tow, e),
-        }
-    }
+    debug_log_swfg_epoch(epoch, &sol_res);
     let sol = sol_res.ok()?;
-    if sol.n_satellites < 4 && !has_imu {
-        return None;
-    }
+    if sol.n_satellites < 4 && !has_imu { return None; }
     let is_fix = sol.error.is_some_and(|e| e < 0.05);
-    let cov = estimate_epoch_covariance(sol.n_satellites, base_pos.is_some(), is_fix);
+    let cov = estimate_swfg_epoch_covariance(
+        sol.n_satellites, base_pos.is_some(), is_fix, engine.is_ppp(), epoch_idx,
+    );
     let q = if is_fix { 1 } else if base_pos.is_some() { 2 } else { 4 };
     let vel = prev_pos.map(|p| sol.position_ecef - p);
     *prev_pos = Some(sol.position_ecef);
 
     Some(FilteredEpoch {
-        time: epoch.time,
-        position_ecef: sol.position_ecef,
-        velocity_ecef: vel,
-        attitude: None,
-        cov_position: cov,
-        n_satellites: sol.n_satellites,
-        quality: q,
-        is_fixed: is_fix,
+        time: epoch.time, position_ecef: sol.position_ecef,
+        velocity_ecef: vel, attitude: None, cov_position: cov,
+        n_satellites: sol.n_satellites, quality: q, is_fixed: is_fix,
     })
 }
 
