@@ -53,14 +53,14 @@ pub fn attenuation_scale(snr_dbhz: Option<u8>, el_rad: f64) -> f64 {
     if snr < 25.0 {
         scale *= 10.0f64.powf((25.0 - snr) / 2.5);
     }
-    scale
+    scale.min(1000.0)
 }
 
 fn single_diff_var(base_sigma: f64, snr_a: Option<u8>, snr_b: Option<u8>, el_rad: f64) -> f64 {
     let sin_el = el_rad.sin().max(0.1);
     let w_a = snr_weight(snr_a) * attenuation_scale(snr_a, el_rad);
     let w_b = snr_weight(snr_b) * attenuation_scale(snr_b, el_rad);
-    let w = w_a + w_b;
+    let w = (w_a + w_b).min(1000.0);
     (base_sigma * base_sigma * w) / (sin_el * sin_el)
 }
 

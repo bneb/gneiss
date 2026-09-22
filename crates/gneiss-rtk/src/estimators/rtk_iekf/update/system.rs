@@ -103,21 +103,24 @@ fn compute_meas_geom(
     MeasGeom { geom_dd, d_geom_dpos, zwd_val, grad_pr, iono_val, sat_iono_dd, zwd_idx, grad_idx, sat_iono_idxs: (si_is, si_ir) }
 }
 
+fn is_code_blunder(m: &DoubleDiffMeasurement, pr_y: f64, pr_r: f64) -> bool {
+    let nis = pr_y * pr_y / pr_r;
+    if m.dd_cp_cycles.is_none() {
+        pr_y.abs() > 15.0 && nis > 36.0
+    } else {
+        pr_y.abs() > 25.0 && nis > 64.0
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn append_dd_code_row(
-    m: &DoubleDiffMeasurement,
-    g: &MeasGeom,
-    state: &RtkState,
-    state_dim: usize,
-    h_rows: &mut Vec<DVector<f64>>,
-    y_vals: &mut Vec<f64>,
-    r_diag: &mut Vec<f64>,
-    row_metas: &mut Vec<RowMeta>,
-    gate_scale: f64,
+    m: &DoubleDiffMeasurement, g: &MeasGeom, state: &RtkState, state_dim: usize,
+    h_rows: &mut Vec<DVector<f64>>, y_vals: &mut Vec<f64>, r_diag: &mut Vec<f64>,
+    row_metas: &mut Vec<RowMeta>, gate_scale: f64,
 ) {
     let pr_y = m.dd_pr_m - g.geom_dd - m.dm_wet_rov * g.zwd_val - g.grad_pr - g.iono_val - g.sat_iono_dd;
     let pr_r = m.pr_var_m2.max(0.01);
-    if pr_y.abs() > 30.0 && (pr_y * pr_y / pr_r) > 100.0 {
+    if is_code_blunder(m, pr_y, pr_r) {
         return; // RAIM: exclude gross pseudorange multipath blunders
     }
     let mut pr_h = DVector::zeros(state_dim);

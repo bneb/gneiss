@@ -16,8 +16,8 @@ use gneiss_parsers::receiver_antenna::{compute_dd_pcv_correction_2d, frequency_c
 
 use super::formation_cov::compute_dd_variances;
 use super::ref_sat::{
-    prn_u16_to_sat, sat_matches_id, sat_to_prn_u16, select_constellations,
-    select_ref_sat_with_hysteresis,
+    filter_reference_candidates, prn_u16_to_sat, sat_matches_id, sat_to_prn_u16,
+    select_constellations, select_ref_sat_with_hysteresis,
 };
 use super::sat_pos::{extract_sat_positions, glo_freq_num};
 use super::update::GRAD_MIN_SIN_EL;
@@ -74,9 +74,10 @@ impl GnssRtkIekf {
             }
 
             let old_ref_opt = self.ref_sats.get(&const_id).copied();
+            let ref_candidates = filter_reference_candidates(&const_sats, rover, base, const_id);
             let ref_sat_id = select_ref_sat_with_hysteresis(
                 const_id,
-                &const_sats,
+                &ref_candidates,
                 self.state.pos_ecef,
                 &mut self.ref_sats,
             );
@@ -247,6 +248,9 @@ impl GnssRtkIekf {
             bas_ref.get_snr(freq_band),
         );
         let dd_var = compute_dd_variances(self.state.pos_ecef, sat_pos, ref_pos, lambda, snrs);
+        if dd_cp.is_none() && dd_var.pr_var_m2 > 100.0 {
+            return None;
+        }
         // Wet-mapping difference at the rover: sensitivity of this DD to the
         // rover ZWD residual state (long-baseline mode), plus the cot(el)
         // gradient mapping differences [north, east] for the same pair.

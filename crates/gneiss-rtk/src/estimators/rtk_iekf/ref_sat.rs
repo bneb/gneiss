@@ -82,6 +82,62 @@ pub fn select_constellations(sat_info: &[(SatelliteId, Vector3<f64>)], glo: bool
     v
 }
 
+fn sat_tier1_eligible(r: &gneiss_core::obs::SatObs, b: &gneiss_core::obs::SatObs) -> bool {
+    let r_cp1 = r.get_observable_phase(1).is_some();
+    let r_cp2 = r.get_observable_phase(2).is_some() || r.get_observable_phase(7).is_some();
+    let b_cp1 = b.get_observable_phase(1).is_some();
+    let b_cp2 = b.get_observable_phase(2).is_some() || b.get_observable_phase(7).is_some();
+    let no_slip = r.get_lli(1).unwrap_or(0) & 1 == 0;
+    let good_snr = r.get_snr(1).unwrap_or(0) >= 30;
+    r_cp1 && r_cp2 && b_cp1 && b_cp2 && no_slip && good_snr
+}
+
+fn sat_tier2_eligible(r: &gneiss_core::obs::SatObs, b: &gneiss_core::obs::SatObs) -> bool {
+    let r_cp = r.get_observable_phase(1).is_some() || r.get_observable_phase(2).is_some();
+    let b_cp = b.get_observable_phase(1).is_some() || b.get_observable_phase(2).is_some();
+    let max_snr = [1, 2, 7].iter().filter_map(|&band| r.get_snr(band)).max().unwrap_or(0);
+    r_cp && b_cp && max_snr >= 25
+}
+
+fn classify_candidate(r: &gneiss_core::obs::SatObs, b: &gneiss_core::obs::SatObs) -> usize {
+    if sat_tier1_eligible(r, b) {
+        0
+    } else if sat_tier2_eligible(r, b) {
+        1
+    } else {
+        2
+    }
+}
+
+/// Filter candidate reference satellites: prioritize satellites tracked on both
+/// rover and base with valid dual-frequency carrier phase and SNR >= 30 dB-Hz.
+pub fn filter_reference_candidates(
+    const_sats: &[(SatelliteId, Vector3<f64>)],
+    rover: &gneiss_core::obs::EpochObs,
+    base: &gneiss_core::obs::EpochObs,
+    const_id: u8,
+) -> Vec<(SatelliteId, Vector3<f64>)> {
+    let mut tiers: [Vec<(SatelliteId, Vector3<f64>)>; 3] = Default::default();
+    for &(sat, pos) in const_sats {
+        let prn = sat_to_prn_u16(sat);
+        let rov = rover.satellites.iter().find(|s| sat_matches_id(s.sat, const_id, prn));
+        let bas = base.satellites.iter().find(|s| sat_matches_id(s.sat, const_id, prn));
+        if let (Some(r), Some(b)) = (rov, bas) {
+            let tier = classify_candidate(r, b);
+            if tier < 2 {
+                tiers[tier].push((sat, pos));
+            }
+            tiers[2].push((sat, pos));
+        }
+    }
+    for t in tiers {
+        if !t.is_empty() {
+            return t;
+        }
+    }
+    const_sats.to_vec()
+}
+
 /// Select reference satellite for a constellation with elevation hysteresis.
 pub fn select_ref_sat_with_hysteresis(
     const_id: u8,

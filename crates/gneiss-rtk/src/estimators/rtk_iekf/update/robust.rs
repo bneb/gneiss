@@ -62,6 +62,28 @@ pub fn update_zwd_scalar(
     (zwd + delta, post_var)
 }
 
+fn pred_cp(state: &RtkState, m: &DoubleDiffMeasurement, amb_idx: usize) -> f64 {
+    let cur_pos = state.pos_ecef;
+    let r_sat = (m.sat_pos - cur_pos).norm();
+    let r_ref = (m.ref_pos - cur_pos).norm();
+    let base_dd = (m.sat_pos - m.base_pos).norm() - (m.ref_pos - m.base_pos).norm();
+    let geom_dd = (r_sat - r_ref) - base_dd
+        + compute_tropo_dd(m.sat_pos, m.ref_pos, m.base_pos, cur_pos);
+    geom_dd / m.lambda + state.to_dvector()[amb_idx]
+}
+
+fn phase_innov_var(state: &RtkState, m: &DoubleDiffMeasurement, amb_idx: usize) -> f64 {
+    let cur_pos = state.pos_ecef;
+    let r_sat = (m.sat_pos - cur_pos).norm().max(1e-3);
+    let r_ref = (m.ref_pos - cur_pos).norm().max(1e-3);
+    let h_pos = ((m.ref_pos - cur_pos) / r_ref - (m.sat_pos - cur_pos) / r_sat) / m.lambda;
+    let p_pos = state.cov.fixed_view::<3, 3>(0, 0);
+    let pos_var = (h_pos.transpose() * p_pos * h_pos)[(0, 0)];
+    let amb_var = state.cov[(amb_idx, amb_idx)];
+    let cp_r = m.cp_var_cycles2.max(1e-4);
+    pos_var + amb_var + cp_r
+}
+
 /// Keys whose DD phase innovation exceeds the slip gate under the current state.
 pub fn phase_innovation_outliers(
     state: &RtkState,
@@ -72,16 +94,19 @@ pub fn phase_innovation_outliers(
     for m in measurements {
         let Some(cp_obs) = pcv_corrected_cp(m) else { continue };
         let Some(amb_idx) = state.get_amb_idx(&m.key) else { continue };
-        let cur_pos = state.pos_ecef;
-        let r_sat = (m.sat_pos - cur_pos).norm();
-        let r_ref = (m.ref_pos - cur_pos).norm();
-        let base_dd = (m.sat_pos - m.base_pos).norm() - (m.ref_pos - m.base_pos).norm();
-        let geom_dd = (r_sat - r_ref) - base_dd
-            + compute_tropo_dd(m.sat_pos, m.ref_pos, m.base_pos, cur_pos);
-        let pred = geom_dd / m.lambda + state.to_dvector()[amb_idx];
-        if (cp_obs - pred).abs() > max_cycles {
+        let amb_var = state.cov[(amb_idx, amb_idx)];
+        if amb_var > 4.0 {
+            continue;
+        }
+        let pred = pred_cp(state, m, amb_idx);
+        let err = (cp_obs - pred).abs();
+        let s_cp = phase_innov_var(state, m, amb_idx);
+        if err > max_cycles && (err * err / s_cp) > 36.0 {
             out.push(m.key);
         }
+    }
+    if out.len() > measurements.len() / 2 {
+        out.clear();
     }
     out
 }
