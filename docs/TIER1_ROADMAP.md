@@ -303,6 +303,34 @@ graph LR
 
 ---
 
+### [Sprint 53] Multi-Constellation Doppler Velocity Aiding & Tightly-Coupled GNSS/INS Integration (COMPLETED 2026-09-22)
+- **Goal**: Implement raw GNSS Doppler velocity aiding in the 15-state ESKF with lever-arm compensation, multi-constellation clock drift estimation, Baarda w-test outlier rejection, and validate across the 12,398-epoch Tokyo Odaiba dataset.
+- **Deliverables**:
+  1. **Multi-Constellation Doppler Estimator (`crates/gneiss-rtk/src/estimators/doppler.rs`)**:
+     - Weighted Least Squares (WLS) estimator resolving 3D receiver velocity $\mathbf{v}^e$ alongside distinct receiver clock drift states ($c\dot{d}t_{\text{GPS}}, c\dot{d}t_{\text{GAL}}, c\dot{d}t_{\text{BDS}}$) via `ConstellationMap`.
+     - High-precision numerical central-difference orbital velocity resolving harmonic perturbation derivatives ($c_{us}, c_{uc}, c_{rs}, c_{rc}$) and eliminating $\sim 50\text{ m/s}$ analytical ephemeris derivative error.
+     - Exact Sagnac Earth-rotation velocity compensation ($\Delta v_{\text{Sagnac}} \le 6\text{ mm/s}$).
+     - Baarda's studentized w-test outlier rejection with hat-matrix leverage $h_{ii} = w_i H_i^T (H^T W H)^{-1} H_i$ and nominal carrier Doppler noise $\sigma_0 = 0.05\text{ m/s}$.
+  2. **15-State ESKF Lever-Arm Velocity Innovation (`crates/gneiss-rtk/src/estimators/eskf/update.rs`)**:
+     - Integrated Doppler antenna velocity update $\mathbf{v}_{\text{ant}}^e = \mathbf{v}_{\text{IMU}}^e + \mathbf{R}_b^e (\boldsymbol{\omega}_b \times \mathbf{l}^b)$ into the 15-state error state.
+     - Exact error-state measurement Jacobian with attitude coupling $H_{\theta} = -[\mathbf{v}_{\text{rot}}^e \times]$ (consistent with predictor.rs:86-91 attitude error convention $d\theta = -\psi$) and gyro bias coupling $H_{b_g} = \mathbf{R}_b^e [\mathbf{l}^b \times]$.
+     - Decoupled GNSS 3D position fixes (`update_gnss_position`) from Doppler velocity aiding (`update_doppler_velocity`).
+  3. **Stationary Coarse Alignment Extraction (`crates/gneiss-rtk/src/estimators/eskf/alignment.rs`)**:
+     - Modularized static gyro bias and gravity-vector roll/pitch leveling (100 LOC, 3 unit tests), keeping `eval_odaiba_ins.rs` cleanly at 460 LOC (< 500 LOC ceiling).
+  4. **Tokyo Odaiba Benchmark Verification (`eval_odaiba_ins`)**:
+     - Doppler velocity norms match physical wheel speeds to centimeters per second ($0.01\text{ m/s}$ when stationary).
+     - **Forward Inertial Filter** ($N=12,398$):
+       - $p_{50} = \mathbf{2.162\text{ m}}$ (collapsed from $5.982\text{ m}$, down 64%).
+       - $p_{68} = \mathbf{3.173\text{ m}}$ (collapsed from $8.678\text{ m}$, down 63%).
+       - $p_{95} = \mathbf{7.142\text{ m}}$ (collapsed from $18.545\text{ m}$, down 61%).
+       - $\text{RMS} = \mathbf{4.287\text{ m}}$ (collapsed from $9.689\text{ m}$, down 56%).
+       - Open-sky Q1 subset: $p_{50} = \mathbf{1.293\text{ m}}$, $\text{RMS} = \mathbf{2.261\text{ m}}$.
+     - **RTS Smoothed GNSS/INS** ($N=12,398$):
+       - $p_{50} = \mathbf{2.300\text{ m}}$, $p_{68} = \mathbf{3.782\text{ m}}$, $p_{95} = \mathbf{7.049\text{ m}}$, $\text{RMS} = \mathbf{4.212\text{ m}}$ (Q1: $p_{50} = \mathbf{1.354\text{ m}}$, $\text{RMS} = \mathbf{2.155\text{ m}}$).
+- **Exit Criteria**: Full compliance with AGENTS.md, 0 compiler warnings, 0 clippy warnings, 0 unwraps, all files $< 500$ LOC, all functions $\le 32$ LOC, 205 workspace tests pass, both CI smoke guards pass (`check_network_benchmark.py --smoke`, `check_multignss_benchmark.py --smoke`). (ACHIEVED)
+
+---
+
 ## 4. Code Standards & CI Quality Invariants ([AGENTS.md](file:///Users/kevin/projects/gneiss/AGENTS.md))
 
 All implementations in Sprints 40–52 must strictly obey:

@@ -7,9 +7,11 @@ use nalgebra::Vector3;
 use gneiss_rtk::swfg::config::EngineConfig;
 use gneiss_rtk::swfg::engine::SwfgEngine;
 use gneiss_rtk::swfg::imu_preintegration::{ImuPreintegration, ImuSample};
+use gneiss_rtk::estimators::doppler::estimate_doppler_velocity;
 use gneiss_rtk::estimators::eskf::{
-    predict_preintegrated, update_body_velocity, update_gnss_pos_vel, update_zupt, EskfSnapshot,
-    EskfSmoother, EskfState, Matrix15, Vector15,
+    compute_gyro_bias, compute_initial_attitude, init_eskf_filter, predict_preintegrated,
+    update_body_velocity, update_doppler_velocity, update_gnss_position, update_zupt,
+    EskfSnapshot, EskfSmoother, EskfState, Matrix15, Vector15,
 };
 
 #[derive(Clone, Copy)]
@@ -165,51 +167,6 @@ fn estimate_initial_heading(gnss_fixes: &GnssFixMap) -> f64 {
     326.65_f64.to_radians()
 }
 
-fn compute_gyro_bias(imu_samples: &[ImuSample]) -> Vector3<f64> {
-    let n = imu_samples.len().clamp(1, 350);
-    let mut sum_g = Vector3::zeros();
-    for s in &imu_samples[..n] {
-        sum_g += s.gyro;
-    }
-    sum_g / n as f64
-}
-
-fn compute_leveling_angles(imu_samples: &[ImuSample]) -> (f64, f64) {
-    let n = imu_samples.len().clamp(1, 350);
-    let mut sum_a = Vector3::zeros();
-    for s in &imu_samples[..n] {
-        sum_a += s.accel;
-    }
-    let mean_a = sum_a / n as f64;
-    let pitch = (mean_a.x / 9.7803).clamp(-0.5, 0.5);
-    let roll = (-mean_a.y / 9.7803).clamp(-0.5, 0.5);
-    (roll, pitch)
-}
-
-fn compute_initial_attitude(
-    imu_samples: &[ImuSample],
-    init_pos: Vector3<f64>,
-    heading_rad: f64,
-) -> nalgebra::UnitQuaternion<f64> {
-    let (roll, pitch) = compute_leveling_angles(imu_samples);
-    let llh = gneiss_core::coords::ecef_to_llh(init_pos);
-    let ned_to_ecef = gneiss_core::coords::ecef_to_ned_matrix(llh).transpose();
-    let r_body = nalgebra::Rotation3::from_euler_angles(roll, pitch, heading_rad);
-    let rot = nalgebra::Rotation3::from_matrix_unchecked(ned_to_ecef * r_body.matrix());
-    nalgebra::UnitQuaternion::from_rotation_matrix(&rot)
-}
-
-fn init_eskf_filter(
-    init_pos: Vector3<f64>,
-    init_vel: Vector3<f64>,
-    init_att: nalgebra::UnitQuaternion<f64>,
-    gyro_bias: Vector3<f64>,
-) -> EskfState {
-    let mut state = EskfState::new(init_pos, init_vel, init_att);
-    state.gyro_bias = gyro_bias;
-    state
-}
-
 fn default_q_diag() -> Vector15<f64> {
     let mut q = Vector15::zeros();
     for i in 0..3 {
@@ -235,7 +192,6 @@ fn update_gnss_innovation(
 ) {
     let dt_g = last_gnss.as_ref().map_or(1.0, |(t, _)| (time.tow - t).abs());
     let step = last_gnss.as_ref().map_or(0.0, |(_, p)| (pos - p).norm());
-    let vel = last_gnss.as_ref().map_or(Vector3::zeros(), |(_, p)| (pos - p) / dt_g.max(0.1));
     let r_b2e = state.attitude.to_rotation_matrix().into_inner();
     let l_e = r_b2e * ANTENNA_LEVER_ARM;
     let innov_norm = (pos - (state.pos_ecef + l_e)).norm();
@@ -247,29 +203,12 @@ fn update_gnss_innovation(
         var_p = 1e6;
     }
 
-    let var_v = if fixed && vel.norm() < 35.0 && dt_g < 2.0 { 1.0 } else { 1e6 };
     let r_pos = nalgebra::Matrix3::from_diagonal(&Vector3::new(var_p, var_p, var_p));
-    let r_vel = nalgebra::Matrix3::from_diagonal(&Vector3::new(var_v, var_v, var_v));
-    let _ = update_gnss_pos_vel(state, &pos, &vel, &ANTENNA_LEVER_ARM, &r_pos, &r_vel);
+    let _ = update_gnss_position(state, &pos, &r_pos, &ANTENNA_LEVER_ARM);
     *last_gnss = Some((time.tow, pos));
 }
 
-fn step_inertial_filter(
-    state: &mut EskfState,
-    time: gneiss_core::time::GpsTime,
-    preint: &ImuPreintegration,
-    gnss_fix: Option<(Vector3<f64>, usize, bool)>,
-    last_gnss: &mut Option<(f64, Vector3<f64>)>,
-    q_diag: &Vector15<f64>,
-    speed: f64,
-) -> (EskfState, Matrix15<f64>) {
-    let phi = predict_preintegrated(state, &preint.dp, &preint.dv, &preint.dq, preint.dt, q_diag)
-        .unwrap_or_else(|_| Matrix15::identity());
-    let pred_state = state.clone();
-
-    if let Some((pos, ns, fixed)) = gnss_fix {
-        update_gnss_innovation(state, pos, ns, fixed, time, last_gnss, speed);
-    }
+fn apply_motion_constraints(state: &mut EskfState, speed: f64) {
     if speed < 0.05 {
         let r_zupt = nalgebra::Matrix3::from_diagonal(&Vector3::new(0.001, 0.001, 0.001));
         let _ = update_zupt(state, &r_zupt);
@@ -277,28 +216,56 @@ fn step_inertial_filter(
         let r_v = nalgebra::Matrix3::from_diagonal(&Vector3::new(0.005, 0.002, 0.002));
         let _ = update_body_velocity(state, &Vector3::new(speed, 0.0, 0.0), &r_v);
     }
-    (pred_state, phi)
+}
+
+struct EpochContext<'a> {
+    epoch: &'a gneiss_core::obs::EpochObs,
+    acc_imu: &'a [ImuSample],
+    ephems: &'a [gneiss_core::ephemeris::Ephemeris],
+    gnss_map: &'a GnssFixMap,
+    q_diag: &'a Vector15<f64>,
+    speed: f64,
 }
 
 type PipelineOutput = (BTreeMap<u32, Vector3<f64>>, Vec<(gneiss_core::time::GpsTime, EskfState)>);
 
 fn process_inertial_epoch(
     state: &mut EskfState,
-    epoch: &gneiss_core::obs::EpochObs,
-    acc_imu: &[ImuSample],
-    gnss_map: &GnssFixMap,
+    ctx: &EpochContext<'_>,
     last_gnss: &mut Option<(f64, Vector3<f64>)>,
-    q_diag: &Vector15<f64>,
-    speed: f64,
 ) -> Option<(u32, Vector3<f64>, EskfSnapshot)> {
-    let preint = build_preintegration(acc_imu, &state.accel_bias, &state.gyro_bias)?;
-    let epoch_key = (epoch.time.tow * 10.0).round() as u32;
-    let fix = gnss_map.get(&epoch_key).copied();
+    let preint = build_preintegration(ctx.acc_imu, &state.accel_bias, &state.gyro_bias)?;
+    let epoch_key = (ctx.epoch.time.tow * 10.0).round() as u32;
+    let fix = ctx.gnss_map.get(&epoch_key).copied();
     let is_gnss = fix.is_some();
-    let (pred, phi) = step_inertial_filter(state, epoch.time, &preint, fix, last_gnss, q_diag, speed);
+    let doppler = estimate_doppler_velocity(ctx.epoch, ctx.ephems, state.pos_ecef);
+
+    let phi = predict_preintegrated(state, &preint.dp, &preint.dv, &preint.dq, preint.dt, ctx.q_diag)
+        .unwrap_or_else(|_| Matrix15::identity());
+    let state_pred = state.clone();
+
+    if let Some((pos, ns, fixed)) = fix {
+        update_gnss_innovation(state, pos, ns, fixed, ctx.epoch.time, last_gnss, ctx.speed);
+    }
+    if let Some(d_sol) = doppler {
+        if epoch_key.is_multiple_of(1000) {
+            eprintln!("Epoch {}: Doppler norm = {:.2} m/s, wheel speed = {:.2} m/s, n_sats = {}, vdop = {:.2}",
+                epoch_key, d_sol.vel_ecef.norm(), ctx.speed, d_sol.n_sats, d_sol.vdop);
+        }
+        if d_sol.vdop < 10.0 && d_sol.n_sats >= 4 {
+            let avg_gyro = if ctx.acc_imu.is_empty() {
+                Vector3::zeros()
+            } else {
+                ctx.acc_imu.iter().map(|s| s.gyro).sum::<Vector3<f64>>() / (ctx.acc_imu.len() as f64)
+            };
+            let _ = update_doppler_velocity(state, &d_sol.vel_ecef, &d_sol.cov, &ANTENNA_LEVER_ARM, &avg_gyro);
+        }
+    }
+    apply_motion_constraints(state, ctx.speed);
+
     let snap = EskfSnapshot {
-        time: epoch.time,
-        state_pred: pred,
+        time: ctx.epoch.time,
+        state_pred,
         state_post: state.clone(),
         phi,
         is_gnss_available: is_gnss,
@@ -311,8 +278,8 @@ fn init_pipeline_state(
     init_pos: Vector3<f64>,
     init_heading: f64,
 ) -> EskfState {
-    let gyro_bias = compute_gyro_bias(imu_samples);
-    let init_att = compute_initial_attitude(imu_samples, init_pos, init_heading);
+    let gyro_bias = compute_gyro_bias(imu_samples, 350);
+    let init_att = compute_initial_attitude(imu_samples, init_pos, init_heading, 350);
     let l_e0 = init_att.to_rotation_matrix().into_inner() * ANTENNA_LEVER_ARM;
     init_eskf_filter(init_pos - l_e0, Vector3::zeros(), init_att, gyro_bias)
 }
@@ -321,6 +288,7 @@ fn run_inertial_pipeline(
     rover_epochs: &[gneiss_core::obs::EpochObs],
     imu_records: &[ImuRecord],
     gnss_map: &GnssFixMap,
+    ephems: &[gneiss_core::ephemeris::Ephemeris],
     init_pos: Vector3<f64>,
     init_heading: f64,
 ) -> PipelineOutput {
@@ -337,7 +305,15 @@ fn run_inertial_pipeline(
             cur_speed = imu_records[last_idx].speed;
             last_idx += 1;
         }
-        if let Some((k, pos, snap)) = process_inertial_epoch(&mut state, epoch, &acc_imu, gnss_map, &mut last_gnss, &q_diag, cur_speed) {
+        let ctx = EpochContext {
+            epoch,
+            acc_imu: &acc_imu,
+            ephems,
+            gnss_map,
+            q_diag: &q_diag,
+            speed: cur_speed,
+        };
+        if let Some((k, pos, snap)) = process_inertial_epoch(&mut state, &ctx, &mut last_gnss) {
             fwd_map.insert(k, pos);
             smoother.push(snap);
         }
@@ -477,7 +453,7 @@ fn main() {
     let init_heading = estimate_initial_heading(&gnss_fixes);
     println!("Initial heading: {:.2} deg (NovAtel reference: 326.65 deg)", init_heading.to_degrees());
 
-    let (forward_map, smoothed) = run_inertial_pipeline(&inputs.rover_epochs, &imu_records, &gnss_fixes, filter_init, init_heading);
+    let (forward_map, smoothed) = run_inertial_pipeline(&inputs.rover_epochs, &imu_records, &gnss_fixes, &inputs.ephems, filter_init, init_heading);
     let smoothed_map: BTreeMap<u32, Vector3<f64>> = smoothed.iter().map(|(time, s)| (((time.tow * 10.0).round() as u32), s.pos_ecef)).collect();
 
     print_evaluation_summary(&gnss_positions, &forward_map, &smoothed_map, &truth);

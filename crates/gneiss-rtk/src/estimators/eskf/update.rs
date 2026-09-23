@@ -5,6 +5,7 @@ use super::types::{clamp_vector, skew_symmetric, EngineError, EskfState, Matrix1
 pub type Vector6<T = f64> = SVector<T, 6>;
 pub type Matrix6<T = f64> = SMatrix<T, 6, 6>;
 pub type Matrix6x15<T = f64> = SMatrix<T, 6, 15>;
+pub type Matrix3x15<T = f64> = SMatrix<T, 3, 15>;
 
 pub fn apply_error_injection(state: &mut EskfState, dx: &Vector15<f64>) {
     state.pos_ecef += dx.fixed_rows::<3>(0);
@@ -35,6 +36,101 @@ pub fn joseph_form_update<const M: usize>(
     let i_kh = Matrix15::identity() - k * h;
     let p_new = i_kh * cov * i_kh.transpose() + k * r * k.transpose();
     0.5 * (p_new + p_new.transpose())
+}
+
+/// Construct innovation, Jacobian, and noise matrix for 3D GNSS position.
+pub fn build_gnss_pos_system(
+    state: &EskfState,
+    pos_meas: &Vector3<f64>,
+    r_pos: &Matrix3<f64>,
+    lever_arm: &Vector3<f64>,
+) -> (Vector3<f64>, Matrix3x15<f64>, Matrix3<f64>) {
+    let r_b2e = state.attitude.to_rotation_matrix().into_inner();
+    let l_e = r_b2e * lever_arm;
+    let y = pos_meas - (state.pos_ecef + l_e);
+
+    let mut h = Matrix3x15::zeros();
+    for i in 0..3 {
+        h[(i, i)] = 1.0;
+    }
+    let l_e_skew = skew_symmetric(&l_e);
+    for r in 0..3 {
+        for c in 0..3 {
+            h[(r, c + 6)] = -l_e_skew[(r, c)];
+        }
+    }
+    (y, h, *r_pos)
+}
+
+/// Update ESKF state with 3D GNSS antenna position fix and antenna lever arm.
+pub fn update_gnss_position(
+    state: &mut EskfState,
+    pos_meas: &Vector3<f64>,
+    r_pos: &Matrix3<f64>,
+    lever_arm: &Vector3<f64>,
+) -> Result<(), EngineError> {
+    let (y, h, r_mat) = build_gnss_pos_system(state, pos_meas, r_pos, lever_arm);
+    let s = h * state.cov * h.transpose() + r_mat;
+    let s_inv = s.try_inverse().ok_or(EngineError::InversionError)?;
+
+    let k = state.cov * h.transpose() * s_inv;
+    let dx = k * y;
+
+    apply_error_injection(state, &dx);
+    state.cov = joseph_form_update(&state.cov, &h, &k, &r_mat);
+    Ok(())
+}
+
+/// Construct innovation, Jacobian, and noise matrix for Doppler antenna velocity.
+pub fn build_doppler_velocity_system(
+    state: &EskfState,
+    vel_meas: &Vector3<f64>,
+    r_vel: &Matrix3<f64>,
+    lever_arm: &Vector3<f64>,
+    gyro_meas: &Vector3<f64>,
+) -> (Vector3<f64>, Matrix3x15<f64>, Matrix3<f64>) {
+    let r_b2e = state.attitude.to_rotation_matrix().into_inner();
+    let omega_corr = gyro_meas - state.gyro_bias;
+    let v_rot_b = omega_corr.cross(lever_arm);
+    let v_rot_e = r_b2e * v_rot_b;
+    let v_ant_pred = state.vel_ecef + v_rot_e;
+    let y = vel_meas - v_ant_pred;
+
+    let mut h = Matrix3x15::zeros();
+    for i in 0..3 {
+        h[(i, i + 3)] = 1.0;
+    }
+    let v_rot_skew = skew_symmetric(&v_rot_e);
+    let l_b_skew = skew_symmetric(lever_arm);
+    let h_bg = r_b2e * l_b_skew;
+    for r in 0..3 {
+        for c in 0..3 {
+            h[(r, c + 6)] = -v_rot_skew[(r, c)];
+            h[(r, c + 12)] = h_bg[(r, c)];
+        }
+    }
+    (y, h, *r_vel)
+}
+
+/// Update ESKF state with GNSS Doppler velocity solution, incorporating antenna lever arm
+/// kinematics and angular rate cross-coupling into attitude error and gyro bias.
+pub fn update_doppler_velocity(
+    state: &mut EskfState,
+    vel_meas: &Vector3<f64>,
+    r_vel: &Matrix3<f64>,
+    lever_arm: &Vector3<f64>,
+    gyro_meas: &Vector3<f64>,
+) -> Result<(), EngineError> {
+    let (y, h, r_mat) = build_doppler_velocity_system(state, vel_meas, r_vel, lever_arm, gyro_meas);
+    let s = h * state.cov * h.transpose() + r_mat;
+    let s_inv = s.try_inverse().ok_or(EngineError::InversionError)?;
+
+    let k = state.cov * h.transpose() * s_inv;
+    let dx = k * y;
+
+    apply_error_injection(state, &dx);
+    state.cov = joseph_form_update(&state.cov, &h, &k, &r_mat);
+    Ok(())
 }
 
 fn build_gnss_jacobian(l_e: &Vector3<f64>) -> Matrix6x15<f64> {
@@ -115,6 +211,58 @@ mod tests {
 
         assert!(state.pos_ecef.x > 100.5);
         assert!(state.cov[(0, 0)] < 1.0);
+    }
+
+    #[test]
+    fn test_gnss_position_update_standalone() {
+        let pos_init = Vector3::new(100.0, 200.0, 300.0);
+        let vel_init = Vector3::zeros();
+        let att_init = UnitQuaternion::identity();
+        let mut state = EskfState::new(pos_init, vel_init, att_init);
+
+        let pos_meas = Vector3::new(101.0, 200.0, 300.0);
+        let lever_arm = Vector3::zeros();
+        let r_pos = Matrix3::from_diagonal(&Vector3::new(0.01, 0.01, 0.01));
+
+        update_gnss_position(&mut state, &pos_meas, &r_pos, &lever_arm)
+            .expect("position update failed");
+
+        assert!(state.pos_ecef.x > 100.5);
+        assert!(state.cov[(0, 0)] < 1.0);
+    }
+
+    #[test]
+    fn test_doppler_velocity_pulls_state_towards_measurement() {
+        let mut state = EskfState::new(Vector3::zeros(), Vector3::zeros(), UnitQuaternion::identity());
+        let vel_meas = Vector3::new(5.0, 0.0, 0.0);
+        let r_vel = Matrix3::from_diagonal(&Vector3::new(0.04, 0.04, 0.04));
+        let lever_arm = Vector3::zeros();
+        let gyro_meas = Vector3::zeros();
+
+        update_doppler_velocity(&mut state, &vel_meas, &r_vel, &lever_arm, &gyro_meas)
+            .expect("doppler update failed");
+
+        assert!(state.vel_ecef.x > 3.0);
+        assert!(state.cov[(3, 3)] < 1.0);
+    }
+
+    #[test]
+    fn test_rotating_platform_lever_arm_compensation() {
+        let state = EskfState::new(Vector3::zeros(), Vector3::zeros(), UnitQuaternion::identity());
+        let lever_arm = Vector3::new(0.0, 1.0, 0.0); // 1m in body Y
+        let gyro_meas = Vector3::new(0.0, 0.0, 0.5); // 0.5 rad/s yaw rate
+        let r_vel = Matrix3::identity();
+
+        // omega x lever = [0, 0, 0.5] x [0, 1, 0] = [-0.5, 0.0, 0.0]
+        let vel_meas = Vector3::new(-0.5, 0.0, 0.0);
+        let (y, h, _) = build_doppler_velocity_system(&state, &vel_meas, &r_vel, &lever_arm, &gyro_meas);
+
+        // Innovation should be exactly zero because measurement matches lever-arm rotation
+        assert!(y.norm() < 1e-12);
+        // Attitude Jacobian row 1 col 8 should match - [v_rot_e x]
+        assert!((h[(1, 6 + 2)] - (-0.5)).abs() < 1e-12);
+        // Gyro bias Jacobian row 0 col 14 should match R * [l x]
+        assert_eq!(h[(0, 12 + 2)], 1.0);
     }
 
     #[test]

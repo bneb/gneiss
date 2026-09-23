@@ -14,12 +14,16 @@
 //! - Zero-Velocity Updates (ZUPT)
 //! - Full 15-state backward Rauch-Tung-Striebel (RTS) smoother
 
+pub mod alignment;
 pub mod constraints;
 pub mod predict;
 pub mod smoother;
 pub mod types;
 pub mod update;
 
+pub use alignment::{
+    compute_gyro_bias, compute_initial_attitude, compute_leveling_angles, init_eskf_filter,
+};
 pub use constraints::{update_body_velocity, update_nhc, update_zupt};
 pub use predict::{
     compute_process_noise, compute_transition_matrix, predict, predict_preintegrated,
@@ -30,4 +34,8 @@ pub use types::{
     clamp_vector, earth_rotation_rate_ecef, normal_gravity_ecef, skew_symmetric, EngineError,
     EskfSnapshot, EskfState, Matrix15, Vector15,
 };
-pub use update::{apply_error_injection, joseph_form_update, update_gnss_pos_vel};
+pub use update::{
+    apply_error_injection, build_doppler_velocity_system, build_gnss_pos_system,
+    joseph_form_update, update_doppler_velocity, update_gnss_pos_vel, update_gnss_position,
+    Matrix3x15,
+};

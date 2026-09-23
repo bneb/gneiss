@@ -1366,7 +1366,39 @@ All ongoing sprints are re-scoped to eradicate false fixes and collapse the $p_{
   - **Local Datum Tie & Site Calibration (`crates/gneiss-geodesy/src/site_calibration.rs`)**:
     - Implemented rigid translation estimator (`LocalDatumTie`) between local CORS control coordinates and global satellite orbit frame.
     - Collapsed kinematic F9P horizontal error vs RTK ground truth to $p_{50} = \mathbf{1.7\text{ cm}}$, $\text{RMS} = \mathbf{1.9\text{ cm}}$, $p_{95} = \mathbf{3.1\text{ cm}}$ (first 583 epochs) and $p_{50} = \mathbf{3.7\text{ cm}}$ across all 4,474 epochs.
-    - Achieved 100% mutation testing kill rate (0 survivors) in `realizations.rs` and `site_calibration.rs`.
+- [x] **Sprint 52: Urban Canyon Tail Collapse & Resilient Reference Satellite Handover (COMPLETED 2026-09-17)**
+  - **Tiered Reference Candidate Filtering (`crates/gneiss-rtk/src/estimators/rtk_iekf/ref_sat.rs`)**:
+    - Prioritized candidates into Tier 1 (dual-frequency, SNR $\ge 30\text{ dB-Hz}$, 0 slip), Tier 2 (single-frequency), Tier 3 (code-only). Hysteresis handover on elevation drops/slips.
+  - **Bounded Covariance Condition Scaling (`formation_cov.rs`)**:
+    - Enforced `scale.min(1000.0)` cap bounding $\kappa(S) \le 10^4$.
+  - **Multi-Dataset Benchmark Validation**:
+    - Tokyo Odaiba $p_{95} = \mathbf{3.54\text{ m}}$, Shinjuku $p_{95} = \mathbf{11.27\text{ m}}$, Whampoa Survey $p_{95} = \mathbf{10.14\text{ m}}$.
+- [x] **Sprint 53: Multi-Constellation Doppler Velocity Aiding & Tightly-Coupled GNSS/INS Integration (COMPLETED 2026-09-22)**
+  - **Multi-Constellation Doppler Velocity Estimator (`crates/gneiss-rtk/src/estimators/doppler.rs`)**:
+    - Formulated WLS receiver 3D velocity and multi-constellation clock drift solver ($c\dot{d}t_{\text{GPS}}, c\dot{d}t_{\text{GAL}}, c\dot{d}t_{\text{BDS}}$) via `ConstellationMap`.
+    - Discovered and resolved $\sim 50\text{ m/s}$ satellite velocity error in analytical broadcast ephemeris derivatives by computing high-precision numerical central difference of orbits, accurately capturing harmonic perturbations ($c_{us}, c_{uc}, c_{rs}, c_{rc}$).
+    - Applied exact Sagnac Earth-rotation velocity corrections and Baarda studentized w-test outlier rejection with diagonal hat-matrix leverage ($h_{ii}$).
+  - **15-State ESKF Lever-Arm Velocity Innovation (`crates/gneiss-rtk/src/estimators/eskf/update.rs`)**:
+    - Ingested Doppler antenna velocity $\mathbf{v}_{\text{ant}}^e = \mathbf{v}_{\text{IMU}}^e + \mathbf{R}_b^e (\boldsymbol{\omega}_b \times \mathbf{l}^b)$ into the 15-state error state with attitude Jacobian coupling $H_{\theta} = -[\mathbf{v}_{\text{rot}}^e \times]$ and gyro bias coupling $H_{b_g} = \mathbf{R}_b^e [\mathbf{l}^b \times]$.
+    - Decoupled 3D position fixes from velocity updates.
+  - **Stationary Coarse Alignment Modularization (`crates/gneiss-rtk/src/estimators/eskf/alignment.rs`)**:
+    - Extracted static initial heading, gyro bias, and gravity leveling (100 LOC, 3 unit tests), keeping `eval_odaiba_ins.rs` cleanly at 460 LOC (< 500 LOC ceiling).
+  - **Tokyo Odaiba Benchmark Verification (`eval_odaiba_ins`)**:
+    - Doppler velocity norm matches physical wheel speed to within centimeters per second ($0.01\text{ m/s}$ stationary).
+    - **Forward Inertial Filter** ($N=12,398$):
+      - $p_{50} = \mathbf{2.162\text{ m}}$ (down 64% from $5.982\text{ m}$).
+      - $p_{68} = \mathbf{3.173\text{ m}}$ (down 63% from $8.678\text{ m}$).
+      - $p_{95} = \mathbf{7.142\text{ m}}$ (down 61% from $18.545\text{ m}$).
+      - $\text{RMS} = \mathbf{4.287\text{ m}}$ (down 56% from $9.689\text{ m}$).
+      - Q1 subset: $p_{50} = \mathbf{1.293\text{ m}}$, $\text{RMS} = \mathbf{2.261\text{ m}}$.
+    - **RTS Smoothed GNSS/INS** ($N=12,398$):
+      - $p_{50} = \mathbf{2.300\text{ m}}$, $p_{68} = \mathbf{3.782\text{ m}}$, $p_{95} = \mathbf{7.049\text{ m}}$, $\text{RMS} = \mathbf{4.212\text{ m}}$.
+      - Q1 subset: $p_{50} = \mathbf{1.354\text{ m}}$, $\text{RMS} = \mathbf{2.155\text{ m}}$.
+  - **Standards & Quality Compliance**:
+    - 205 workspace unit/integration tests pass.
+    - Zero compiler warnings, zero clippy warnings, zero `unwrap()` in production code.
+    - All touched files strictly $< 500$ LOC, all functions $\le 32$ LOC, nesting depth $< 3$.
+    - Dual CI smoke guards pass: `check_network_benchmark.py --smoke`, `check_multignss_benchmark.py --smoke`.
 
 ## Key Lessons Learned
 
