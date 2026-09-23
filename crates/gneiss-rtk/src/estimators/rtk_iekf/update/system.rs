@@ -108,7 +108,17 @@ fn is_code_blunder(m: &DoubleDiffMeasurement, pr_y: f64, pr_r: f64) -> bool {
     if m.dd_cp_cycles.is_none() {
         pr_y.abs() > 15.0 && nis > 36.0
     } else {
-        pr_y.abs() > 25.0 && nis > 64.0
+        pr_y.abs() > 10.0 && nis > 25.0
+    }
+}
+
+fn effective_code_variance(m: &DoubleDiffMeasurement, pr_y: f64) -> f64 {
+    let base_r = m.pr_var_m2.max(0.01);
+    if m.dd_cp_cycles.is_some() && pr_y.abs() > 3.0 {
+        let excess = pr_y.abs() - 3.0;
+        base_r * (1.0 + excess * excess)
+    } else {
+        base_r
     }
 }
 
@@ -119,7 +129,7 @@ fn append_dd_code_row(
     row_metas: &mut Vec<RowMeta>, gate_scale: f64,
 ) {
     let pr_y = m.dd_pr_m - g.geom_dd - m.dm_wet_rov * g.zwd_val - g.grad_pr - g.iono_val - g.sat_iono_dd;
-    let pr_r = m.pr_var_m2.max(0.01);
+    let pr_r = effective_code_variance(m, pr_y);
     if is_code_blunder(m, pr_y, pr_r) {
         return; // RAIM: exclude gross pseudorange multipath blunders
     }

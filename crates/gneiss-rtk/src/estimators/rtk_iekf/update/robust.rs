@@ -221,13 +221,15 @@ pub fn validate_fixed_pseudorange_residuals(
         let base_dd = (m.sat_pos - m.base_pos).norm() - (m.ref_pos - m.base_pos).norm();
         let geom_m = (r_sat - r_ref) - base_dd + compute_tropo_dd(m.sat_pos, m.ref_pos, m.base_pos, pos);
         let res = (m.dd_pr_m - geom_m).abs();
+        let is_outlier = res > 8.0 && res > 2.5 * m.pr_var_m2.sqrt();
         if res > max_pr_res_m { n_large += 2; }
-        else if res > 8.0 { n_large += 1; }
+        else if is_outlier { n_large += 1; }
         sum_sq += res * res;
         count += 1;
     }
     if count == 0 { return true; }
     let rms = (sum_sq / count as f64).sqrt();
-    rms <= max_pr_rms_m && n_large <= 3
+    let max_allowed_large = (count / 8).max(3);
+    rms <= max_pr_rms_m && n_large <= max_allowed_large
 }
 

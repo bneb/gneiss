@@ -82,26 +82,42 @@ pub fn select_constellations(sat_info: &[(SatelliteId, Vector3<f64>)], glo: bool
     v
 }
 
+/// BeiDou Geostationary Orbit (GEO) satellites have PRNs 1-5 and 59-63.
+/// Due to near-stationary geometry, they provide minimal line-of-sight angular
+/// velocity and should be demoted as reference pivots when IGSO/MEOs are available.
+pub fn is_beidou_geo(sat: SatelliteId) -> bool {
+    sat.constellation == Constellation::Beidou
+        && ((1..=5).contains(&sat.prn) || (59..=63).contains(&sat.prn))
+}
+
 fn sat_tier1_eligible(r: &gneiss_core::obs::SatObs, b: &gneiss_core::obs::SatObs) -> bool {
     let r_cp1 = r.get_observable_phase(1).is_some();
-    let r_cp2 = r.get_observable_phase(2).is_some() || r.get_observable_phase(7).is_some();
+    let r_cp2 = r.get_observable_phase(2).is_some()
+        || r.get_observable_phase(6).is_some()
+        || r.get_observable_phase(7).is_some();
     let b_cp1 = b.get_observable_phase(1).is_some();
-    let b_cp2 = b.get_observable_phase(2).is_some() || b.get_observable_phase(7).is_some();
+    let b_cp2 = b.get_observable_phase(2).is_some()
+        || b.get_observable_phase(6).is_some()
+        || b.get_observable_phase(7).is_some();
     let no_slip = r.get_lli(1).unwrap_or(0) & 1 == 0;
     let good_snr = r.get_snr(1).unwrap_or(0) >= 30;
     r_cp1 && r_cp2 && b_cp1 && b_cp2 && no_slip && good_snr
 }
 
 fn sat_tier2_eligible(r: &gneiss_core::obs::SatObs, b: &gneiss_core::obs::SatObs) -> bool {
-    let r_cp = r.get_observable_phase(1).is_some() || r.get_observable_phase(2).is_some();
-    let b_cp = b.get_observable_phase(1).is_some() || b.get_observable_phase(2).is_some();
-    let max_snr = [1, 2, 7].iter().filter_map(|&band| r.get_snr(band)).max().unwrap_or(0);
+    let r_cp = [1, 2, 6, 7].iter().any(|&band| r.get_observable_phase(band).is_some());
+    let b_cp = [1, 2, 6, 7].iter().any(|&band| b.get_observable_phase(band).is_some());
+    let max_snr = [1, 2, 6, 7].iter().filter_map(|&band| r.get_snr(band)).max().unwrap_or(0);
     r_cp && b_cp && max_snr >= 25
 }
 
-fn classify_candidate(r: &gneiss_core::obs::SatObs, b: &gneiss_core::obs::SatObs) -> usize {
+fn classify_candidate(sat: SatelliteId, r: &gneiss_core::obs::SatObs, b: &gneiss_core::obs::SatObs) -> usize {
     if sat_tier1_eligible(r, b) {
-        0
+        if is_beidou_geo(sat) {
+            1
+        } else {
+            0
+        }
     } else if sat_tier2_eligible(r, b) {
         1
     } else {
@@ -123,7 +139,7 @@ pub fn filter_reference_candidates(
         let rov = rover.satellites.iter().find(|s| sat_matches_id(s.sat, const_id, prn));
         let bas = base.satellites.iter().find(|s| sat_matches_id(s.sat, const_id, prn));
         if let (Some(r), Some(b)) = (rov, bas) {
-            let tier = classify_candidate(r, b);
+            let tier = classify_candidate(sat, r, b);
             if tier < 2 {
                 tiers[tier].push((sat, pos));
             }

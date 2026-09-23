@@ -29,7 +29,7 @@ pub struct LambdaResult {
 
 /// Resolves integer ambiguities using the LAMBDA method (Decorrelation + Search).
 pub fn resolve_lambda(a: &DVector<f64>, q: &DMatrix<f64>) -> Result<LambdaResult, &'static str> {
-    resolve_lambda_inner(a, q, 20_000)
+    resolve_lambda_inner(a, q, 100_000)
 }
 
 fn resolve_lambda_inner(

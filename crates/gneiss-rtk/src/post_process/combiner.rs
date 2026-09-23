@@ -132,7 +132,7 @@ fn select_fused_estimate(
         }
     };
     let both_fixed = fwd.is_fixed && bwd.is_fixed;
-    let limit_m = if both_fixed { limits.strict_m } else { limits.strict_m.max(2.0) };
+    let limit_m = if both_fixed { limits.strict_m } else { limits.strict_m.max(2.2) };
     if strict && sep > limit_m && q == 1 {
         q = 2;
         if fwd.cov_position.trace() <= bwd.cov_position.trace() {

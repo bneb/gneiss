@@ -294,7 +294,7 @@ pub fn signal_for_band(c: crate::sat::Constellation, band: u8) -> Option<Signal>
         (Constellation::Galileo, 7) => Some(Signal::GalE5b),
         (Constellation::Beidou, 1) => Some(Signal::BdsB1i),
         (Constellation::Beidou, 2) => Some(Signal::BdsB1i),
-        (Constellation::Beidou, 5) => Some(Signal::BdsB3i),
+        (Constellation::Beidou, 6) => Some(Signal::BdsB3i),
         (Constellation::Beidou, 7) => Some(Signal::BdsB2i),
         _ => None,
     }

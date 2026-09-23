@@ -109,13 +109,16 @@ pub struct SatObs {
 
 impl SatObs {
     fn matches_band(&self, o_band: u8, o_attr: char, req_band: u8) -> bool {
-        if o_band == req_band {
-            return true;
+        if self.sat.constellation == crate::sat::Constellation::Beidou {
+            match req_band {
+                1 => o_band == 1 || (o_band == 2 && o_attr == 'I'),
+                2 | 7 => o_band == 7 || (o_band == 2 && o_attr != 'I'),
+                6 => o_band == 6,
+                _ => o_band == req_band,
+            }
+        } else {
+            o_band == req_band
         }
-        if self.sat.constellation == crate::sat::Constellation::Beidou && o_attr == 'I' {
-            return (req_band == 1 && o_band == 2) || (req_band == 2 && o_band == 1);
-        }
-        false
     }
 
     pub fn get_observable(&self, freq_band: u8) -> Option<f64> {
@@ -313,5 +316,40 @@ mod tests {
             },
         };
         assert_eq!(code2.to_string(), "L2W");
+    }
+
+    #[test]
+    fn test_beidou_band_extraction_rinex302_and_303() {
+        use crate::sat::{Constellation, SatelliteId};
+        let bds_sat = SatelliteId { constellation: Constellation::Beidou, prn: 6 };
+
+        // RINEX 3.03 (e.g. u-blox F9P): C2I for B1I, C7I for B2I
+        let obs_303 = SatObs {
+            sat: bds_sat,
+            observations: vec![
+                Observation { code: ObsCode::from_str("C2I").unwrap(), value: 21_000_001.0, lock_time: None, lli: None },
+                Observation { code: ObsCode::from_str("L2I").unwrap(), value: 109_000_001.0, lock_time: None, lli: None },
+                Observation { code: ObsCode::from_str("C7I").unwrap(), value: 21_000_002.0, lock_time: None, lli: None },
+                Observation { code: ObsCode::from_str("L7I").unwrap(), value: 84_000_002.0, lock_time: None, lli: None },
+            ],
+        };
+        // Band 1 must return B1I (from C2I), Band 7 must return B2I (from C7I)
+        assert_eq!(obs_303.get_observable(1), Some(21_000_001.0));
+        assert_eq!(obs_303.get_observable(7), Some(21_000_002.0));
+        assert_eq!(obs_303.get_observable(2), Some(21_000_002.0)); // fallback to B2I
+        assert_ne!(obs_303.get_observable(1), obs_303.get_observable(7));
+
+        // RINEX 3.02 (e.g. Trimble NetR9 / Leica): C1I for B1I, C6I for B3I, C7I for B2I
+        let obs_302 = SatObs {
+            sat: bds_sat,
+            observations: vec![
+                Observation { code: ObsCode::from_str("C1I").unwrap(), value: 22_000_001.0, lock_time: None, lli: None },
+                Observation { code: ObsCode::from_str("C6I").unwrap(), value: 22_000_003.0, lock_time: None, lli: None },
+                Observation { code: ObsCode::from_str("C7I").unwrap(), value: 22_000_002.0, lock_time: None, lli: None },
+            ],
+        };
+        assert_eq!(obs_302.get_observable(1), Some(22_000_001.0));
+        assert_eq!(obs_302.get_observable(6), Some(22_000_003.0));
+        assert_eq!(obs_302.get_observable(7), Some(22_000_002.0));
     }
 }

@@ -2,7 +2,13 @@
 
 use nalgebra::{DMatrix, DVector, Matrix3, Vector3};
 use crate::ambiguity::{ffrt, lambda};
+use super::ar_subsets::{
+    extract_subset, generate_omission_subsets, generate_two_omission_subsets,
+    partition_constellation_subsets, select_par_candidates,
+};
 use super::state::{DoubleDiffKey, RtkState};
+use super::update;
+use super::DoubleDiffMeasurement;
 
 /// Result of ambiguity resolution attempt for an epoch.
 #[derive(Debug, Clone)]
@@ -29,18 +35,29 @@ pub fn resolve_ambiguities(
     target_pf: f64,
     is_kinematic: bool,
 ) -> ArResult {
+    resolve_ambiguities_screened(state, min_ambiguities, target_pf, is_kinematic, None)
+}
+
+/// Attempt integer ambiguity resolution with pre-acceptance carrier residual screening.
+pub fn resolve_ambiguities_screened(
+    state: &RtkState,
+    min_ambiguities: usize,
+    target_pf: f64,
+    is_kinematic: bool,
+    dd_meas: Option<&[DoubleDiffMeasurement]>,
+) -> ArResult {
     let (a_float, q_amb) = state.extract_amb_block();
     let n_amb = a_float.len();
     let (pos, cov) = (state.pos_ecef, state.extract_pos_cov());
     let float_trace = cov[(0, 0)] + cov[(1, 1)] + cov[(2, 2)];
-    let max_float_trace = if is_kinematic { 1.50 } else { 25.0 };
+    let max_float_trace = if is_kinematic { 3.50 } else { 25.0 };
     if n_amb < min_ambiguities || n_amb < 3 || float_trace > max_float_trace {
         return build_float_result(pos, cov, 0.0, n_amb);
     }
-    if let Some(far_res) = try_full_ar(state, &a_float, &q_amb, target_pf, is_kinematic) {
+    if let Some(far_res) = try_full_ar(state, &a_float, &q_amb, target_pf, is_kinematic, dd_meas) {
         return far_res;
     }
-    if let Some(par_res) = try_partial_ar(state, &a_float, &q_amb, min_ambiguities, target_pf, is_kinematic) {
+    if let Some(par_res) = try_partial_ar(state, &a_float, &q_amb, min_ambiguities, target_pf, is_kinematic, dd_meas) {
         return par_res;
     }
     build_float_result(pos, cov, 0.0, n_amb)
@@ -52,6 +69,7 @@ fn try_full_ar(
     q_amb: &DMatrix<f64>,
     target_pf: f64,
     is_kinematic: bool,
+    dd_meas: Option<&[DoubleDiffMeasurement]>,
 ) -> Option<ArResult> {
     let n_amb = a_float.len();
     if is_kinematic && (0..n_amb).any(|i| q_amb[(i, i)] > 1.0) {
@@ -70,6 +88,11 @@ fn try_full_ar(
     let full_idx: Vec<usize> = (0..n_amb).collect();
     let (pos, cov) = project_subset_fixed(state, a_float, &l_res.best_integers, q_amb, &full_idx)?;
     let fixed = fixed_subset_ambiguities(state, &full_idx, &l_res.best_integers);
+    if let Some(dd) = dd_meas {
+        if !update::validate_fixed_carrier_residuals(pos, dd, &fixed, 0.05) {
+            return None;
+        }
+    }
     Some(ArResult {
         position_ecef: pos,
         cov_position: cov,
@@ -101,34 +124,13 @@ fn fixed_subset_ambiguities(state: &RtkState, indices: &[usize], integers: &DVec
         .collect()
 }
 
-fn select_par_subset_indices(
-    a_float: &DVector<f64>,
-    q_amb: &DMatrix<f64>,
-    min_ambs: usize,
+struct ParContext<'a> {
+    state: &'a RtkState,
+    a_float: &'a DVector<f64>,
+    q_amb: &'a DMatrix<f64>,
+    target_pf: f64,
     is_kinematic: bool,
-) -> (Vec<usize>, usize) {
-    let n_amb = a_float.len();
-    if is_kinematic {
-        let score = |i: usize| {
-            let frac = (a_float[i] - a_float[i].round()).abs();
-            frac + q_amb[(i, i)].sqrt() * 0.5
-        };
-        let min_k = min_ambs.max(6);
-        let mut c: Vec<usize> = (0..n_amb)
-            .filter(|&i| q_amb[(i, i)] <= 1.0)
-            .collect();
-        if c.len() < min_k {
-            c = (0..n_amb).collect();
-        }
-        c.sort_by(|&i, &j| score(i).total_cmp(&score(j)));
-        let m = c.len().min(16);
-        (c, m)
-    } else {
-        let mut idx: Vec<usize> = (0..n_amb).collect();
-        idx.sort_by(|&i, &j| q_amb[(i, i)].total_cmp(&q_amb[(j, j)]));
-        let m = (n_amb - 1).min(16);
-        (idx, m)
-    }
+    dd_meas: Option<&'a [DoubleDiffMeasurement]>,
 }
 
 fn try_partial_ar(
@@ -138,43 +140,98 @@ fn try_partial_ar(
     min_ambs: usize,
     target_pf: f64,
     is_kinematic: bool,
+    dd_meas: Option<&[DoubleDiffMeasurement]>,
 ) -> Option<ArResult> {
     let n_amb = a_float.len();
     let float_trace = state.cov[(0, 0)] + state.cov[(1, 1)] + state.cov[(2, 2)];
-    let max_float_trace = if is_kinematic { 1.50 } else { 25.0 };
+    let max_float_trace = if is_kinematic { 3.50 } else { 25.0 };
     if n_amb <= 4 || float_trace > max_float_trace {
         return None;
     }
-    let (sorted_indices, max_k) = select_par_subset_indices(a_float, q_amb, min_ambs, is_kinematic);
-    let min_k = if is_kinematic {
-        min_ambs.max(6)
-    } else {
-        min_ambs.max(4)
-    };
+    let (sorted_indices, max_k) = select_par_candidates(state, a_float, q_amb, min_ambs, is_kinematic);
+    let min_k = if is_kinematic { min_ambs.max(6) } else { min_ambs.max(4) };
     if max_k < min_k {
         return None;
     }
+    let ctx = ParContext { state, a_float, q_amb, target_pf, is_kinematic, dd_meas };
+    if let Some(res) = eval_par_prefix_subsets(&ctx, &sorted_indices, min_k, max_k) {
+        return Some(res);
+    }
+    if is_kinematic {
+        if let Some(res) = eval_par_partition_subsets(&ctx, &sorted_indices, min_k) {
+            return Some(res);
+        }
+    }
+    let pool_len = max_k.min(min_k + 4);
+    if pool_len > min_k {
+        eval_par_omission_subsets(&ctx, &sorted_indices, pool_len, min_k)
+    } else {
+        None
+    }
+}
+
+fn eval_par_prefix_subsets(
+    ctx: &ParContext<'_>,
+    sorted_indices: &[usize],
+    min_k: usize,
+    max_k: usize,
+) -> Option<ArResult> {
     for k in (min_k..=max_k).rev() {
-        if let Some(res) = eval_par_subset(state, a_float, q_amb, &sorted_indices[..k], target_pf, is_kinematic) {
+        if let Some(res) = eval_par_subset(ctx, &sorted_indices[..k]) {
             return Some(res);
         }
     }
     None
 }
 
+fn eval_par_partition_subsets(
+    ctx: &ParContext<'_>,
+    sorted_indices: &[usize],
+    min_k: usize,
+) -> Option<ArResult> {
+    let clusters = partition_constellation_subsets(ctx.state, sorted_indices, min_k);
+    for sub in clusters {
+        if let Some(res) = eval_par_subset(ctx, sub.as_slice()) {
+            return Some(res);
+        }
+    }
+    None
+}
+
+fn eval_par_omission_subsets(
+    ctx: &ParContext<'_>,
+    sorted_indices: &[usize],
+    pool_len: usize,
+    min_k: usize,
+) -> Option<ArResult> {
+    let subsets1 = generate_omission_subsets(sorted_indices, pool_len);
+    for sub in subsets1 {
+        if sub.len >= min_k {
+            if let Some(res) = eval_par_subset(ctx, sub.as_slice()) {
+                return Some(res);
+            }
+        }
+    }
+    if ctx.is_kinematic && pool_len >= min_k + 2 {
+        let subsets2 = generate_two_omission_subsets(sorted_indices, pool_len, min_k);
+        for sub in subsets2 {
+            if let Some(res) = eval_par_subset(ctx, sub.as_slice()) {
+                return Some(res);
+            }
+        }
+    }
+    None
+}
+
 fn eval_par_subset(
-    state: &RtkState,
-    a_float: &DVector<f64>,
-    q_amb: &DMatrix<f64>,
+    ctx: &ParContext<'_>,
     subset_idx: &[usize],
-    target_pf: f64,
-    is_kinematic: bool,
 ) -> Option<ArResult> {
     let k = subset_idx.len();
-    let (sub_a, sub_q) = extract_subset(a_float, q_amb, subset_idx);
+    let (sub_a, sub_q) = extract_subset(ctx.a_float, ctx.q_amb, subset_idx);
     let l_res = lambda::resolve_lambda(&sub_a, &sub_q).ok()?;
-    let thresh = ffrt::calculate_threshold(k, target_pf);
-    let min_ratio = if is_kinematic {
+    let thresh = ffrt::calculate_threshold(k, ctx.target_pf);
+    let min_ratio = if ctx.is_kinematic {
         thresh.max(2.0)
     } else {
         thresh
@@ -182,8 +239,13 @@ fn eval_par_subset(
     if l_res.ratio < min_ratio {
         return None;
     }
-    let (pos, cov) = project_subset_fixed(state, &sub_a, &l_res.best_integers, &sub_q, subset_idx)?;
-    let fixed = fixed_subset_ambiguities(state, subset_idx, &l_res.best_integers);
+    let (pos, cov) = project_subset_fixed(ctx.state, &sub_a, &l_res.best_integers, &sub_q, subset_idx)?;
+    let fixed = fixed_subset_ambiguities(ctx.state, subset_idx, &l_res.best_integers);
+    if let Some(dd) = ctx.dd_meas {
+        if !update::validate_fixed_carrier_residuals(pos, dd, &fixed, 0.05) {
+            return None;
+        }
+    }
     Some(ArResult {
         position_ecef: pos,
         cov_position: cov,
@@ -192,24 +254,6 @@ fn eval_par_subset(
         num_ambiguities: k,
         fixed_ambiguities: fixed,
     })
-}
-
-fn extract_subset(
-    a_float: &DVector<f64>,
-    q_amb: &DMatrix<f64>,
-    indices: &[usize],
-) -> (DVector<f64>, DMatrix<f64>) {
-    let k = indices.len();
-    let mut sub_a = DVector::zeros(k);
-    let mut sub_q = DMatrix::zeros(k, k);
-
-    for (r, &i) in indices.iter().enumerate() {
-        sub_a[r] = a_float[i];
-        for (c, &j) in indices.iter().enumerate() {
-            sub_q[(r, c)] = q_amb[(i, j)];
-        }
-    }
-    (sub_a, sub_q)
 }
 
 pub(crate) fn project_subset_fixed(

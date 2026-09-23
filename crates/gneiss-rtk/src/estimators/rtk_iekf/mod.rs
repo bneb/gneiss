@@ -2,6 +2,7 @@
 
 pub mod ar;
 pub mod ar_gate;
+pub mod ar_subsets;
 pub mod clk_datum;
 pub mod formation;
 pub mod formation_cov;
@@ -345,7 +346,9 @@ impl GnssRtkIekf {
         } else {
             &self.state
         };
-        let mut ar_res = ar::resolve_ambiguities(ar_view, 3, self.target_pf, self.is_kinematic);
+        let mut ar_res = ar::resolve_ambiguities_screened(
+            ar_view, 3, self.target_pf, self.is_kinematic, Some(&dd_meas.dd),
+        );
         if self.widelane_ar {
             let far_vetoed = ar_res.is_fixed
                 && !widelane::far_matches_widelanes(&self.wl_tracker, &ar_res);
@@ -364,7 +367,7 @@ impl GnssRtkIekf {
         if !ar_res.is_fixed {
             return;
         }
-        let max_carrier_res = if self.is_kinematic { 0.08 } else { 0.05 };
+        let max_carrier_res = 0.05;
         let (max_code_rms, max_code_res) = if self.is_kinematic { (6.0, 18.0) } else { (4.0, 12.0) };
         let carrier_ok = update::validate_fixed_carrier_residuals(
             ar_res.position_ecef,

@@ -38,6 +38,8 @@ pub struct IonoFreeMeasurement {
     pub ref_pos: Vector3<f64>,
     pub base_pos: Vector3<f64>,
     pub lambda_if: f64,
+    /// Secondary frequency band number (e.g. 2 for L2, 5 for E5a, 6 for B3I, 7 for E5b/B2I).
+    pub b2: u8,
     pub f1_hz: f64,
     pub f2_hz: f64,
     pub dd_phase_if_cycles: f64,
@@ -52,7 +54,7 @@ pub struct IonoFreeMeasurement {
     pub dgrad_e_rov: f64,
 }
 
-/// Form the iono-free DD phase for a pair when both L1 and L2 are observed.
+/// Form the iono-free DD phase for a pair when both L1 and secondary band are observed.
 #[allow(clippy::too_many_arguments)] // same obs bundle as build_single_dd_pair
 pub fn form_iono_free_dd(
     sat_id: SatelliteId,
@@ -68,8 +70,8 @@ pub fn form_iono_free_dd(
     glo_k: i8,
 ) -> Option<IonoFreeMeasurement> {
     let f1 = gneiss_core::frequencies::track_c_frequency(sat_id.constellation, 1, glo_k);
-    // Secondary band: L2 for GPS/GLONASS; E5a (band 5) for Galileo
-    // exports that carry no L2 slot. All four stations must have it.
+    // Secondary band: L2 (2), E5b/B2I (7), B3I (6), or E5a (5).
+    // All four stations must observe phase on it.
     let b2 = if rov_s.get_observable_phase(2).is_some()
         && bas_s.get_observable_phase(2).is_some()
         && rov_ref.get_observable_phase(2).is_some()
@@ -82,6 +84,12 @@ pub fn form_iono_free_dd(
         && bas_ref.get_observable_phase(7).is_some()
     {
         7
+    } else if rov_s.get_observable_phase(6).is_some()
+        && bas_s.get_observable_phase(6).is_some()
+        && rov_ref.get_observable_phase(6).is_some()
+        && bas_ref.get_observable_phase(6).is_some()
+    {
+        6
     } else {
         5
     };
@@ -117,6 +125,7 @@ pub fn form_iono_free_dd(
         ref_pos,
         base_pos,
         lambda_if,
+        b2,
         f1_hz: f1,
         f2_hz: f2,
         dd_phase_if_cycles: dd_if,
@@ -158,14 +167,7 @@ pub fn apply_fixed_iono_free(
     meas: &[IonoFreeMeasurement],
     ar: &ArResult,
 ) -> IonoFreeOutcome {
-    let n1: HashMap<DoubleDiffKey, f64> = ar.fixed_ambiguities.iter()
-        .filter(|(k, _)| k.freq_band == 1)
-        .map(|(k, v)| (*k, *v))
-        .collect();
-    let n2: HashMap<DoubleDiffKey, f64> = ar.fixed_ambiguities.iter()
-        .filter(|(k, _)| k.freq_band == 2)
-        .map(|(k, v)| (*k, *v))
-        .collect();
+    let fixed_map: HashMap<DoubleDiffKey, f64> = ar.fixed_ambiguities.iter().copied().collect();
     // Current gradient estimates act as a known correction here (like the
     // troposphere model): the LSQ re-estimates position only.
     let (grad_n, grad_e) = if state.grad_enabled {
@@ -180,8 +182,8 @@ pub fn apply_fixed_iono_free(
     let cur_pos = state.pos_ecef;
 
     for m in meas {
-        let key2 = DoubleDiffKey { freq_band: 2, ..m.key };
-        let (Some(n1v), Some(n2v)) = (n1.get(&m.key), n2.get(&key2)) else { continue };
+        let key2 = DoubleDiffKey { freq_band: m.b2, ..m.key };
+        let (Some(&n1v), Some(&n2v)) = (fixed_map.get(&m.key), fixed_map.get(&key2)) else { continue };
         let n_if = (m.f1_hz * n1v - m.f2_hz * n2v) / (m.f1_hz - m.f2_hz);
 
         let base_dd = (m.sat_pos - m.base_pos).norm() - (m.ref_pos - m.base_pos).norm();
@@ -339,6 +341,7 @@ mod tests {
                 ref_pos,
                 base_pos,
                 lambda_if: lambda_iono_free(F1, F2),
+                b2: 2,
                 f1_hz: F1,
                 f2_hz: F2,
                 dd_phase_if_cycles: combine_iono_free(F1, F2, dd1, dd2),
@@ -403,6 +406,7 @@ mod tests {
                 ref_pos,
                 base_pos,
                 lambda_if: lambda_iono_free(F1, F2),
+                b2: 2,
                 f1_hz: F1,
                 f2_hz: F2,
                 dd_phase_if_cycles: *phase_if,

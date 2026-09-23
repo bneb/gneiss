@@ -27,10 +27,7 @@ pub(crate) fn build_single_measurement(
     }
 
     let mut freq_band = 1;
-    let p1_opt = match sat_obs.sat.constellation {
-        gneiss_core::sat::Constellation::Beidou => sat_obs.get_observable(2),
-        _ => sat_obs.get_observable(1),
-    };
+    let p1_opt = sat_obs.get_observable(1);
     let p2_opt = match sat_obs.sat.constellation {
         gneiss_core::sat::Constellation::Galileo => {
             if let Some(obs) = sat_obs.get_observable(7) {
