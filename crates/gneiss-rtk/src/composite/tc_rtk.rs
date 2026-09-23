@@ -429,12 +429,12 @@ pub fn compute_dd_los_jacobian(
     (delta_u, h_dd)
 }
 
-/// Double-difference attitude coupling Jacobian with lever arm: H_att = -delta_u^T * [l_e x].
+/// Double-difference attitude coupling Jacobian with lever arm: H_att = delta_u^T * [l_e x].
 pub fn compute_dd_att_coupling_jacobian(
     delta_u: &Vector3<f64>,
     l_skew: &Matrix3<f64>,
 ) -> RowVector3<f64> {
-    -delta_u.transpose() * l_skew
+    delta_u.transpose() * l_skew
 }
 
 /// Double-difference carrier phase residual: res = dd_meas - (dd_geom + dd_amb_m).
@@ -467,8 +467,8 @@ mod tests {
         let lever_arm = Vector3::new(0.0, 0.0, -1.0);
         let l_skew = skew_symmetric(&lever_arm);
         let h_att = compute_dd_att_coupling_jacobian(&delta_u_test, &l_skew);
-        assert!((h_att[0] - (-0.2)).abs() < 1e-12);
-        assert!((h_att[1] - (-0.2)).abs() < 1e-12);
+        assert!((h_att[0] - 0.2).abs() < 1e-12);
+        assert!((h_att[1] - 0.2).abs() < 1e-12);
     }
 
     #[test]

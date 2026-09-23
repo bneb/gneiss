@@ -16,6 +16,7 @@
 
 pub mod alignment;
 pub mod constraints;
+pub mod dd_update;
 pub mod predict;
 pub mod smoother;
 pub mod types;
@@ -25,6 +26,10 @@ pub use alignment::{
     compute_gyro_bias, compute_initial_attitude, compute_leveling_angles, init_eskf_filter,
 };
 pub use constraints::{update_body_velocity, update_nhc, update_zupt};
+pub use dd_update::{
+    compute_dd_jacobian_15, update_dd_scalar, DdMeasurementKind, DdSatGeometry,
+    DdScalarUpdateResult, RowVector15,
+};
 pub use predict::{
     compute_process_noise, compute_transition_matrix, predict, predict_preintegrated,
     predict_with_phi, propagate_nominal_state,
@@ -39,3 +44,4 @@ pub use update::{
     joseph_form_update, update_doppler_velocity, update_gnss_pos_vel, update_gnss_position,
     Matrix3x15,
 };
+

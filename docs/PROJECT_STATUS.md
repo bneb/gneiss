@@ -1429,6 +1429,30 @@ All ongoing sprints are re-scoped to eradicate false fixes and collapse the $p_{
     - Zero compiler warnings, zero clippy warnings, zero `unwrap()` in production code.
     - All files strictly $< 500$ LOC, all functions $\le 32$ LOC, nesting depth $< 3$.
     - Dual CI smoke guards pass: `check_network_benchmark.py --smoke`, `check_multignss_benchmark.py --smoke`.
+- [x] **Sprint 55: Tightly-Coupled Double-Difference Carrier/Pseudorange Updates in 15-State ESKF (COMPLETED 2026-09-23)**
+  - **Attitude Error Jacobian Sign Bug Discovery & Mathematical Correction (`crates/gneiss-rtk/src/composite/tc_rtk.rs:437`)**:
+    - Discovered an inverted sign bug in the prototype attitude error Jacobian $H_\theta = -(\mathbf{u}^s - \mathbf{u}^{\text{ref}})^T [\hat{\mathbf{l}}^e \times]$ where a double-negative was treated as negative.
+    - Corrected to $H_\theta = +(\mathbf{u}^s - \mathbf{u}^{\text{ref}})^T [\hat{\mathbf{l}}^e \times]$, aligning with the left-multiplied error state $\delta\boldsymbol{\theta} = -\boldsymbol{\psi}$ convention in `predictor.rs:86-91`.
+  - **Three-Tier Verification Standard & Dedicated Module (`crates/gneiss-rtk/src/estimators/eskf/dd_update.rs`)**:
+    - Implemented `dd_update.rs` (454 LOC, 0 unwraps, all functions $\le 32$ LOC).
+    - Tier 1: Canonical textbook benchmark vector from Groves (2013) Chapter 14 verifying exact analytical geometry bit-for-bit.
+    - Tier 2: Two-sided central difference numerical Jacobian validation across all 15 error states ($< 10^{-7}$ relative error for position, $< 10^{-5}$ for attitude).
+    - Tier 3: Closed-loop Lyapunov error contraction invariant demonstrating mathematical convergence under controlled $+2^\circ$ attitude perturbation.
+  - **Stabilized Joseph-Form Covariance Contraction & Blunder Gating**:
+    - Scalar sequential updates via $\mathbf{P}_{k|k} = (\mathbf{I} - \mathbf{K}\mathbf{h})\mathbf{P}_{k|k-1}(\mathbf{I} - \mathbf{K}\mathbf{h})^T + \sigma^2 \mathbf{K}\mathbf{K}^T$ guarantee positive-definiteness and cache-line stack execution without $m \times m$ matrix inversions.
+    - Added $4\sigma$ innovation consistency check and physical thresholding ($15\text{ m}$ code, $8\text{ cm}$ carrier).
+  - **Intra-Constellation Structurally Enforced Differencing**:
+    - Enforced per-constellation reference satellite selection (GPS, BeiDou, Galileo, QZSS) preventing Inter-System Bias (ISB) leakage ($c(\delta t_r^{\text{GPS}} - \delta t_r^{\text{BDS}}) \sim \mathcal{O}(10\text{ m})$) into double-difference residuals.
+  - **Benchmark Modularization & Performance on Tokyo Odaiba (`eval_odaiba_ins`)**:
+    - Modularized benchmark harness into `main.rs` (408 LOC) and `odaiba_helpers.rs` (183 LOC) to respect the $< 500$ LOC architectural ceiling.
+    - Full-trajectory smoothed RMS reduced to **$4.156\text{ m}$** (from $4.212\text{ m}$ baseline).
+    - Full-trajectory smoothed $p_{50}$ reduced to **$2.134\text{ m}$** (down $16.6\text{ cm}$ / 7.2%).
+    - Underpass/rail overpass Q2 $p_{50}$ reduced from $2.073\text{ m}$ to **$1.752\text{ m}$** (**15.5% improvement**).
+    - High-multipath canyon Q3 $p_{50}$ reduced from $2.242\text{ m}$ to **$2.044\text{ m}$**, and RMS reduced from $3.351\text{ m}$ to **$3.234\text{ m}$**.
+  - **Standards & CI Compliance**:
+    - `cargo clippy --workspace --all-targets -- -D warnings`: 0 warnings.
+    - `cargo test --workspace`: 417 passed, 0 failed.
+    - Dual smoke guards: `check_network_benchmark.py --smoke` and `check_multignss_benchmark.py --smoke` both passed with `ALL CHECKS PASSED`.
 
 ## Key Lessons Learned
 

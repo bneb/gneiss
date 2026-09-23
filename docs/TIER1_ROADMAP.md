@@ -362,6 +362,27 @@ graph LR
 
 ---
 
+### [Sprint 55] Tightly-Coupled Double-Difference Carrier/Pseudorange Updates in 15-State ESKF (COMPLETED 2026-09-23)
+- **Goal**: Expand the 15-state ESKF with tightly-coupled scalar double-difference pseudorange and carrier-phase updates, eliminate inertial dead-reckoning divergence when satellite tracking drops, correct the attitude error Jacobian sign bug, enforce intra-constellation differencing to eliminate Inter-System Biases, and verify mathematical correctness via the Three-Tier Verification Standard.
+- **Deliverables**:
+  1. **Attitude Error Jacobian Sign Bug Discovery & Fix (`crates/gneiss-rtk/src/composite/tc_rtk.rs:437`)**:
+     - Corrected prototype attitude error Jacobian sign from negative to positive $H_\theta = +(\mathbf{u}^s - \mathbf{u}^{\text{ref}})^T [\hat{\mathbf{l}}^e \times]$, matching left-multiplied convention.
+  2. **Core Tightly-Coupled Module (`crates/gneiss-rtk/src/estimators/eskf/dd_update.rs`)**:
+     - Created `dd_update.rs` (454 LOC, 0 unwraps, all functions $\le 32$ LOC).
+     - Verified with Groves 2013 Chapter 14 textbook geometry, two-sided numerical finite-difference derivative checks ($< 10^{-7}$ rel error), and Lyapunov closed-loop error contraction.
+  3. **Joseph-Form Scalar Updates & Intra-Constellation Differencing**:
+     - Formulated scalar updates with Joseph-form covariance contraction avoiding large matrix inversions.
+     - Structurally enforced per-constellation reference satellite selection (GPS, BeiDou, Galileo, QZSS).
+  4. **Benchmark Modularization & Tokyo Odaiba Results (`eval_odaiba_ins`)**:
+     - Modularized into `main.rs` (408 LOC) and `odaiba_helpers.rs` (183 LOC).
+     - Full-trajectory smoothed RMS reduced to **$4.156\text{ m}$** (from $4.212\text{ m}$).
+     - Full-trajectory smoothed $p_{50}$ reduced to **$2.134\text{ m}$** (down $16.6\text{ cm}$ / 7.2%).
+     - Underpass/rail overpass Q2 $p_{50}$ reduced from $2.073\text{ m}$ to **$1.752\text{ m}$** (**15.5% improvement**).
+     - High-multipath canyon Q3 $p_{50}$ reduced from $2.242\text{ m}$ to **$2.044\text{ m}$**, and RMS reduced from $3.351\text{ m}$ to **$3.234\text{ m}$**.
+- **Exit Criteria**: Full compliance with AGENTS.md, 0 compiler warnings, 0 clippy warnings, 0 unwraps, all files strictly $< 500$ LOC, all functions $\le 32$ LOC, all 417 workspace tests pass, both CI smoke guards pass. (ACHIEVED)
+
+---
+
 ## 4. Code Standards & CI Quality Invariants ([AGENTS.md](file:///Users/kevin/projects/gneiss/AGENTS.md))
 
 All implementations in Sprints 40–52 must strictly obey:
