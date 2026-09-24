@@ -15,6 +15,7 @@
 //! - Full 15-state backward Rauch-Tung-Striebel (RTS) smoother
 
 pub mod alignment;
+pub mod condition;
 pub mod constraints;
 pub mod dd_update;
 pub mod predict;
@@ -25,6 +26,7 @@ pub mod update;
 pub use alignment::{
     compute_gyro_bias, compute_initial_attitude, compute_leveling_angles, init_eskf_filter,
 };
+pub use condition::{apply_integer_conditioning, ConditionSummary};
 pub use constraints::{update_body_velocity, update_nhc, update_zupt};
 pub use dd_update::{
     compute_dd_jacobian_15, update_dd_scalar, DdMeasurementKind, DdSatGeometry,

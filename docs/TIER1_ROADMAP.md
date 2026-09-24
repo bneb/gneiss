@@ -383,6 +383,25 @@ graph LR
 
 ---
 
+### [Sprint 56] Tightly-Coupled Integer Ambiguity Resolution Inside 15-State ESKF (COMPLETED 2026-09-24)
+- **Goal**: Implement integer ambiguity resolution directly inside the 15-state ESKF, conditioning the full navigation error state ($\delta\mathbf{p}, \delta\mathbf{v}, \delta\boldsymbol{\theta}, \delta\mathbf{b}_a, \delta\mathbf{b}_g$) and covariance on fixed integer ambiguities (LAMBDA + Dynamic FFRT) with Three-Tier test verification and empirical adversarial stress testing.
+- **Deliverables**:
+  1. **Conditional Least-Squares Integer Update (`crates/gneiss-rtk/src/estimators/eskf/condition.rs`)**:
+     - Derived and implemented $\Delta\mathbf{x} = -P_{xa} Q_{aa}^{-1}(\hat{\mathbf{a}} - \check{\mathbf{a}})$ and Schur complement covariance collapse $P_{\check{x}} = P_{\hat{x}} - P_{xa} Q_{aa}^{-1} P_{ax}$.
+     - Three-Tier verification: analytical Groves Ch14 golden vector, two-sided central difference numerical Jacobians ($< 10^{-7}$ rel error), Lyapunov error reduction, and minimum eigenvalue positive-definiteness assertion ($\lambda_{\min} \ge 10^{-10}$).
+     - Position jump gating ($\|\Delta\mathbf{x}_{pos}\|_2 \le \max(3\sigma_{3d}, 0.5\text{m})$ and $\le 2.0\text{m}$) strictly repels false fixes.
+  2. **Constellation-Isolated Float Ambiguity & Cross-Covariance Tracker (`crates/gneiss-rtk/src/composite/tc_ambiguity.rs`)**:
+     - Strict constellation isolation (GPS/QZSS, Galileo, BeiDou, GLONASS) prevents ISB leakage into double differences.
+     - Full state-ambiguity cross-covariance propagation ($P_{xa} \leftarrow \Phi_{15} P_{xa}$) and measurement contraction.
+     - Integrated with LAMBDA decorrelation, Dynamic FFRT ratio test, and Partial Ambiguity Resolution (PAR).
+     - Fixed ambiguity row/column covariance isolation ($Q_{ij} = 0$) preserving positive semi-definiteness ($Q_{aa} \succeq 0$).
+     - Post-fix carrier residual screening ($< 0.05\text{m}$) and automatic rollback on rejected candidate vectors.
+  3. **Adversarial Red-Team Audit & Stress Testing (`crates/gneiss-rtk/src/bin/tc_ar_stress.rs`)**:
+     - Passed all 7 adversarial challenge criteria: extreme condition numbers ($\kappa > 10^{10}$ to $10^{16}$), high correlation ($\rho \to 0.999999$), injected cycle slips, 10-meter position jump gating, tracker $Q_{aa}$ definiteness, $P_{check}$ positive-definiteness gating, and 10,000 randomized Monte Carlo SPD perturbations (100% pass rate).
+- **Exit Criteria**: Full compliance with AGENTS.md, 0 compiler warnings, 0 clippy warnings, 0 unwraps in production, all files strictly $< 500$ LOC, all functions $\le 32$ LOC, all workspace tests pass, both CI smoke guards pass (`check_network_benchmark.py --smoke`, `check_multignss_benchmark.py --smoke`), Tokyo Odaiba INS benchmark verified. (ACHIEVED)
+
+---
+
 ## 4. Code Standards & CI Quality Invariants ([AGENTS.md](file:///Users/kevin/projects/gneiss/AGENTS.md))
 
 All implementations in Sprints 40–52 must strictly obey:

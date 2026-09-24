@@ -1453,6 +1453,27 @@ All ongoing sprints are re-scoped to eradicate false fixes and collapse the $p_{
     - `cargo clippy --workspace --all-targets -- -D warnings`: 0 warnings.
     - `cargo test --workspace`: 417 passed, 0 failed.
     - Dual smoke guards: `check_network_benchmark.py --smoke` and `check_multignss_benchmark.py --smoke` both passed with `ALL CHECKS PASSED`.
+- [x] **Sprint 56: Tightly-Coupled Integer Ambiguity Resolution Inside 15-State ESKF (COMPLETED 2026-09-24)**
+  - **Conditional Least-Squares Integer Conditioning (`crates/gneiss-rtk/src/estimators/eskf/condition.rs`)**:
+    - Implemented Teunissen (1995) conditional integer state correction $\Delta\mathbf{x} = -P_{xa} Q_{aa}^{-1}(\hat{\mathbf{a}} - \check{\mathbf{a}})$ and Schur complement covariance contraction $P_{\check{x}} = P_{\hat{x}} - P_{xa} Q_{aa}^{-1} P_{ax}$.
+    - Three-Tier verification: analytical Groves Ch14 golden vector, two-sided central difference numerical Jacobians ($< 10^{-7}$ rel error), Lyapunov error reduction, and minimum eigenvalue positive-definiteness assertion ($\lambda_{\min} \ge 10^{-10}$).
+    - Position jump gating ($\|\Delta\mathbf{x}_{pos}\|_2 \le \max(3\sigma_{3d}, 0.5\text{m})$ and $\le 2.0\text{m}$) strictly repels false fixes.
+  - **Constellation-Isolated Float Ambiguity & Cross-Covariance Tracker (`crates/gneiss-rtk/src/composite/tc_ambiguity.rs`)**:
+    - Per-group reference satellite selection across GPS/QZSS, Galileo, BeiDou, and GLONASS prevents ISB contamination.
+    - Full $15 \times M$ state-ambiguity cross-covariance propagation ($P_{xa} \leftarrow \Phi_{15} P_{xa}$) and measurement contraction.
+    - Dynamic FFRT ratio test, LAMBDA decorrelation, and Partial Ambiguity Resolution (PAR) subset search.
+    - Fixed ambiguity row/column covariance isolation ($Q_{ij} = 0$) preserving positive semi-definiteness ($Q_{aa} \succeq 0$).
+    - Carrier residual screening ($< 0.05\text{m}$) and automatic rollback on rejected candidate vectors.
+  - **Flattened Control Flow & Clean Architecture (`crates/gneiss-rtk/src/composite/tc_rtk.rs`)**:
+    - Refactored carrier update loop to flatten nested `if let` blocks, maintaining strictly $< 3$ nesting levels across all functions.
+    - File size strictly $< 500$ LOC (488 LOC `tc_ambiguity.rs`, 491 LOC `tc_rtk.rs`, 452 LOC `condition.rs`), functions $\le 32$ LOC, 0 unwraps.
+  - **Adversarial Red-Team Audit & Stress Testing (`crates/gneiss-rtk/src/bin/tc_ar_stress.rs`)**:
+    - Verified against extreme condition numbers ($\kappa(Q_{aa}) > 10^{10}$ to $10^{16}$), high correlation ($\rho \to 0.999999$), injected cycle slips, 10-meter position jump gating, and 10,000 randomized Monte Carlo SPD perturbations (100% pass rate).
+  - **Standards & CI Compliance**:
+    - `cargo clippy --workspace --all-targets -- -D warnings`: 0 warnings.
+    - `cargo test --workspace`: all unit and integration tests passed cleanly (including 21 dedicated tests in `condition` and `tc_ambiguity`).
+    - Dual smoke guards: `check_network_benchmark.py --smoke` and `check_multignss_benchmark.py --smoke` both passed with `ALL CHECKS PASSED`.
+    - Tokyo Odaiba 12,398-epoch INS benchmark verified: $p_{50} = 2.134\text{m}$, RMS $= 4.156\text{m}$ (zero regressions).
 
 ## Key Lessons Learned
 

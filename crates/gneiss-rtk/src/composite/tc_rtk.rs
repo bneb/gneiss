@@ -1,29 +1,23 @@
 //! Tightly-Coupled Network RTK/INS Integration Pipeline.
-//!
-//! Fuses localized Virtual Reference Station (VRS) synthesized observables and
-//! double-difference carrier-phase / pseudorange observations with a 15-state
-//! Error-State Kalman Filter (ESKF) and LAMBDA ambiguity resolution.
-
 use std::collections::HashMap;
+use nalgebra::{Matrix2, Matrix3, RowVector3, SVector, Vector2, Vector3};
 
-use nalgebra::{
-    DMatrix, DVector, Matrix2, Matrix3, RowVector3, SMatrix, SVector, Vector2, Vector3,
-};
-
-use gneiss_core::coords::{az_el, ecef_to_llh};
 use gneiss_core::ephemeris::Ephemeris;
 use gneiss_core::imu::ImuMeasurement;
 use gneiss_core::obs::{EpochObs, SatObs};
 use gneiss_core::sat::{Constellation, SatelliteId};
 use gneiss_core::time::GpsTime;
 
-use crate::ambiguity::lambda::resolve_lambda;
+use crate::composite::tc_ambiguity::{
+    find_group_ref_sat, ConstellationGroup, GroupRefSat, TcAmbiguityTracker,
+};
 use crate::composite::{CompositeMode, EpochObservation, NavSolution, StationEpoch};
+use crate::estimators::eskf::predict::predict_with_phi;
 use crate::estimators::eskf::{
-    apply_error_injection, joseph_form_update, predict, skew_symmetric,
-    update_nhc, update_zupt, EngineError, EskfSmoother, EskfSnapshot, EskfState,
+    skew_symmetric, update_nhc, update_zupt, EngineError, EskfSmoother, EskfSnapshot, EskfState,
     Matrix15, Vector15,
 };
+use crate::estimators::rtk_iekf::ref_sat::sat_to_prn_u16;
 use crate::estimators::rtk_iekf::DoubleDiffKey;
 use crate::post_process::network_adj::CorsStation;
 use crate::post_process::vrs::VrsSynthesizer;
@@ -76,12 +70,24 @@ impl Default for TcRtkConfig {
     }
 }
 
+struct EpochDdPair {
+    key: DoubleDiffKey,
+    h_x: SVector<f64, 15>,
+    wavelength: f64,
+    dd_code: Option<f64>,
+    dd_phase: Option<f64>,
+    dd_geom: f64,
+    p_i: Vector3<f64>,
+    p_ref: Vector3<f64>,
+}
+
 /// Tightly-Coupled Network RTK/INS navigation pipeline.
 pub struct TightlyCoupledNetworkRtkIns {
     pub eskf: EskfState,
     pub vrs_synth: VrsSynthesizer,
     pub config: TcRtkConfig,
     pub ephemerides: Vec<Ephemeris>,
+    pub tracker: TcAmbiguityTracker,
     pub tracked_ambiguities: HashMap<DoubleDiffKey, DoubleDiffAmbiguity>,
     pub last_time: Option<GpsTime>,
     pub smoother: Option<EskfSmoother>,
@@ -95,6 +101,7 @@ impl TightlyCoupledNetworkRtkIns {
             vrs_synth,
             config,
             ephemerides: Vec::new(),
+            tracker: TcAmbiguityTracker::new(),
             tracked_ambiguities: HashMap::new(),
             last_time: None,
             smoother,
@@ -117,26 +124,16 @@ impl TightlyCoupledNetworkRtkIns {
 
         let pred_state = self.eskf.clone();
         let ref_epoch = self.synthesize_vrs_reference(cors_obs)?;
-        let (y, h_rows, r_diag, num_sats) = match &ref_epoch {
-            Some(base) => self.formulate_dd_measurements(rover_obs, base),
-            None => (Vec::new(), Vec::new(), Vec::new(), 0),
+        let pairs = match &ref_epoch {
+            Some(base) => self.formulate_and_apply_dd(rover_obs, base),
+            None => Vec::new(),
         };
 
-        let (is_fixed, ratio) = self.attempt_lambda_ar();
-        if !y.is_empty() {
-            self.apply_kalman_measurement_update(&y, &h_rows, &r_diag, is_fixed)?;
-        }
+        let (is_fixed, ratio) = self.attempt_ar_with_screening(&pairs);
+        self.sync_tracked_ambiguities_map();
 
-        if let Some(s) = &mut self.smoother {
-            s.push(EskfSnapshot {
-                time: rover_obs.time,
-                state_pred: pred_state,
-                state_post: self.eskf.clone(),
-                phi: phi.unwrap_or_else(Matrix15::identity),
-                is_gnss_available: num_sats >= 4,
-            });
-        }
-        self.last_time = Some(rover_obs.time);
+        let num_sats = pairs.len().saturating_add(if pairs.is_empty() { 0 } else { 1 });
+        self.update_smoother_and_history(pred_state, phi, rover_obs.time, num_sats);
         Ok(self.build_solution(rover_obs.time, num_sats, is_fixed, ratio))
     }
 
@@ -153,9 +150,10 @@ impl TightlyCoupledNetworkRtkIns {
         for imu in imu_samples {
             let dt_ms = (imu.time_tag.wrapping_sub(last_tag)) as f64;
             let dt = if dt_ms > 0.0 && dt_ms < 5000.0 { dt_ms * 1e-3 } else { 0.01 };
-            predict(&mut self.eskf, imu, dt, &self.config.q_diag)?;
+            let phi = predict_with_phi(&mut self.eskf, &imu.accel, &imu.gyro, dt, &self.config.q_diag)?;
+            self.tracker.propagate_cross_cov(&phi);
             last_tag = imu.time_tag;
-            last_phi = Some(Matrix15::identity());
+            last_phi = Some(phi);
         }
         Ok(last_phi)
     }
@@ -166,8 +164,10 @@ impl TightlyCoupledNetworkRtkIns {
     ) -> Result<Option<Matrix15<f64>>, EngineError> {
         let dt = self.last_time.map_or(0.1, |t| (epoch_time.tow - t.tow).clamp(0.0, 10.0));
         if dt > 1e-4 {
-            let imu = ImuMeasurement::new((epoch_time.tow * 1000.0) as u32, Vector3::new(0.0, 0.0, -9.81), Vector3::zeros());
-            predict(&mut self.eskf, &imu, dt, &self.config.q_diag)?;
+            let accel = Vector3::new(0.0, 0.0, -9.81);
+            let phi = predict_with_phi(&mut self.eskf, &accel, &Vector3::zeros(), dt, &self.config.q_diag)?;
+            self.tracker.propagate_cross_cov(&phi);
+            return Ok(Some(phi));
         }
         Ok(None)
     }
@@ -183,19 +183,11 @@ impl TightlyCoupledNetworkRtkIns {
         Ok(())
     }
 
-    fn synthesize_vrs_reference(
-        &self,
-        cors_obs: &[StationEpoch],
-    ) -> Result<Option<EpochObs>, EngineError> {
-        if cors_obs.is_empty() {
-            return Ok(None);
-        }
+    fn synthesize_vrs_reference(&self, cors_obs: &[StationEpoch]) -> Result<Option<EpochObs>, EngineError> {
+        if cors_obs.is_empty() { return Ok(None); }
         let stations: Vec<CorsStation> = cors_obs.iter().map(|s| CorsStation {
-            id: s.station_id.clone(),
-            pos_ecef: s.station_pos,
-            epochs: vec![s.obs.clone()],
+            id: s.station_id.clone(), pos_ecef: s.station_pos, epochs: vec![s.obs.clone()],
         }).collect();
-
         let ant_pos = self.antenna_position_ecef();
         match self.vrs_synth.synthesize_vrs_stream(&stations, ant_pos, &self.ephemerides) {
             Ok(mut stream) => Ok(stream.pop()),
@@ -203,57 +195,142 @@ impl TightlyCoupledNetworkRtkIns {
         }
     }
 
-    fn formulate_dd_measurements(
-        &mut self,
-        rover_obs: &EpochObs,
-        base_obs: &EpochObs,
-    ) -> (Vec<f64>, Vec<SVector<f64, 15>>, Vec<f64>, usize) {
+    fn formulate_and_apply_dd(&mut self, rover_obs: &EpochObs, base_obs: &EpochObs) -> Vec<EpochDdPair> {
+        let pairs = self.collect_all_dd_pairs(rover_obs, base_obs);
+        if pairs.is_empty() { return pairs; }
+        self.apply_dd_float_updates(&pairs);
+        pairs
+    }
+
+    fn collect_all_dd_pairs(&self, rover_obs: &EpochObs, base_obs: &EpochObs) -> Vec<EpochDdPair> {
         let ant_pos = self.antenna_position_ecef();
         let l_e = self.eskf.attitude.to_rotation_matrix() * self.config.lever_arm;
         let l_skew = skew_symmetric(&l_e);
+        let mut all_pairs = Vec::new();
+        for group in ConstellationGroup::ALL {
+            all_pairs.extend(self.collect_group_dd(group, rover_obs, base_obs, &ant_pos, &l_skew));
+        }
+        all_pairs
+    }
 
-        let (mut y, mut h_rows, mut r_diag) = (Vec::new(), Vec::new(), Vec::new());
-        let (ref_sat, u_ref) = match self.find_ref_sat_and_los(rover_obs, &ant_pos) {
-            Some(pair) => pair,
-            None => return (y, h_rows, r_diag, 0),
-        };
-
-        let mut tracked_count = 1;
+    fn collect_group_dd(
+        &self,
+        group: ConstellationGroup,
+        rover_obs: &EpochObs,
+        base_obs: &EpochObs,
+        ant_pos: &Vector3<f64>,
+        l_skew: &Matrix3<f64>,
+    ) -> Vec<EpochDdPair> {
+        let Some(ref_sat) = find_group_ref_sat(
+            group, rover_obs, base_obs, &self.ephemerides, ant_pos, self.config.min_elevation_rad,
+        ) else { return Vec::new(); };
+        let mut pairs = Vec::new();
         for r_sat in &rover_obs.satellites {
-            if r_sat.sat == ref_sat { continue; }
-            let b_sat = match base_obs.satellites.iter().find(|s| s.sat == r_sat.sat) {
-                Some(s) => s,
-                None => continue,
-            };
-            let u_i = match self.compute_sat_unit_vector(r_sat.sat, rover_obs.time, &ant_pos) {
-                Some(u) => u,
-                None => continue,
-            };
-            let (dd_geom, dd_code, dd_phase) = match self.calculate_dd_values(r_sat, b_sat, ref_sat, base_obs, rover_obs, &ant_pos) {
-                Some(res) => res,
-                None => continue,
-            };
-            tracked_count += 1;
-            let (delta_u, h_dd_pos) = compute_dd_los_jacobian(&u_ref, &u_i);
-            let h_dd_att = compute_dd_att_coupling_jacobian(&delta_u, &l_skew);
-            let mut h_row = SVector::<f64, 15>::zeros();
-            h_row.fixed_rows_mut::<3>(0).copy_from(&h_dd_pos.transpose());
-            h_row.fixed_rows_mut::<3>(6).copy_from(&h_dd_att.transpose());
-
-            if let Some(code_val) = dd_code {
-                y.push(code_val - dd_geom);
-                h_rows.push(h_row);
-                r_diag.push(self.config.sigma_dd_code * self.config.sigma_dd_code);
-            }
-            if let Some(phase_val) = dd_phase {
-                let key = DoubleDiffKey { constellation_id: r_sat.sat.constellation as u8, sat: r_sat.sat.prn as u16, ref_sat: ref_sat.prn as u16, freq_band: 1 };
-                let amb = self.manage_dd_ambiguity(key, phase_val, dd_geom);
-                y.push(compute_dd_residual(phase_val, dd_geom, amb));
-                h_rows.push(h_row);
-                r_diag.push(self.config.sigma_dd_phase * self.config.sigma_dd_phase);
+            if !group.matches(r_sat.sat) || r_sat.sat == ref_sat.sat { continue; }
+            if let Some(pair) = self.build_dd_pair(r_sat, base_obs, rover_obs, ref_sat, ant_pos, l_skew) {
+                pairs.push(pair);
             }
         }
-        (y, h_rows, r_diag, tracked_count)
+        pairs
+    }
+
+    fn build_dd_pair(
+        &self,
+        r_sat: &SatObs,
+        base_obs: &EpochObs,
+        rover_obs: &EpochObs,
+        ref_sat: GroupRefSat,
+        ant_pos: &Vector3<f64>,
+        l_skew: &Matrix3<f64>,
+    ) -> Option<EpochDdPair> {
+        let b_sat = base_obs.satellites.iter().find(|s| s.sat == r_sat.sat)?;
+        let u_i = self.compute_sat_unit_vector(r_sat.sat, rover_obs.time, ant_pos)?;
+        let (dd_geom, dd_code, dd_phase) = self.calculate_dd_values(r_sat, b_sat, ref_sat.sat, base_obs, rover_obs, ant_pos)?;
+        let p_i = self.get_sat_position(r_sat.sat, rover_obs.time)?;
+        let (delta_u, h_dd_pos) = compute_dd_los_jacobian(&ref_sat.u_ref, &u_i);
+        let h_dd_att = compute_dd_att_coupling_jacobian(&delta_u, l_skew);
+        let mut h_x = SVector::<f64, 15>::zeros();
+        h_x.fixed_rows_mut::<3>(0).copy_from(&h_dd_pos.transpose());
+        h_x.fixed_rows_mut::<3>(6).copy_from(&h_dd_att.transpose());
+        let const_grp = ConstellationGroup::ALL.iter().find(|g| g.matches(r_sat.sat))?;
+        let key = DoubleDiffKey {
+            constellation_id: const_grp.constellation_id(),
+            sat: sat_to_prn_u16(r_sat.sat),
+            ref_sat: sat_to_prn_u16(ref_sat.sat),
+            freq_band: 1,
+        };
+        let wavelength = get_carrier_wavelength(r_sat.sat.constellation);
+        Some(EpochDdPair { key, h_x, wavelength, dd_code, dd_phase, dd_geom, p_i, p_ref: ref_sat.pos })
+    }
+
+    fn apply_dd_float_updates(&mut self, pairs: &[EpochDdPair]) {
+        let active_keys: Vec<DoubleDiffKey> = pairs.iter().filter(|p| p.dd_phase.is_some()).map(|p| p.key).collect();
+        let init_floats: Vec<f64> = pairs.iter().filter(|p| p.dd_phase.is_some()).map(|p| {
+            let phase = p.dd_phase.unwrap_or(0.0);
+            (phase - p.dd_geom) / p.wavelength
+        }).collect();
+        self.tracker.sync_keys(&active_keys, &init_floats);
+
+        let var_code = self.config.sigma_dd_code * self.config.sigma_dd_code;
+        for p in pairs {
+            if let Some(code) = p.dd_code {
+                self.tracker.update_code_float(&mut self.eskf, &p.h_x, code - p.dd_geom, var_code);
+            }
+        }
+        let var_phase = self.config.sigma_dd_phase * self.config.sigma_dd_phase;
+        for p in pairs {
+            let (Some(phase), Some(idx)) = (p.dd_phase, self.tracker.key_index(&p.key)) else {
+                continue;
+            };
+            let y = phase - p.dd_geom - self.tracker.a_float[idx] * p.wavelength;
+            self.tracker.update_carrier_float(&mut self.eskf, idx, &p.h_x, p.wavelength, y, var_phase);
+        }
+    }
+
+    fn attempt_ar_with_screening(&mut self, pairs: &[EpochDdPair]) -> (bool, Option<f64>) {
+        let base_pos = self.vrs_synth.master_pos;
+        let l_e = self.eskf.attitude.to_rotation_matrix() * self.config.lever_arm;
+        let checker = |ant_pos: &Vector3<f64>, key: DoubleDiffKey, int_val: i32| -> Option<f64> {
+            let p = pairs.iter().find(|pair| pair.key == key)?;
+            let phase = p.dd_phase?;
+            let cur_ant = *ant_pos + l_e;
+            let geom = ((p.p_i - cur_ant).norm() - (p.p_i - base_pos).norm())
+                - ((p.p_ref - cur_ant).norm() - (p.p_ref - base_pos).norm());
+            Some(phase - geom - (int_val as f64) * p.wavelength)
+        };
+        self.tracker.attempt_ar_and_condition(&mut self.eskf, checker)
+    }
+
+    fn sync_tracked_ambiguities_map(&mut self) {
+        for (idx, key) in self.tracker.keys.iter().enumerate() {
+            let float_cycles = self.tracker.a_float[idx];
+            let var_cycles2 = self.tracker.q_aa[(idx, idx)];
+            let fixed_integer = self.tracker.fixed_integers.get(key).copied();
+            let lock_count = self.tracker.lock_counts.get(key).copied().unwrap_or(1);
+            self.tracked_ambiguities.insert(*key, DoubleDiffAmbiguity {
+                key: *key, float_cycles, var_cycles2, fixed_integer, lock_count,
+            });
+        }
+        self.tracked_ambiguities.retain(|k, _| self.tracker.keys.contains(k));
+    }
+
+    fn update_smoother_and_history(
+        &mut self,
+        pred_state: EskfState,
+        phi: Option<Matrix15<f64>>,
+        time: GpsTime,
+        num_sats: usize,
+    ) {
+        if let Some(s) = &mut self.smoother {
+            s.push(EskfSnapshot {
+                time,
+                state_pred: pred_state,
+                state_post: self.eskf.clone(),
+                phi: phi.unwrap_or_else(Matrix15::identity),
+                is_gnss_available: num_sats >= 4,
+            });
+        }
+        self.last_time = Some(time);
     }
 
     fn calculate_dd_values(
@@ -267,7 +344,8 @@ impl TightlyCoupledNetworkRtkIns {
     ) -> Option<(f64, Option<f64>, Option<f64>)> {
         let r_ref = rover_obs.satellites.iter().find(|s| s.sat == ref_sat)?;
         let b_ref = base_obs.satellites.iter().find(|s| s.sat == ref_sat)?;
-        let (p_i, p_ref) = (self.get_sat_position(r_sat.sat, rover_obs.time)?, self.get_sat_position(ref_sat, rover_obs.time)?);
+        let p_i = self.get_sat_position(r_sat.sat, rover_obs.time)?;
+        let p_ref = self.get_sat_position(ref_sat, rover_obs.time)?;
         let base_pos = self.vrs_synth.master_pos;
 
         let dd_geom = ((p_i - ant_pos).norm() - (p_i - base_pos).norm())
@@ -282,100 +360,6 @@ impl TightlyCoupledNetworkRtkIns {
             _ => None,
         };
         Some((dd_geom, dd_code, dd_phase))
-    }
-
-    fn manage_dd_ambiguity(&mut self, key: DoubleDiffKey, phase_m: f64, geom_m: f64) -> f64 {
-        let entry = self.tracked_ambiguities.entry(key).or_insert_with(|| DoubleDiffAmbiguity {
-            key,
-            float_cycles: (phase_m - geom_m) / get_carrier_wavelength(Constellation::Gps),
-            var_cycles2: 100.0,
-            fixed_integer: None,
-            lock_count: 0,
-        });
-        entry.lock_count = entry.lock_count.saturating_add(1);
-        let wl = get_carrier_wavelength(Constellation::Gps);
-        entry.fixed_integer.map_or(entry.float_cycles * wl, |n| (n as f64) * wl)
-    }
-
-    fn attempt_lambda_ar(&mut self) -> (bool, Option<f64>) {
-        let n = self.tracked_ambiguities.len();
-        if n < 4 {
-            return (false, None);
-        }
-        let mut float_vec = DVector::zeros(n);
-        let mut cov_mat = DMatrix::zeros(n, n);
-        let mut keys = Vec::with_capacity(n);
-
-        for (idx, (k, a)) in self.tracked_ambiguities.iter().enumerate() {
-            float_vec[idx] = a.float_cycles;
-            cov_mat[(idx, idx)] = a.var_cycles2.clamp(1e-4, 1.0);
-            keys.push(*k);
-        }
-        match resolve_lambda(&float_vec, &cov_mat) {
-            Ok(res) if res.ratio >= self.config.ar_ratio_threshold => {
-                for (idx, k) in keys.iter().enumerate() {
-                    if let Some(a) = self.tracked_ambiguities.get_mut(k) {
-                        a.fixed_integer = Some(res.best_integers[idx] as i32);
-                        a.var_cycles2 = 1e-4;
-                    }
-                }
-                (true, Some(res.ratio))
-            }
-            Ok(res) => (false, Some(res.ratio)),
-            Err(_) => (false, None),
-        }
-    }
-
-    fn apply_kalman_measurement_update(
-        &mut self,
-        y: &[f64],
-        h_rows: &[SVector<f64, 15>],
-        r_diag: &[f64],
-        is_fixed: bool,
-    ) -> Result<(), EngineError> {
-        let m = y.len().min(30);
-        let mut h_mat = SMatrix::<f64, 30, 15>::zeros();
-        let mut y_vec = SVector::<f64, 30>::zeros();
-        let mut r_mat = SMatrix::<f64, 30, 30>::zeros();
-
-        for i in 0..m {
-            y_vec[i] = y[i];
-            let r_val = if is_fixed { r_diag[i] * 0.05 } else { r_diag[i] };
-            r_mat[(i, i)] = r_val;
-            for j in 0..15 {
-                h_mat[(i, j)] = h_rows[i][j];
-            }
-        }
-        let h_slice = h_mat.fixed_view::<30, 15>(0, 0);
-        let s = h_slice * self.eskf.cov * h_slice.transpose() + r_mat;
-        let s_inv = s.try_inverse().ok_or(EngineError::InversionError)?;
-        let k = self.eskf.cov * h_slice.transpose() * s_inv;
-
-        let dx = k * y_vec;
-        apply_error_injection(&mut self.eskf, &dx);
-        self.eskf.cov = joseph_form_update(&self.eskf.cov, &h_slice.into_owned(), &k, &r_mat);
-        Ok(())
-    }
-
-    fn find_ref_sat_and_los(&self, obs: &EpochObs, ant_pos: &Vector3<f64>) -> Option<(SatelliteId, Vector3<f64>)> {
-        let llh = ecef_to_llh(*ant_pos);
-        let mut best = None;
-        let mut best_el = -1.0;
-
-        for s in &obs.satellites {
-            let sat_pos = match self.get_sat_position(s.sat, obs.time) {
-                Some(p) => p,
-                None => continue,
-            };
-            let (_, el) = az_el(llh, *ant_pos, sat_pos);
-            if el > best_el && el >= self.config.min_elevation_rad {
-                best_el = el;
-                let diff = sat_pos - ant_pos;
-                let u = diff / diff.norm();
-                best = Some((s.sat, u));
-            }
-        }
-        best
     }
 
     fn compute_sat_unit_vector(&self, sat: SatelliteId, time: GpsTime, ant_pos: &Vector3<f64>) -> Option<Vector3<f64>> {
@@ -442,9 +426,9 @@ pub fn compute_dd_residual(dd_meas: f64, dd_geom: f64, dd_amb_m: f64) -> f64 {
     dd_meas - (dd_geom + dd_amb_m)
 }
 
-fn get_carrier_wavelength(constellation: Constellation) -> f64 {
+pub fn get_carrier_wavelength(constellation: Constellation) -> f64 {
     match constellation {
-        Constellation::Gps | Constellation::Galileo => SPEED_OF_LIGHT / 1575.42e6,
+        Constellation::Gps | Constellation::Qzss | Constellation::Galileo => SPEED_OF_LIGHT / 1575.42e6,
         Constellation::Beidou => SPEED_OF_LIGHT / 1561.098e6,
         Constellation::Glonass => SPEED_OF_LIGHT / 1602.0e6,
         _ => SPEED_OF_LIGHT / 1575.42e6,
@@ -454,6 +438,7 @@ fn get_carrier_wavelength(constellation: Constellation) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nalgebra::UnitQuaternion;
 
     #[test]
     fn test_tc_rtk_dd_los_and_attitude_jacobians() {
@@ -482,11 +467,25 @@ mod tests {
 
     #[test]
     fn test_tc_rtk_vrs_packet_loss_graceful_propagation() {
-        let eskf = EskfState::new(Vector3::new(10.0, 20.0, 30.0), Vector3::zeros(), nalgebra::UnitQuaternion::identity());
+        let eskf = EskfState::new(Vector3::new(10.0, 20.0, 30.0), Vector3::zeros(), UnitQuaternion::identity());
         let synth = VrsSynthesizer::new("BASE", Vector3::zeros());
         let rtk = TightlyCoupledNetworkRtkIns::new(eskf, synth, TcRtkConfig::default());
 
         let res = rtk.synthesize_vrs_reference(&[]).unwrap();
         assert!(res.is_none());
+    }
+
+    #[test]
+    fn test_tc_rtk_constellation_isolation_in_dd_formation() {
+        let eskf = EskfState::new(Vector3::new(100.0, 200.0, 300.0), Vector3::zeros(), UnitQuaternion::identity());
+        let synth = VrsSynthesizer::new("BASE", Vector3::new(100.0, 200.0, 300.0));
+        let rtk = TightlyCoupledNetworkRtkIns::new(eskf, synth, TcRtkConfig::default());
+        let sats = vec![
+            SatObs { sat: SatelliteId { constellation: Constellation::Gps, prn: 1 }, observations: Vec::new() },
+            SatObs { sat: SatelliteId { constellation: Constellation::Gps, prn: 2 }, observations: Vec::new() },
+            SatObs { sat: SatelliteId { constellation: Constellation::Galileo, prn: 5 }, observations: Vec::new() },
+        ];
+        let rover = EpochObs { time: GpsTime::new(2200, 100.0), satellites: sats };
+        assert!(rtk.collect_all_dd_pairs(&rover, &rover.clone()).is_empty());
     }
 }

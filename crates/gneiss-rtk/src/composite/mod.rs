@@ -12,6 +12,7 @@
 //!    Seamless mode-switching between TC-RTK and TC-PPP with hysteresis and
 //!    inertial bias/covariance preservation.
 
+pub mod tc_ambiguity;
 pub mod tc_ppp;
 pub mod tc_rtk;
 
@@ -23,6 +24,7 @@ use gneiss_core::time::GpsTime;
 pub use crate::estimators::eskf::types::EngineError;
 pub use crate::estimators::eskf::{EskfState, Matrix15, Vector15};
 
+pub use tc_ambiguity::{ConstellationGroup, GroupRefSat, TcAmbiguityTracker};
 pub use tc_ppp::{FloatAmbiguity, TcPppConfig, TightlyCoupledPppIns};
 pub use tc_rtk::{DoubleDiffAmbiguity, TcRtkConfig, TightlyCoupledNetworkRtkIns};
 
