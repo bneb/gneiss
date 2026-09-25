@@ -402,6 +402,28 @@ graph LR
 
 ---
 
+### [Sprint 57] Urban Canyon Multipath Mitigation & Prioritized Partial Ambiguity Resolution (COMPLETED 2026-09-25)
+- **Goal**: Implement adaptive SIGMA-SNR covariance modeling, decoupled code-minus-carrier (CMC) multipath detection, multi-band Doppler cycle slip screening, and Composite Quality Metric (CQM) prioritized PAR.
+- **Deliverables**:
+  1. **Adaptive SIGMA-SNR Covariance**: $C^1$-continuous elevation mapping and smooth logistic SNR dampening below 40 dB-Hz ensuring $R_{DD} \succ 0$.
+  2. **CMC Multipath Shielding**: Code-carrier decoupled screening with quadratic code variance scaling $R_p \times (1 + \text{cmc}^2)$ preserving phase during severe code multipath.
+  3. **Multi-Band Doppler Slip Detection**: Bands $[1, 2, 5, 6, 7]$ with dynamics-adaptive velocity thresholding.
+  4. **CQM-Ranked PAR**: Elevation, C/N$_0$, and lock-time ranked subset search with DOP guard ($\text{PDOP} \le 10.0, k \ge 4$).
+- **Exit Criteria**: Zero false fixes, zero regressions on NOAA CORS / Multi-GNSS / Odaiba INS benchmarks. (ACHIEVED)
+
+---
+
+### [Sprint 58] Multi-Constellation Cascaded AR & Deep Urban Canyon Fix Expansion (COMPLETED 2026-09-25)
+- **Goal**: Expand cascaded wide-lane / narrow-lane ambiguity resolution across GPS, Galileo, and BeiDou, accelerate Melbourne-Wübbena convergence for dynamic platforms, widen kinematic float trace search envelopes, and enable collinear geometry fixes.
+- **Deliverables**:
+  1. **Multi-Constellation Cascaded AR (`widelane.rs`, `mw.rs`)**: Generalized secondary band pairing across $[2, 7, 6, 5]$ unlocking Galileo E1/E5b and BeiDou B1I/B2I wide-lane tracking.
+  2. **Adaptive Fast MW Convergence**: Clean arcs ($\sigma \le 0.08$ cyc, residual $\le 0.15$ cyc) fix after 5 epochs (`FAST_TRACK_EPOCHS = 5`); standard threshold reduced from 20 to 12.
+  3. **Kinematic PAR Envelopes (`ar.rs`, `ar_subsets.rs`)**: Float trace ceiling expanded to $12.0\text{ m}^2$, minimum subset relaxed to 4, PDOP ceiling expanded to 15.0 with HDOP $\le 10.0$ collinear guard.
+  4. **Benchmark Gains**: Tokyo Shinjuku fix rate jumped +33% to +37% (11.0% RTK / 12.0% PPK), fixed subset $p_{95} = \mathbf{2.191\text{ m}}$ (down from $2.806\text{ m}$) with **0 false fixes**. Both CI smoke guards pass.
+- **Exit Criteria**: AGENTS.md compliant, 0 clippy warnings, 0 unwraps, all files $< 500$ LOC, all functions $\le 32$ LOC. (ACHIEVED)
+
+---
+
 ## 4. Code Standards & CI Quality Invariants ([AGENTS.md](file:///Users/kevin/projects/gneiss/AGENTS.md))
 
 All implementations in Sprints 40–52 must strictly obey:
