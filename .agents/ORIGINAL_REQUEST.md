@@ -188,3 +188,110 @@ The codebase already contains benchmark evaluation harnesses and ground-truth da
 - [ ] Exactly 0 `unwrap()` calls in production code (`match`, `if let`, `ok_or()?`, or descriptive `.expect()` only).
 - [ ] All unit and integration tests (`cargo test --workspace`) pass with 0 failures.
 - [ ] Both regression guard scripts (`check_network_benchmark.py --smoke` and `check_multignss_benchmark.py --smoke`) pass cleanly.
+
+## Follow-up — 2026-09-24T13:30:49Z
+
+Implement Urban Canyon Fix Rate Expansion and Multipath Mitigation for the Gneiss RTK positioning engine, focusing on adaptive C/N0 (SNR) and elevation observation weighting, Code-Minus-Carrier (CMC) multipath detection/de-weighting, Doppler-assisted cycle slip validation, and SNR-prioritized Partial Ambiguity Resolution (PAR). The objective is to expand urban canyon fix rates (Tokyo Shinjuku and Hong Kong Whampoa) toward commercial Tier-1 levels (> 60%) and collapse the $p_{95}$ tail error without introducing false integer fixes.
+
+Working directory: /Users/kevin/projects/gneiss
+Integrity mode: development
+
+## Context
+
+In challenging urban environments (Tokyo Shinjuku skyscraper canyon and Hong Kong Whampoa/TST1 high-rise canyons), GNSS signals suffer from severe multipath and Non-Line-of-Sight (NLOS) reflections. Currently, Gneiss achieves zero false fixes in the fixed subset ($p_{95} = 1.36\text{m}$ to $2.24\text{m}$), but the *all-epoch* $p_{95}$ remains between $8.8\text{m}$ and $10.1\text{m}$ because urban canyon fix rates are limited to $6\%\text{--}18\%$ (vs. $> 60\%$ in commercial engines like NovAtel Inertial Explorer, Trimble POSPac, and SBG Qinertia). 
+
+Unmitigated pseudorange multipath corrupts the float Kalman filter states, driving float ambiguity estimates far from true integers, causing LAMBDA and FFRT to reject ambiguity fixing or fail the ratio test.
+
+### Key Codebase Locations
+
+- **RTK Double-Difference Engine**: `crates/gneiss-rtk/src/estimators/rtk_iekf/`
+  - Observation formation & weighting: `formation.rs`, `formation_cov.rs`
+  - Ambiguity resolution & conditioning: `ar.rs`, `ar_gate.rs`
+  - Wide-lane / Melbourne-Wübbena tracking: `mw.rs`
+  - Robust update & innovation screening: `update/robust.rs`
+- **Ambiguity Machinery**: `crates/gneiss-rtk/src/ambiguity/`
+  - LAMBDA decorrelation: `lambda.rs`
+  - Dynamic Fixed Failure-Rate Ratio Test (FFRT): `ffrt.rs`
+  - Partial Ambiguity Resolution (PAR): `par.rs`
+- **Tightly-Coupled Ambiguity Tracker**: `crates/gneiss-rtk/src/composite/tc_ambiguity.rs`
+- **Physical Variance Models**: `crates/gneiss-core/src/variance.rs`
+- **Doppler Estimation**: `crates/gneiss-rtk/src/estimators/doppler/`
+- **Multi-Dataset F9P Benchmark**: `crates/gneiss-rtk/src/bin/eval_f9p_rover.rs`
+- **Tokyo Odaiba INS Benchmark**: `crates/gneiss-rtk/src/bin/eval_odaiba_ins/`
+- **CI Smoke Guard Scripts**: `scripts/check_network_benchmark.py`, `scripts/check_multignss_benchmark.py`
+- **Standards & Invariants**: `AGENTS.md` (must be obeyed strictly)
+
+### Critical Standards & Conventions (from AGENTS.md)
+
+- **No `unwrap()` in production code.** Use `?`, `match`, `if let`, `.expect("invariant")`.
+- **File size < 500 LOC, function size < 32 LOC, nesting depth < 3.**
+- **0 compiler warnings, 0 clippy warnings** under `-D warnings`.
+- **Sign conventions**: attitude error state $d_\theta = -\psi$, left-multiplied global frame (`predictor.rs:86-91`). Phase windup always subtracted: $\Phi - \text{windup}$.
+- **Frame safety**: relational coupling structurally enforced via shared typed inputs.
+- **Three-Tier Verification Standard**: Tier 1 (analytical golden vectors), Tier 2 (numerical finite differences), Tier 3 (closed-loop invariants / Monte Carlo stability).
+
+## Requirements
+
+### R1. Adaptive C/N0 (SNR) and Elevation Observation Covariance Weighting
+
+Enhance observation covariance formulation in double-difference formation (`formation_cov.rs` and `variance.rs`) using a physically grounded SIGMA-SNR model:
+- Formulate code and carrier observation variances scaling with both elevation angle $\theta$ and receiver C/N0 ($S$ in dB-Hz):
+  $$\sigma^2(\theta, S) = \left( a^2 + \frac{b^2}{\sin^2 \theta} \right) \cdot f_{\text{SNR}}(S)$$
+  where $f_{\text{SNR}}(S)$ scales noise exponentially when $S$ drops below a nominal threshold (e.g. 38–40 dB-Hz) up to an attenuation ceiling.
+- Ensure smooth, continuous derivatives with respect to elevation and SNR to avoid Kalman filter gain chatter.
+- Provide textbook golden-vector unit tests verifying monotonic variance growth under decreasing SNR and elevation.
+
+### R2. Code-Minus-Carrier (CMC) Multipath Detection & Down-Weighting
+
+Implement an innovation-level and measurement-level multipath screening detector:
+- Track Code-Minus-Carrier (CMC) residuals or dual-frequency geometry-free combinations across continuous carrier tracking arcs:
+  $$\text{CMC} = P - \Phi - 2I$$
+- When sudden pseudorange deviations occur without corresponding carrier phase movement, identify the satellite as affected by code multipath / NLOS reflection.
+- Adaptively inflate the pseudorange measurement variance or down-weight the contaminated observation row in the filter update rather than discarding valid carrier phase measurements.
+- Maintain zero false fixes: ensure multipath de-weighting does not falsely admit corrupted carrier phase tracking into the integer search.
+
+### R3. Doppler-Assisted Cycle Slip Detection & Phase Continuity Validation
+
+Leverage Doppler velocity measurements ($\dot{\Phi} = -\lambda f_D$) to audit carrier phase continuity across epochs:
+- Validate phase increments $\Delta\Phi_k = \Phi_k - \Phi_{k-1}$ against integrated Doppler range rate $\int \dot{\rho} dt$ over the epoch interval $\Delta t$.
+- In the presence of urban foliage or underpass signal interruptions, detect fractional or multi-cycle slips instantaneously without waiting for Melbourne-Wübbena filter convergence.
+- Reset or re-seed ambiguity variance immediately upon Doppler-detected slip, preventing corrupt carrier observations from entering LAMBDA.
+
+### R4. C/N0- and Elevation-Prioritized Partial Ambiguity Resolution (PAR)
+
+Enhance the Partial Ambiguity Resolution subset selection in `par.rs` and `tc_ambiguity.rs`:
+- When full-set LAMBDA fails the Dynamic FFRT ratio test, prioritize the ambiguity subset candidates based on satellite elevation, C/N0, tracking lock duration, and CMC residual variance rather than arbitrary index truncation.
+- Ensure the selected subset maintains sufficient satellite geometry (DOP guard and minimum subset size $\ge 4$).
+- Guarantee that fixed subset updates preserve positive semi-definiteness ($Q_{aa} \succeq 0$) without off-diagonal covariance leakage.
+
+## Acceptance Criteria
+
+### Mathematical Correctness & TDD
+- [ ] Adaptive SNR-elevation variance function satisfies Three-Tier test suite (analytical golden vectors, monotonic derivative checks, and stability bounds).
+- [ ] CMC multipath detector correctly flags 5m–20m injected code steps without rejecting clean carrier phase.
+- [ ] Doppler cycle slip detector catches 1-cycle and half-cycle phase slips under simulated vehicle dynamics.
+- [ ] Covariance definiteness: all PAR subset selections and fixed covariance updates preserve $Q_{aa} \succeq 0$ and $P \succ 0$.
+
+### Benchmark & Performance
+- [ ] Fix rate increases or holds across UrbanNav evaluation datasets (`eval_f9p_rover` on Shinjuku, Whampoa, and TST1).
+- [ ] All-epoch tail error ($p_{95}$) reduces or holds across UrbanNav datasets with zero false fixes introduced in the fixed subset.
+- [ ] Tokyo Odaiba 12,398-epoch INS benchmark maintains or improves performance ($p_{50} \le 2.134\text{m}$, RMS $\le 4.156\text{m}$).
+- [ ] Both CI smoke guard scripts pass with `ALL CHECKS PASSED`:
+  - `python3 scripts/check_network_benchmark.py --smoke`
+  - `python3 scripts/check_multignss_benchmark.py --smoke`
+
+### Code Quality & Standards
+- [ ] All modified and new files strictly $< 500$ LOC.
+- [ ] All functions strictly $\le 32$ LOC.
+- [ ] Nesting depth strictly $< 3$ levels across all functions.
+- [ ] Zero `unwrap()` calls in production code.
+- [ ] Zero compiler warnings and zero clippy warnings (`cargo clippy --workspace --all-targets -- -D warnings`).
+- [ ] All workspace tests pass (`cargo test --workspace`).
+
+## Follow-up — 2026-09-25T06:17:11Z
+
+Please resume execution of Sprint 57. The server restarted and paused subagents. Milestone 2 (R2: CMC multipath screening) handoff was delivered by worker_m2_urban_canyon. Please proceed with the audit and transition to Milestone 3 (R3: Doppler-assisted cycle slip validation) and Milestone 4 (R4: SNR/elevation-prioritized PAR).
+
+## Follow-up — 2026-09-25T07:09:37Z
+
+Please check on worker_m4_urban_canyon and orchestrator status, ensure crons are active, and continue driving Sprint 57 to completion.

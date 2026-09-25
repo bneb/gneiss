@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
-use nalgebra::Vector3;
+use nalgebra::{Matrix3, Vector3};
 
 use gneiss_rtk::swfg::imu_preintegration::ImuSample;
 
@@ -181,3 +181,34 @@ pub fn print_evaluation_summary(
         .collect();
     print_trajectory_stats("RTS Smoothed (at GNSS Epochs)", &smoothed_at_gnss, truth);
 }
+
+pub fn update_stationary_state(
+    state: &mut gneiss_rtk::estimators::eskf::types::EskfState,
+    acc_imu: &[ImuSample],
+) {
+    if acc_imu.is_empty() {
+        return;
+    }
+    let avg_gyro = acc_imu.iter().map(|s| s.gyro).sum::<Vector3<f64>>() / (acc_imu.len() as f64);
+    state.gyro_bias = state.gyro_bias * 0.995 + avg_gyro * 0.005;
+}
+
+pub fn compute_gnss_cov_ecef(pos_ecef: Vector3<f64>, var_h: f64, var_v: f64) -> Matrix3<f64> {
+    let llh = gneiss_core::coords::ecef_to_llh(pos_ecef);
+    let ned_to_ecef = gneiss_core::coords::ecef_to_ned_matrix(llh).transpose();
+    let r_ned = Matrix3::from_diagonal(&Vector3::new(var_h, var_h, var_v));
+    ned_to_ecef * r_ned * ned_to_ecef.transpose()
+}
+
+pub fn compute_code_variance(el: f64, snr: Option<f64>) -> Option<f64> {
+    let s = snr.unwrap_or(36.0);
+    if s < 26.0 {
+        return None;
+    }
+    let sin_el = el.sin().max(0.2618);
+    let base_var = (1.8 / sin_el).powi(2);
+    let snr_factor = 10.0_f64.powf(((38.0 - s).max(0.0)) / 10.0);
+    Some(base_var * snr_factor)
+}
+
+

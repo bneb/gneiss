@@ -112,20 +112,31 @@ fn default_q_diag() -> Vector15<f64> {
     let mut q = Vector15::zeros();
     for i in 0..3 {
         q[i] = 0.01;
-        q[i + 3] = 0.05;
-        q[i + 6] = 1e-4;
+        q[i + 3] = 0.09;
+        q[i + 6] = 5e-5;
         q[i + 9] = 1e-7;
         q[i + 12] = 1e-9;
     }
     q
 }
 
-fn apply_motion_constraints(state: &mut EskfState, speed: f64) {
+fn apply_motion_constraints(
+    state: &mut EskfState,
+    speed: f64,
+    acc_imu: &[ImuSample],
+) {
     if speed < 0.05 {
         let r_zupt = nalgebra::Matrix3::from_diagonal(&Vector3::new(0.001, 0.001, 0.001));
         let _ = update_zupt(state, &r_zupt);
+        update_stationary_state(state, acc_imu);
     } else {
-        let r_v = nalgebra::Matrix3::from_diagonal(&Vector3::new(0.005, 0.002, 0.002));
+        let yaw_rate = if acc_imu.is_empty() {
+            0.0
+        } else {
+            acc_imu.iter().map(|s| s.gyro.z.abs()).sum::<f64>() / (acc_imu.len() as f64)
+        };
+        let var_lat = 0.002 * (1.0 + (yaw_rate / 0.02).powi(2)).min(25.0);
+        let r_v = nalgebra::Matrix3::from_diagonal(&Vector3::new(0.005, var_lat, 0.002));
         let _ = update_body_velocity(state, &Vector3::new(speed, 0.0, 0.0), &r_v);
     }
 }
@@ -190,14 +201,18 @@ fn update_gnss_innovation(
     let l_e = r_b2e * ANTENNA_LEVER_ARM;
     let innov_norm = (pos - (state.pos_ecef + l_e)).norm();
 
-    let mut var_p = if fixed { 0.001 } else if ns >= 6 { 0.004 } else { 0.04 };
+    let (var_h, var_v) = if fixed {
+        (0.001, 0.004)
+    } else if ns >= 6 {
+        (0.18, 0.72)
+    } else {
+        (0.8, 3.2)
+    };
     let max_phys_step = (speed * dt_g) + 2.5;
     let is_spike = (speed < 0.05 && innov_norm > 0.8) || (step > max_phys_step && innov_norm > 3.0);
-    if is_spike {
-        var_p = 1e6;
-    }
+    let (eff_h, eff_v) = if is_spike { (1e6, 1e6) } else { (var_h, var_v) };
 
-    let r_pos = nalgebra::Matrix3::from_diagonal(&Vector3::new(var_p, var_p, var_p));
+    let r_pos = compute_gnss_cov_ecef(pos, eff_h, eff_v);
     let _ = update_gnss_position(state, &pos, &r_pos, &ANTENNA_LEVER_ARM);
     *last_gnss = Some((time.tow, pos));
 }
@@ -208,18 +223,21 @@ fn apply_single_sat_dd(
     obs: &DdObsPair<'_>,
     pos_fix: Option<Vector3<f64>>,
 ) {
-    if let (Some(pr_r), Some(pr_b), Some(pr_rr), Some(pr_br)) = (
-        obs.r_sat.get_observable(1),
-        obs.b_sat.get_observable(1),
-        obs.r_ref.get_observable(1),
-        obs.b_ref.get_observable(1),
-    ) {
-        let dd_code = (pr_r - pr_b) - (pr_rr - pr_br);
-        let y_code = dd_code - obs.dd_geom;
-        if y_code.abs() <= 3.5 {
-            let sin_el = obs.el.sin().max(0.2618);
-            let var_code = (2.0 / sin_el).powi(2);
-            let _ = update_dd_scalar(state, geom, y_code, var_code, DdMeasurementKind::Pseudorange);
+    for &band in &[1u8, 2u8, 5u8, 6u8, 7u8] {
+        if let (Some(pr_r), Some(pr_b), Some(pr_rr), Some(pr_br)) = (
+            obs.r_sat.get_observable(band),
+            obs.b_sat.get_observable(band),
+            obs.r_ref.get_observable(band),
+            obs.b_ref.get_observable(band),
+        ) {
+            let dd_code = (pr_r - pr_b) - (pr_rr - pr_br);
+            let y_code = dd_code - obs.dd_geom;
+            if y_code.abs() <= 3.0 {
+                let snr = obs.r_sat.get_snr_f64(band);
+                if let Some(var_code) = compute_code_variance(obs.el, snr) {
+                    let _ = update_dd_scalar(state, geom, y_code, var_code, DdMeasurementKind::Pseudorange);
+                }
+            }
         }
     }
 
@@ -334,7 +352,7 @@ fn process_inertial_epoch(
             let _ = update_doppler_velocity(state, &d_sol.vel_ecef, &d_sol.cov, &ANTENNA_LEVER_ARM, &avg_gyro);
         }
     }
-    apply_motion_constraints(state, ctx.speed);
+    apply_motion_constraints(state, ctx.speed, ctx.acc_imu);
 
     let snap = EskfSnapshot {
         state_pred,
@@ -368,6 +386,20 @@ struct PipelineConfig<'a> {
     init_heading: f64,
 }
 
+fn advance_imu_records(
+    imu_records: &[ImuRecord],
+    cur_us: u64,
+    last_idx: &mut usize,
+    acc_imu: &mut Vec<ImuSample>,
+    cur_speed: &mut f64,
+) {
+    while *last_idx < imu_records.len() && imu_records[*last_idx].sample.time_us <= cur_us {
+        acc_imu.push(imu_records[*last_idx].sample);
+        *cur_speed = imu_records[*last_idx].speed;
+        *last_idx += 1;
+    }
+}
+
 fn run_inertial_pipeline(cfg: &PipelineConfig<'_>) -> PipelineOutput {
     let imu_samples: Vec<ImuSample> = cfg.imu_records.iter().map(|r| r.sample).collect();
     let mut state = init_pipeline_state(&imu_samples, cfg.init_pos, cfg.init_heading);
@@ -377,20 +409,10 @@ fn run_inertial_pipeline(cfg: &PipelineConfig<'_>) -> PipelineOutput {
 
     for epoch in cfg.rover_epochs {
         let cur_us = (epoch.time.tow * 1_000_000.0).round() as u64;
-        while last_idx < cfg.imu_records.len() && cfg.imu_records[last_idx].sample.time_us <= cur_us {
-            acc_imu.push(cfg.imu_records[last_idx].sample);
-            cur_speed = cfg.imu_records[last_idx].speed;
-            last_idx += 1;
-        }
+        advance_imu_records(cfg.imu_records, cur_us, &mut last_idx, &mut acc_imu, &mut cur_speed);
         let ctx = EpochContext {
-            epoch,
-            acc_imu: &acc_imu,
-            ephems: cfg.ephems,
-            gnss_map: cfg.gnss_map,
-            base_index: cfg.base_index,
-            base_pos: cfg.base_pos,
-            q_diag: &q_diag,
-            speed: cur_speed,
+            epoch, acc_imu: &acc_imu, ephems: cfg.ephems, gnss_map: cfg.gnss_map,
+            base_index: cfg.base_index, base_pos: cfg.base_pos, q_diag: &q_diag, speed: cur_speed,
         };
         if let Some((k, pos, snap)) = process_inertial_epoch(&mut state, &ctx, &mut last_gnss) {
             fwd_map.insert(k, pos);
@@ -401,6 +423,27 @@ fn run_inertial_pipeline(cfg: &PipelineConfig<'_>) -> PipelineOutput {
         if let Some(s) = last_sample { acc_imu.push(s); }
     }
     (fwd_map, smoother.smooth_with_time().unwrap_or_default())
+}
+
+fn build_pipeline_config<'a>(
+    inputs: &'a RinexInputs,
+    imu_records: &'a [ImuRecord],
+    base_ref_map: &'a BTreeMap<u32, &'a EpochObs>,
+    gnss_fixes: &'a GnssFixMap,
+    rover_init: Vector3<f64>,
+    init_heading: f64,
+) -> PipelineConfig<'a> {
+    let filter_init = gnss_fixes.values().next().map(|&(p, _, _)| p).unwrap_or(rover_init);
+    PipelineConfig {
+        rover_epochs: &inputs.rover_epochs,
+        imu_records,
+        gnss_map: gnss_fixes,
+        base_index: base_ref_map,
+        base_pos: inputs.base_pos,
+        ephems: &inputs.ephems,
+        init_pos: filter_init,
+        init_heading,
+    }
 }
 
 fn main() {
@@ -420,20 +463,10 @@ fn main() {
 
     let gnss_fixes = run_gnss_rtk_pass(&inputs.rover_epochs, &base_ref_map, inputs.base_pos, rover_init, &inputs.ephems, inputs.klob);
     let gnss_positions: BTreeMap<u32, Vector3<f64>> = gnss_fixes.iter().map(|(&k, &(p, _, _))| (k, p)).collect();
-    let filter_init = gnss_fixes.values().next().map(|&(p, _, _)| p).unwrap_or(rover_init);
     let init_heading = estimate_initial_heading(&gnss_fixes);
     println!("Initial heading: {:.2} deg (NovAtel reference: 326.65 deg)", init_heading.to_degrees());
 
-    let cfg = PipelineConfig {
-        rover_epochs: &inputs.rover_epochs,
-        imu_records: &imu_records,
-        gnss_map: &gnss_fixes,
-        base_index: &base_ref_map,
-        base_pos: inputs.base_pos,
-        ephems: &inputs.ephems,
-        init_pos: filter_init,
-        init_heading,
-    };
+    let cfg = build_pipeline_config(&inputs, &imu_records, &base_ref_map, &gnss_fixes, rover_init, init_heading);
     let (forward_map, smoothed) = run_inertial_pipeline(&cfg);
     let smoothed_map: BTreeMap<u32, Vector3<f64>> = smoothed.iter().map(|(time, s)| (((time.tow * 10.0).round() as u32), s.pos_ecef)).collect();
 
