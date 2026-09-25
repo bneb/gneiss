@@ -19,47 +19,56 @@ use super::update::{compute_tropo_dd, DoubleDiffMeasurement};
 /// blunders.
 pub const GROSS_PR_ERROR_THRESHOLD_M: f64 = 15.0;
 
+/// Extreme variance assigned to suppressed/de-weighted code observations (m^2).
+pub const GROSS_PR_DEWEIGHT_VAR_M2: f64 = 1.0e8;
+
 /// Cap on removals per epoch: if more than a few satellites look like
 /// blunders, the reference satellite or the position prior itself is the
 /// more likely culprit, and further blind exclusion would just mask that.
 pub const MAX_GROSS_PR_REJECTIONS_PER_EPOCH: usize = 3;
 
-/// Iteratively drops the single worst-residual DD pseudorange pair while
+/// Iteratively screens the single worst-residual DD pseudorange pair while
 /// its prefit residual (evaluated at `pos_pred`, i.e. *before* this
 /// epoch's update -- a bad satellite can't hide behind an update it
 /// corrupted itself) exceeds [`GROSS_PR_ERROR_THRESHOLD_M`], up to
-/// [`MAX_GROSS_PR_REJECTIONS_PER_EPOCH`] removals.
+/// [`MAX_GROSS_PR_REJECTIONS_PER_EPOCH`] rejections.
 ///
-/// The Huber-style robust weighting in `iekf_update_gated` already
-/// down-weights moderately-large innovations, but that's a soft,
-/// residual-based mechanism: with the deliberately loose position prior
-/// this filter runs (so it can reacquire after outages), a single
-/// kilometre-scale blunder can drag the *linearization point* itself
-/// before robust weighting ever gets a chance to see it as an outlier.
-/// This screen runs first, at a fixed prior position, so it can't be
-/// fooled that way -- classic one-at-a-time "data snooping" FDE, as used
-/// by RTKLIB, NovAtel Waypoint, and Leica Infinity for exactly this
-/// reason. Returns the rejected keys, in rejection order, for logging.
+/// If the measurement carries active carrier phase (`dd_cp_cycles.is_some()`),
+/// the observation is NOT dropped. Instead, its pseudorange variance is inflated
+/// to [`GROSS_PR_DEWEIGHT_VAR_M2`], dropping the code weight in the Kalman update
+/// while preserving clean millimeter-level carrier phase tracking. Measurements
+/// without carrier phase are dropped from the vector.
 pub fn screen_gross_pr_errors(
     measurements: &mut Vec<DoubleDiffMeasurement>,
     pos_pred: Vector3<f64>,
 ) -> Vec<DoubleDiffKey> {
     let mut rejected = Vec::new();
     for _ in 0..MAX_GROSS_PR_REJECTIONS_PER_EPOCH {
-        let Some((idx, residual)) = worst_pr_residual(measurements, pos_pred) else { break };
+        let Some((idx, residual)) = worst_pr_residual(measurements, pos_pred, &rejected) else { break };
         if residual.abs() <= GROSS_PR_ERROR_THRESHOLD_M {
             break;
         }
-        rejected.push(measurements.remove(idx).key);
+        let key = measurements[idx].key;
+        if measurements[idx].dd_cp_cycles.is_some() {
+            measurements[idx].pr_var_m2 = GROSS_PR_DEWEIGHT_VAR_M2;
+            rejected.push(key);
+        } else {
+            rejected.push(measurements.remove(idx).key);
+        }
     }
     rejected
 }
 
-/// Index and signed prefit DD pseudorange residual of the pair with the
-/// largest `|obs - predicted|`, or `None` if `measurements` is empty.
-fn worst_pr_residual(measurements: &[DoubleDiffMeasurement], pos_pred: Vector3<f64>) -> Option<(usize, f64)> {
+/// Index and signed prefit DD pseudorange residual of the unscreened pair with
+/// the largest `|obs - predicted|`, or `None` if all pairs are screened or clean.
+fn worst_pr_residual(
+    measurements: &[DoubleDiffMeasurement],
+    pos_pred: Vector3<f64>,
+    screened: &[DoubleDiffKey],
+) -> Option<(usize, f64)> {
     measurements.iter()
         .enumerate()
+        .filter(|(_, m)| !screened.contains(&m.key) && m.pr_var_m2 < GROSS_PR_DEWEIGHT_VAR_M2)
         .map(|(i, m)| (i, pr_residual(m, pos_pred)))
         .max_by(|(_, a), (_, b)| a.abs().total_cmp(&b.abs()))
 }
@@ -146,5 +155,33 @@ mod gross_pr_error_tests {
         let rejected = screen_gross_pr_errors(&mut meas, pos);
         assert_eq!(rejected.len(), MAX_GROSS_PR_REJECTIONS_PER_EPOCH);
         assert_eq!(meas.len(), 5 - MAX_GROSS_PR_REJECTIONS_PER_EPOCH);
+    }
+
+    #[test]
+    fn screen_preserves_carrier_phase_and_deweights_code() {
+        let pos = Vector3::new(100.0, 200.0, 300.0);
+        let sat_pos = Vector3::new(10_000.0, 20_000.0, 20_000.0);
+        let ref_pos = Vector3::new(5_000.0, 25_000.0, 20_000.0);
+        let clean = true_dd(pos, sat_pos, ref_pos, Vector3::zeros());
+
+        let mut m_clean = make_meas(2, clean, sat_pos, ref_pos);
+        m_clean.dd_cp_cycles = Some(clean / 0.190);
+        let mut m_corrupt = make_meas(3, clean + 25.0, sat_pos, ref_pos);
+        m_corrupt.dd_cp_cycles = Some(clean / 0.190);
+
+        let mut meas = vec![m_clean, m_corrupt];
+        let rejected = screen_gross_pr_errors(&mut meas, pos);
+
+        assert_eq!(rejected.len(), 1);
+        assert_eq!(rejected[0].sat, 3);
+        assert_eq!(meas.len(), 2, "Measurement with carrier phase must NOT be removed");
+
+        let screened = meas.iter().find(|m| m.key.sat == 3).expect("pair 3 retained");
+        assert!(screened.dd_cp_cycles.is_some(), "Carrier phase must remain active");
+        assert!(screened.pr_var_m2 >= GROSS_PR_DEWEIGHT_VAR_M2, "Code variance must be inflated");
+        assert_eq!(screened.cp_var_cycles2, 0.0001, "Phase variance must remain nominal");
+
+        let intact = meas.iter().find(|m| m.key.sat == 2).expect("pair 2 retained");
+        assert_eq!(intact.pr_var_m2, 0.04, "Clean pair code variance unchanged");
     }
 }

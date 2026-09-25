@@ -1,54 +1,125 @@
 use nalgebra::{DMatrix, DVector};
+/// Observation and tracking quality metadata for an ambiguity candidate.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct AmbiguityMetadata {
+    /// Satellite elevation angle in radians (from local horizon).
+    pub elevation_rad: f64,
+    /// Carrier-to-noise ratio in dB-Hz.
+    pub snr_dbhz: f64,
+    /// Continuous carrier tracking lock duration (epochs or seconds).
+    pub lock_time: f64,
+    /// Code-Minus-Carrier (CMC) multipath standard deviation (metres).
+    pub cmc_sigma: f64,
+}
+
+impl AmbiguityMetadata {
+    pub fn new(elevation_rad: f64, snr_dbhz: f64, lock_time: f64, cmc_sigma: f64) -> Self {
+        Self { elevation_rad, snr_dbhz, lock_time, cmc_sigma }
+    }
+}
+
+impl Default for AmbiguityMetadata {
+    fn default() -> Self {
+        Self {
+            elevation_rad: std::f64::consts::FRAC_PI_4,
+            snr_dbhz: 42.0,
+            lock_time: 30.0,
+            cmc_sigma: 0.20,
+        }
+    }
+}
+
+/// Compute Composite Quality Metric (CQM) for candidate ranking.
+///
+/// CQM = w_el * sin(theta) + w_snr * ((SNR - 20) / 30) + w_lock * min(1, t_lock / 30)
+///       - w_cmc * (sigma_cmc / 2.0) - w_var * sigma_a
+///
+/// Defaults: w_el = 0.25, w_snr = 0.25, w_lock = 0.20, w_cmc = 0.15, w_var = 0.15.
+/// Fallback when metadata is None: -(frac + 0.5 * sigma_a) for backward compatibility.
+pub fn compute_cqm(
+    meta: Option<&AmbiguityMetadata>,
+    q_ii: f64,
+    float_val: f64,
+) -> f64 {
+    let sigma_a = q_ii.max(1e-12).sqrt();
+    let frac = (float_val - float_val.round()).abs();
+    match meta {
+        Some(m) => {
+            let el_term = m.elevation_rad.sin().clamp(0.0, 1.0);
+            let snr_term = ((m.snr_dbhz - 20.0) / 30.0).clamp(0.0, 1.0);
+            let lock_term = (m.lock_time / 30.0).clamp(0.0, 1.0);
+            let cmc_term = (m.cmc_sigma / 2.0).clamp(0.0, 2.0);
+            let var_term = (sigma_a + 0.5 * frac).min(2.0);
+            0.25 * el_term + 0.25 * snr_term + 0.20 * lock_term - 0.15 * cmc_term - 0.15 * var_term
+        }
+        None => -(frac + 0.5 * sigma_a),
+    }
+}
 
 /// Select the largest subset of float ambiguities whose bootstrapped
 /// success rate exceeds `min_success_rate`. Returns the indices of
 /// selected ambiguities, the sub-vector, and the sub-covariance.
-///
-/// Algorithm: sort by conditional variance (most confident first),
-/// then add ambiguities one at a time until the cumulative success
-/// rate drops below the threshold.
 pub fn select_ils_subset(
     a: &DVector<f64>,
     q: &DMatrix<f64>,
     min_success_rate: f64,
 ) -> (Vec<usize>, DVector<f64>, DMatrix<f64>) {
+    select_ils_subset_with_metadata(a, q, min_success_rate, None)
+}
+
+fn rank_candidates_by_cqm(
+    a: &DVector<f64>,
+    q: &DMatrix<f64>,
+    metadata: Option<&[AmbiguityMetadata]>,
+) -> Vec<(usize, f64)> {
     let n = a.len();
-    if n == 0 {
-        return (vec![], DVector::zeros(0), DMatrix::zeros(0, 0));
-    }
+    let mut indexed: Vec<(usize, f64)> = if let Some(meta) = metadata {
+        (0..n).map(|i| (i, compute_cqm(meta.get(i), q[(i, i)], a[i]))).collect()
+    } else {
+        let cond_stdevs = compute_conditional_stdevs(q);
+        (0..n).map(|i| (i, -cond_stdevs[i])).collect()
+    };
+    indexed.sort_by(|a, b| b.1.total_cmp(&a.1));
+    indexed
+}
 
-    // Compute per-ambiguity conditional standard deviations from LDL^T decomposition
-    let cond_stdevs = compute_conditional_stdevs(q);
-
-    // Sort indices by conditional stdev ascending (most confident first)
-    let mut indexed: Vec<(usize, f64)> = (0..n).map(|i| (i, cond_stdevs[i])).collect();
-    indexed.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
-
-    // Greedy selection: add until cumulative success rate drops below threshold
-    let mut selected: Vec<usize> = Vec::with_capacity(n);
-    for &(idx, _) in &indexed {
+fn accumulate_ils_subset(
+    indexed: &[(usize, f64)],
+    q: &DMatrix<f64>,
+    min_success_rate: f64,
+) -> Vec<usize> {
+    let mut selected: Vec<usize> = Vec::with_capacity(indexed.len());
+    for &(idx, _) in indexed {
         selected.push(idx);
         let sub_q = submatrix(q, &selected);
         let sub_d = ldlt_diagonal(&sub_q);
-        let sr = cumulative_success_rate(&sub_d);
-        if sr < min_success_rate {
+        if cumulative_success_rate(&sub_d) < min_success_rate {
             selected.pop();
-            break;
         }
     }
+    selected
+}
 
+/// Select ILS subset with optional CQM metadata prioritization.
+pub fn select_ils_subset_with_metadata(
+    a: &DVector<f64>,
+    q: &DMatrix<f64>,
+    min_success_rate: f64,
+    metadata: Option<&[AmbiguityMetadata]>,
+) -> (Vec<usize>, DVector<f64>, DMatrix<f64>) {
+    if a.is_empty() {
+        return (vec![], DVector::zeros(0), DMatrix::zeros(0, 0));
+    }
+    let indexed = rank_candidates_by_cqm(a, q, metadata);
+    let selected = accumulate_ils_subset(&indexed, q, min_success_rate);
     if selected.is_empty() {
         return (vec![], DVector::zeros(0), DMatrix::zeros(0, 0));
     }
-
-    // Build sub-vector and sub-covariance
-    let k = selected.len();
-    let mut sub_a = DVector::zeros(k);
+    let mut sub_a = DVector::zeros(selected.len());
     let sub_q = submatrix(q, &selected);
     for (i, &orig_idx) in selected.iter().enumerate() {
         sub_a[i] = a[orig_idx];
     }
-
     (selected, sub_a, sub_q)
 }
 
@@ -279,5 +350,36 @@ mod tests {
                 "sub_a length should match indices length"
             );
         }
+    }
+
+    #[test]
+    fn test_cqm_ranking_clean_vs_corrupted() {
+        // Satellite 1: clean high-elevation, high-SNR, converged lock, low CMC
+        // but float offset is 0.25 cycles
+        let clean_meta = AmbiguityMetadata::new(1.10, 45.0, 40.0, 0.15);
+        let clean_cqm = compute_cqm(Some(&clean_meta), 0.04, 10.25);
+
+        // Satellite 2: low-elevation, noisy SNR, short lock, severe CMC multipath
+        // but float offset is coincidental near-integer 0.001 cycles
+        let corrupted_meta = AmbiguityMetadata::new(0.18, 22.0, 4.0, 3.5);
+        let corrupted_cqm = compute_cqm(Some(&corrupted_meta), 0.04, 10.001);
+
+        assert!(
+            clean_cqm > corrupted_cqm,
+            "Clean satellite must have higher CQM ({clean_cqm:.3}) than corrupted ({corrupted_cqm:.3})"
+        );
+    }
+
+    #[test]
+    fn test_select_ils_subset_with_metadata_prioritizes_high_cqm() {
+        let a = DVector::from_vec(vec![10.001, 20.25]);
+        let q = DMatrix::from_diagonal(&DVector::from_vec(vec![0.02, 0.02]));
+        // Index 0: corrupted; Index 1: clean
+        let meta = vec![
+            AmbiguityMetadata::new(0.18, 22.0, 4.0, 3.5),
+            AmbiguityMetadata::new(1.10, 45.0, 40.0, 0.15),
+        ];
+        let (selected, _, _) = select_ils_subset_with_metadata(&a, &q, 0.90, Some(&meta));
+        assert!(selected.contains(&1), "Clean satellite must be selected");
     }
 }

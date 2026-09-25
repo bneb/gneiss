@@ -342,6 +342,10 @@ impl TcAmbiguityTracker {
             self.q_aa.row_mut(idx).fill(0.0);
             self.q_aa[(idx, idx)] = 1e-4;
         }
+        self.q_aa = 0.5 * (&self.q_aa + self.q_aa.transpose());
+        for i in 0..self.q_aa.nrows() {
+            if self.q_aa[(i, i)] < 1e-6 { self.q_aa[(i, i)] = 1e-6; }
+        }
     }
 }
 

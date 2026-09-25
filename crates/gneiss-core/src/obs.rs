@@ -181,14 +181,18 @@ impl SatObs {
             .and_then(|o| o.lli)
     }
 
-    pub fn get_snr(&self, freq_band: u8) -> Option<u8> {
+    pub fn get_snr_f64(&self, freq_band: u8) -> Option<f64> {
         self.observations
             .iter()
             .find(|o| {
                 o.code.obs_type == ObsType::Snr
                     && self.matches_band(o.code.signal.freq_band, o.code.signal.attribute, freq_band)
             })
-            .map(|o| o.value as u8)
+            .map(|o| o.value)
+    }
+
+    pub fn get_snr(&self, freq_band: u8) -> Option<u8> {
+        self.get_snr_f64(freq_band).map(|v| v as u8)
     }
 }
 
@@ -319,7 +323,7 @@ mod tests {
     }
 
     #[test]
-    fn test_beidou_band_extraction_rinex302_and_303() {
+    fn test_beidou_band_extraction_rinex303() {
         use crate::sat::{Constellation, SatelliteId};
         let bds_sat = SatelliteId { constellation: Constellation::Beidou, prn: 6 };
 
@@ -338,6 +342,12 @@ mod tests {
         assert_eq!(obs_303.get_observable(7), Some(21_000_002.0));
         assert_eq!(obs_303.get_observable(2), Some(21_000_002.0)); // fallback to B2I
         assert_ne!(obs_303.get_observable(1), obs_303.get_observable(7));
+    }
+
+    #[test]
+    fn test_beidou_band_extraction_rinex302() {
+        use crate::sat::{Constellation, SatelliteId};
+        let bds_sat = SatelliteId { constellation: Constellation::Beidou, prn: 6 };
 
         // RINEX 3.02 (e.g. Trimble NetR9 / Leica): C1I for B1I, C6I for B3I, C7I for B2I
         let obs_302 = SatObs {
@@ -351,5 +361,25 @@ mod tests {
         assert_eq!(obs_302.get_observable(1), Some(22_000_001.0));
         assert_eq!(obs_302.get_observable(6), Some(22_000_003.0));
         assert_eq!(obs_302.get_observable(7), Some(22_000_002.0));
+    }
+
+    #[test]
+    fn test_get_snr_f64_and_u8_compatibility() {
+        use crate::sat::{Constellation, SatelliteId};
+        let sat = SatelliteId { constellation: Constellation::Gps, prn: 1 };
+        let obs = SatObs {
+            sat,
+            observations: vec![
+                Observation {
+                    code: ObsCode::from_str("S1C").unwrap(),
+                    value: 42.75,
+                    lock_time: None,
+                    lli: None,
+                },
+            ],
+        };
+        assert_eq!(obs.get_snr_f64(1), Some(42.75));
+        assert_eq!(obs.get_snr(1), Some(42));
+        assert_eq!(obs.get_snr_f64(2), None);
     }
 }

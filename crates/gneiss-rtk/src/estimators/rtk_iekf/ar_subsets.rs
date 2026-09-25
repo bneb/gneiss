@@ -1,9 +1,13 @@
 //! Partial Ambiguity Resolution (PAR) candidate selection and subset partitioning.
 
-use nalgebra::{DMatrix, DVector};
+use nalgebra::{DMatrix, DVector, Vector3};
+pub use crate::ambiguity::par::{compute_cqm, AmbiguityMetadata};
 use super::state::{DoubleDiffKey, RtkState};
+use super::DoubleDiffMeasurement;
 
 pub const MAX_SUBSET_SIZE: usize = 16;
+pub const MIN_PAR_SUBSET_SIZE: usize = 4;
+pub const MAX_ACCEPTABLE_PDOP: f64 = 10.0;
 
 /// Stack-allocated ambiguity index subset (zero heap allocation on critical path).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -44,13 +48,90 @@ pub fn is_beidou_geo_key(key: &DoubleDiffKey) -> bool {
     is_geo(key.sat) || is_geo(key.ref_sat)
 }
 
-/// Select and sort candidate ambiguity indices for PAR.
-pub fn select_par_candidates(
+/// Check if a subset of satellite positions satisfies the DOP geometry guard.
+pub fn validate_subset_geometry(
+    rover_pos: Vector3<f64>,
+    sat_positions: &[Vector3<f64>],
+    max_pdop: f64,
+) -> bool {
+    if sat_positions.len() < MIN_PAR_SUBSET_SIZE {
+        return false;
+    }
+    match gneiss_core::dop::compute_dop_from_positions(rover_pos, sat_positions) {
+        Some(dop) => dop.pdop > 0.0 && dop.pdop <= max_pdop && dop.hdop <= max_pdop,
+        None => false,
+    }
+}
+
+fn push_unique_pos(list: &mut Vec<Vector3<f64>>, pos: Vector3<f64>) {
+    if !list.iter().any(|p| (p - pos).norm() < 1.0) {
+        list.push(pos);
+    }
+}
+
+/// Validate geometry of double-difference subset against minimum size and DOP thresholds.
+pub fn validate_dd_subset_geometry(
+    state: &RtkState,
+    dd: &[DoubleDiffMeasurement],
+    subset_idx: &[usize],
+) -> bool {
+    if subset_idx.len() < 3 {
+        return false;
+    }
+    let mut sat_positions = Vec::with_capacity(subset_idx.len() + 1);
+    for &idx in subset_idx {
+        if idx >= state.ambiguities.len() { continue; }
+        let key = state.ambiguities[idx].0;
+        if let Some(m) = dd.iter().find(|m| m.key == key) {
+            push_unique_pos(&mut sat_positions, m.sat_pos);
+            push_unique_pos(&mut sat_positions, m.ref_pos);
+        }
+    }
+    validate_subset_geometry(state.pos_ecef, &sat_positions, MAX_ACCEPTABLE_PDOP)
+}
+
+/// Construct ambiguity quality metadata from state and double-difference measurements.
+pub fn compute_metadata_from_dd(
+    state: &RtkState,
+    dd: &[DoubleDiffMeasurement],
+) -> Vec<AmbiguityMetadata> {
+    let mut meta = Vec::with_capacity(state.ambiguities.len());
+    let rover_llh = gneiss_core::coords::ecef_to_llh(state.pos_ecef);
+    for (key, _) in &state.ambiguities {
+        if let Some(m) = dd.iter().find(|m| m.key == *key) {
+            let (_, el) = gneiss_core::coords::az_el(rover_llh, state.pos_ecef, m.sat_pos);
+            let cmc_sigma = m.pr_var_m2.max(1e-4).sqrt().min(10.0);
+            let snr_est = (45.0 - 10.0 * (m.cp_var_cycles2 / 0.0005).max(1e-4).log10()).clamp(20.0, 50.0);
+            meta.push(AmbiguityMetadata::new(el, snr_est, 30.0, cmc_sigma));
+        } else {
+            meta.push(AmbiguityMetadata::default());
+        }
+    }
+    meta
+}
+
+/// Select and sort candidate ambiguity indices for PAR using CQM metadata.
+fn filter_kinematic_pool(state: &RtkState, q_amb: &DMatrix<f64>, n_amb: usize, min_k: usize) -> Vec<usize> {
+    let mut c: Vec<usize> = (0..n_amb)
+        .filter(|&i| q_amb[(i, i)] <= 1.0 && !is_beidou_geo_key(&state.ambiguities[i].0))
+        .collect();
+    if c.len() < min_k {
+        c = (0..n_amb).filter(|&i| !is_beidou_geo_key(&state.ambiguities[i].0)).collect();
+    }
+    if c.len() < min_k {
+        c = (0..n_amb).collect();
+    }
+    c
+}
+
+/// Select and sort candidate ambiguity indices for PAR using CQM metadata.
+pub fn select_par_candidates_with_metadata(
     state: &RtkState,
     a_float: &DVector<f64>,
     q_amb: &DMatrix<f64>,
     min_ambs: usize,
     is_kinematic: bool,
+    metadata: Option<&[AmbiguityMetadata]>,
 ) -> (Vec<usize>, usize) {
     let n_amb = a_float.len();
     if !is_kinematic {
@@ -60,30 +141,59 @@ pub fn select_par_candidates(
         return (idx, m);
     }
 
-    let min_k = min_ambs.max(6);
-    let mut c: Vec<usize> = (0..n_amb)
-        .filter(|&i| {
-            let key = &state.ambiguities[i].0;
-            q_amb[(i, i)] <= 1.0 && !is_beidou_geo_key(key)
-        })
-        .collect();
-
-    if c.len() < min_k {
-        c = (0..n_amb)
-            .filter(|&i| !is_beidou_geo_key(&state.ambiguities[i].0))
-            .collect();
-    }
-    if c.len() < min_k {
-        c = (0..n_amb).collect();
-    }
-
+    let min_k = min_ambs.max(4);
+    let mut c = filter_kinematic_pool(state, q_amb, n_amb, min_k);
     let score = |i: usize| {
-        let frac = (a_float[i] - a_float[i].round()).abs();
-        frac + q_amb[(i, i)].sqrt() * 0.5
+        let m = metadata.and_then(|meta| meta.get(i));
+        compute_cqm(m, q_amb[(i, i)], a_float[i])
     };
-    c.sort_by(|&i, &j| score(i).total_cmp(&score(j)));
+    c.sort_by(|&i, &j| score(j).total_cmp(&score(i)));
     let m = c.len().min(MAX_SUBSET_SIZE);
     (c, m)
+}
+
+/// Select and sort candidate ambiguity indices for PAR with optional DD measurements.
+pub fn select_par_candidates_with_dd(
+    state: &RtkState,
+    a_float: &DVector<f64>,
+    q_amb: &DMatrix<f64>,
+    min_ambs: usize,
+    is_kinematic: bool,
+    dd_meas: Option<&[DoubleDiffMeasurement]>,
+) -> (Vec<usize>, usize) {
+    let meta = dd_meas.map(|dd| compute_metadata_from_dd(state, dd));
+    select_par_candidates_with_metadata(state, a_float, q_amb, min_ambs, is_kinematic, meta.as_deref())
+}
+
+/// Select and sort candidate ambiguity indices for PAR.
+pub fn select_par_candidates(
+    state: &RtkState,
+    a_float: &DVector<f64>,
+    q_amb: &DMatrix<f64>,
+    min_ambs: usize,
+    is_kinematic: bool,
+) -> (Vec<usize>, usize) {
+    select_par_candidates_with_metadata(state, a_float, q_amb, min_ambs, is_kinematic, None)
+}
+
+fn build_cluster_subset(
+    state: &RtkState,
+    ranked_candidates: &[usize],
+    cluster: &[u8],
+) -> (usize, [usize; MAX_SUBSET_SIZE]) {
+    let mut subset_indices = [0usize; MAX_SUBSET_SIZE];
+    let mut count = 0;
+    for &idx in ranked_candidates {
+        if count >= MAX_SUBSET_SIZE {
+            break;
+        }
+        let const_id = state.ambiguities[idx].0.constellation_id;
+        if cluster.contains(&const_id) {
+            subset_indices[count] = idx;
+            count += 1;
+        }
+    }
+    (count, subset_indices)
 }
 
 /// Generate constellation-partitioned subsets (e.g., GPS+Galileo, GPS+BeiDou).
@@ -100,18 +210,7 @@ pub fn partition_constellation_subsets(
 
     let mut result = Vec::with_capacity(clusters.len());
     for &cluster in &clusters {
-        let mut subset_indices = [0usize; MAX_SUBSET_SIZE];
-        let mut count = 0;
-        for &idx in ranked_candidates {
-            if count >= MAX_SUBSET_SIZE {
-                break;
-            }
-            let const_id = state.ambiguities[idx].0.constellation_id;
-            if cluster.contains(&const_id) {
-                subset_indices[count] = idx;
-                count += 1;
-            }
-        }
+        let (count, subset_indices) = build_cluster_subset(state, ranked_candidates, cluster);
         if count >= min_k {
             result.push(AmbiguitySubset {
                 indices: subset_indices,
@@ -280,5 +379,53 @@ mod tests {
         assert_eq!(sub_q[(2, 2)], 0.4);
         assert_eq!(sub_q[(0, 1)], 0.0);
         assert!(sub_q.cholesky().is_some());
+    }
+
+    #[test]
+    fn test_cqm_candidate_prioritization_over_coincidental_float() {
+        use gneiss_core::time::GpsTime;
+        let mut state = RtkState::new(Vector3::new(100.0, 200.0, 300.0), GpsTime::new(2000, 100.0));
+        let k1 = DoubleDiffKey { constellation_id: 0, sat: 2, ref_sat: 1, freq_band: 1 };
+        let k2 = DoubleDiffKey { constellation_id: 0, sat: 3, ref_sat: 1, freq_band: 1 };
+        state.ensure_ambiguity(k1, 10.25, 0.04);
+        state.ensure_ambiguity(k2, 20.001, 0.04);
+
+        let a = DVector::from_vec(vec![10.25, 20.001]);
+        let q = DMatrix::from_diagonal(&DVector::from_vec(vec![0.04, 0.04]));
+        let meta = vec![
+            AmbiguityMetadata::new(1.10, 45.0, 40.0, 0.15), // Index 0: high-el clean
+            AmbiguityMetadata::new(0.18, 22.0, 4.0, 3.5),   // Index 1: low-el corrupted
+        ];
+
+        let (ranked, _) = select_par_candidates_with_metadata(&state, &a, &q, 2, true, Some(&meta));
+        assert_eq!(ranked[0], 0, "High elevation clean satellite must be ranked first");
+        assert_eq!(ranked[1], 1, "Multipath corrupted satellite must be ranked second");
+    }
+
+    #[test]
+    fn test_validate_subset_geometry_rejects_sub_four_and_collinear() {
+        let rover = Vector3::new(6_378_137.0, 0.0, 0.0);
+        let sats3 = vec![
+            Vector3::new(20_000_000.0, 5_000_000.0, 5_000_000.0),
+            Vector3::new(22_000_000.0, -5_000_000.0, 5_000_000.0),
+            Vector3::new(19_000_000.0, 5_000_000.0, -5_000_000.0),
+        ];
+        assert!(!validate_subset_geometry(rover, &sats3, 10.0), "Subset with < 4 satellites must be rejected");
+
+        let collinear = vec![
+            Vector3::new(20_000_000.0, 0.0, 5_000_000.0),
+            Vector3::new(22_000_000.0, 0.0, 10_000_000.0),
+            Vector3::new(19_000_000.0, 0.0, -5_000_000.0),
+            Vector3::new(21_000_000.0, 0.0, -10_000_000.0),
+        ];
+        assert!(!validate_subset_geometry(rover, &collinear, 10.0), "Collinear satellites must be rejected");
+
+        let spread = vec![
+            Vector3::new(26_000_000.0, 0.0, 0.0),
+            Vector3::new(20_000_000.0, 0.0, 15_000_000.0),
+            Vector3::new(20_000_000.0, 13_000_000.0, -10_000_000.0),
+            Vector3::new(20_000_000.0, -13_000_000.0, -10_000_000.0),
+        ];
+        assert!(validate_subset_geometry(rover, &spread, 10.0), "Well-spread satellites must pass geometry guard");
     }
 }

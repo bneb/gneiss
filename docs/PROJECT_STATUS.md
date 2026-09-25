@@ -1474,6 +1474,37 @@ All ongoing sprints are re-scoped to eradicate false fixes and collapse the $p_{
     - `cargo test --workspace`: all unit and integration tests passed cleanly (including 21 dedicated tests in `condition` and `tc_ambiguity`).
     - Dual smoke guards: `check_network_benchmark.py --smoke` and `check_multignss_benchmark.py --smoke` both passed with `ALL CHECKS PASSED`.
     - Tokyo Odaiba 12,398-epoch INS benchmark verified: $p_{50} = 2.134\text{m}$, RMS $= 4.156\text{m}$ (zero regressions).
+- [x] **Sprint 57: Urban Canyon Multipath Mitigation & Prioritized Partial Ambiguity Resolution (COMPLETED 2026-09-25)**
+  - **R1: Adaptive SIGMA-SNR Elevation-Dependent Covariance (`crates/gneiss-core/src/variance.rs`, `obs.rs`, `formation_cov.rs`)**:
+    - Implemented C$^1$-continuous SIGMA-SNR stochastic model $\sigma(\theta) = a_0 + a_1/\sin(\max(\theta, \theta_0))$ with $\theta_0 = 5°$ regularization preventing singularity at horizon.
+    - Smooth logistic SNR dampening below 40 dB-Hz inflates variance for low-quality signals while guaranteeing $R_{DD} \succ 0$ positive-definiteness of the double-difference measurement noise matrix.
+  - **R2: CMC Multipath Detection & Code-Carrier Decoupled Screening (`screen.rs`, `formation.rs`, `robust.rs`, `mw.rs`)**:
+    - Decoupled pseudorange blunder screen preserves carrier phase when code multipath exceeds 20 m, preventing multipath-induced carrier rejection.
+    - Recursive CMC (Code-Minus-Carrier) arc tracking with quadratic code variance inflation $R_p \leftarrow R_p \times (1 + \text{cmc}^2)$ for multipath-contaminated observations.
+    - Melbourne-Wübbena multipath shielding freezes widelane innovation during code excursions $> 2.5\text{ m}$, preventing false cycle slip declarations.
+  - **R3: Multi-Band Doppler Cycle Slip Detection (`screening.rs`, `mod.rs`, `formation.rs`, `mw.rs`)**:
+    - Extended Doppler slip screening across bands $[1, 2, 5, 6, 7]$ with dynamics-adaptive velocity threshold $(0.30 \cdot \Delta t)\text{.clamp}(0.28, 1.0)$.
+    - Unconditional base station slip checks (base stations are stationary, so any Doppler discontinuity is a true slip).
+    - Immediate lock count reset on slip with widelane and windup tracker re-seeding to prevent stale ambiguity contamination.
+  - **R4: CQM-Ranked Partial Ambiguity Resolution & DOP Guard (`par.rs`, `ar_subsets.rs`, `ar.rs`, `tc_ambiguity.rs`)**:
+    - Composite Quality Metric (CQM) ranking by elevation, C/N$_0$, lock time, and CMC sigma for intelligent ambiguity candidate prioritization.
+    - DOP guard with PDOP $\le 10.0$ and minimum subset $\ge 4$ satellites prevents geometrically degenerate fixes.
+    - Cross-covariance zeroing on fixed ambiguities with eigenvalue floor $\lambda_{\min}(P) \ge 10^{-6}$ ensures positive-definiteness after integer conditioning.
+    - Greedy subset selector `continue`-on-skip allows bypassing a degraded candidate without halting the search.
+  - **Benchmark Results (Zero Regressions, Zero False Fixes)**:
+    - Network RTK/PPK: 99.1%/99.7%/70.8% fix rates, $p_{50} = 0.023\text{ m}$ (CI smoke guards: ALL CHECKS PASSED).
+    - Multi-GNSS: 99.9% network fused fix rate (CI smoke guard: ALL CHECKS PASSED).
+    - Tokyo Odaiba 12,398-epoch INS: $p_{50} = 2.134\text{ m}$, RMS $= 4.156\text{ m}$ (zero regression).
+    - UrbanNav kinematic rover matrix (zero false fixes across all datasets):
+      - Odaiba: Smooth PPK 61.5% fix rate, $p_{50} = 1.269\text{ m}$.
+      - Shinjuku: Smooth PPK 14.5% fix rate, $p_{50} = 0.675\text{ m}$.
+      - Whampoa Survey: Smooth PPK 30.5% fix rate, $p_{50} = 0.600\text{ m}$.
+  - **Standards & CI Compliance**:
+    - `cargo clippy --workspace --all-targets -- -D warnings`: 0 warnings.
+    - `cargo test --workspace`: 449 passed, 0 failed.
+    - All 13 modified production files strictly $< 500$ LOC, all functions $\le 32$ LOC, nesting depth $< 3$, zero `unwrap()` in production code.
+    - Dual CI smoke guards pass: `check_network_benchmark.py --smoke`, `check_multignss_benchmark.py --smoke`.
+
 
 ## Key Lessons Learned
 

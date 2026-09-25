@@ -206,11 +206,7 @@ impl GnssRtkIekf {
         ephems: &[Ephemeris],
     ) -> Result<FilteredEpoch, String> {
         self.slip_detector.check_epoch(rover);
-        // Base-side slip tracking is part of the accumulating-ambiguity
-        // machinery; the legacy path must stay untouched.
-        if self.widelane_ar {
-            self.base_slip_detector.check_epoch(base);
-        }
+        self.base_slip_detector.check_epoch(base);
         let dd_meas = self.build_dd_measurements(rover, base, base_pos, ephems)?;
         if dd_meas.dd.is_empty() {
             return Err("No valid double-difference measurements formed".to_string());

@@ -1,16 +1,5 @@
 //! Melbourne–Wübbena observable construction and per-pair arc tracking.
-//!
-//! The double-difference MW combination is geometry-free and first-order
-//! ionosphere-free:
-//!
-//!   mw      = (∇Δφ1 − ∇Δφ2) − ∇ΔR_N / λ_W          [cycles]
-//!   ∇ΔR_N   = (f1·∇ΔP1 + f2·∇ΔP2)/(f1 + f2)         [m]
-//!   λ_W     = c/(f1 − f2)                           [m]
-//!
-//! so its arc average converges to the integer wide-lane ambiguity
-//! N_W = N1 − N2 even at long baselines where the L1 DD ionosphere bias
-//! (>= 9 cm at 50 km, about half an L1 cycle) makes direct per-band fixing
-//! unreliable.
+//! mw = (∇Δφ1 − ∇Δφ2) − ∇ΔR_N / λ_W [cycles], converges to N_W = N1 − N2.
 
 use std::collections::HashMap;
 
@@ -71,10 +60,15 @@ impl MwTrack {
     }
 
     /// Absorb one epoch; a large innovation restarts the arc (cycle slip).
-    fn absorb(&mut self, x: f64) {
-        if self.n >= INNOVATION_ARM_EPOCHS && (x - self.mean).abs() > SLIP_INNOVATION_CYCLES {
-            *self = MwTrack::new(x);
-        } else {
+    /// If `shielded` is true (code multipath jump along continuous carrier arc),
+    /// the track is protected from false reset and does not absorb the blunder.
+    fn absorb(&mut self, x: f64, shielded: bool) {
+        let innov = (x - self.mean).abs();
+        if self.n >= INNOVATION_ARM_EPOCHS && innov > SLIP_INNOVATION_CYCLES {
+            if !shielded {
+                *self = MwTrack::new(x);
+            }
+        } else if !shielded {
             self.push(x);
         }
     }
@@ -82,31 +76,59 @@ impl MwTrack {
 
 /// Per-pair arc averages of the double-difference MW observable plus the
 /// narrow-lane scale factor s = f2/(f1-f2) captured when the pair was formed.
-///
-/// Keys are the band-1 DD keys; a reference-satellite switch changes the key
-/// and therefore starts a fresh arc automatically.
 #[derive(Debug, Default, Clone)]
 pub struct WidelaneTracker {
     tracks: HashMap<DoubleDiffKey, MwTrack>,
     nl_scales: HashMap<DoubleDiffKey, f64>,
-    /// Network-solved satellite wide-lane UPDs (cycles, sum-zero): applied
-    /// before rounding so MW arc means round to the true integer despite
-    /// per-satellite biases.
+    /// Network-solved satellite wide-lane UPDs (cycles, sum-zero).
     pub sat_upd: Option<HashMap<u16, f64>>,
+    pub cmc_tracker: crate::estimators::rtk_iekf::update::robust::CmcTracker,
 }
 
 impl WidelaneTracker {
     /// Absorb one DD MW observation; `slip` forces an arc restart.
     pub fn update(&mut self, key: DoubleDiffKey, mw_cycles: f64, nl_scale: f64, slip: bool) {
+        let shielded = self.is_cmc_multipath(&key);
+        self.update_shielded(key, mw_cycles, nl_scale, slip, shielded);
+    }
+
+    /// Absorb one DD MW observation with explicit multipath shielding.
+    pub fn update_shielded(
+        &mut self,
+        key: DoubleDiffKey,
+        mw_cycles: f64,
+        nl_scale: f64,
+        slip: bool,
+        shielded: bool,
+    ) {
         let next = match self.tracks.get_mut(&key) {
             Some(track) if !slip => {
-                track.absorb(mw_cycles);
+                track.absorb(mw_cycles, shielded);
                 *track
             }
             _ => MwTrack::new(mw_cycles),
         };
         self.tracks.insert(key, next);
         self.nl_scales.insert(key, nl_scale);
+    }
+
+    pub fn get_cmc_multipath_m(&self, key: &DoubleDiffKey) -> f64 {
+        self.cmc_tracker.get_multipath_m(key)
+    }
+
+    pub fn is_cmc_multipath(&self, key: &DoubleDiffKey) -> bool {
+        self.cmc_tracker.is_multipath(key)
+    }
+
+    pub fn update_cmc(
+        &mut self,
+        key: DoubleDiffKey,
+        dd_pr_m: f64,
+        dd_cp_cycles: f64,
+        lambda: f64,
+        slip: bool,
+    ) -> f64 {
+        self.cmc_tracker.update_pair(key, dd_pr_m, dd_cp_cycles, lambda, slip)
     }
 
     /// Narrow-lane scale factor captured for a pair, if any.
@@ -117,6 +139,7 @@ impl WidelaneTracker {
     /// Drop tracks whose pair disappeared from the active DD set.
     pub fn retain_active(&mut self, active_keys: &[DoubleDiffKey]) {
         self.tracks.retain(|k, _| active_keys.contains(k));
+        self.cmc_tracker.retain_active(active_keys);
     }
 
     /// Forget one pair's arc (cycle-slip evidence): the next observation
@@ -240,43 +263,50 @@ mod tests {
         assert_eq!(tracker.fixed_widelane(&key).unwrap().1, 7);
     }
 
-}
+    #[test]
+    fn test_tracker_shields_against_multipath_jump() {
+        let key = DoubleDiffKey { constellation_id: 0, sat: 2, ref_sat: 1, freq_band: 1 };
+        let mut tracker = WidelaneTracker::default();
+        for _ in 0..30 {
+            tracker.update(key, 5.02, NL_SCALE, false);
+        }
+        assert!(tracker.fixed_widelane(&key).is_some());
+        // A +6.5-cycle jump with shielded=true must NOT reset the arc:
+        tracker.update_shielded(key, 11.52, NL_SCALE, false, true);
+        assert!(tracker.fixed_widelane(&key).is_some(), "Shielded MW track must survive jump");
+        let (w, w_int) = tracker.fixed_widelane(&key).expect("fixed");
+        assert_eq!(w_int, 5);
+        assert!((w - 5.0).abs() <= MAX_DEVIATION_CYCLES);
+    }
 
+    #[test]
+    fn test_tracker_resets_on_slip() {
+        let key = DoubleDiffKey { constellation_id: 0, sat: 2, ref_sat: 1, freq_band: 1 };
+        let mut tracker = WidelaneTracker::default();
+        for _ in 0..30 {
+            tracker.update(key, 5.02, NL_SCALE, false);
+        }
+        assert!(tracker.fixed_widelane(&key).is_some());
+        tracker.update(key, 5.02, NL_SCALE, true);
+        assert!(tracker.fixed_widelane(&key).is_none(), "Explicit slip must reset track");
+    }
+}
 
 /// Phase and code observables for one frequency band across a satellite pair
 /// on both receivers, order `[rov_sat, rov_ref, bas_sat, bas_ref]`.
-fn band_quad(rov_s: &SatObs, rov_ref: &SatObs, bas_s: &SatObs, bas_ref: &SatObs, band: u8) -> Option<([f64; 4], [f64; 4])> {
+fn band_quad(r_s: &SatObs, r_r: &SatObs, b_s: &SatObs, b_r: &SatObs, b: u8) -> Option<([f64; 4], [f64; 4])> {
     Some((
-        [
-            rov_s.get_observable_phase(band)?,
-            rov_ref.get_observable_phase(band)?,
-            bas_s.get_observable_phase(band)?,
-            bas_ref.get_observable_phase(band)?,
-        ],
-        [
-            rov_s.get_observable(band)?,
-            rov_ref.get_observable(band)?,
-            bas_s.get_observable(band)?,
-            bas_ref.get_observable(band)?,
-        ],
+        [r_s.get_observable_phase(b)?, r_r.get_observable_phase(b)?, b_s.get_observable_phase(b)?, b_r.get_observable_phase(b)?],
+        [r_s.get_observable(b)?, r_r.get_observable(b)?, b_s.get_observable(b)?, b_r.get_observable(b)?],
     ))
 }
 
 /// Absorb one DD MW observation for a satellite pair straight from raw obs.
-///
-/// Arc resets fire on LLI flags from EITHER receiver on EITHER band — the
-/// rover-only slip detector cannot see base-side slips, which would
-/// otherwise shift every wide lane identically and invisibly.
-#[allow(clippy::too_many_arguments)] // same obs bundle as build_single_dd_pair
+#[allow(clippy::too_many_arguments)]
 pub fn update_tracker_from_obs(
-    tracker: &mut WidelaneTracker,
-    sat_id: SatelliteId,
-    ref_sat_id: u16,
-    rov_s: &SatObs,
-    bas_s: &SatObs,
-    rov_ref: &SatObs,
-    bas_ref: &SatObs,
-    glo_k: i8,
+    tracker: &mut WidelaneTracker, sat_id: SatelliteId, ref_sat_id: u16,
+    rov_s: &SatObs, bas_s: &SatObs, rov_ref: &SatObs, bas_ref: &SatObs,
+    glo_k: i8, external_slip: bool,
 ) {
     let key = DoubleDiffKey {
         constellation_id: sat_id.constellation as u8,
@@ -284,34 +314,20 @@ pub fn update_tracker_from_obs(
         ref_sat: ref_sat_id,
         freq_band: 1,
     };
-    // Secondary band: GPS/GLONASS L2 (2); Galileo exports carry E5a on
-    // band 5 instead of L2. Policy matches all other consumers: require
-    // band-2 phase at ALL FOUR stations so a single dropped slot cannot
-    // silently switch an arc between E5b- and E5a-based wide lanes.
-    let b2 = if rov_s.get_observable_phase(2).is_some()
-        && bas_s.get_observable_phase(2).is_some()
-        && rov_ref.get_observable_phase(2).is_some()
-        && bas_ref.get_observable_phase(2).is_some()
-    {
-        2
-    } else {
-        5
-    };
+    let b2 = if [rov_s, bas_s, rov_ref, bas_ref].iter().all(|o| o.get_observable_phase(2).is_some()) { 2 } else { 5 };
     let f1 = gneiss_core::frequencies::track_c_frequency(sat_id.constellation, 1, glo_k);
     let f2 = gneiss_core::frequencies::track_c_frequency(sat_id.constellation, b2, glo_k);
     let band1 = band_quad(rov_s, rov_ref, bas_s, bas_ref, 1);
     let band2 = band_quad(rov_s, rov_ref, bas_s, bas_ref, b2);
-    let slip = [rov_s, rov_ref, bas_s, bas_ref].iter().any(|o| {
-        o.get_lli(1).is_some_and(|l| l & 1 != 0)
-            || o.get_lli(b2).is_some_and(|l| l & 1 != 0)
+    let slip = external_slip || [rov_s, rov_ref, bas_s, bas_ref].iter().any(|o| {
+        o.get_lli(1).is_some_and(|l| l & 1 != 0) || o.get_lli(b2).is_some_and(|l| l & 1 != 0)
     });
-    if let (Some((phi1, code1)), Some((phi2, code2))) = (band1, band2) {
-        if let Some((mw_cycles, nl_scale)) = mw_dd_cycles(f1, f2, phi1, phi2, code1, code2) {
-            tracker.update(key, mw_cycles, nl_scale, slip);
+    if let (Some((p1, c1)), Some((p2, c2))) = (band1, band2) {
+        if let Some((mw, nl)) = mw_dd_cycles(f1, f2, p1, p2, c1, c2) {
+            tracker.update(key, mw, nl, slip);
         }
     }
 }
-
 
 // ---------------------------------------------------------------------------
 // Network UPD estimation from phase-only wide-lane arc means
@@ -328,117 +344,103 @@ pub struct NetworkUpdSolution {
     pub residual_rms: f64,
 }
 
-/// Solve satellite wide-lane UPDs from per-base PHASE-only wide-lane arc
-/// means.
-///
-/// Inputs are the converged means of `pw = dd_phi1 - dd_phi2 - geom_wl`
-/// (geometry and troposphere removed with the known trajectory), keyed by
-/// band-1 DD pairs. For each observation:
-///
-///   pw_arc_mean = N_W + u_sat - u_ref  (+ noise), all in cycles
-///
-/// so the fractional part carries the satellite UPD difference. The
-/// integer N_W is eliminated by working with `frac = mean - round(mean)`
-/// wrapped to [-0.5, 0.5); the rank defect is fixed by sum(u) = 0.
-/// Observations whose wrapped fraction sits within 1e-3 of +-0.5 are
-/// skipped (unresolvable half-cycle ambiguity between two hypotheses).
-pub fn solve_network_upd(
+/// Solve satellite wide-lane UPDs from per-base PHASE-only wide-lane arc means.
+pub fn solve_network_upd(per_base_means: &[HashMap<DoubleDiffKey, f64>]) -> NetworkUpdSolution {
+    let (obs, sats) = extract_upd_observations(per_base_means);
+    if sats.len() < 2 || obs.is_empty() {
+        return NetworkUpdSolution::default();
+    }
+    let last = *sats.last().unwrap_or(&0);
+    let free: Vec<u16> = sats[..sats.len() - 1].to_vec();
+    let fidx: HashMap<u16, usize> = free.iter().enumerate().map(|(i, &v)| (v, i)).collect();
+    let (ata, atb) = build_normal_equations(&obs, &fidx, free.len());
+    let Some(sol_free) = solve_linear_system(ata, atb, free.len()) else {
+        return NetworkUpdSolution::default();
+    };
+    let mut sat_upd: HashMap<u16, f64> = free.iter().enumerate().map(|(i, &v)| (v, sol_free[i])).collect();
+    sat_upd.insert(last, -sol_free.iter().sum::<f64>());
+    let (residuals, residual_rms) = compute_upd_residuals(&obs, &sat_upd);
+    NetworkUpdSolution { sat_upd, residuals, residual_rms }
+}
+
+type UpdObs = (DoubleDiffKey, u16, u16, f64);
+
+fn extract_upd_observations(
     per_base_means: &[HashMap<DoubleDiffKey, f64>],
-) -> NetworkUpdSolution {
-    // Observations: (sat, ref, wrapped fraction) per DD pair.
-    let mut obs: Vec<(DoubleDiffKey, u16, u16, f64)> = Vec::new();
+) -> (Vec<UpdObs>, Vec<u16>) {
+    let mut obs = Vec::new();
     for means in per_base_means {
         for (k, m) in means {
             let frac = m - m.round();
             let wrapped = frac.rem_euclid(1.0);
-            // Unresolvable half-cycle: skip rather than guess a side.
-            if (wrapped - 0.5).abs() < 1e-3 {
-                continue;
+            if (wrapped - 0.5).abs() >= 1e-3 {
+                let signed = if wrapped > 0.5 { wrapped - 1.0 } else { wrapped };
+                obs.push((*k, k.sat, k.ref_sat, signed));
             }
-            let signed = if wrapped > 0.5 { wrapped - 1.0 } else { wrapped };
-            obs.push((*k, k.sat, k.ref_sat, signed));
         }
     }
     let mut sats: Vec<u16> = obs.iter().flat_map(|(_, s, r, _)| [*s, *r]).collect();
     sats.sort_unstable();
     sats.dedup();
-    if sats.len() < 2 || obs.is_empty() {
-        return NetworkUpdSolution::default();
-    }
+    (obs, sats)
+}
 
-    // Eliminate the rank defect via substitution: u_last = -sum(u_free).
-    // Each observation contributes c . u_free + k to the predicted
-    // fraction, with c_i = d(i,sat) - d(i,ref), k = -(d(sat,last)-d(ref,last)).
-    let last = *sats.last().expect("non-empty");
-    let free: Vec<u16> = sats[..sats.len() - 1].to_vec();
-    let fidx: HashMap<u16, usize> = free.iter().enumerate()
-        .map(|(i, &v)| (v, i)).collect();
-    let m = free.len();
-
+fn build_normal_equations(
+    obs: &[UpdObs],
+    fidx: &HashMap<u16, usize>,
+    m: usize,
+) -> (Vec<Vec<f64>>, Vec<f64>) {
     let mut ata = vec![vec![0.0_f64; m]; m];
     let mut atb = vec![0.0_f64; m];
-    for (key, s, r, frac) in &obs {
+    for (_, s, r, frac) in obs {
         let mut coef = vec![0.0_f64; m];
         for &(station, sign) in &[(s, 1.0), (r, -1.0)] {
-            match fidx.get(station) {
-                Some(&ci) => coef[ci] += sign,
-                // Eliminated satellite: u_last = -sum(u_free), so its
-                // contribution lands on EVERY free coefficient.
-                None => {
-                    for ci in coef.iter_mut() {
-                        *ci -= sign;
-                    }
-                }
+            if let Some(&ci) = fidx.get(station) {
+                coef[ci] += sign;
+            } else {
+                coef.iter_mut().for_each(|ci| *ci -= sign);
             }
         }
         for i in 0..m {
-            for j2 in 0..m {
-                ata[i][j2] += coef[i] * coef[j2];
+            for j in 0..m {
+                ata[i][j] += coef[i] * coef[j];
             }
             atb[i] += coef[i] * frac;
         }
-        let _ = key;
     }
+    (ata, atb)
+}
 
-    // Solve the normal equations (Gaussian elimination + back-substitution).
-    let mut sol_free = atb.clone();
+fn solve_linear_system(mut ata: Vec<Vec<f64>>, mut b: Vec<f64>, m: usize) -> Option<Vec<f64>> {
     for col in 0..m {
-        let piv = (col..m)
-            .fold(col, |best, r| {
-                if ata[r][col].abs() > ata[best][col].abs() { r } else { best }
-            });
-        if ata[piv][col].abs() < 1e-12 {
-            return NetworkUpdSolution::default();
-        }
+        let piv = (col..m).max_by(|&r1, &r2| ata[r1][col].abs().total_cmp(&ata[r2][col].abs()))?;
+        if ata[piv][col].abs() < 1e-12 { return None; }
         ata.swap(piv, col);
-        sol_free.swap(piv, col);
-        // Forward elimination only; the back-substitution pass below
-        // resolves the unknowns top-down.
-        let pivot_row: Vec<f64> = ata[col].clone();
+        b.swap(piv, col);
+        let pivot_row = ata[col].clone();
         for rr in col + 1..m {
             let fct = ata[rr][col] / ata[col][col];
-            if fct == 0.0 { continue; }
-            for cc in col..m {
-                ata[rr][cc] -= fct * pivot_row[cc];
+            if fct != 0.0 {
+                for cc in col..m { ata[rr][cc] -= fct * pivot_row[cc]; }
+                b[rr] -= fct * b[col];
             }
-            sol_free[rr] -= fct * sol_free[col];
         }
     }
     for row in (0..m).rev() {
-        let mut acc = sol_free[row];
-        for cc in row + 1..m {
-            acc -= ata[row][cc] * sol_free[cc];
-        }
-        sol_free[row] = acc / ata[row][row];
+        let mut acc = b[row];
+        for cc in row + 1..m { acc -= ata[row][cc] * b[cc]; }
+        b[row] = acc / ata[row][row];
     }
+    Some(b)
+}
 
-    let mut sat_upd: HashMap<u16, f64> =
-        free.iter().enumerate().map(|(i, &v)| (v, sol_free[i])).collect();
-    sat_upd.insert(last, -sol_free.iter().sum::<f64>());
-    // Exact post-fit residuals with the solved UPDs.
+fn compute_upd_residuals(
+    obs: &[(DoubleDiffKey, u16, u16, f64)],
+    sat_upd: &HashMap<u16, f64>,
+) -> (Vec<(DoubleDiffKey, f64)>, f64) {
     let mut residuals = Vec::with_capacity(obs.len());
-    let mut sq = 0.0_f64;
-    for (key, s, r, frac) in &obs {
+    let mut sq = 0.0;
+    for (key, s, r, frac) in obs {
         let pred = sat_upd[s] - sat_upd[r];
         let mut e = frac - pred;
         while e >= 0.5 { e -= 1.0; }
@@ -446,9 +448,8 @@ pub fn solve_network_upd(
         sq += e * e;
         residuals.push((*key, e));
     }
-    let residual_rms = if obs.is_empty() { 0.0 } else { (sq / obs.len() as f64).sqrt() };
-
-    NetworkUpdSolution { sat_upd, residuals, residual_rms }
+    let rms = if obs.is_empty() { 0.0 } else { (sq / obs.len() as f64).sqrt() };
+    (residuals, rms)
 }
 
 #[cfg(test)]
@@ -459,26 +460,14 @@ mod upd_tests {
     fn test_network_upd_solver_recovers_satellite_offsets() {
         // True satellite UPDs (sum zero), observed from two bases over
         // pairs against ref G21, with small deterministic noise.
-        let true_u: HashMap<u16, f64> = [
-            (21u16, 0.0_f64),
-            (2u16, 0.30),
-            (5u16, -0.20),
-            (12u16, -0.10),
-        ]
-        .into_iter()
-        .collect();
+        let true_u: HashMap<u16, f64> = [(21u16, 0.0), (2, 0.30), (5, -0.20), (12, -0.10)].into_iter().collect();
         let mut per_base: Vec<HashMap<DoubleDiffKey, f64>> = Vec::new();
         for b in 0..2u32 {
             let mut means = HashMap::new();
-            for (&s, &u) in true_u.iter() {
-                if s == 21 {
-                    continue;
-                }
+            for (&s, &u) in true_u.iter().filter(|(&s, _)| s != 21) {
                 let key = DoubleDiffKey { constellation_id: 0, sat: s, ref_sat: 21, freq_band: 1 };
                 let noise = if b == 0 { 0.01 } else { -0.01 };
-                // N_W chosen so the arc mean = N_W + frac difference.
-                let n_w = 7.0 + s as f64;
-                means.insert(key, n_w + u - true_u[&21] + noise);
+                means.insert(key, 7.0 + s as f64 + u - true_u[&21] + noise);
             }
             per_base.push(means);
         }

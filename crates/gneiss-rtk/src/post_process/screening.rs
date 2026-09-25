@@ -66,7 +66,7 @@ impl CycleSlipDetector {
 
     fn check_doppler_slips(&mut self, epoch: &EpochObs) -> HashSet<SatelliteId> {
         let mut slips = HashSet::new();
-        for band in [1, 2, 7] {
+        for band in [1, 2, 5, 6, 7] {
             let band_slips = self.check_band_doppler_slips(epoch, band);
             slips.extend(band_slips);
         }
@@ -147,7 +147,7 @@ fn evaluate_doppler_residuals(discs: &[(SatelliteId, f64, f64)]) -> Vec<Satellit
     let mut slipped = Vec::new();
     for &(sat, d, dt) in discs {
         let residual = (d - median).abs();
-        let thresh = (1.0 * dt).max(1.0);
+        let thresh = (0.30 * dt).clamp(0.28, 1.0);
         if residual > thresh {
             slipped.push(sat);
         }
@@ -346,23 +346,35 @@ mod tests {
         assert_eq!(report.refined_base_pos, Some(Vector3::zeros()));
     }
 
-    fn make_test_obs(sat_prn: u8, cp: f64, dop: f64) -> gneiss_core::obs::SatObs {
+    fn make_test_obs_band(sat_prn: u8, band: u8, cp: f64, dop: f64) -> gneiss_core::obs::SatObs {
         use std::str::FromStr;
         let sat = SatelliteId { constellation: Constellation::Gps, prn: sat_prn };
         let mut obs = gneiss_core::obs::SatObs { sat, observations: Vec::new() };
+        let (lc, dc) = match band {
+            1 => ("L1C", "D1C"),
+            2 => ("L2W", "D2W"),
+            5 => ("L5Q", "D5Q"),
+            6 => ("L6I", "D6I"),
+            7 => ("L7I", "D7I"),
+            _ => ("L1C", "D1C"),
+        };
         obs.observations.push(gneiss_core::obs::Observation {
-            code: gneiss_core::obs::ObsCode::from_str("L1C").expect("valid code"),
+            code: gneiss_core::obs::ObsCode::from_str(lc).expect("valid code"),
             value: cp,
             lock_time: None,
             lli: None,
         });
         obs.observations.push(gneiss_core::obs::Observation {
-            code: gneiss_core::obs::ObsCode::from_str("D1C").expect("valid code"),
+            code: gneiss_core::obs::ObsCode::from_str(dc).expect("valid code"),
             value: dop,
             lock_time: None,
             lli: None,
         });
         obs
+    }
+
+    fn make_test_obs(sat_prn: u8, cp: f64, dop: f64) -> gneiss_core::obs::SatObs {
+        make_test_obs_band(sat_prn, 1, cp, dop)
     }
 
     #[test]
@@ -420,5 +432,36 @@ mod tests {
         };
         let slips = detector.check_epoch(&ep2);
         assert_eq!(slips, 0, "common-mode clock jump must not declare false slips");
+    }
+
+    #[test]
+    fn test_doppler_half_cycle_slip_multi_band() {
+        for band in [1, 2, 5, 6, 7] {
+            let mut detector = CycleSlipDetector::new();
+            let sat3 = SatelliteId { constellation: Constellation::Gps, prn: 3 };
+            let ep1 = EpochObs {
+                time: GpsTime::new(2000, 100.0),
+                satellites: vec![
+                    make_test_obs_band(1, band, 1000.0, 100.0),
+                    make_test_obs_band(2, band, 2000.0, -50.0),
+                    make_test_obs_band(3, band, 3000.0, 25.0),
+                    make_test_obs_band(4, band, 4000.0, -10.0),
+                ],
+            };
+            assert_eq!(detector.check_epoch(&ep1), 0);
+
+            let ep2 = EpochObs {
+                time: GpsTime::new(2000, 101.0),
+                satellites: vec![
+                    make_test_obs_band(1, band, 900.0, 100.0),
+                    make_test_obs_band(2, band, 2050.0, -50.0),
+                    make_test_obs_band(3, band, 2975.0 + 0.5, 25.0),
+                    make_test_obs_band(4, band, 4010.0, -10.0),
+                ],
+            };
+            let slips = detector.check_epoch(&ep2);
+            assert_eq!(slips, 1, "band {band} failed to detect 0.5-cycle slip");
+            assert_eq!(detector.get_arc(sat3), 1);
+        }
     }
 }
