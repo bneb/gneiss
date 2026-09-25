@@ -1504,6 +1504,30 @@ All ongoing sprints are re-scoped to eradicate false fixes and collapse the $p_{
     - `cargo test --workspace`: 449 passed, 0 failed.
     - All 13 modified production files strictly $< 500$ LOC, all functions $\le 32$ LOC, nesting depth $< 3$, zero `unwrap()` in production code.
     - Dual CI smoke guards pass: `check_network_benchmark.py --smoke`, `check_multignss_benchmark.py --smoke`.
+- [x] **Sprint 58: Multi-Constellation Cascaded AR & Deep Urban Canyon Fix Expansion (COMPLETED 2026-09-25)**
+  - **Multi-Constellation Multi-Band Cascaded AR (`widelane.rs`, `mw.rs`)**:
+    - Generalized Melbourne-Wübbena (MW) observable formation and cascade ambiguity resolution beyond GPS L1/L2 to multi-constellation frequency bands: GPS (1 & 2), Galileo E1/E5b (1 & 7), and BeiDou B1I/B2I (1/2 & 7/6).
+    - Generalized secondary band search across `[2, 7, 6, 5]`, allowing Galileo and BeiDou double-difference pairs to participate in wide-lane tracking and FAR veto cross-validation.
+  - **Adaptive Rapid MW Convergence for Dynamic Canyons (`mw.rs`)**:
+    - Formulated fast-track wide-lane convergence: clean arcs ($\sigma_{\text{mean}} \le 0.08$ cycles, $|\bar{w} - [\bar{w}]| \le 0.15$ cycles) fix after only 5 epochs (`FAST_TRACK_EPOCHS = 5`), bypassing the legacy 20-epoch static wait.
+    - Reduced standard tracking epoch threshold from 20 to 12 epochs for dynamic rover operations.
+  - **Dynamically Gated PAR & Collinear Geometry Handling (`ar.rs`, `ar_subsets.rs`)**:
+    - Widened kinematic float trace threshold (`max_float_trace`) from $3.50\text{ m}^2 \to 12.0\text{ m}^2$, preventing premature aborts under code multipath while relying on millimeter post-fix carrier residual validation ($\le 0.05\text{ m}$) for integrity.
+    - Relaxed PAR candidate minimum subset size from 6 to 4 (`min_ambs.max(4)`), enabling ambiguity resolution under narrow sky views.
+    - Increased `MAX_ACCEPTABLE_PDOP` from 10.0 to 15.0 while enforcing `HDOP <= 10.0`, unlocking fixes in narrow street canyons with collinear satellite constellations.
+  - **Benchmark Verification & Performance Improvements**:
+    - Tokyo Shinjuku: 100-epoch kinematic fix rate jumped from 8.0% / 9.0% to **11.0% / 12.0%** (+33% to +37% fix expansion), with $p_{50}$ reducing to **0.812 m / 0.834 m**.
+    - Full Shinjuku (2,096 epochs): fixed subset $p_{50} = \mathbf{1.043\text{ m}}$, $p_{95} = \mathbf{2.191\text{ m}}$ (down from $2.806\text{ m}$) with **zero false fixes**.
+    - NOAA CORS Network (`check_network_benchmark.py --smoke`): **ALL CHECKS PASSED** ($p_{50} = 0.023\text{ m}$, OHLN fix rate 99.0%, P181 99.0%, SLAC 72.2%).
+    - Multi-GNSS Network (`check_multignss_benchmark.py --smoke`): **ALL CHECKS PASSED** (99.3% fused fix rate).
+    - Tokyo Odaiba INS RTS Smoothed (`eval_odaiba_ins`): $p_{50} = \mathbf{2.134\text{ m}}$, $\text{RMS} = \mathbf{4.156\text{ m}}$ (zero regression).
+  - **Standards & CI Compliance**:
+    - `cargo clippy --workspace --all-targets -- -D warnings`: 0 warnings.
+    - `cargo test -p gneiss-rtk --lib`: 451 passed, 0 failed.
+    - `cargo test --test test_urban_canyon_e2e`: 51 passed, 0 failed.
+    - `cargo test -p gneiss-tests --lib`: 16 passed, 0 failed.
+    - All touched files strictly $< 500$ LOC, all functions $\le 32$ LOC, nesting depth $< 3$, 0 `unwrap()` in production code.
+
 
 
 ## Key Lessons Learned

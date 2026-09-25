@@ -51,7 +51,7 @@ pub fn resolve_ambiguities_screened(
     let n_amb = a_float.len();
     let (pos, cov) = (state.pos_ecef, state.extract_pos_cov());
     let float_trace = cov[(0, 0)] + cov[(1, 1)] + cov[(2, 2)];
-    let max_float_trace = if is_kinematic { 3.50 } else { 25.0 };
+    let max_float_trace = if is_kinematic { 12.0 } else { 25.0 };
     if n_amb < min_ambiguities || n_amb < 3 || float_trace > max_float_trace {
         return build_float_result(pos, cov, 0.0, n_amb);
     }
@@ -153,12 +153,12 @@ fn par_pool_and_limits(
     dd_meas: Option<&[DoubleDiffMeasurement]>,
 ) -> Option<(Vec<usize>, usize, usize)> {
     let float_trace = state.cov[(0, 0)] + state.cov[(1, 1)] + state.cov[(2, 2)];
-    let max_float_trace = if is_kinematic { 3.50 } else { 25.0 };
+    let max_float_trace = if is_kinematic { 12.0 } else { 25.0 };
     if a_float.len() <= 4 || float_trace > max_float_trace {
         return None;
     }
     let (sorted, max_k) = select_par_candidates_with_dd(state, a_float, q_amb, min_ambs, is_kinematic, dd_meas);
-    let min_k = if is_kinematic { min_ambs.max(6) } else { min_ambs.max(4) };
+    let min_k = min_ambs.max(4);
     if max_k < min_k {
         return None;
     }

@@ -7,7 +7,7 @@ use super::DoubleDiffMeasurement;
 
 pub const MAX_SUBSET_SIZE: usize = 16;
 pub const MIN_PAR_SUBSET_SIZE: usize = 4;
-pub const MAX_ACCEPTABLE_PDOP: f64 = 10.0;
+pub const MAX_ACCEPTABLE_PDOP: f64 = 15.0;
 
 /// Stack-allocated ambiguity index subset (zero heap allocation on critical path).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -58,7 +58,7 @@ pub fn validate_subset_geometry(
         return false;
     }
     match gneiss_core::dop::compute_dop_from_positions(rover_pos, sat_positions) {
-        Some(dop) => dop.pdop > 0.0 && dop.pdop <= max_pdop && dop.hdop <= max_pdop,
+        Some(dop) => dop.pdop > 0.0 && dop.pdop <= max_pdop && dop.hdop <= 10.0,
         None => false,
     }
 }

@@ -10,7 +10,10 @@ use gneiss_core::sat::SatelliteId;
 use super::state::DoubleDiffKey;
 
 /// Minimum epochs in an MW arc average before it may be declared fixed.
-pub const MIN_TRACK_EPOCHS: u32 = 20;
+pub const MIN_TRACK_EPOCHS: u32 = 12;
+pub const FAST_TRACK_EPOCHS: u32 = 5;
+pub const FAST_SIGMA_MEAN_CYCLES: f64 = 0.08;
+pub const FAST_DEVIATION_CYCLES: f64 = 0.15;
 /// Maximum standard error of the arc average for a wide-lane fix attempt.
 pub const MAX_SIGMA_MEAN_CYCLES: f64 = 0.12;
 /// Maximum distance of the arc average from the nearest integer.
@@ -159,11 +162,10 @@ impl WidelaneTracker {
     /// Fixed `(w_float, w_int)` once the arc average converged near an integer.
     pub fn fixed_widelane(&self, key: &DoubleDiffKey) -> Option<(f64, i64)> {
         let track = self.tracks.get(key)?;
-        if track.count() < MIN_TRACK_EPOCHS || track.sigma_mean() > MAX_SIGMA_MEAN_CYCLES {
-            tracing::debug!(
-                "wl-track {:?}: n={} sigma_mean={:.3} (gates n>={MIN_TRACK_EPOCHS}, sigma<={MAX_SIGMA_MEAN_CYCLES})",
-                key.sat, track.count(), track.sigma_mean()
-            );
+        let (n, s_mean) = (track.count(), track.sigma_mean());
+        let fast = n >= FAST_TRACK_EPOCHS && s_mean <= FAST_SIGMA_MEAN_CYCLES;
+        let std = n >= MIN_TRACK_EPOCHS && s_mean <= MAX_SIGMA_MEAN_CYCLES;
+        if !fast && !std {
             return None;
         }
         let mut w = track.mean();
@@ -173,8 +175,8 @@ impl WidelaneTracker {
             }
         }
         let w_int = w.round();
-        if (w - w_int).abs() > MAX_DEVIATION_CYCLES {
-            tracing::debug!("wl-track {} deviates after UPD correction: w={w:.3}", key.sat);
+        let max_dev = if fast && !std { FAST_DEVIATION_CYCLES } else { MAX_DEVIATION_CYCLES };
+        if (w - w_int).abs() > max_dev {
             return None;
         }
         Some((w, w_int as i64))
@@ -250,16 +252,11 @@ mod tests {
     fn test_tracker_rejects_biased_mean_and_resets_on_jump() {
         let key = DoubleDiffKey { constellation_id: 0, sat: 2, ref_sat: 1, freq_band: 1 };
         let mut tracker = WidelaneTracker::default();
-        for _ in 0..30 {
-            tracker.update(key, 5.02, NL_SCALE, false);
-        }
+        for _ in 0..20 { tracker.update(key, 5.02, NL_SCALE, false); }
         assert!(tracker.fixed_widelane(&key).is_some());
-        // A +2-cycle jump must reset the arc: no fix until it re-converges.
         tracker.update(key, 7.03, NL_SCALE, false);
         assert!(tracker.fixed_widelane(&key).is_none());
-        for _ in 0..30 {
-            tracker.update(key, 7.01, NL_SCALE, false);
-        }
+        for _ in 0..20 { tracker.update(key, 7.01, NL_SCALE, false); }
         assert_eq!(tracker.fixed_widelane(&key).unwrap().1, 7);
     }
 
@@ -267,9 +264,7 @@ mod tests {
     fn test_tracker_shields_against_multipath_jump() {
         let key = DoubleDiffKey { constellation_id: 0, sat: 2, ref_sat: 1, freq_band: 1 };
         let mut tracker = WidelaneTracker::default();
-        for _ in 0..30 {
-            tracker.update(key, 5.02, NL_SCALE, false);
-        }
+        for _ in 0..20 { tracker.update(key, 5.02, NL_SCALE, false); }
         assert!(tracker.fixed_widelane(&key).is_some());
         // A +6.5-cycle jump with shielded=true must NOT reset the arc:
         tracker.update_shielded(key, 11.52, NL_SCALE, false, true);
@@ -280,12 +275,20 @@ mod tests {
     }
 
     #[test]
+    fn test_tracker_fast_convergence() {
+        let key = DoubleDiffKey { constellation_id: 0, sat: 2, ref_sat: 1, freq_band: 1 };
+        let mut tracker = WidelaneTracker::default();
+        for _ in 0..5 { tracker.update(key, 4.02, NL_SCALE, false); }
+        let fix = tracker.fixed_widelane(&key);
+        assert!(fix.is_some(), "5 clean epochs should allow fast wide-lane fix");
+        assert_eq!(fix.unwrap().1, 4);
+    }
+
+    #[test]
     fn test_tracker_resets_on_slip() {
         let key = DoubleDiffKey { constellation_id: 0, sat: 2, ref_sat: 1, freq_band: 1 };
         let mut tracker = WidelaneTracker::default();
-        for _ in 0..30 {
-            tracker.update(key, 5.02, NL_SCALE, false);
-        }
+        for _ in 0..15 { tracker.update(key, 5.02, NL_SCALE, false); }
         assert!(tracker.fixed_widelane(&key).is_some());
         tracker.update(key, 5.02, NL_SCALE, true);
         assert!(tracker.fixed_widelane(&key).is_none(), "Explicit slip must reset track");
@@ -301,6 +304,14 @@ fn band_quad(r_s: &SatObs, r_r: &SatObs, b_s: &SatObs, b_r: &SatObs, b: u8) -> O
     ))
 }
 
+fn select_secondary_quad_band(quad: &[&SatObs; 4], b1: u8) -> Option<u8> {
+    [2, 7, 6, 5].into_iter().find(|&b| b != b1 && quad.iter().all(|o| o.get_observable_phase(b).is_some() && o.get_observable(b).is_some()))
+}
+
+fn select_primary_quad_band(quad: &[&SatObs; 4]) -> Option<u8> {
+    [1, 2].into_iter().find(|&b| quad.iter().all(|o| o.get_observable_phase(b).is_some() && o.get_observable(b).is_some()))
+}
+
 /// Absorb one DD MW observation for a satellite pair straight from raw obs.
 #[allow(clippy::too_many_arguments)]
 pub fn update_tracker_from_obs(
@@ -308,24 +319,22 @@ pub fn update_tracker_from_obs(
     rov_s: &SatObs, bas_s: &SatObs, rov_ref: &SatObs, bas_ref: &SatObs,
     glo_k: i8, external_slip: bool,
 ) {
+    let quad = [rov_s, bas_s, rov_ref, bas_ref];
+    let (Some(b1), Some(b2)) = (select_primary_quad_band(&quad), select_secondary_quad_band(&quad, 1)) else { return };
     let key = DoubleDiffKey {
         constellation_id: sat_id.constellation as u8,
         sat: sat_id.prn as u16,
         ref_sat: ref_sat_id,
-        freq_band: 1,
+        freq_band: b1,
     };
-    let b2 = if [rov_s, bas_s, rov_ref, bas_ref].iter().all(|o| o.get_observable_phase(2).is_some()) { 2 } else { 5 };
-    let f1 = gneiss_core::frequencies::track_c_frequency(sat_id.constellation, 1, glo_k);
+    let f1 = gneiss_core::frequencies::track_c_frequency(sat_id.constellation, b1, glo_k);
     let f2 = gneiss_core::frequencies::track_c_frequency(sat_id.constellation, b2, glo_k);
-    let band1 = band_quad(rov_s, rov_ref, bas_s, bas_ref, 1);
-    let band2 = band_quad(rov_s, rov_ref, bas_s, bas_ref, b2);
-    let slip = external_slip || [rov_s, rov_ref, bas_s, bas_ref].iter().any(|o| {
-        o.get_lli(1).is_some_and(|l| l & 1 != 0) || o.get_lli(b2).is_some_and(|l| l & 1 != 0)
+    let (Some(band1), Some(band2)) = (band_quad(rov_s, rov_ref, bas_s, bas_ref, b1), band_quad(rov_s, rov_ref, bas_s, bas_ref, b2)) else { return };
+    let slip = external_slip || quad.iter().any(|o| {
+        o.get_lli(b1).is_some_and(|l| l & 1 != 0) || o.get_lli(b2).is_some_and(|l| l & 1 != 0)
     });
-    if let (Some((p1, c1)), Some((p2, c2))) = (band1, band2) {
-        if let Some((mw, nl)) = mw_dd_cycles(f1, f2, p1, p2, c1, c2) {
-            tracker.update(key, mw, nl, slip);
-        }
+    if let Some((mw, nl)) = mw_dd_cycles(f1, f2, band1.0, band2.0, band1.1, band2.1) {
+        tracker.update(key, mw, nl, slip);
     }
 }
 

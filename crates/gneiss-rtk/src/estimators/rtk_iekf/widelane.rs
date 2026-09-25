@@ -36,56 +36,47 @@ const MIN_FIXED_PAIRS: usize = 4;
 /// `MIN_FIXED_PAIRS` pairs must fix for a position claim. Returns None when
 /// the subset is too small or the projected position fails the sanity gates.
 pub fn resolve_cascade(state: &RtkState, tracker: &WidelaneTracker) -> Option<ArResult> {
-    let mut fixed_keys: Vec<usize> = Vec::new();
-    let mut fixed_values: Vec<f64> = Vec::new();
-    let mut nl_rejected = 0usize;
-
-    // Receiver-pair differential code biases shift every MW arc average by a
-    // near-common fractional offset (cross-brand DD does not cancel them).
-    // Estimate the offset across all confident pairs and remove it before
-    // rounding — otherwise ±1-cycle wide-lane errors are systematic.
     let confident: Vec<(DoubleDiffKey, f64)> = confident_widelanes(state, tracker);
     let bias = common_fractional_offset(&confident);
+    let (fixed_keys, fixed_values) = collect_cascade_fixed_keys(state, tracker, &confident, bias);
+    if fixed_keys.len() / 2 < MIN_FIXED_PAIRS {
+        return None;
+    }
+    build_cascade_result(state, &fixed_keys, &fixed_values)
+}
 
+fn collect_cascade_fixed_keys(
+    state: &RtkState,
+    tracker: &WidelaneTracker,
+    confident: &[(DoubleDiffKey, f64)],
+    bias: f64,
+) -> (Vec<usize>, Vec<f64>) {
+    let mut fixed_keys = Vec::new();
+    let mut fixed_values = Vec::new();
     for i in 0..state.ambiguities.len() {
         let key = state.ambiguities[i].0;
-        if key.freq_band != 1 {
-            continue;
-        }
-        let key2 = DoubleDiffKey { freq_band: 2, ..key };
-        // get_amb_idx returns the absolute state index; ambiguities[] is
-        // addressed relatively.
-        let (Some(j_abs), Some(nl_scale)) =
-            (state.get_amb_idx(&key2), tracker.nl_scale(&key))
-            else { continue };
-        let Some(w_float) = state_amb_widelane(&confident, &key)
-            else { continue };
-        let j = j_abs - state.amb_offset();
+        let Some((j, nl_scale)) = find_secondary_ambiguity(state, tracker, &key) else { continue };
+        let Some(w_float) = state_amb_widelane(confident, &key) else { continue };
         let w_int = (w_float - bias).round() as i64;
-        if (w_float - bias - w_int as f64).abs() > WL_ROUND_MAX_DEV_CYCLES {
-            continue;
-        }
-        let Some(n1) = fix_narrow_lane(state, i, j, w_int, nl_scale) else {
-            nl_rejected += 1;
-            continue;
-        };
+        if (w_float - bias - w_int as f64).abs() > WL_ROUND_MAX_DEV_CYCLES { continue; }
+        let Some(n1) = fix_narrow_lane(state, i, j, w_int, nl_scale) else { continue };
         fixed_keys.push(i);
         fixed_values.push(n1 as f64);
         fixed_keys.push(j);
         fixed_values.push((n1 - w_int) as f64);
     }
+    (fixed_keys, fixed_values)
+}
 
-    tracing::debug!(
-        "wl-cascade: band1_pairs={} wl_confident={} bias={bias:.3} nl_rejected={nl_rejected} pairs={}",
-        state.ambiguities.iter().filter(|(k, _)| k.freq_band == 1).count(),
-        confident.len(),
-        fixed_keys.len() / 2,
-    );
-
-    if fixed_keys.len() / 2 < MIN_FIXED_PAIRS {
-        return None;
+fn find_secondary_ambiguity(state: &RtkState, tracker: &WidelaneTracker, key: &DoubleDiffKey) -> Option<(usize, f64)> {
+    let candidates: &[u8] = if key.freq_band == 1 { &[2, 7, 6, 5] } else if key.freq_band == 2 { &[7, 6] } else { return None };
+    for &b2 in candidates {
+        let key2 = DoubleDiffKey { freq_band: b2, ..*key };
+        if let (Some(j_abs), Some(nl_scale)) = (state.get_amb_idx(&key2), tracker.nl_scale(key)) {
+            return Some((j_abs - state.amb_offset(), nl_scale));
+        }
     }
-    build_cascade_result(state, &fixed_keys, &fixed_values)
+    None
 }
 
 fn ar_fixed_keys(ar: &ArResult) -> Vec<DoubleDiffKey> {
@@ -96,18 +87,18 @@ fn confident_widelanes_from(
     tracker: &WidelaneTracker,
     keys: &[DoubleDiffKey],
 ) -> Vec<(DoubleDiffKey, f64)> {
-    keys.iter().filter(|k| k.freq_band == 1)
+    keys.iter().filter(|k| k.freq_band == 1 || k.freq_band == 2)
         .filter_map(|k| tracker.fixed_widelane(k).map(|(w, _)| (*k, w)))
         .collect()
 }
 
-/// Confident converged wide-lane averages for tracked band-1 pairs.
+/// Confident converged wide-lane averages for tracked primary pairs.
 fn confident_widelanes(
     state: &RtkState,
     tracker: &WidelaneTracker,
 ) -> Vec<(DoubleDiffKey, f64)> {
     state.ambiguities.iter()
-        .filter(|(k, _)| k.freq_band == 1)
+        .filter(|(k, _)| k.freq_band == 1 || k.freq_band == 2)
         .filter_map(|(k, _)| tracker.fixed_widelane(k).map(|(w, _)| (*k, w)))
         .collect()
 }
@@ -128,18 +119,11 @@ fn common_fractional_offset(ws: &[(DoubleDiffKey, f64)]) -> f64 {
 }
 
 /// Cross-validation of a FAR/PAR fix against confident MW wide lanes.
-///
-/// The ratio test cannot detect a confidently-wrong integer vector whose
-/// float was dragged past half-cycle by unmodelled DD-iono drift, but the
-/// iono-free MW average can: any fixed pair whose N1 − N2 disagrees with a
-/// converged wide lane condemns the whole fix. Pairs without a converged
-/// wide lane are skipped (cannot judge).
 pub fn far_matches_widelanes(tracker: &WidelaneTracker, ar: &ArResult) -> bool {
-    let n2: HashMap<DoubleDiffKey, f64> = ar.fixed_ambiguities.iter()
-        .filter(|(k, _)| k.freq_band == 2)
+    let n_sec: HashMap<DoubleDiffKey, f64> = ar.fixed_ambiguities.iter()
+        .filter(|(k, _)| k.freq_band != 1)
         .map(|(k, v)| (*k, *v))
         .collect();
-    // Bias-corrected wide lanes: same rounding the cascade uses.
     let confident = confident_widelanes_from(tracker, &ar_fixed_keys(ar));
     let bias = common_fractional_offset(&confident);
     let w_map: HashMap<DoubleDiffKey, i64> = confident.iter()
@@ -147,24 +131,20 @@ pub fn far_matches_widelanes(tracker: &WidelaneTracker, ar: &ArResult) -> bool {
         .collect();
     let mut judged = 0usize;
     let mut contradictions = 0usize;
-    for (key, n1) in ar.fixed_ambiguities.iter().filter(|(k, _)| k.freq_band == 1) {
+    for (key, n1) in ar.fixed_ambiguities.iter().filter(|(k, _)| k.freq_band == 1 || k.freq_band == 2) {
         let Some(&w_int) = w_map.get(key) else { continue };
-        let key2 = DoubleDiffKey { freq_band: 2, ..*key };
-        let Some(n2v) = n2.get(&key2) else { continue };
-        if *n1 as i64 - *n2v as i64 != w_int {
-            tracing::debug!(
-                "wl-veto: sat {} fixed N1-N2={} but MW wide lane is {w_int}",
-                key.sat, *n1 as i64 - *n2v as i64
-            );
-            contradictions += 1;
+        let candidates: &[u8] = if key.freq_band == 1 { &[2, 7, 6, 5] } else { &[7, 6] };
+        for &b2 in candidates {
+            let key2 = DoubleDiffKey { freq_band: b2, ..*key };
+            if let Some(n2v) = n_sec.get(&key2) {
+                if *n1 as i64 - *n2v as i64 != w_int {
+                    contradictions += 1;
+                }
+                judged += 1;
+                break;
+            }
         }
-        judged += 1;
     }
-    // Tolerate a minority of contradictions (a single stale pair must not
-    // kill a seven-pair fix); majority contradiction condemns the fix.
-    // GNEISS_STRICT_VETO=1 demands zero contradictions among >=2 judged
-    // pairs: confidently-wrong fixes agreeing with a stale arc minority
-    // get rejected too (P181-style shared-bias wrong fixes).
     if std::env::var("GNEISS_STRICT_VETO").is_ok() {
         return judged == 0 || (judged >= 2 && contradictions == 0);
     }
@@ -235,43 +215,44 @@ mod tests {
     /// still rides on the float geometry, so larger float errors are
     /// rejected by the deviation gate rather than mis-rounded.
     fn biased_state(truth: Vector3<f64>, err: Vector3<f64>) -> (RtkState, WidelaneTracker) {
-        let lambda1 = SPEED_OF_LIGHT_M_S / F1;
-        let lambda2 = SPEED_OF_LIGHT_M_S / F2;
+        let (l1, l2) = (SPEED_OF_LIGHT_M_S / F1, SPEED_OF_LIGHT_M_S / F2);
         let dirs = [
-            Vector3::new(-20_000.0, 15_000.0, 18_000.0),
-            Vector3::new(5_000.0, 24_000.0, -14_000.0),
-            Vector3::new(16_000.0, -18_000.0, 22_000.0),
-            Vector3::new(-9_000.0, -6_000.0, -26_000.0),
-            Vector3::new(22_000.0, 9_000.0, -19_000.0),
-            Vector3::new(-15_000.0, 21_000.0, 8_000.0),
+            Vector3::new(-20_000.0, 15_000.0, 18_000.0), Vector3::new(5_000.0, 24_000.0, -14_000.0),
+            Vector3::new(16_000.0, -18_000.0, 22_000.0), Vector3::new(-9_000.0, -6_000.0, -26_000.0),
+            Vector3::new(22_000.0, 9_000.0, -19_000.0), Vector3::new(-15_000.0, 21_000.0, 8_000.0),
             Vector3::new(11_000.0, -23_000.0, 13_000.0),
         ];
         let true_w = [3.0, -2.0, 7.0, 1.0, -4.0, 5.0, 2.0];
         let true_n1 = [10.0, -5.0, 23.0, 2.0, -8.0, 17.0, 6.0];
-        let iono1_m = 0.15; // strong DD iono: ~0.79 L1 cycles of per-band bias
-
         let mut state = RtkState::new(truth + err, GpsTime::new(2000, 100.0));
-        state.pos_ecef = truth + err;
         let mut tracker = WidelaneTracker::default();
         let mut los_list = Vec::new();
         for (p, dir) in dirs.iter().enumerate() {
             let los = (dir - truth).normalize();
             los_list.push(los);
-            let key = DoubleDiffKey { constellation_id: 0, sat: 2 + p as u16, ref_sat: 1, freq_band: 1 };
-            let key2 = DoubleDiffKey { freq_band: 2, ..key };
-            let a1 = true_n1[p] + los.dot(&err) / lambda1 - iono1_m / lambda1;
-            let a2 = true_n1[p] - true_w[p] + los.dot(&err) / lambda2
-                - iono1_m * (F1 / F2).powi(2) / lambda2;
-            state.ensure_ambiguity(key, a1, 1.0);
-            state.ensure_ambiguity(key2, a2, 1.0);
-            // Converged MW arcs: symmetric ramp settling on the true integer.
-            for k in 0..40 {
-                let frac = 1.0 - k as f64 / 39.0;
-                tracker.update(key, true_w[p] + 0.2 * frac - 0.1, NL_SCALE, false);
-            }
+            populate_biased_pair(&mut state, &mut tracker, p, los, err, true_w[p], true_n1[p], l1, l2);
         }
-        assemble_kf_consistent_covariance(&mut state, &los_list, lambda1, lambda2);
+        assemble_kf_consistent_covariance(&mut state, &los_list, l1, l2);
         (state, tracker)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn populate_biased_pair(
+        state: &mut RtkState, tracker: &mut WidelaneTracker,
+        p: usize, los: Vector3<f64>, err: Vector3<f64>,
+        w: f64, n1: f64, l1: f64, l2: f64,
+    ) {
+        let iono1_m = 0.15;
+        let key = DoubleDiffKey { constellation_id: 0, sat: 2 + p as u16, ref_sat: 1, freq_band: 1 };
+        let key2 = DoubleDiffKey { freq_band: 2, ..key };
+        let a1 = n1 + los.dot(&err) / l1 - iono1_m / l1;
+        let a2 = n1 - w + los.dot(&err) / l2 - iono1_m * (F1 / F2).powi(2) / l2;
+        state.ensure_ambiguity(key, a1, 1.0);
+        state.ensure_ambiguity(key2, a2, 1.0);
+        for k in 0..40 {
+            let frac = 1.0 - k as f64 / 39.0;
+            tracker.update(key, w + 0.2 * frac - 0.1, NL_SCALE, false);
+        }
     }
 
     /// Overwrite the fixture covariance with the shape a converged DD KF
@@ -427,4 +408,21 @@ mod tests {
         assert!(resolve_cascade(&state, &tracker).is_none());
     }
 
+    #[test]
+    fn test_far_veto_multi_band_galileo() {
+        let key = DoubleDiffKey { constellation_id: 2, sat: 5, ref_sat: 1, freq_band: 1 };
+        let key7 = DoubleDiffKey { freq_band: 7, ..key };
+        let mut tracker = WidelaneTracker::default();
+        for _ in 0..15 { tracker.update(key, 3.01, 3.28, false); }
+        let make_ar = |n1: f64, n7: f64| ArResult {
+            position_ecef: Vector3::zeros(),
+            cov_position: nalgebra::Matrix3::identity(),
+            ratio: 3.0,
+            is_fixed: true,
+            num_ambiguities: 2,
+            fixed_ambiguities: vec![(key, n1), (key7, n7)],
+        };
+        assert!(far_matches_widelanes(&tracker, &make_ar(8.0, 5.0)));
+        assert!(!far_matches_widelanes(&tracker, &make_ar(8.0, 6.0)));
+    }
 }
