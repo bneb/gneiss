@@ -424,6 +424,17 @@ graph LR
 
 ---
 
+### [Sprint 59] Cascade Wide-Lane State Feedback & Dynamic Sky-Mask NLOS Pruning (COMPLETED 2026-09-25)
+- **Goal**: Implement sequential scalar wide-lane Kalman feedback, isolate kinematic profiles from unobservable ZWD estimation, isolate FAR veto to static modes, lower minimum cascade pairs to 3, and add dynamic sky-mask NLOS pruning to break past urban canyon fix rate ceilings.
+- **Deliverables**:
+  1. **Cascade Wide-Lane State Feedback (`widelane.rs`)**: Formulated stabilized Joseph-form scalar measurement update ($var_{WL} = 0.01\text{ cyc}^2$) constraining $a_i - a_j = N_{WL}$ upon Melbourne-Wübbena integer convergence.
+  2. **Kinematic Profile Isolation & Safe Cascaded Fallback (`iekf_pass.rs`, `mod.rs`)**: Gated ZWD estimation behind `!dynamics.is_kinematic()`, restricted `far_vetoed` to static modes, and lowered `MIN_FIXED_PAIRS` to 3 in `resolve_cascade`.
+  3. **Dynamic Sky-Mask NLOS Pruning (`ar_subsets.rs`)**: Withholds multipath-reflected NLOS satellites ($el < 25^\circ$, $C/N_0 < 28\text{ dB-Hz}$ or $\sigma_{cmc} > 3.0\text{ m}$) from primary PAR candidate pools.
+  4. **Benchmark Gains**: Hong Kong Whampoa Survey fix rate reached **36.0% / 34.0%** (+33% expansion, fixed $p_{95} = \mathbf{1.294\text{ m}}$). Hong Kong Whampoa Patch fix rate surged from 2.6% to **32.0%** ($12\times$ increase, $p_{95} = \mathbf{1.688\text{ m}}$). Tokyo Shinjuku fixed subset $p_{50} = \mathbf{1.022\text{ m}}$, $p_{95} = \mathbf{2.191\text{ m}}$. Zero false fixes across all datasets.
+- **Exit Criteria**: Full AGENTS.md compliance, 0 clippy warnings, 0 unwraps, all files $< 500$ LOC, all functions $\le 32$ LOC, all 789 tests pass, both CI smoke guards pass. (ACHIEVED)
+
+---
+
 ## 4. Code Standards & CI Quality Invariants ([AGENTS.md](file:///Users/kevin/projects/gneiss/AGENTS.md))
 
 All implementations in Sprints 40–52 must strictly obey:

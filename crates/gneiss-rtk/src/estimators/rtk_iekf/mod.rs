@@ -277,7 +277,7 @@ impl GnssRtkIekf {
 
         // Long-baseline mode: track the rover ZWD residual from post-update
         // phase innovations with per-epoch step saturation.
-        if self.widelane_ar {
+        if self.widelane_ar && !self.is_kinematic {
             let dt = rover.time.tow - self.prev_zwd_tow;
             let pairs = self.zwd_innovation_pairs(&dd_meas.dd);
             let (z, v) = update::update_zwd_scalar(
@@ -289,7 +289,9 @@ impl GnssRtkIekf {
             self.prev_zwd_tow = rover.time.tow;
         }
 
-
+        if self.widelane_ar {
+            widelane::apply_widelane_feedback(&mut self.state, &self.wl_tracker);
+        }
 
         let mut ar_res = self.resolve_ar_candidate(&dd_meas);
         let (pos_ecef, cov_pos) = self.finalize_fixed_position(&mut ar_res, &dd_meas);
@@ -346,7 +348,8 @@ impl GnssRtkIekf {
             ar_view, 3, self.target_pf, self.is_kinematic, Some(&dd_meas.dd),
         );
         if self.widelane_ar {
-            let far_vetoed = ar_res.is_fixed
+            let far_vetoed = !self.is_kinematic
+                && ar_res.is_fixed
                 && !widelane::far_matches_widelanes(&self.wl_tracker, &ar_res);
             if !ar_res.is_fixed || far_vetoed {
                 ar_res = ar::float_result(&self.state);

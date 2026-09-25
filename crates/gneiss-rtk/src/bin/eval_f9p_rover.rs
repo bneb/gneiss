@@ -382,6 +382,7 @@ fn evaluate_pass(
         dynamics: ProcessingDynamics::Kinematic,
         klobuchar_alpha: klob.map(|k| k.alpha),
         klobuchar_beta: klob.map(|k| k.beta),
+        widelane_ar: true,
         ..Default::default()
     };
     let (result, eff_arm) = run_dataset_pipeline(

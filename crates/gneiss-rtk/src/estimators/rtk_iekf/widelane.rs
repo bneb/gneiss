@@ -27,7 +27,68 @@ const WL_ROUND_MAX_DEV_CYCLES: f64 = 0.25;
 /// and therefore strictly better-informed than PAR's unconditioned ones.
 /// (Was 6 to mirror iono-free; that made the cascade unreachable — it
 /// fixed on zero epochs across every benchmark base.)
-const MIN_FIXED_PAIRS: usize = 4;
+const MIN_FIXED_PAIRS: usize = 3;
+
+/// Feeds confident wide-lane integer constraints into the RTK state.
+pub fn apply_widelane_feedback(state: &mut RtkState, tracker: &WidelaneTracker) -> usize {
+    let confident: Vec<(DoubleDiffKey, f64)> = confident_widelanes(state, tracker);
+    let bias = common_fractional_offset(&confident);
+    let mut applied = 0usize;
+    for i in 0..state.ambiguities.len() {
+        let key = state.ambiguities[i].0;
+        if key.freq_band != 1 {
+            continue;
+        }
+        let Some((j, _)) = find_secondary_ambiguity(state, tracker, &key) else { continue };
+        let Some(w_float) = state_amb_widelane(&confident, &key) else { continue };
+        let w_int = (w_float - bias).round();
+        if (w_float - bias - w_int).abs() > WL_ROUND_MAX_DEV_CYCLES { continue; }
+        if constrain_widelane_pair(state, i, j, w_int, 0.01) {
+            applied += 1;
+        }
+    }
+    applied
+}
+
+/// Applies scalar Kalman update constraining `a_i - a_j = w_int` with pseudo-measurement variance `var_wl`.
+pub fn constrain_widelane_pair(
+    state: &mut RtkState,
+    idx_i: usize,
+    idx_j: usize,
+    w_int: f64,
+    var_wl: f64,
+) -> bool {
+    let off = state.amb_offset();
+    let (i, j) = (off + idx_i, off + idx_j);
+    let x_vec = state.to_dvector();
+    let y = w_int - (x_vec[i] - x_vec[j]);
+    let s = state.cov[(i, i)] + state.cov[(j, j)] - 2.0 * state.cov[(i, j)] + var_wl;
+    if s <= 0.0 || !s.is_finite() || y.abs() > 0.40 || (y * y / s) > 16.0 {
+        return false;
+    }
+    let dim = state.dim();
+    let mut h_p = DVector::zeros(dim);
+    for r in 0..dim {
+        h_p[r] = state.cov[(r, i)] - state.cov[(r, j)];
+    }
+    let k = &h_p / s;
+    let dx = &k * y;
+    let x_new = x_vec + dx;
+    state.update_from_dvector(&x_new);
+    update_cov_joseph(state, &k, &h_p, s);
+    true
+}
+
+fn update_cov_joseph(state: &mut RtkState, k: &DVector<f64>, h_p: &DVector<f64>, s: f64) {
+    let khp = k * h_p.transpose();
+    state.cov = &state.cov - &khp - khp.transpose() + (k * k.transpose()) * s;
+    state.cov = (&state.cov + state.cov.transpose()) * 0.5;
+    for d in 0..state.dim() {
+        if state.cov[(d, d)] < 1e-10 {
+            state.cov[(d, d)] = 1e-10;
+        }
+    }
+}
 
 /// Cascade AR: wide-lane integers from the MW arcs, then narrow lanes.
 ///
@@ -424,5 +485,12 @@ mod tests {
         };
         assert!(far_matches_widelanes(&tracker, &make_ar(8.0, 5.0)));
         assert!(!far_matches_widelanes(&tracker, &make_ar(8.0, 6.0)));
+    }
+
+    #[test]
+    fn test_widelane_feedback_constrains_ambiguity_diff() {
+        let (mut state, tracker) = biased_state(Vector3::new(100.0, 200.0, 300.0), Vector3::new(0.01, -0.01, 0.005));
+        let applied = apply_widelane_feedback(&mut state, &tracker);
+        assert!(applied >= 3, "must constrain at least 3 confident pairs, got {}", applied);
     }
 }

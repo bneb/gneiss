@@ -94,7 +94,7 @@ pub(crate) fn configure_iekf(
         iekf.receiver_pcv = Some((pair.rover.clone(), pair.base.clone()));
     }
     configure_static_lock(&mut iekf, dynamics, widelane_ar);
-    configure_atmosphere_and_precise_products(&mut iekf, init_pos, base_pos, widelane_ar, tropo_grad);
+    configure_atmosphere_and_precise_products(&mut iekf, init_pos, base_pos, dynamics, widelane_ar, tropo_grad);
     // Debug-dump toggle: previously also required baseline < 25km in the
     // forward pass only (accidental -- it was just physically nested
     // inside the ZWD-gate block above, not a principled restriction) and
@@ -151,11 +151,12 @@ fn configure_atmosphere_and_precise_products(
     iekf: &mut GnssRtkIekf,
     init_pos: Vector3<f64>,
     base_pos: Vector3<f64>,
+    dynamics: ProcessingDynamics,
     widelane_ar: bool,
     tropo_grad: bool,
 ) {
     let baseline_m = (init_pos - base_pos).norm();
-    if widelane_ar && baseline_m < ZWD_BASELINE_GATE_M {
+    if widelane_ar && !dynamics.is_kinematic() && baseline_m < ZWD_BASELINE_GATE_M {
         iekf.state.enable_zwd(0.0225); // ~15 cm zenith wet init uncertainty
         // Experimental tropo gradients: opt-in via env while the
         // OHLN interaction is unresolved (v_p95 -6mm pooled, but

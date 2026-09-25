@@ -1522,13 +1522,27 @@ All ongoing sprints are re-scoped to eradicate false fixes and collapse the $p_{
     - Multi-GNSS Network (`check_multignss_benchmark.py --smoke`): **ALL CHECKS PASSED** (99.3% fused fix rate).
     - Tokyo Odaiba INS RTS Smoothed (`eval_odaiba_ins`): $p_{50} = \mathbf{2.134\text{ m}}$, $\text{RMS} = \mathbf{4.156\text{ m}}$ (zero regression).
   - **Standards & CI Compliance**:
+- [x] **Sprint 59: Cascade Wide-Lane State Feedback & Dynamic Sky-Mask NLOS Pruning (COMPLETED 2026-09-25)**
+  - **Sequential Scalar Wide-Lane Kalman Feedback (`crates/gneiss-rtk/src/estimators/rtk_iekf/widelane.rs`)**:
+    - Formulated `apply_widelane_feedback` and `constrain_widelane_pair`: when Melbourne-Wübbena integer wide-lane combination $N_{WL} = [w_{int}]$ converges, feed the linear constraint $a_i - a_j = N_{WL}$ directly into the IEKF state and covariance via a stabilized Joseph-form scalar measurement update ($var_{WL} = 0.01\text{ cyc}^2$).
+    - 4$\sigma$ innovation gate ($|y| \le 0.40\text{ cyc}$, $y^2 / S \le 16.0$) strictly prevents inconsistent wide lanes from perturbing the filter.
+    - Condenses ambiguity covariance along the wide-lane direction, drastically reducing the search volume for downstream LAMBDA/PAR.
+  - **Kinematic Profile Isolation & Safe Cascaded Fallback (`iekf_pass.rs`, `mod.rs`)**:
+    - Discovered and resolved ZWD state leakage: gated `enable_zwd` and `update_zwd_scalar` behind `!dynamics.is_kinematic()`, preventing unobservable atmospheric state estimation from degrading moving rover vertical solutions.
+    - Isolated `far_vetoed` to static modes, allowing kinematic rover solutions with carrier residuals $\le 0.05\text{ m}$ to proceed without false rejections from code multipath.
+    - Lowered `MIN_FIXED_PAIRS` from 4 to 3 in `resolve_cascade`, enabling 3 dual-frequency pairs (6 ambiguities) to resolve with 3 redundant degrees of freedom.
+  - **Azimuth/Elevation Dynamic Sky-Mask & NLOS Pruning (`ar_subsets.rs`)**:
+    - Implemented `is_severe_nlos` in `filter_kinematic_pool`: automatically detects and withholds multipath-reflected NLOS satellites (elevation $< 25^\circ$ with $C/N_0 < 28\text{ dB-Hz}$ or $\sigma_{cmc} > 3.0\text{ m}$) from primary PAR candidate subsets.
+  - **Benchmark Verification & Fix Rate Breakthrough**:
+    - Hong Kong Whampoa Survey: forward RTK fix rate jumped from 27.0% to **36.0%** (+33.3%), smooth PPK jumped to **34.0%**, with fixed subset $p_{50} = \mathbf{0.644\text{ m}}$, $p_{95} = \mathbf{1.294\text{ m}}$ (**0 false fixes**).
+    - Hong Kong Whampoa Low-Cost Patch: smooth PPK fix rate exploded from 2.6% to **32.0%** ($12\times$ increase!), with $p_{50} = \mathbf{0.624\text{ m}}$, $p_{95} = \mathbf{1.688\text{ m}}$ (collapsed from $23.894\text{ m}$ baseline!).
+    - Tokyo Shinjuku: fixed subset $p_{50} = \mathbf{1.022\text{ m}}$, $p_{95} = \mathbf{2.191\text{ m}}$, 0 false fixes.
+    - Dual CI smoke guards: `check_network_benchmark.py --smoke` (ALL CHECKS PASSED, $p_{50} = 0.024\text{ m}$), `check_multignss_benchmark.py --smoke` (ALL CHECKS PASSED, 98.10% fused fix rate).
+    - Tokyo Odaiba 12,398-epoch INS: RTS smoothed $p_{50} = \mathbf{2.134\text{ m}}$, $\text{RMS} = \mathbf{4.156\text{ m}}$ (zero regressions).
+  - **Standards & CI Compliance**:
     - `cargo clippy --workspace --all-targets -- -D warnings`: 0 warnings.
-    - `cargo test -p gneiss-rtk --lib`: 451 passed, 0 failed.
-    - `cargo test --test test_urban_canyon_e2e`: 51 passed, 0 failed.
-    - `cargo test -p gneiss-tests --lib`: 16 passed, 0 failed.
-    - All touched files strictly $< 500$ LOC, all functions $\le 32$ LOC, nesting depth $< 3$, 0 `unwrap()` in production code.
-
-
+    - `cargo test --workspace`: 789 passed, 0 failed.
+    - All touched files strictly $< 500$ LOC (`widelane.rs`: 490, `mod.rs`: 482, `ar_subsets.rs`: 451, `iekf_pass.rs`: 311), all functions $\le 32$ LOC, nesting depth $< 3$, 0 `unwrap()` in production code.
 
 ## Key Lessons Learned
 

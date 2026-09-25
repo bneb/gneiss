@@ -110,11 +110,31 @@ pub fn compute_metadata_from_dd(
     meta
 }
 
+fn is_severe_nlos(meta: Option<&AmbiguityMetadata>) -> bool {
+    let Some(m) = meta else { return false };
+    m.elevation_rad < 25.0_f64.to_radians() && (m.snr_dbhz < 28.0 || m.cmc_sigma > 3.0)
+}
+
 /// Select and sort candidate ambiguity indices for PAR using CQM metadata.
-fn filter_kinematic_pool(state: &RtkState, q_amb: &DMatrix<f64>, n_amb: usize, min_k: usize) -> Vec<usize> {
+fn filter_kinematic_pool(
+    state: &RtkState,
+    q_amb: &DMatrix<f64>,
+    n_amb: usize,
+    min_k: usize,
+    meta: Option<&[AmbiguityMetadata]>,
+) -> Vec<usize> {
     let mut c: Vec<usize> = (0..n_amb)
-        .filter(|&i| q_amb[(i, i)] <= 1.0 && !is_beidou_geo_key(&state.ambiguities[i].0))
+        .filter(|&i| {
+            q_amb[(i, i)] <= 1.0
+                && !is_beidou_geo_key(&state.ambiguities[i].0)
+                && !is_severe_nlos(meta.and_then(|m| m.get(i)))
+        })
         .collect();
+    if c.len() < min_k {
+        c = (0..n_amb)
+            .filter(|&i| q_amb[(i, i)] <= 1.0 && !is_beidou_geo_key(&state.ambiguities[i].0))
+            .collect();
+    }
     if c.len() < min_k {
         c = (0..n_amb).filter(|&i| !is_beidou_geo_key(&state.ambiguities[i].0)).collect();
     }
@@ -142,7 +162,7 @@ pub fn select_par_candidates_with_metadata(
     }
 
     let min_k = min_ambs.max(4);
-    let mut c = filter_kinematic_pool(state, q_amb, n_amb, min_k);
+    let mut c = filter_kinematic_pool(state, q_amb, n_amb, min_k, metadata);
     let score = |i: usize| {
         let m = metadata.and_then(|meta| meta.get(i));
         compute_cqm(m, q_amb[(i, i)], a_float[i])
