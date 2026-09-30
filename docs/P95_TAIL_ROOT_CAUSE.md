@@ -1065,3 +1065,56 @@ p50 does not regress.
 Section 21's other two findings stand: fixing still acquires only the
 already-well-determined epochs, and the Wilcoxon still reports the bulk
 improvement that the CDF contradicts.
+
+---
+
+## 23. The projection trade is median-only; there is no setting that wins both
+
+Damping the integer projection was the experiment section 22 called for. The
+projection correction is `dx = P_xa Q_aa^-1 (a - N)`, which scales as `1/Q_aa`,
+so flooring the ambiguity covariance bounds the correction continuously rather
+than by rejection. Forward pass, F9P:
+
+| Q_aa floor (cyc^2) | fix rate | p50 | p90 | p95 | p99 |
+|---|---:|---:|---:|---:|---:|
+| 0.0 (shipped) | 84.5% | **0.184** | 0.445 | 0.537 | 0.676 |
+| 0.5 | 22.9% | 0.243 | 0.380 | 0.459 | 0.594 |
+| 2.0 | 15.1% | 0.242 | 0.376 | **0.456** | 0.581 |
+| *pure float (no AR)* | 0% | 0.242 | 0.376 | 0.456 | 0.586 |
+
+The curve is monotone and it answers the question cleanly. Damping the
+projection walks the whole CDF back toward pure float: at 2.0 the solution is
+indistinguishable from never fixing at all.
+
+**There is no setting that improves the tail.** The median benefit (0.184 vs
+0.242, a 58 mm gain) exists only at the setting that costs the most tail
+(p95 0.537 vs 0.456, an 81 mm loss). Partway down the curve the median gain is
+gone *and* the tail is still marginally worse than pure float (p99 0.594 vs
+0.586 at floor 0.5).
+
+### 23.1 Conclusion for F9P
+
+**On this dataset ambiguity resolution is not worth enabling.** It buys the
+median and costs the tail, and the only fully-damped setting that protects the
+tail also removes the benefit. The p95 budget of 0.500 m is met only by not
+fixing.
+
+That is a real product decision, not a tuning question:
+
+- For a contract specified on **p50**, fixing helps (0.242 -> 0.184).
+- For a contract specified on **p95** — which is how survey work is priced —
+  fixing hurts (0.456 -> 0.537).
+- The Wilcoxon signed-rank test reports the median view and calls it a
+  `1.4e-208` significant win. Had it been the only statistic consulted, the
+  project would have shipped a change that makes its survey-grade accuracy
+  worse while every headline fix-rate number improves.
+
+The underlying question is now narrow and well-posed: **why does the projection
+improve the median while degrading the tail?** The answer is almost certainly
+that a minority of accepted integers are wrong in a way that survives the ratio
+test and the residual screen, and on those epochs the projection applies a
+large, confident, wrong correction. Fixing that is a screening problem, not a
+weighting problem -- no amount of covariance damping can distinguish a wrong
+integer from a right one.
+
+No code change ships. The floor knob was removed; the sweep is recorded here.
