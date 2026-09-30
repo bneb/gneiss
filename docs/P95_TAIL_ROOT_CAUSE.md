@@ -587,3 +587,33 @@ existing p50/p95/RMS budgets. The floor is deliberately low: it asserts that
 ambiguity resolution is working at all, not a performance target. It is
 documented inline as a known, diagnosed defect so the failure is legible rather
 than mysterious.
+
+---
+
+## 14. `widelane_ar` measured and deliberately not adopted (round 10)
+
+Flagged as "promising but unverified" in rounds 5 and 9. Measured now, on the
+static specs of `eval_qinertia_ppk` (all four specs previously had
+`widelane_ar: false`, while `eval_f9p_rover` enables it):
+
+| Dataset | metric | `false` (current) | `true` |
+|---|---|---:|---:|
+| NGS Geodetic (112.5 m) | forward fix rate | 250/300 (83.3%) | **300/300 (100%)** |
+| | smoothed p50 | 0.014 m | 0.017 m |
+| | smoothed p95 | 0.028 m | 0.029 m |
+| NOAA CORS (15 km) | smoothed fix rate | 599/600 (99.8%) | 599/600 (99.8%) |
+| | smoothed p50 | 0.015 m | 0.018 m |
+| | smoothed p95 | 0.050 m | 0.047 m |
+
+**Not adopted.** The NGS forward fix rate gain is large and real (+16.7 points),
+but smoothed p50 degrades by 3 mm on both static baselines, and only CORS p95
+improves. A benchmark that reports a better fix rate while reporting worse
+accuracy is not obviously an improvement, and `check_multignss_benchmark.py`
+would not catch the regression, because it does not exercise this binary.
+
+This is a benchmark-configuration choice, not an engine capability gap — the
+engine already supports wide-lane AR, and `eval_f9p_rover` uses it. Before
+adopting it, someone should establish why wide-lane fixing trades ~3 mm of p50
+for fix rate on short baselines; that trade may be correct for a kinematic rover
+and wrong for a static monument, in which case the right answer is a
+dynamics-dependent default rather than a blanket flag.
