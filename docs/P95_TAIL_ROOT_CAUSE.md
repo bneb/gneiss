@@ -1154,3 +1154,57 @@ target is the projection and the screening of accepted integers.
 
 Two regimes, two different problems. Neither is currently addressed by the AR
 work that Sprints 40-59 and 61 focused on.
+
+---
+
+## 25. Phase is available and fully usable; the protection gap is in screening (round 19)
+
+Tested the round-18 hypothesis that Shinjuku's float tail comes from carrier
+phase not driving the filter. Instrumented per epoch: DD pairs, allocated
+ambiguity states, pairs carrying phase, and phase rows that can actually update
+position (phase present AND ambiguity state present).
+
+| dataset | DD pairs/ep | amb states/ep | pairs with phase | usable phase rows |
+|---|---:|---:|---:|---:|
+| Shinjuku | 26.49 | 26.49 | 16.89 | **16.89** |
+| Whampoa Survey | 21.87 | 21.87 | 11.78 | **11.78** |
+
+**The hypothesis is wrong.** Ambiguity state is allocated for every DD pair, and
+every pair carrying phase also has its ambiguity state, so nothing is blocked by
+missing state. Carrier phase is fully available and fully usable: 16.89 usable
+rows per epoch on Shinjuku, 11.78 on Whampoa Survey.
+
+The round-8 figure of "5.54 phase rows" counted *accepted* rows in the
+post-fix residual screen, not available ones. Those are different quantities and
+conflating them was the error. The real gap is between availability (11.78) and
+acceptance (5.54) on Whampoa Survey: **half the carrier observations are being
+discarded at the screening stage**, not lost upstream.
+
+### 25.1 The concrete asymmetry
+
+Round 4's per-epoch median-relative NLOS gate was applied to **code rows only**
+(`append_dd_code_row` calls `is_code_epoch_outlier`). `append_dd_phase_row` has
+no equivalent. Carrier phase is the *more* dangerous observable to leave
+unguarded: a biased code observation produces a position error, whereas a biased
+carrier observation produces a biased ambiguity that then propagates through the
+integer projection — exactly the failure mode section 23 identified as
+unresolvable by covariance damping.
+
+So the highest-value concrete change available is to apply the same per-epoch
+median-relative outlier test to phase innovations, and then re-check the raw CDF
+with `eval_compare`. Not attempted this round: context was exhausted, and an
+unguarded change to the phase path needs a full six-dataset CDF sweep plus both
+guards before it could be trusted, which is more than remained.
+
+### 25.2 Revised picture
+
+Three separate quantities were being conflated across rounds 8 and 19:
+
+| quantity | Shinjuku | meaning |
+|---|---:|---|
+| usable phase rows | 16.89 | phase is driving the position |
+| accepted phase rows (Whampoa) | 5.54 | screening discards ~47% |
+| round-4 relative gate | code rows only | carrier phase is currently unguarded |
+
+The tail work is a screening problem at both stages, not a measurement-availability
+problem. That is a more tractable problem than the one round 18 assumed.
