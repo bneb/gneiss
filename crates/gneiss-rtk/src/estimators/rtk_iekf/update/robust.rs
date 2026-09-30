@@ -1,6 +1,6 @@
 //! Robust weighting, outlier screening, and scalar residual filters.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use nalgebra::Vector3;
 use crate::estimators::rtk_iekf::state::{DoubleDiffKey, RtkState};
 use super::system::compute_tropo_dd;
@@ -315,6 +315,36 @@ pub fn validate_fixed_carrier_residuals(
 /// A false integer fix in a weak geometry can yield small carrier residuals for its own
 /// subset while moving the position by tens of meters, creating 50-100m pseudorange residuals
 /// across the constellation. Returns false if any DD pseudorange residual exceeds `max_pr_res_m`.
+/// Residual (m) above which a row is a data fault rather than an error estimate.
+pub const CATASTROPHIC_CODE_RESIDUAL_M: f64 = 100.0;
+/// Share of a constellation's rows that must be catastrophic before it is
+/// treated as broken data rather than merely multipathed.
+pub const BROKEN_CONSTELLATION_SHARE: f64 = 0.5;
+/// Minimum rows before a constellation is judged at all.
+pub const BROKEN_CONSTELLATION_MIN_ROWS: usize = 5;
+
+fn dd_code_residual(m: &DoubleDiffMeasurement, pos: Vector3<f64>) -> f64 {
+    let r_sat = (m.sat_pos - pos).norm();
+    let r_ref = (m.ref_pos - pos).norm();
+    let base_dd = (m.sat_pos - m.base_pos).norm() - (m.ref_pos - m.base_pos).norm();
+    let geom_m = (r_sat - r_ref) - base_dd + compute_tropo_dd(m.sat_pos, m.ref_pos, m.base_pos, pos);
+    (m.dd_pr_m - geom_m).abs()
+}
+
+/// Constellations whose rows are overwhelmingly out of range: broken data.
+fn broken_constellations(measurements: &[DoubleDiffMeasurement], pos: Vector3<f64>) -> HashSet<u8> {
+    let mut rows: HashMap<u8, (usize, usize)> = HashMap::new();
+    for m in measurements {
+        let e = rows.entry(m.key.constellation_id).or_insert((0, 0));
+        e.0 += 1;
+        if dd_code_residual(m, pos) > CATASTROPHIC_CODE_RESIDUAL_M { e.1 += 1; }
+    }
+    rows.iter()
+        .filter(|(_, (n, bad))| *n >= BROKEN_CONSTELLATION_MIN_ROWS
+            && (*bad as f64 / *n as f64) > BROKEN_CONSTELLATION_SHARE)
+        .map(|(c, _)| *c).collect()
+}
+
 pub fn validate_fixed_pseudorange_residuals(
     pos: Vector3<f64>,
     measurements: &[DoubleDiffMeasurement],
@@ -322,15 +352,13 @@ pub fn validate_fixed_pseudorange_residuals(
     max_pr_res_m: f64,
 ) -> bool {
     if measurements.is_empty() { return true; }
+    let broken = broken_constellations(measurements, pos);
     let mut sum_sq = 0.0;
     let mut count = 0;
     let mut n_large = 0;
     for m in measurements {
-        let r_sat = (m.sat_pos - pos).norm();
-        let r_ref = (m.ref_pos - pos).norm();
-        let base_dd = (m.sat_pos - m.base_pos).norm() - (m.ref_pos - m.base_pos).norm();
-        let geom_m = (r_sat - r_ref) - base_dd + compute_tropo_dd(m.sat_pos, m.ref_pos, m.base_pos, pos);
-        let res = (m.dd_pr_m - geom_m).abs();
+        if broken.contains(&m.key.constellation_id) { continue; }
+        let res = dd_code_residual(m, pos);
         let is_outlier = res > 8.0 && res > 2.5 * m.pr_var_m2.sqrt();
         if res > max_pr_res_m { n_large += 2; }
         else if is_outlier { n_large += 1; }
