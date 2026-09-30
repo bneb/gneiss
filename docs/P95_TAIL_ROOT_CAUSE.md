@@ -716,3 +716,120 @@ exits 0 and prints nothing when it does not match. A line number taken from an
 earlier read is not stable once the file has been edited. Locate the target by
 content (`awk '/name: "<dataset>"/{f=1} f&&/key:/{print NR; exit}'`) and assert
 the value changed before interpreting output.
+
+---
+
+## 17. The predicted fix does not clear the budget (round 13)
+
+§16 predicted that excluding GLONASS from the *ambiguity candidate set* while
+keeping its float contribution would deliver 0.469 m float and ~69% fixes.
+Implemented and measured, in two steps.
+
+**Step 1 — exclude GLONASS ambiguity state only** (`update_dd_ambiguity`, which
+no longer allocates or updates ambiguity for `constellation_id == Glonass`):
+
+```
+F9P: 0 / 4521 (0.0%)   -- unchanged
+```
+
+No effect at all. So the ambiguity candidate set was not the sole poison; the
+GLONASS *rows* still veto every fix through the pseudorange screen, because their
+kilometre-scale residuals dominate the epoch RMS.
+
+**Step 2 — additionally exclude a catastrophically-broken constellation from the
+screen**, the change reverted in round 8:
+
+```
+F9P forward 321/4521 (7.1%)   F9P smoothed 228/4521 (5.0%)
+p50 0.239m   p95 0.508m   RMS 0.287m
+```
+
+Identical to the screen-only variant of round 8 (7.1% / 5.1%), confirming the
+ambiguity exclusion contributed nothing. And `check_f9p_benchmark.py` **fails
+again**: p95 0.508 m against the 0.500 m budget.
+
+**Reverted.** The guard is red, so this does not ship.
+
+### 17.1 What the two failed attempts have in common
+
+Round 8 (screen only): 7.1% / 5.1% fixes, p95 0.507 m.
+Round 13 (screen + ambiguity exclusion): 7.1% / 5.0% fixes, p95 0.508 m.
+
+The same ~5-7% of fixes appears either way, and p95 lands at the same ~0.508 m,
+*just* over budget. Meanwhile the fully-excluded configuration (§11, §15) gives
+69.1% fixes at p95 0.584 m with 94.8% of fixed epochs under 5 cm.
+
+These three points do not line up. The 5-7% regime is not a fraction of the 69%
+regime; it is a different regime, and it is the one the residual screen selects
+for on its own. Two readings are consistent with the data and neither is yet
+distinguished:
+
+1. The 5-7% fixes are the *survivors* of a poisoned LAMBDA search — a small,
+   biased subset of the 69% that happens to clear a weakened screen. Removing
+   GLONASS from the ambiguity set did not change which ones survive, which fits.
+2. The screen exclusion is admitting a small number of false fixes each time,
+   and it is the *false* ones that push p95 to 0.508.
+
+The discriminator is the same one that settled §15: bucket the fixed epochs by
+actual error. Round 11 did exactly that for the fully-excluded case (94.8% under
+5 cm, none over 1 m) and never did it for the 5-7% case. Until that is measured,
+neither reading can be excluded, and shipping on the strength of a fix-rate
+improvement alone would repeat the mistake this project has already made twice.
+
+---
+
+## 18. Two defects found in the measurement apparatus itself (round 13)
+
+### 18.1 `check_f9p_benchmark.py` can validate a stale binary
+
+`ensure_binary()` rebuilds only when `target/release/eval_qinertia_ppk` is
+**missing**:
+
+```python
+if not BIN.exists():
+    r = subprocess.run(["cargo", "build", "--release", "--bin", "eval_qinertia_ppk"])
+```
+
+After reverting the round-13 changes the guard still reported the reverted
+numbers (`p95 0.508 m`) because the binary from the changed build was still on
+disk. Every guard result is therefore only valid for the build that produced the
+binary, and a source revert does not invalidate it. This silently happened to me
+once already and would silently happen to anyone else.
+
+Fix: always rebuild (or compare the binary mtime against the newest source file
+and rebuild when it is stale).
+
+### 18.2 A 0% fix rate is itself evidence of a miscalibration
+
+GLONASS is a convenient explanation, but it should not be allowed to become the
+answer just because it is the one that has been measured. Three things do not
+sit comfortably with "the data is bad":
+
+1. **A production RTK engine does not return 0% fixes.** A u-blox ZED-F9P on a
+   kinematic drive against an NGS base is a configuration where real engines
+   return 95%+ fixes. 0/4521 is not a weak result, it is a broken one.
+2. **One boolean flag moves the fix rate from 84.6% to 0%.** A 100% swing from
+   `enable_glonass` is not the shape of a data-quality problem. It is the shape
+   of a guard that is miscalibrated for this data and therefore vetoes
+   everything — consistent with the observation that the AR layer produced
+   10,181 candidates and the pseudorange screen rejected **all** of them. A
+   screen that rejects 100% of candidates regardless of their quality is
+   reporting its own miscalibration, not the candidates' quality.
+3. **The 20 km GLONASS residual is itself unverified against a reference.** It
+   was computed by the same geometry code path whose correctness is in question.
+   If the troposphere, Sagnac, or satellite-ephemeris handling is off for *all*
+   constellations on this dataset, the "GLONASS is 100% broken" result could be
+   an artefact of a position solution that is wrong in a way that happens to
+   penalise GLONASS most.
+
+The honest position is therefore narrower than §11–§16 have been implying: the
+**observed** fact is that enabling GLONASS on this dataset drives the fix rate to
+zero, and the most probable cause is unusable GLONASS DD. The GLONASS
+time-system and FDMA story in §11.1 is a *hypothesis* consistent with a 20 km
+error, not a verified diagnosis, and it has never been checked against an
+independent reference.
+
+The decisive test has not been run: compute GLONASS satellite positions and
+double-differenced ranges for a handful of epochs by an independent route and
+compare against the engine's own. Until that is done, treat §11.1 as unverified
+and do not build further work on it.
