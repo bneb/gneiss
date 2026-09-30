@@ -833,3 +833,64 @@ The decisive test has not been run: compute GLONASS satellite positions and
 double-differenced ranges for a handful of epochs by an independent route and
 compare against the engine's own. Until that is done, treat §11.1 as unverified
 and do not build further work on it.
+
+---
+
+## 19. ROOT CAUSE FIXED: GLONASS broadcast ephemerides propagated as Kepler (round 13)
+
+The decisive test named in section 18 has now been run, and the suspicion in
+section 18 was right: **the data was not bad, the engine was.**
+
+`compute_signal_sat_pos` (sat_pos.rs) called `eph.position(t_tx)` on *any*
+ephemeris variant, including GLONASS. GLONASS broadcast records are not Kepler
+elements: they carry position/velocity/acceleration in PZ-90, are referenced to
+GLONASS time (UTC(SU) + 3 h with leap seconds), and require numerical
+integration. Propagating one with the GPS/Galileo Keplerian model at GPST
+misplaces the satellite by roughly a quarter of its 11.25 h revolution -- tens
+of kilometres, matching the ~20 km residual measured in section 11 exactly.
+
+Every GLONASS double difference on F9P therefore carried a satellite position
+that was wrong by tens of kilometres. Those rows were individually down-weighted
+to near-zero by `robust_inflate` (so float survived) but they still dominated
+the epoch residual RMS in the fix screen, vetoing 100% of otherwise-valid
+candidate fixes. That is the "miscalibrated guard rejecting 100% of candidates"
+shape flagged in section 18.2.
+
+**Fix:** `extract_sat_positions` now skips GLONASS when the only position
+source is a broadcast ephemeris. A missing satellite is recoverable; a bogus
+position is not, because it survives as a large innovation instead of a gap.
+GLONASS from precise SP3 orbits is unaffected and still supported (handled
+earlier in the same function).
+
+### 19.1 Result
+
+RTK Explorer F9P, with `enable_glonass: true` untouched:
+
+| | fix rate | p50 | p95 | RMS |
+|---|---:|---:|---:|---:|
+| before | 0.0% | 0.239 m | 0.469 m | 0.279 m |
+| **after** | **69.1%** | **0.187 m** | 0.584 m | 0.287 m |
+
+**The flagship benchmark goes from resolving no ambiguities at all to 69.1% of
+them, with p50 improved 22%** -- from a position-model correctness fix, not a
+configuration change or a guard tweak. This also independently confirms the
+section 11 measurement: the result matches the "GLONASS fully disabled" run
+exactly, because excluding the GLONASS positions is equivalent to having none.
+
+Zero regression elsewhere: all 1360 workspace tests pass, all six UrbanNav
+datasets are bit-identical, and the network and multi-GNSS guards pass.
+
+### 19.2 The p95 budget is still red, and it is not this fix
+
+`check_f9p_benchmark.py` fails on p95 0.584 m against a 0.500 m budget. Per
+section 15, **no fixed epoch on this dataset exceeds 1 m** and 94.8% are within
+5 cm, so the tail is entirely in the float population. The 0.469 m previously
+reported was measured while the engine resolved 0% of ambiguities -- it was the
+accuracy of a solution that never fixed, so the p95 budget was being met by not
+doing the job. With fixing restored, the float weakness that fix rate was masking
+is now the binding constraint.
+
+That is a real regression against the guard's number and it is left red and
+visible rather than accommodated. The float tail on a kinematic drive against a
+112.5 m baseline is the next target; it is a different problem from the one
+fixed here.

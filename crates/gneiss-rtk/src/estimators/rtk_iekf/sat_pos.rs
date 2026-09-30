@@ -81,6 +81,21 @@ pub(crate) fn extract_sat_positions(
                     .unwrap_or(std::cmp::Ordering::Equal)
             });
         if let Some(eph) = eph_opt {
+            // GLONASS broadcast ephemerides are NOT Kepler elements: they carry
+            // position/velocity/acceleration in PZ-90 and are referenced to
+            // GLONASS time (UTC(SU) + 3 h with leap seconds), and require
+            // numerical integration rather than the Keplerian propagation used
+            // for GPS/Galileo. Evaluating one at GPST misplaces the satellite by
+            // tens of kilometres -- measured at ~20 km on RTK Explorer F9P, which
+            // poisoned every double-difference fix in the set.
+            //
+            // GLONASS remains usable from precise (SP3) orbits, handled above.
+            // Here we have no correct position, so contribute nothing rather than
+            // a wrong one: a bogus position is worse than a missing satellite,
+            // because it survives as a large innovation instead of a gap.
+            if matches!(eph, Ephemeris::Glonass(_)) {
+                continue;
+            }
             let sat_p = compute_signal_sat_pos(s, eph, rover.time);
             let (_az, el) = gneiss_core::coords::az_el(rx_llh, rx_pos, sat_p);
             if el >= min_el {
