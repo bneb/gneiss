@@ -671,3 +671,48 @@ be had together.**
 
 The round-9 guard floor (fix rate < 5%) remains correct and remains red, because
 0% fixes is still the shipped state.
+
+---
+
+## 16. Why GLONASS helps float while destroying fixes (round 12)
+
+§15 left one question: GLONASS DD code is unusable for fixing (20 km residuals)
+yet removing GLONASS made float 115 mm *worse*. Measured satellite counts both
+ways, same binary, flag verified changed in both runs:
+
+| F9P config | float epochs | mean sats (float) | fixed epochs | mean sats (fixed) |
+|---|---:|---:|---:|---:|
+| `enable_glonass: true` | 4521 | **36.06** | 0 | — |
+| `enable_glonass: false` | 1395 | 36.28 | 3126 | 35.97 |
+
+**Satellite count is essentially unchanged** (36.06 vs 35.97). So the flag does
+not remove geometry, and §15's candidate explanation 1 needs restating: what
+GLONASS contributes is not tracked satellites but **double-difference pairs**.
+Those pairs are formed either way. With GLONASS on they are present, individually
+down-weighted to near-zero by `robust_inflate` because their innovations are
+kilometres, and therefore contribute **update redundancy without contributing to
+ambiguity resolution**. Remove them and the float update loses that redundancy,
+costing ~115 mm at p95; keep them and LAMBDA searches a candidate set containing
+entries it can never resolve, costing 100% of the fixes.
+
+That yields a concrete, previously unjustified fix: **keep GLONASS pairs in the
+float update, exclude them from the ambiguity candidate set.** It should deliver
+0.469 m float *and* ~69% fixes, which is the combination neither configuration
+currently achieves.
+
+This is also the correct shape for the real repair: GLONASS DD is a valid float
+observable with a broken ambiguity, and the two roles should be separable rather
+than governed by one flag.
+
+Not implemented this round — the ambiguity-eligibility filter has to be built and
+validated against the F9P guard (fix rate *and* p95), and there was no room to do
+that responsibly alongside the measurement.
+
+### 16.1 Process note
+
+This is the **third** time a `sed -i '' <line>s/.../.../` silently matched nothing
+and I drew a conclusion from the resulting run (rounds 8, 9, 12). The command
+exits 0 and prints nothing when it does not match. A line number taken from an
+earlier read is not stable once the file has been edited. Locate the target by
+content (`awk '/name: "<dataset>"/{f=1} f&&/key:/{print NR; exit}'`) and assert
+the value changed before interpreting output.
