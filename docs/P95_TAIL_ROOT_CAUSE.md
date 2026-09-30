@@ -179,3 +179,88 @@ and should be resolved before Whampoa numbers are quoted against Tier-1 targets.
 
 `eval_f9p_rover.rs` is at 476 LOC against the <500 limit, so tail diagnostics have no
 room in place. They require extracting a shared `bench` harness module first.
+
+---
+
+## 8. Follow-up investigation (Sprint 61, rounds 2–3)
+
+### 8.1 Which measurement survives as error grows
+
+Instrumenting the IEKF to count accepted rows per epoch and bucketing by actual
+horizontal error (Whampoa Survey, 1535 epochs):
+
+| Horizontal error | Epochs | Code rows/ep | Phase rows/ep | Pairs offered |
+|---|---:|---:|---:|---:|
+| < 2 m | 791 | 22.77 | 15.78 | 26 |
+| 2–5 m | 286 | 18.56 | 9.01 | 15 |
+| 5–20 m | 388 | 16.04 | 6.76 | 15 |
+| > 20 m | 70 | 17.20 | 5.54 | 16 |
+
+This resolves the question left open in §4. Measurements are **not** being gated
+away: 16–17 pseudorange rows are still accepted at the worst epochs. But carrier
+collapses by 65% (15.78 → 5.54). The position is therefore being driven largely by
+**raw pseudorange**, where NLOS bias is the dominant error term.
+
+This reframes the problem: it is not a "filter cannot coast" problem, it is a
+**code-bias** problem. Adding a motion model would not remove a biased measurement.
+
+### 8.2 Negative result: sticky CMC protection is a no-op
+
+§8.1 implies the CMC multipath detector should be the natural defence — but its
+protection was gated behind carrier availability:
+
+```rust
+if let Some(cp) = dd_cp { /* downweight */ } else { base_pr_var }   // old
+```
+
+Losing carrier phase is itself a *symptom* of NLOS, so the pairs most likely to be
+contaminated received no protection at all. This was implemented using the
+tracker's remembered (stateful) estimate, decayed per epoch
+(`CMC_STICKY_DECAY = 0.7`, self-clearing via `CmcTrack::update`).
+
+**Measured result: no effect.** Across all 6 datasets every row was bit-identical
+to baseline except TST1 Survey Fwd, which regressed slightly (p50 1.446 → 1.455 m).
+Reverted.
+
+Why inert: `apply_cmc_deweight` only sees `None` when the *band* carries no phase at
+all, whereas the low phase-row count in §8.1 is dominated by pairs whose ambiguity
+state is not yet allocated (`append_dd_phase_row` returns early when
+`get_amb_idx` is `None`) — those pairs still take the `Some` branch and are
+unaffected. The `multipath_m` estimate is also only non-zero after
+`CMC_WARMUP_EPOCHS` of arc plus a deviation beyond `CMC_MULTIPATH_THRESHOLD_M`.
+
+### 8.3 `robust_inflate` is a deliberate guard — do not weaken it
+
+`robust_inflate` (`update/robust.rs`) inflates R in proportion to the *squared*
+innovation, which caps any observation's normalised weight at a constant. A
+lagging filter therefore recovers slowly: a 20 m innovation cannot snap the
+solution back, because the guard refuses to let one observation dominate.
+
+This is **intentional** and is the mechanism that guarantees zero false fixes, the
+project's first-ranked requirement. Trading it for faster tail recovery would
+re-open exactly the failure mode that produced the original 7.6–23.5 m tail.
+Left untouched.
+
+### 8.4 Concrete defect found: 2-pass lever-arm calibration is unstable
+
+`eval_f9p_rover.rs` declares `lever_arm: None` for both Whampoa datasets and relies
+on `execute_calibrated_post_process` to recover the mounting offset. Running that
+calibration in **both** passes (instead of PPK only) exposed that the estimator does
+not converge consistently:
+
+| Dataset | Fwd-pass arm | PPK-pass arm | Fwd p50 | Fwd p95 |
+|---|---|---|---:|---:|
+| Whampoa Patch | `[0.9282, -0.2094, -0.6462]` | `[0.9362, -0.0924, -0.6509]` | 2.377 → 2.205 m | 27.283 → 27.723 m |
+| Whampoa Survey | `[0.0004, -0.8163, -0.4414]` | `[-0.3110, -0.4597, 0.0840]` | 1.873 → **2.407 m** | 19.302 → **20.236 m** |
+
+For Whampoa Patch the two passes agree closely and $p_{50}$ improves. For Whampoa
+Survey they disagree materially (magnitudes 0.93 m vs 0.56 m, different directions)
+and every Fwd metric gets worse — the estimator is fitting noise, not a physical
+offset. Reverted; an unstable estimate must not be used to score results.
+
+**Actionable follow-up:** make `CalibrationConvergenceCriteria` actually reject a
+disagreement between passes (e.g. require the recovered arm to be stable across
+independent segments before it is applied), and only then use the recovered arm for
+both passes so the two passes measure the same thing. Until then the Whampoa Fwd
+numbers carry an uncorrected mounting offset and must not be quoted against
+Tier-1 targets.
