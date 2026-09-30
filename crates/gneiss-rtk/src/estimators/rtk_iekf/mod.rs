@@ -149,6 +149,9 @@ pub struct GnssRtkIekf {
     code_phase_div: Vec<(u8, f64)>,
 }
 
+/// `Constellation::Glonass as u8` in a `DoubleDiffKey` (Qzss remapped to 0).
+const GLONASS_CONSTELLATION_ID: u8 = 1;
+
 impl GnssRtkIekf {
     /// Default measurement elevation cut-off: 10 degrees.
     const DEFAULT_MIN_ELEVATION_RAD: f64 = 0.1745;
@@ -427,6 +430,9 @@ impl GnssRtkIekf {
     /// for its initial uncertainty rather than a fixed constant -- see that
     /// function's doc comment.
     fn update_dd_ambiguity(&mut self, key: DoubleDiffKey, dd_cp: Option<f64>, dd_pr: f64, lambda: f64, lli_slip: bool, pr_var_m2: f64) {
+        // GLONASS DD ambiguities are unresolvable: FDMA channels, a distinct
+        // ephemeris time system (UTC(SU)+3h), RINEX 2 compact base mapping.
+        if key.constellation_id == GLONASS_CONSTELLATION_ID { return; }
         let init_amb = dd_cp.map_or(0.0, |cp| cp - dd_pr / lambda);
         if std::env::var("WL_TRACE").is_ok() && init_amb.abs() > 1e5 {
             eprintln!("BAD-SEED tow-file key={:?} init_amb={:.3e}", key, init_amb);
