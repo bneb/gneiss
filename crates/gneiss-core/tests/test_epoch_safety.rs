@@ -3,8 +3,8 @@
 use gneiss_core::ephemeris::BeidouEphemeris;
 use gneiss_core::sat::{Constellation, SatelliteId};
 use gneiss_core::time::{
-    BdtEpoch, BdtScale, Epoch, EpochKey, GlonassScale, GpsEpoch, GpsScale, GpsTime, GstScale,
-    TimeDelta, UtcScale, BDT_OFFSET_NANOS, NANOS_PER_SEC,
+    BdtEpoch, Epoch, EpochKey, GlonassScale, GpsEpoch, GpsScale, GpsTime, GstScale,
+    TimeDelta, UtcScale, BDT_OFFSET_NANOS, BDT_OFFSET_SECONDS, NANOS_PER_SEC,
 };
 use std::collections::HashMap;
 
@@ -36,33 +36,109 @@ fn test_addition_and_subtraction_of_timedelta() {
     assert_eq!(t_back, t0);
 }
 
+/// Clock-bias probe tolerance. `af1` is inflated 7 orders above any real
+/// broadcast value, so a 14 s GPST/BDT epoch mix-up moves the clock bias by
+/// `af1 * 14 = 1.4e-3` s. This tolerance sits 6 orders below that error and
+/// 6 orders above the ~1e-14 s of f64 round-off in the epoch subtraction.
+const CLOCK_BIAS_TOL_S: f64 = 1e-9;
+
+/// Builds a BeiDou B1I ephemeris probe for clock-bias testing.
+///
+/// Two elements are deliberately synthetic:
+/// - `m0 = 0` makes the fixed-point eccentric-anomaly solve return exactly
+///   `0.0`, so the relativistic term `F * e * sqrt_a * sin(E)` in
+///   `calc_keplerian` vanishes identically and the expected bias at TOC is
+///   exactly `af0 - tgd1`, to the last bit.
+/// - `af1 = -1e-4` s/s is 7 orders above a real broadcast drift. With a
+///   realistic `af1 ~ -6.8e-12` the same 14 s mix-up moves the clock by only
+///   ~1e-10 s, which a 1e-10 tolerance would wave through — that is why the
+///   original version of this test could not detect the error it named.
+///
+/// All other elements are realistic broadcast values and are unconstrained by
+/// the clock-bias assertion.
+fn beidou_clock_probe(sat: SatelliteId, toe: GpsTime, toc: GpsTime) -> BeidouEphemeris {
+    BeidouEphemeris {
+        sat,
+        toe,
+        toc,
+        af0: -2.71548e-4,
+        af1: -1.0e-4,
+        af2: 0.0,
+        aode: 70,
+        crs: 70.0,
+        delta_n: 4.32e-9,
+        m0: 0.0,
+        cuc: -1.76e-7,
+        e: 1.93e-3,
+        cus: 4.60e-6,
+        sqrt_a: 5153.5396,
+        cic: 1.35e-7,
+        omega0: -2.968,
+        cis: -3.91e-8,
+        i0: 0.9798,
+        crc: 298.0,
+        omega: -1.061,
+        omega_dot: -8.07e-9,
+        idot: 4.57e-11,
+        tgd1: 1.2e-9,
+        tgd2: 0.0,
+        aodc: 70,
+    }
+}
+
+/// Asserts the clock bias evaluated in GPST equals the BDT-frame expectation.
+#[track_caller]
+fn assert_bias_matches_bdt_toc(eph: &BeidouEphemeris, t_eval_gpst: GpsTime) {
+    let (_, _, clk_err, _) = eph.position(t_eval_gpst);
+    let expected = eph.af0 - eph.tgd1;
+    assert!(
+        (clk_err - expected).abs() < CLOCK_BIAS_TOL_S,
+        "clock bias at TOC should be af0 - tgd1 = {expected:e}, got {clk_err:e} \
+         (delta {:e} s); a 14 s GPST/BDT mix-up would show ~1.4e-3 s",
+        (clk_err - expected).abs(),
+    );
+}
+
+#[test]
+fn test_bdt_offset_constant_matches_icd() {
+    // Pinned independently of the implementation so the canonical constant
+    // cannot silently drift from the ICD value the probe tests assert against.
+    assert_eq!(BDT_OFFSET_SECONDS, 14.0);
+    assert_eq!(BDT_OFFSET_NANOS, 14 * (NANOS_PER_SEC as i64));
+}
+
 #[test]
 fn test_beidou_ephemeris_clock_bias_at_toc() {
-    let sat = SatelliteId::new(Constellation::Beidou, 1);
+    // PRN 1 is a BeiDou GEO satellite (prn <= 5), exercising the GEO branch.
     let toc_bdt = GpsTime::new(2105, 424_800.0);
-    let toe_bdt = GpsTime::new(2105, 424_800.0);
-    let af0 = -2.71548e-4;
-    let af1 = -6.82121e-12;
-    let af2 = 0.0;
-    let tgd1 = 1.2e-9;
+    let eph = beidou_clock_probe(SatelliteId::new(Constellation::Beidou, 1), toc_bdt, toc_bdt);
 
-    let eph = BeidouEphemeris {
-        sat, toe: toe_bdt, toc: toc_bdt, af0, af1, af2,
-        aode: 70, crs: 70.0, delta_n: 4.32e-9, m0: 2.456,
-        cuc: -1.76e-7, e: 1.93e-3, cus: 4.60e-6, sqrt_a: 5153.5396,
-        cic: 1.35e-7, omega0: -2.968, cis: -3.91e-8, i0: 0.9798,
-        crc: 298.0, omega: -1.061, omega_dot: -8.07e-9, idot: 4.57e-11,
-        tgd1, tgd2: 0.0, aodc: 70,
-    };
+    // toe/toc are BDT; callers pass GPST, which runs 14 s ahead.
+    assert_bias_matches_bdt_toc(&eph, toc_bdt + 14.0);
+}
 
-    // Satellite position and clock evaluated at TOC:
-    // When time in GPST is (toc_bdt + 14s), t_bdt inside position is toc_bdt.
-    let t_eval_gpst = GpsTime::new(toc_bdt.week, toc_bdt.tow + 14.0);
-    let (_, _, clk_err, _) = eph.position(t_eval_gpst);
+#[test]
+fn test_beidou_meo_clock_bias_at_toc() {
+    // PRN 6 is neither <= 5 nor >= 59, exercising the non-GEO branch, which
+    // takes a different Earth-rotation path than the GEO branch above.
+    let toc_bdt = GpsTime::new(2105, 424_800.0);
+    let eph = beidou_clock_probe(SatelliteId::new(Constellation::Beidou, 6), toc_bdt, toc_bdt);
 
-    // At TOC, tc = t_bdt - toc_bdt = 0.0. Clock correction is af0 - tgd1 (neglecting relativity).
-    let expected_clk = af0 - tgd1;
-    assert!((clk_err - expected_clk).abs() < 1e-10, "Clock bias at TOC must match af0 - tgd1 without 14s error");
+    assert_bias_matches_bdt_toc(&eph, toc_bdt + 14.0);
+}
+
+#[test]
+fn test_beidou_clock_bias_at_toc_across_week_boundary() {
+    // TOC sits 5 s before the week rolls over, so the GPST->BDT subtraction has
+    // to carry the week number down by one, not just the time of week.
+    let toc_bdt = GpsTime::new(2105, 604_795.0);
+    let eph = beidou_clock_probe(SatelliteId::new(Constellation::Beidou, 1), toc_bdt, toc_bdt);
+
+    let t_eval_gpst = toc_bdt + 14.0;
+    assert_eq!(t_eval_gpst.week, 2106, "probe must actually cross the week boundary");
+    assert!((t_eval_gpst.tow - 9.0).abs() < 1e-9, "expected tow 9.0, got {}", t_eval_gpst.tow);
+
+    assert_bias_matches_bdt_toc(&eph, t_eval_gpst);
 }
 
 #[test]

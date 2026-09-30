@@ -2,7 +2,7 @@
 
 use crate::keplerian::calc_keplerian;
 use crate::sat::SatelliteId;
-use crate::time::GpsTime;
+use crate::time::{GpsTime, BDT_OFFSET_SECONDS};
 use nalgebra::Vector3;
 use super::{MU_BDS, MU_GAL, MU_GPS, OMEGA_E_BDS, OMEGA_E_GAL, OMEGA_E_GPS};
 
@@ -174,8 +174,15 @@ impl GalileoEphemeris {
 }
 
 impl BeidouEphemeris {
+    /// `toe`/`toc` are broadcast in BDT; `t` arrives in GPST, which runs 14 s ahead.
+    /// `Sub<f64> for GpsTime` normalizes the week, so subtracting across a week
+    /// boundary carries the week number down with the time of week.
+    fn to_bdt(&self, t: GpsTime) -> GpsTime {
+        t - BDT_OFFSET_SECONDS
+    }
+
     pub fn position(&self, t: GpsTime) -> (Vector3<f64>, Vector3<f64>, f64, f64) {
-        let t_bdt = GpsTime::new(t.week, t.tow - 14.0);
+        let t_bdt = self.to_bdt(t);
         let is_bds_geo = self.sat.prn <= 5 || self.sat.prn >= 59;
         calc_keplerian(
             t_bdt, self.toe, self.toc, self.af0, self.af1, self.af2,
@@ -187,7 +194,7 @@ impl BeidouEphemeris {
     }
 
     pub fn position_iono_free(&self, t: GpsTime) -> (Vector3<f64>, Vector3<f64>, f64, f64) {
-        let t_bdt = GpsTime::new(t.week, t.tow - 14.0);
+        let t_bdt = self.to_bdt(t);
         let is_bds_geo = self.sat.prn <= 5 || self.sat.prn >= 59;
         calc_keplerian(
             t_bdt, self.toe, self.toc, self.af0, self.af1, self.af2,

@@ -18,6 +18,10 @@ pub const NANOS_PER_WEEK: u64 = SECONDS_PER_WEEK * NANOS_PER_SEC;
 /// Permanent ICD offset between GPST and BDT in nanoseconds (GPST - BDT = 14s).
 pub const BDT_OFFSET_NANOS: i64 = 14 * (NANOS_PER_SEC as i64);
 
+/// Permanent ICD offset between GPST and BDT in fractional seconds (GPST - BDT = 14s).
+/// Derived from [`BDT_OFFSET_NANOS`] so the integer and `f64` forms cannot drift apart.
+pub const BDT_OFFSET_SECONDS: f64 = BDT_OFFSET_NANOS as f64 / NANOS_PER_SEC as f64;
+
 /// GLONASS timezone offset from UTC(SU) in nanoseconds (3 hours = 10,800s).
 pub const GLONASS_HOURS_NANOS: i64 = 3 * 3600 * (NANOS_PER_SEC as i64);
 
