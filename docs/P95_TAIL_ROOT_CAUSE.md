@@ -264,3 +264,63 @@ independent segments before it is applied), and only then use the recovered arm 
 both passes so the two passes measure the same thing. Until then the Whampoa Fwd
 numbers carry an uncorrected mounting offset and must not be quoted against
 Tier-1 targets.
+
+---
+
+## 9. Open defect: F9P and Odaiba resolve zero integer ambiguities in `eval_qinertia_ppk`
+
+Discovered while validating the relative NLOS gate: `check_f9p_benchmark.py`,
+once its regex was repaired, reports the flagship low-cost benchmark at
+**0 / 4521 integer fixes (0.0%)**. Accuracy is good (p50 0.240 m, p95 0.469 m),
+so this is purely an ambiguity-resolution failure, not a positioning failure.
+
+### 9.1 Scope
+
+| Dataset (eval_qinertia_ppk) | Mode | Fix rate |
+|---|---|---:|
+| RTK Explorer F9P (u-blox, kinematic 1 Hz) | kinematic | **0 / 4521 (0.0%)** |
+| Odaiba (UrbanNav Trimble 10 Hz) | kinematic | **0 / 600 (0.0%)** |
+| NGS Geodetic Baseline (112.5 m) | static | 250 / 300 (83.3%) |
+| NOAA CORS P181/P224 (15 km) | static | 600 / 600 (100%) |
+
+The split is by dynamics: **every kinematic dataset fixes nothing; every static
+dataset fixes normally.**
+
+### 9.2 The same engine fixes the same data elsewhere
+
+`eval_f9p_rover` processes the *same* Odaiba dataset and reports a 25.0% fix
+rate over 1242/1242 epochs, with options that differ from `eval_qinertia_ppk`
+only in `tropo_gradients`, `init_passes`, and `widelane_ar`. So the capability
+exists in the engine; something in the `eval_qinertia_ppk` kinematic
+configuration prevents it engaging.
+
+Note also that `eval_qinertia_ppk` retains only 334 of 600 Odaiba epochs, versus
+1242/1242 in `eval_f9p_rover` — the two binaries are not seeing the same epoch
+population, which is itself unexplained.
+
+### 9.3 Hypotheses tested and rejected
+
+1. **Kinematic ambiguity-variance gate** (`ar.rs:99`,
+   `is_kinematic && any(q_amb[(i,i)] > 1.0)`). Relaxed to 1000.0 — F9P stayed at
+   0/4521. Not the blocker.
+2. **`widelane_ar: false`** (all four specs in `eval_qinertia_ppk`; `eval_f9p_rover`
+   uses `true`). Enabling it left F9P and Odaiba at 0% — *but* raised the NGS
+   static baseline from 83.3% to **100%** and held CORS at 99.8%. This looks like
+   a genuine separate improvement, but it is unexplained and unverified, so it was
+   **not** shipped. Worth a dedicated investigation.
+3. **GLONASS** (`enable_glonass: true` on F9P). Rejected as the general cause:
+   Odaiba has `enable_glonass: false` and still fixes nothing.
+
+An unconditional call counter placed in `resolve_ambiguities_screened` recorded
+**zero invocations** for every dataset in this binary, including the static ones
+that report 100% fixes. That is contradictory with `forward.rs:98` calling
+`iekf.process_epoch` on every matched epoch, and it means the "Fixed" counts and
+the AR entry point are not connected the way the call graph suggests. This is
+the most likely place to look next.
+
+### 9.4 Why this matters
+
+A low-cost u-blox F9P benchmark that never resolves a single ambiguity cannot be
+quoted alongside commercial Tier-1 parity claims, even though its float accuracy
+is already strong. Until the kinematic AR path engages, the headline fix rate for
+the hardware most surveyors can actually afford is zero.
