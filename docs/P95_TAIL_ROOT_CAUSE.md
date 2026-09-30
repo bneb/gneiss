@@ -398,3 +398,53 @@ Make the acceptance statistic robust while keeping the hard outlier cap:
 This must not be done without the upstream investigation: the guard is what
 guarantees zero false fixes, and relaxing it is exactly the trade this project
 has refused three times. Validate against TST1/Whampoa/Shinjuku before shipping.
+
+---
+
+## 11. GLONASS code residuals are 100% catastrophic on F9P (round 7)
+
+Instrumenting `validate_fixed_pseudorange_residuals` to attribute each residual
+to its DD pair, on the F9P dataset at fixed positions:
+
+| constellation | rows | > 1 m | > 10 m |
+|---|---:|---:|---:|
+| 0 (GPS) | 126,309 | 17.70% | 0.320% |
+| **1 (GLONASS)** | 29,734 | **100.00%** | **100.000%** |
+| 2 (Galileo) | 60,306 | 19.25% | 0.773% |
+
+Worst single residual: **19,995.85 m**, constellation 1, sat 19, ref 9, band 1.
+
+Every GLONASS row is wrong by more than 10 m, and the worst is 20 km — far
+beyond any plausible code noise, so this is a modelling/parsing fault, not
+multipath. F9P is the only spec in `eval_qinertia_ppk` with
+`enable_glonass: true`; the two datasets with it disabled (NGS, CORS) show a
+worst residual of 4.11 m and 5.26 m respectively.
+
+**It is not, however, the only cause of the 0% fix rate.** Setting
+`enable_glonass: false` for F9P removed the 20 km residuals but left the
+reported fix rate at 0 / 4521. So the code screen has at least one further
+failing condition once GLONASS is out of the picture. GLONASS is therefore a
+severe independent defect, not the sole blocker.
+
+### 11.1 Why GLONASS residuals can reach 20 km
+
+GLONASS broadcast ephemerides are not referenced to GPST. They are in
+UTC(SU), conventionally converted with a +3 h offset and the leap-second
+history, and each satellite additionally sits on its own FDMA channel
+(frequency increments of 0.5625 MHz from L1 base, `glo_freq_num` in
+`sat_pos.rs`). A 20 km position error is consistent with a few seconds of
+ephemeris time error (~3.8 km/s orbital speed) rather than a metre-level
+correction. The base station is a teqc-produced compact RINEX 2.11 file in
+which GLONASS satellites share the GPS observation-type table
+(`L1 L2 L5 C1 P1 C2 P2 C5`), which is a second, independent way for the GLONASS
+leg to be mis-modelled.
+
+### 11.2 Next steps
+
+1. Establish the correct GLONASS time/frequency handling against a reference,
+   then fix `sat_pos.rs`/`glo_freq_num` or the RINEX 2 compact GLONASS mapping.
+   Until then, GLONASS rows are poison and should arguably be excluded from DD
+   formation when the receiver/base mix includes a RINEX 2 compact base.
+2. Re-run the F9P demotion breakdown with GLONASS disabled to find the
+   remaining veto condition, which is still unknown.
+3. Only after both: reconsider making the acceptance statistic robust (§10.4).
