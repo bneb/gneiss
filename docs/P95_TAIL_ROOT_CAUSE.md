@@ -1118,3 +1118,39 @@ weighting problem -- no amount of covariance damping can distinguish a wrong
 integer from a right one.
 
 No code change ships. The floor knob was removed; the sweep is recorded here.
+
+---
+
+## 24. Shinjuku: AR is irrelevant; the 22.9 m tail is a pure float problem (round 18)
+
+Applied the section 23 analysis to Tokyo Shinjuku, the worst urban-canyon
+dataset. Smooth PPK, 2096 epochs, `GNEISS_NO_AR=1` forcing float:
+
+| | p50 | p90 | p95 | p99 | max |
+|---|---:|---:|---:|---:|---:|
+| AR on (7.0% fixed) | 1.582 | 11.682 | 22.927 | 26.833 | 36.648 |
+| AR off (pure float) | 1.575 | 11.682 | 22.927 | 26.833 | 36.648 |
+
+**The two distributions are identical.** Weibull agrees too (k = 1.035 both,
+p99.9 = 25.398 vs 25.330 m). And **1830 of 2096 epochs are bit-identical** —
+ambiguity resolution changes almost nothing on this dataset.
+
+Where the 266 epochs that do differ were tested, the Wilcoxon says float is
+*better*: `p = 3.77e-3`, `P(AR_ON better) = 0.449`.
+
+So on Shinjuku the 22.9 m p95 is **not** an AR problem at all. It is the float
+double-difference solution itself. Every hour spent on ambiguity screening,
+ratio tests, and projection damping cannot move this number, because AR is
+nearly inert here — there is simply too little resolvable geometry in a dense
+skyscraper canyon for 7% of epochs to fix, and the remaining 93% float out at
+22 m.
+
+This redirects the remaining work decisively. The F9P lesson (AR helps the
+median, costs the tail) does not generalise. Where fix rates are low, the tail
+belongs to the float solution and the target is float quality: carrier
+availability (round 8 measurement: phase collapses 15.78 -> 5.54 rows/epoch as
+error grows), NLOS code bias, and geometry. Where fix rates are high, the
+target is the projection and the screening of accepted integers.
+
+Two regimes, two different problems. Neither is currently addressed by the AR
+work that Sprints 40-59 and 61 focused on.

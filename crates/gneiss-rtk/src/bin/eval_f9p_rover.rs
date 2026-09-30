@@ -227,7 +227,24 @@ fn extract_errors(
     traj: &[SmoothedEpoch],
     truth: &BTreeMap<i64, GtPoint>,
     lever_arm: Option<Vector3<f64>>,
+    dump_tag: &str,
 ) -> (Vec<f64>, Vec<f64>, usize) {
+    if let Ok(base) = std::env::var("GNEISS_ERR_DUMP") {
+        use std::io::Write;
+        let path = format!("{base}.{dump_tag}");
+        let Ok(mut f) = std::fs::File::create(&path) else {
+            eprintln!("[ERRDUMP] cannot open {path}");
+            return (Vec::new(), Vec::new(), 0);
+        };
+        let _ = writeln!(f, "# tow quality h_err_m");
+        for ep in traj {
+            if let Some(t_pt) = find_closest_truth(truth, ep.time.tow) {
+                let (h, _) = compute_errors(ep.position_ecef, truth_antenna_pos(&t_pt, lever_arm));
+                let _ = writeln!(f, "{:.0} {} {:.6}", ep.time.tow, ep.quality, h);
+            }
+        }
+        eprintln!("[ERRDUMP] wrote {path}");
+    }
     let mut h_errs = Vec::with_capacity(traj.len());
     let mut errs_3d = Vec::with_capacity(traj.len());
     let mut fixed_h_errs = Vec::new();
@@ -388,7 +405,8 @@ fn evaluate_pass(
     let (result, eff_arm) = run_dataset_pipeline(
         spec, rover_epochs, base_epochs, ephems, truth, &config, &options, bidirectional,
     )?;
-    let (h_errs, errs_3d, fixed) = extract_errors(&result.trajectory, truth, eff_arm);
+    let (h_errs, errs_3d, fixed) =
+        extract_errors(&result.trajectory, truth, eff_arm, &format!("{}_{}", spec.id, if bidirectional { "smooth" } else { "fwd" }));
     Ok(calculate_metrics(h_errs, errs_3d, rover_epochs.len(), fixed))
 }
 
