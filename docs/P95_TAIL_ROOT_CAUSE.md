@@ -448,3 +448,95 @@ leg to be mis-modelled.
 2. Re-run the F9P demotion breakdown with GLONASS disabled to find the
    remaining veto condition, which is still unknown.
 3. Only after both: reconsider making the acceptance statistic robust (§10.4).
+
+---
+
+## 12. GLONASS WAS the cause — correcting §11 (round 8)
+
+**§11.0 contains a wrong claim and is hereby retracted.** It stated that setting
+`enable_glonass: false` removed the 20 km residuals but left the fix rate at
+0/4521, concluding GLONASS was "not the sole blocker".
+
+That test never ran. The `sed` used to flip the flag targeted line 312, which
+holds `widelane_ar: false`; F9P's `enable_glonass: true` is on line **313**. The
+command silently matched nothing, and I reported a no-op as an experimental
+result. Re-running against the correct line:
+
+| F9P | `enable_glonass: true` | `enable_glonass: false` |
+|---|---:|---:|
+| Forward RTK fix rate | 0 / 4521 (0.0%) | **3825 / 4521 (84.6%)** |
+| Smoothed PPK fix rate | 0 / 4521 (0.0%) | **3126 / 4521 (69.1%)** |
+
+GLONASS was the entire cause of the flagship benchmark's zero fix rate.
+
+The lesson is procedural, not technical: a `sed` that matches nothing exits 0 and
+prints nothing. Verify the substitution happened before drawing a conclusion
+from the run.
+
+### 12.1 Attempted fix (REVERTED — it manufactured false fixes)
+
+Disabling GLONASS recovers the fix rate but hides a real defect, so the fix is
+made at the guard instead. `validate_fixed_pseudorange_residuals` now excludes a
+constellation whose rows are overwhelmingly **catastrophic** (> 100 m) before
+computing RMS and the `n_large` budget.
+
+The threshold is deliberately far above `max_pr_res_m` (18 m). A broadly biased
+constellation is the *classic false-fix case* and must keep vetoing; only
+residuals far beyond any plausible code error indicate a data or modelling fault
+that carries no information about whether this fix is correct. An earlier draft
+used `max_pr_res_m` and its own unit test caught the flaw: a uniformly biased
+12-pair set was being waved through. After correcting the threshold, three unit
+tests passed and UrbanNav was bit-identical to baseline.
+
+**It was still wrong, and the CI guard caught it.** With the fix in place F9P
+reported 7.1% / 5.1% fixes but accuracy *degraded*:
+
+| F9P (check_f9p_benchmark.py) | without fix | with fix | budget |
+|---|---:|---:|---:|
+| p50 | 0.239 m | 0.238 m | 0.250 m |
+| p95 | 0.469 m | **0.507 m** | 0.500 m |
+| RMS | 0.279 m | 0.286 m | 0.350 m |
+
+p95 crossed the 0.500 m budget and the guard failed. Fix rate up, accuracy down
+is the signature of **false** fixes, not recovered ones. The change was reverted
+and the guard passes again at p95 0.469 m.
+
+The reason is §12.2: excluding GLONASS from the residual screen does not remove
+it from the solution. Ambiguity state is still allocated for GLONASS pairs, so
+LAMBDA searches a candidate set containing unobservable-epoch garbage; the small
+number of integer vectors that then survive the ratio test are artefacts of that
+garbage rather than genuine resolutions. Screening at the residual gate is too
+late in the chain to be safe on its own.
+
+**Do not ship the residual-screen exclusion in isolation.** The upstream change
+(§12.3 step 1) must land first, and the fix must then be re-validated against
+this guard.
+
+### 12.2 What it would have recovered, and why it was unsafe
+
+| F9P | before | after (shipped fix) | after (GLONASS fully disabled) |
+|---|---:|---:|---:|
+| Forward RTK | 0.0% | **7.1%** | 84.6% |
+| Smoothed PPK | 0.0% | **5.1%** | 69.1% |
+
+NGS (83.3% / 100%) and CORS (99.8%) are unchanged, so the guard behaves
+identically where no constellation is broken.
+
+Only ~5-7% of the 69-85% available is recovered, because excluding GLONASS from
+the *residual screen* is not the same as excluding it from the solution. GLONASS
+rows are already stripped from the float update by the round-4 median-relative
+gate, but ambiguity state is still allocated for GLONASS pairs, so LAMBDA
+searches a candidate set poisoned by unobservable-epoch garbage and most ratio
+tests still fail.
+
+### 12.3 Next steps, in order
+
+1. Do not allocate ambiguity state for a constellation already identified as
+   broken, so AR operates on a clean candidate set. This is the change that
+   should recover the remaining ~60-78 points of fix rate.
+2. Fix GLONASS ephemeris time handling (UTC(SU) + 3 h, leap-second history) and
+   FDMA channel mapping, and the RINEX 2 compact base mapping described in §11.1.
+   Until then GLONASS contributes no usable information.
+3. Investigate why the smoothed pass (5.1%) fixes less than the forward pass
+   (7.1%) — smoothing should not lose fixes, and the same inversion appears on
+   the NGS forward 83.3% vs smoothed 100.0% in the other direction.
