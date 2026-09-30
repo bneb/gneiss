@@ -19,6 +19,7 @@ pub mod metrics;
 pub mod obs;
 pub mod sat;
 pub mod signal;
+pub mod stats;
 pub mod sun;
 pub mod tides;
 pub mod time;
