@@ -135,37 +135,19 @@ fn build_beidou_ephemeris(
     af0: f64,
     af1: f64,
     af2: f64,
-    vals: &[f64; 32],
+    v: &[f64; 32],
 ) -> Option<Ephemeris> {
-    Some(Ephemeris::Beidou(
-        gneiss_core::ephemeris::BeidouEphemeris {
-            sat,
-            toc,
-            toe: GpsTime::new(toc.week, vals[8]),
-            af0,
-            af1,
-            af2,
-            aode: vals[0] as u32,
-            crs: vals[1],
-            delta_n: vals[2],
-            m0: vals[3],
-            cuc: vals[4],
-            e: vals[5],
-            cus: vals[6],
-            sqrt_a: vals[7],
-            cic: vals[9],
-            omega0: vals[10],
-            cis: vals[11],
-            i0: vals[12],
-            crc: vals[13],
-            omega: vals[14],
-            omega_dot: vals[15],
-            idot: vals[16],
-            tgd1: vals[22],
-            tgd2: vals[23],
-            aodc: vals[25] as u32,
-        },
-    ))
+    // toc in rinex/nav/mod.rs had 14s added; convert back so toe & toc are consistent BDT
+    let toc_bdt = GpsTime::new(toc.week, toc.tow - 14.0);
+    let toe_bdt = GpsTime::new(toc_bdt.week, v[8]);
+    Some(Ephemeris::Beidou(gneiss_core::ephemeris::BeidouEphemeris {
+        sat, toc: toc_bdt, toe: toe_bdt, af0, af1, af2,
+        aode: v[0] as u32, crs: v[1], delta_n: v[2], m0: v[3],
+        cuc: v[4], e: v[5], cus: v[6], sqrt_a: v[7],
+        cic: v[9], omega0: v[10], cis: v[11], i0: v[12],
+        crc: v[13], omega: v[14], omega_dot: v[15], idot: v[16],
+        tgd1: v[22], tgd2: v[23], aodc: v[25] as u32,
+    }))
 }
 
 fn build_qzss_ephemeris(

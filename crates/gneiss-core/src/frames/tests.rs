@@ -6,6 +6,7 @@ use nalgebra::Vector3;
 
     const SITE: Vector3<f64> = Vector3::new(4_027_893.0, 307_041.0, 4_919_475.0);
 
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     struct TestRotZ;
     impl ReferenceFrame for TestRotZ {
         const NAME: &'static str = "TEST-ROTZ";
@@ -18,6 +19,7 @@ use nalgebra::Vector3;
         });
     }
 
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     struct TestRates;
     impl ReferenceFrame for TestRates {
         const NAME: &'static str = "TEST-RATES";
@@ -54,7 +56,7 @@ use nalgebra::Vector3;
         let p = EcefPos::<Itrf2014>::new(SITE);
         assert_eq!(Itrf2014::HELMERT_TO_ITRF2014, None);
         for t in [2015.0_f64, 2020.0, 2040.0] {
-            assert_eq!(p.convert_to::<Itrf2014>(t).0, SITE);
+            assert_eq!(p.convert_to::<Itrf2014>(t).into_vector(), SITE);
         }
     }
 
@@ -91,7 +93,7 @@ use nalgebra::Vector3;
         );
         let got = EcefPos::<Itrf2020>::new(SITE)
             .convert_to::<Itrf2014>(2015.0)
-            .0
+            .into_vector()
             - SITE;
         assert!(
             (got - expected_shift).abs().max() < 1.0e-8,
@@ -126,7 +128,7 @@ use nalgebra::Vector3;
             ),
         ];
         for (v, expected) in cases {
-            let out = EcefPos::<TestRotZ>::new(v).convert_to::<Itrf2014>(2015.0).0;
+            let out = EcefPos::<TestRotZ>::new(v).convert_to::<Itrf2014>(2015.0).into_vector();
             assert!(
                 (out - expected).abs().max() < 1.0e-12,
                 "rotation {v:?} -> {out:?}, expected {expected:?}"
@@ -136,7 +138,7 @@ use nalgebra::Vector3;
 
     #[test]
     fn epoch_propagation_is_linear_in_years_from_reference_epoch() {
-        let shift_at = |t| EcefPos::<TestRates>::new(SITE).convert_to::<Itrf2014>(t).0 - SITE;
+        let shift_at = |t| EcefPos::<TestRates>::new(SITE).convert_to::<Itrf2014>(t).into_vector() - SITE;
         let at_ref = shift_at(2015.0);
         let plus10 = shift_at(2025.0);
         let minus10 = shift_at(2005.0);
@@ -250,7 +252,7 @@ use nalgebra::Vector3;
         let ep_2025 = ep.at_epoch(2025.0);
         assert_eq!(ep_2025.epoch_yr, 2025.0);
         // Shift after 5 years = 5 * [0.01, -0.02, 0.005] = [0.05, -0.10, 0.025]
-        let diff = ep_2025.pos.0 - ep.pos.0;
+        let diff = ep_2025.pos.into_vector() - ep.pos.into_vector();
         assert!((diff[0] - 0.05).abs() < 1e-9);
         assert!((diff[1] - (-0.10)).abs() < 1e-9);
         assert!((diff[2] - 0.025).abs() < 1e-9);
@@ -265,10 +267,10 @@ use nalgebra::Vector3;
         let llh_rad = Vector3::new(0.5, 1.0, 100.0);
 
         let ep_apc: EpochPosition<Itrf2014, Apc<1>> = ep_arp.to_apc(pco_neu_mm, llh_rad);
-        assert!((ep_apc.pos.0 - ep_arp.pos.0).norm() > 0.05); // ~87 mm offset
+        assert!((ep_apc.pos.into_vector() - ep_arp.pos.into_vector()).norm() > 0.05); // ~87 mm offset
 
         let ep_arp_back = ep_apc.to_arp(pco_neu_mm, llh_rad);
-        assert!((ep_arp_back.pos.0 - ep_arp.pos.0).norm() < 1e-9, "Exact roundtrip");
+        assert!((ep_arp_back.pos.into_vector() - ep_arp.pos.into_vector()).norm() < 1e-9, "Exact roundtrip");
     }
 
     #[test]
@@ -276,7 +278,7 @@ use nalgebra::Vector3;
         let v = Vector3::new(100.0, 200.0, 300.0);
         let pos: EcefPos<Itrf2014> = v.into();
         assert_eq!(pos.into_vector(), v);
-        assert_eq!(*pos, v);
+        assert_eq!(*pos.coords(), v);
         let back: Vector3<f64> = pos.into();
         assert_eq!(back, v);
         assert_eq!(pos, pos.clone());

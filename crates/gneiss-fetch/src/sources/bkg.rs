@@ -4,6 +4,19 @@ use gneiss_core::coords::Coordinate;
 use gneiss_core::time::GpsTime;
 use std::path::{Path, PathBuf};
 
+/// Standard leap seconds between GPST and UTC since 2017-01-01 (18 seconds).
+const GPS_LEAP_SECONDS: i64 = 18;
+
+/// Convert GPST to civil UTC NaiveDateTime accounting for leap seconds.
+pub(crate) fn gps_to_utc_naive(time: GpsTime) -> Result<chrono::NaiveDateTime, FetchError> {
+    let gps_epoch = chrono::NaiveDate::from_ymd_opt(1980, 1, 6)
+        .ok_or_else(|| FetchError::Decompression("Invalid GPS epoch date".to_string()))?
+        .and_hms_opt(0, 0, 0)
+        .ok_or_else(|| FetchError::Decompression("Invalid GPS epoch time".to_string()))?;
+    let seconds = (time.week as i64 * 604800) + (time.tow as i64) - GPS_LEAP_SECONDS;
+    Ok(gps_epoch + chrono::Duration::seconds(seconds))
+}
+
 pub struct BkgProvider;
 
 #[async_trait]
@@ -18,12 +31,7 @@ impl DataSource for BkgProvider {
         time: GpsTime,
         out_dir: &Path,
     ) -> Result<PathBuf, FetchError> {
-        let gps_epoch = chrono::NaiveDate::from_ymd_opt(1980, 1, 6)
-            .expect("GPS epoch 1980-01-06 is valid")
-            .and_hms_opt(0, 0, 0)
-            .expect("GPS epoch 00:00:00 is valid");
-        let seconds = (time.week as i64 * 604800) + time.tow as i64;
-        let utc_time = gps_epoch + chrono::Duration::seconds(seconds);
+        let utc_time = gps_to_utc_naive(time)?;
 
         let year = utc_time.format("%Y").to_string(); // 2020
         let doy = utc_time.format("%j").to_string(); // 359
@@ -78,12 +86,7 @@ impl DataSource for BkgProvider {
     }
 
     async fn fetch_ephemeris(&self, time: GpsTime, out_dir: &Path) -> Result<PathBuf, FetchError> {
-        let gps_epoch = chrono::NaiveDate::from_ymd_opt(1980, 1, 6)
-            .expect("GPS epoch 1980-01-06 is valid")
-            .and_hms_opt(0, 0, 0)
-            .expect("GPS epoch 00:00:00 is valid");
-        let seconds = (time.week as i64 * 604800) + time.tow as i64;
-        let utc_time = gps_epoch + chrono::Duration::seconds(seconds);
+        let utc_time = gps_to_utc_naive(time)?;
 
         let year = utc_time.format("%Y").to_string();
         let doy = utc_time.format("%j").to_string();
@@ -196,5 +199,26 @@ impl BkgProvider {
         }
 
         Ok(out_paths)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_gps_to_utc_leap_seconds_boundary() {
+        // Week 2086, TOW 259200 corresponds to 2020-01-01 00:00:00 in raw elapsed days
+        // At 00:00:10 GPST (TOW = 259210.0), subtracting 18s leap seconds gives 2019-12-31 23:59:52 UTC
+        let t_before_midnight = GpsTime::new(2086, 259_210.0);
+        let utc_prev = gps_to_utc_naive(t_before_midnight).unwrap();
+        assert_eq!(utc_prev.format("%Y").to_string(), "2019");
+        assert_eq!(utc_prev.format("%j").to_string(), "365");
+
+        // At 00:00:18 GPST (TOW = 259218.0), exactly 2020-01-01 00:00:00 UTC is reached
+        let t_exact_midnight = GpsTime::new(2086, 259_218.0);
+        let utc_curr = gps_to_utc_naive(t_exact_midnight).unwrap();
+        assert_eq!(utc_curr.format("%Y").to_string(), "2020");
+        assert_eq!(utc_curr.format("%j").to_string(), "001");
     }
 }

@@ -3,7 +3,7 @@
 use super::helmert::HelmertParams;
 
 /// Marker trait binding a coordinate realization to its published Helmert link into the ITRF2014 hub.
-pub trait ReferenceFrame {
+pub trait ReferenceFrame: 'static + Send + Sync + Copy + PartialEq + Eq {
     const NAME: &'static str;
     const HELMERT_TO_ITRF2014: Option<HelmertParams>;
 }
@@ -155,3 +155,39 @@ impl ReferenceFrame for Jgd2011 {
         scale_rate: 0.0,
     });
 }
+
+/// PZ-90.11 geodetic reference frame (GLONASS reference frame).
+///
+/// Official 14-parameter Helmert transformation parameters aligning PZ-90.11 into ITRF2014.
+/// Citations:
+/// - GLONASS Interface Control Document (ICD) Edition 5.1.
+/// - IERS Technical Note No. 36: ITRF2014.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Pz90;
+impl ReferenceFrame for Pz90 {
+    const NAME: &'static str = "PZ-90.11";
+    const HELMERT_TO_ITRF2014: Option<HelmertParams> = Some(HelmertParams {
+        tx_mm: 3.0,
+        ty_mm: -1.0,
+        tz_mm: 0.0,
+        scale_ppb: 0.0,
+        rx_mas: 0.019,
+        ry_mas: -0.042,
+        rz_mas: 0.002,
+        ref_epoch_yr: 2011.0,
+        tx_rate: 0.0,
+        ty_rate: 0.0,
+        tz_rate: 0.0,
+        rx_rate: 0.0,
+        ry_rate: 0.0,
+        rz_rate: 0.0,
+        scale_rate: 0.0,
+    });
+}
+
+/// Convenient alias for broadcast WGS84 realization.
+pub type Wgs84 = Wgs84Broadcast;
+
+/// Convenient alias for NAD83(2011) realization.
+pub type Nad83 = Nad83_2011;
+

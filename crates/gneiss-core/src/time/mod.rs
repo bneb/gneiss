@@ -1,4 +1,12 @@
+//! Time representations, scales, and high-precision epoch arithmetic.
+
 use core::ops::{Add, Sub};
+
+pub mod epoch;
+pub mod scales;
+
+pub use epoch::*;
+pub use scales::*;
 
 const SECONDS_IN_WEEK: f64 = 604800.0;
 
@@ -32,7 +40,6 @@ impl GpsTime {
         }
 
         let d = day as f64 + hour as f64 / 24.0 + minute as f64 / 1440.0 + sec / 86400.0;
-
         let a = libm::floor(y as f64 / 100.0);
         let b = 2.0 - a + libm::floor(a / 4.0);
         let jd = libm::floor(365.25 * (y as f64 + 4716.0))
@@ -68,6 +75,11 @@ impl GpsTime {
             self.week = self.week.wrapping_sub(1);
         }
         self
+    }
+
+    /// Convert into strongly typed `Epoch<GpsScale>`.
+    pub fn to_epoch(&self) -> Epoch<GpsScale> {
+        Epoch::from_week_tow(self.week, self.tow)
     }
 }
 

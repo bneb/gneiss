@@ -1,7 +1,7 @@
-# BRIEFING — 2026-09-25T07:11:00Z
+# BRIEFING — 2026-09-25T21:03:00Z
 
 ## Mission
-Implement Urban Canyon Fix Rate Expansion and Multipath Mitigation for the Gneiss RTK positioning engine, focusing on adaptive C/N0 (SNR) and elevation observation weighting, Code-Minus-Carrier (CMC) multipath detection/de-weighting, Doppler-assisted cycle slip validation, and SNR-prioritized Partial Ambiguity Resolution (PAR).
+Refactor Gneiss RTK and GNSS/INS codebase to eliminate bare, untyped vectors and floats, structurally enforcing compile-time frame safety, datum consistency, and temporal epoch alignment across all estimators and benchmark pipelines.
 
 ## 🔒 My Identity
 - Archetype: sentinel
@@ -25,6 +25,9 @@ Implement Urban Canyon Fix Rate Expansion and Multipath Mitigation for the Gneis
 - Post-Restart Cron 2 (Urban Canyon Gen 2): 0509abe5-d6e0-49e8-b353-cd730575f1dc/task-603
 - Active Cron 1 (Urban Canyon Gen 2): 0509abe5-d6e0-49e8-b353-cd730575f1dc/task-714
 - Active Cron 2 (Urban Canyon Gen 2): 0509abe5-d6e0-49e8-b353-cd730575f1dc/task-716
+- Active Orchestrator (Frame Safety): db66ae0c-b21b-4e14-ac97-93509c51c4b0
+- Progress Reporting Cron (Frame Safety): 5d3514ba-c7b7-4d48-a991-062ca148f761/task-32
+- Liveness Check Cron (Frame Safety): 5d3514ba-c7b7-4d48-a991-062ca148f761/task-34
 
 ## 🔒 Key Constraints
 - No technical decisions — relay only
@@ -35,12 +38,12 @@ Implement Urban Canyon Fix Rate Expansion and Multipath Mitigation for the Gneis
 - Mandatory blocking Victory Audit before reporting success
 
 ## User Context
-- **Last user request**: Check on worker_m4_urban_canyon and orchestrator status, ensure crons are active, and continue driving Sprint 57 to completion.
+- **Last user request**: Fan out sub agent teams to implement and review in parallel using a test-driven approach. Refactor Gneiss RTK and GNSS/INS codebase to eliminate bare, untyped vectors and floats, structurally enforcing compile-time frame safety, datum consistency, and temporal epoch alignment across all estimators and benchmark pipelines.
 - **Pending clarifications**: none
 - **Delivered results**: none
 
 ## Project Status
-- **Phase**: in progress (Milestones 1-3 complete and verified; Milestone 4 in final verification)
+- **Phase**: in progress (Project Orchestrator db66ae0c-b21b-4e14-ac97-93509c51c4b0 dispatched with active crons)
 
 ## Victory Audit Status
 - **Triggered**: no
@@ -48,9 +51,9 @@ Implement Urban Canyon Fix Rate Expansion and Multipath Mitigation for the Gneis
 - **Retry count**: 0
 
 ## Artifact Index
-- /Users/kevin/projects/gneiss/.agents/ORIGINAL_REQUEST.md — Global user request
-- /Users/kevin/projects/gneiss/ORIGINAL_REQUEST.md — Root copy of user request
-- /Users/kevin/projects/gneiss/.agents/orchestrator_urban_canyon_gen2/ — Active Orchestrator workspace
-- /Users/kevin/projects/gneiss/.agents/worker_m1/handoff.md — Verified Milestone 1 Handoff
-- /Users/kevin/projects/gneiss/.agents/worker_m2_urban_canyon/handoff.md — Verified Milestone 2 Handoff
-- /Users/kevin/projects/gneiss/.agents/worker_m3_urban_canyon/handoff.md — Verified Milestone 3 Handoff
+- /Users/kevin/projects/gneiss/ORIGINAL_REQUEST.md — Global user request
+- /Users/kevin/projects/gneiss/.agents/ORIGINAL_REQUEST.md — Agent-level user request
+- /Users/kevin/projects/gneiss/.agents/teamwork/ORIGINAL_REQUEST.md — Teamwork user request
+- /Users/kevin/projects/gneiss/.agents/teamwork/teamwork_preview_orchestrator/ — Project Orchestrator workspace
+- /Users/kevin/projects/gneiss/.agents/teamwork/teamwork_preview_orchestrator/plan.md — Orchestrator plan
+- /Users/kevin/projects/gneiss/.agents/teamwork/teamwork_preview_orchestrator/progress.md — Orchestrator progress

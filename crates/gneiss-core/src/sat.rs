@@ -63,6 +63,12 @@ pub struct SatelliteId {
     pub prn: u8,
 }
 
+impl SatelliteId {
+    pub const fn new(constellation: Constellation, prn: u8) -> Self {
+        Self { constellation, prn }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParseSatelliteIdError;
 

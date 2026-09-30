@@ -1,83 +1,12 @@
-//! Strongly-typed ECEF coordinate containers and antenna point references.
+//! Strongly-typed antenna point references and epoch-qualified geodetic positions.
 
 use core::marker::PhantomData;
 use nalgebra::Vector3;
-use super::helmert::HelmertParams;
+use super::primitives::EcefPos;
 use super::realizations::ReferenceFrame;
 
-/// Frame-tagged ECEF coordinates preventing accidental cross-datum mixing.
-pub struct EcefPos<F: ReferenceFrame>(pub Vector3<f64>, pub PhantomData<F>);
-
-impl<F: ReferenceFrame> EcefPos<F> {
-    #[must_use]
-    pub fn new(v: Vector3<f64>) -> Self {
-        Self(v, PhantomData)
-    }
-
-    #[must_use]
-    pub fn norm(&self) -> f64 {
-        self.0.norm()
-    }
-
-    #[must_use]
-    pub const fn vector(&self) -> &Vector3<f64> {
-        &self.0
-    }
-
-    #[must_use]
-    pub const fn into_vector(self) -> Vector3<f64> {
-        self.0
-    }
-
-    pub fn convert_to<F2: ReferenceFrame>(&self, t_epoch_yr: f64) -> EcefPos<F2> {
-        let to_hub = params_at(F::HELMERT_TO_ITRF2014, t_epoch_yr);
-        let from_hub = params_at(F2::HELMERT_TO_ITRF2014, t_epoch_yr);
-        EcefPos::new(from_hub.apply_inverse(to_hub.apply(self.0)))
-    }
-}
-
-fn params_at(p: Option<HelmertParams>, t_yr: f64) -> HelmertParams {
-    p.map_or_else(|| HelmertParams::identity_at(t_yr), |params| params.at(t_yr))
-}
-
-impl<F: ReferenceFrame> core::ops::Deref for EcefPos<F> {
-    type Target = Vector3<f64>;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl<F: ReferenceFrame> From<Vector3<f64>> for EcefPos<F> {
-    fn from(v: Vector3<f64>) -> Self {
-        Self::new(v)
-    }
-}
-
-impl<F: ReferenceFrame> From<EcefPos<F>> for Vector3<f64> {
-    fn from(p: EcefPos<F>) -> Self {
-        p.0
-    }
-}
-
-impl<F: ReferenceFrame> Clone for EcefPos<F> {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-
-impl<F: ReferenceFrame> core::fmt::Debug for EcefPos<F> {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "EcefPos<{}>({})", F::NAME, self.0)
-    }
-}
-
-impl<F: ReferenceFrame> Copy for EcefPos<F> {}
-
-impl<F: ReferenceFrame> PartialEq for EcefPos<F> {
-    fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
-    }
-}
+// Re-export EcefPos for callers importing from positions
+pub use super::primitives::EcefPos as EcefPosition;
 
 /// Marker trait for physical points of reference on a station.
 pub trait AntennaReference: 'static {
@@ -129,9 +58,9 @@ impl<F: ReferenceFrame, R: AntennaReference> EpochPosition<F, R> {
     pub fn at_epoch(&self, target_epoch_yr: f64) -> Self {
         let dt = target_epoch_yr - self.epoch_yr;
         let new_pos = if let Some(v) = self.velocity_m_yr {
-            self.pos.0 + v * dt
+            *self.pos.coords() + v * dt
         } else {
-            self.pos.0
+            *self.pos.coords()
         };
         Self {
             pos: EcefPos::new(new_pos),
@@ -161,7 +90,7 @@ impl<F: ReferenceFrame> EpochPosition<F, Arp> {
     ) -> EpochPosition<F, Apc<BAND>> {
         let pco_ecef = neu_to_ecef(pco_neu_mm * 1e-3, rx_llh_rad);
         EpochPosition {
-            pos: EcefPos::new(self.pos.0 + pco_ecef),
+            pos: EcefPos::new(*self.pos.coords() + pco_ecef),
             epoch_yr: self.epoch_yr,
             velocity_m_yr: self.velocity_m_yr,
             _marker: PhantomData,
@@ -177,7 +106,7 @@ impl<F: ReferenceFrame, const BAND: u8> EpochPosition<F, Apc<BAND>> {
     ) -> EpochPosition<F, Arp> {
         let pco_ecef = neu_to_ecef(pco_neu_mm * 1e-3, rx_llh_rad);
         EpochPosition {
-            pos: EcefPos::new(self.pos.0 - pco_ecef),
+            pos: EcefPos::new(*self.pos.coords() - pco_ecef),
             epoch_yr: self.epoch_yr,
             velocity_m_yr: self.velocity_m_yr,
             _marker: PhantomData,

@@ -191,7 +191,7 @@ impl AntexDatabase {
 
     /// Look up satellite calibration by PRN and [`gneiss_core::time::GpsTime`].
     pub fn find_satellite_gps(&self, prn: &str, time: gneiss_core::time::GpsTime) -> Option<&AntennaPcv> {
-        let unix_s = 315_964_800 + (time.week as i64) * 604_800 + (time.tow as i64);
+        let unix_s = 315_964_800 + (time.week as i64) * 604_800 + (time.tow as i64) - 18;
         let dt = DateTime::from_timestamp(unix_s, 0)?;
         self.find_satellite(prn, dt)
     }
@@ -266,25 +266,24 @@ mod tests {
     fn write_temp_antex(content: &str) -> PathBuf {
         let dir = std::env::temp_dir();
         let n = ANTEX_COUNTER.fetch_add(1, Ordering::SeqCst);
-        let path = dir.join(format!("test_antex_{}.atx", n));
+        let path = dir.join(format!("test_antex_{}_{}.atx", std::process::id(), n));
         std::fs::write(&path, content).unwrap();
         path
     }
 
     /// A minimal valid antenna block (single frequency G01).
     fn minimal_antenna_block(ant_type: &str, serial: &str, freq_code: &str) -> String {
+        let id_line = format!("{:20}{:20}", ant_type, serial);
+        let fr_line = format!("   {:4}", freq_code);
         let lines = [
-            ("", "START OF ANTENNA"),
-            (&format!("{:20}{:20}", ant_type, serial), "TYPE / SERIAL NO"),
-            ("     0.0", "DAZI"),
-            ("     0.0  17.0   1.0", "ZEN1 / ZEN2 / DZEN"),
+            ("", "START OF ANTENNA"), (&id_line[..], "TYPE / SERIAL NO"),
+            ("     0.0", "DAZI"), ("     0.0  17.0   1.0", "ZEN1 / ZEN2 / DZEN"),
             ("  2020     1    15     0     0    0.0000000", "VALID FROM"),
             ("  2030     1    15     0     0    0.0000000", "VALID UNTIL"),
-            (&format!("   {:4}", freq_code), "START OF FREQUENCY"),
+            (&fr_line[..], "START OF FREQUENCY"),
             ("      1.00      2.00      3.00", "NORTH / EAST / UP"),
             ("   NOAZI    0.10    0.20    0.30", ""),
-            ("", "END OF FREQUENCY"),
-            ("", "END OF ANTENNA"),
+            ("", "END OF FREQUENCY"), ("", "END OF ANTENNA"),
         ];
         lines.iter().map(|(d, l)| ant_line(d, l)).collect()
     }
@@ -319,15 +318,11 @@ mod tests {
 
     #[test]
     fn test_parse_multiple_antennas() {
-        let content = format!(
-            "{}{}",
-            minimal_antenna_block("ANT_A", "G01", "G01"),
-            minimal_antenna_block("ANT_B", "R02", "G01")
-        );
-        let path = write_temp_antex(&content);
+        let a1 = minimal_antenna_block("ANT_A", "G01", "G01");
+        let a2 = minimal_antenna_block("ANT_B", "R02", "G01");
+        let path = write_temp_antex(&format!("{}{}", a1, a2));
         let db = AntexDatabase::parse(&path).unwrap();
         std::fs::remove_file(&path).ok();
-
         assert_eq!(db.antennas.len(), 2);
         assert_eq!(db.antennas[0].antenna_type, "ANT_A");
         assert_eq!(db.antennas[1].antenna_type, "ANT_B");
@@ -354,32 +349,24 @@ mod tests {
 
     #[test]
     fn test_parse_short_lines_skipped() {
-        // Lines shorter than 60 characters are skipped.
-        let short = "short line\n";
-        let path = write_temp_antex(short);
+        let path = write_temp_antex("short line\n");
         let db = AntexDatabase::parse(&path).unwrap();
         std::fs::remove_file(&path).ok();
-
         assert!(db.antennas.is_empty());
     }
 
     #[test]
     fn test_parse_frequency_multiple_frequencies() {
+        let id_line = format!("{:20}{:20}", "MULTI_FREQ", "G01");
         let lines = [
-            ("", "START OF ANTENNA"),
-            (&format!("{:20}{:20}", "MULTI_FREQ", "G01"), "TYPE / SERIAL NO"),
-            ("     0.0", "DAZI"),
-            ("     0.0  17.0   1.0", "ZEN1 / ZEN2 / DZEN"),
+            ("", "START OF ANTENNA"), (&id_line[..], "TYPE / SERIAL NO"),
+            ("     0.0", "DAZI"), ("     0.0  17.0   1.0", "ZEN1 / ZEN2 / DZEN"),
             ("  2020     1    15     0     0    0.0000000", "VALID FROM"),
             ("  2030     1    15     0     0    0.0000000", "VALID UNTIL"),
-            ("   G01", "START OF FREQUENCY"),
-            ("     10.00     20.00     30.00", "NORTH / EAST / UP"),
-            ("   NOAZI    0.10    0.20", ""),
-            ("", "END OF FREQUENCY"),
-            ("   G02", "START OF FREQUENCY"),
-            ("     40.00     50.00     60.00", "NORTH / EAST / UP"),
-            ("   NOAZI    0.30    0.40", ""),
-            ("", "END OF FREQUENCY"),
+            ("   G01", "START OF FREQUENCY"), ("     10.00     20.00     30.00", "NORTH / EAST / UP"),
+            ("   NOAZI    0.10    0.20", ""), ("", "END OF FREQUENCY"),
+            ("   G02", "START OF FREQUENCY"), ("     40.00     50.00     60.00", "NORTH / EAST / UP"),
+            ("   NOAZI    0.30    0.40", ""), ("", "END OF FREQUENCY"),
             ("", "END OF ANTENNA"),
         ];
         let content: String = lines.iter().map(|(d, l)| ant_line(d, l)).collect();
@@ -445,21 +432,15 @@ mod tests {
 
     #[test]
     fn test_parse_receiver_azimuth_grid() {
+        let id_line = format!("{:<40}", "RECV_WITH_AZI");
         let lines = [
-            ("", "START OF ANTENNA"),
-            (&format!("{:<40}", "RECV_WITH_AZI"), "TYPE / SERIAL NO"),
-            ("    90.0", "DAZI"),
-            ("     0.0  10.0  10.0", "ZEN1 / ZEN2 / DZEN"),
-            ("   G01", "START OF FREQUENCY"),
-            ("      1.00      2.00      3.00", "NORTH / EAST / UP"),
-            ("   NOAZI    1.00    2.00", ""),
-            ("     0.0    1.10    2.10", ""),
-            ("    90.0    1.20    2.20", ""),
-            ("   180.0    1.30    2.30", ""),
-            ("   270.0    1.40    2.40", ""),
-            ("   360.0    1.10    2.10", ""),
-            ("", "END OF FREQUENCY"),
-            ("", "END OF ANTENNA"),
+            ("", "START OF ANTENNA"), (&id_line[..], "TYPE / SERIAL NO"),
+            ("    90.0", "DAZI"), ("     0.0  10.0  10.0", "ZEN1 / ZEN2 / DZEN"),
+            ("   G01", "START OF FREQUENCY"), ("      1.00      2.00      3.00", "NORTH / EAST / UP"),
+            ("   NOAZI    1.00    2.00", ""), ("     0.0    1.10    2.10", ""),
+            ("    90.0    1.20    2.20", ""), ("   180.0    1.30    2.30", ""),
+            ("   270.0    1.40    2.40", ""), ("   360.0    1.10    2.10", ""),
+            ("", "END OF FREQUENCY"), ("", "END OF ANTENNA"),
         ];
         let content: String = lines.iter().map(|(d, l)| ant_line(d, l)).collect();
         let path = write_temp_antex(&content);
@@ -487,5 +468,27 @@ mod tests {
         assert!((pcv_0 - 0.00010).abs() < 1e-7);
         let pcv_mid = db.satellite_pcv_nadir_m("G01", t, 0.5, "G01");
         assert!((pcv_mid - 0.00015).abs() < 1e-7);
+    }
+
+    #[test]
+    fn test_find_satellite_gps_leap_seconds() {
+        let id = format!("{:20}{:20}", "LEAP_SAT", "G01");
+        let l = [
+            ("", "START OF ANTENNA"), (&id[..], "TYPE / SERIAL NO"),
+            ("     0.0", "DAZI"), ("     0.0  17.0   1.0", "ZEN1 / ZEN2 / DZEN"),
+            ("  2020     1    15     0     0    0", "VALID FROM"),
+            ("  2030     1    15     0     0    0", "VALID UNTIL"),
+            ("   G01", "START OF FREQUENCY"), ("      1.00      2.00      3.00", "NORTH / EAST / UP"),
+            ("   NOAZI    0.10", ""), ("", "END OF FREQUENCY"), ("", "END OF ANTENNA"),
+        ];
+        let content: String = l.iter().map(|(d, lbl)| ant_line(d, lbl)).collect();
+        let path = write_temp_antex(&content);
+        let db = AntexDatabase::parse(&path).unwrap();
+        std::fs::remove_file(&path).ok();
+
+        let t_before = gneiss_core::time::GpsTime::new(2088, 259_200.0 + 17.0);
+        let t_at = gneiss_core::time::GpsTime::new(2088, 259_200.0 + 18.0);
+        assert!(db.find_satellite_gps("G01", t_before).is_none());
+        assert!(db.find_satellite_gps("G01", t_at).is_some());
     }
 }
