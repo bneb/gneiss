@@ -894,3 +894,62 @@ That is a real regression against the guard's number and it is left red and
 visible rather than accommodated. The float tail on a kinematic drive against a
 112.5 m baseline is the next target; it is a different problem from the one
 fixed here.
+
+---
+
+## 20. Does fixing help? Wilcoxon says yes, the CDF says no (round 13)
+
+The open question from section 15 — does ambiguity resolution improve F9P — now
+has a rigorous answer, using the statistics added in `gneiss_core::stats` and
+applied through the new `eval_compare` binary. Two runs of the same 4504 epochs:
+`GNEISS_NO_AR=1` forces pure float; the default run fixes.
+
+### 20.1 Raw CDF (the salient result)
+
+| | p50 | p90 | p95 | p99 | max |
+|---|---:|---:|---:|---:|---:|
+| AR on (69.0% fixed) | **0.187** | 0.487 | 0.584 | 0.809 | 1.375 |
+| AR off (pure float) | 0.242 | **0.376** | **0.456** | **0.582** | **1.203** |
+
+Fixing improves **only p50**. It is worse at p90, p95, p99 and max.
+
+### 20.2 Wilcoxon signed-rank (paired, 4281 usable pairs)
+
+```
+W+ = 3336578.5   W- = 5829042.5
+two-sided p = 1.44e-208
+P(AR_ON better) = 0.636     direction = +1     verdict: significant, A better
+```
+
+The test is overwhelmingly significant and says AR-on wins — because it ranks
+pairs by magnitude and so is dominated by the bulk, where fixing genuinely wins.
+**Taken alone it would have declared the change a large improvement.**
+
+### 20.3 Weibull tail fit
+
+| | shape k | scale | p99.9 |
+|---|---:|---:|---:|
+| AR on | **1.255** | 0.240 m | **1.121 m** |
+| AR off | **2.425** | 0.287 m | **0.638 m** |
+
+Float is far closer to Weibull (k = 2.4, fast-decaying) while fixed is
+heavy-tailed (k = 1.26). The extreme tail is 43% better without fixing.
+
+### 20.4 Conclusion
+
+**On RTK Explorer F9P, ambiguity resolution is a net negative for tail
+accuracy.** It buys 55 mm at the median and costs 128 mm at p95, 227 mm at p99,
+and 483 mm at p99.9, while making the tail statistically heavier.
+
+This is the direct answer to the framing in section 13's retraction and to the
+principle that the raw CDF is the salient result: the label "fixed" is not
+quality. Here the unfixed solution is measurably better exactly where a survey
+contract binds. The p95 budget this project has been treating as a regression
+target is not being violated by an unlucky threshold — **float genuinely is the
+better solution on this dataset**, and the reason is still unexplained.
+
+The two diagnostics are not redundant and contradict each other on purpose:
+Wilcoxon answers "is one better per epoch?" and Weibull answers "how heavy is
+the tail?". Reporting either alone would have produced a wrong decision. Had
+only the Wilcoxon been run, the 1.4e-208 p-value would have been cited as proof
+that the AR work improved F9P.

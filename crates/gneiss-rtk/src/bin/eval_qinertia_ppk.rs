@@ -170,6 +170,7 @@ fn format_stats(
 fn collect_trajectory_stats(
     trajectory: &[SmoothedEpoch],
     truth: &BTreeMap<u32, Vector3<f64>>,
+    label: &str,
 ) -> (Vec<f64>, Vec<f64>, usize) {
     let mut h_errs = Vec::new();
     let mut d3_errs = Vec::new();
@@ -183,6 +184,22 @@ fn collect_trajectory_stats(
             h_errs.push(h);
             d3_errs.push(d3);
         }
+    }
+    if let Ok(path) = std::env::var("GNEISS_ERR_DUMP") {
+        use std::io::Write;
+        // Datasets are evaluated concurrently, so the path must be unique per
+        // dataset or the last writer wins nondeterministically.
+        let path = format!("{path}.{}", label.replace(|c: char| !c.is_ascii_alphanumeric(), "_"));
+        let Ok(mut f) = std::fs::File::create(&path) else { eprintln!("[ERRDUMP] cannot open {path}"); return (h_errs, d3_errs, fix_count); };
+        let _ = writeln!(f, "# tow quality h_err_m");
+        for ep in trajectory {
+            let tow = ep.time.tow.round() as u32;
+            if let Some(&t) = truth.get(&tow) {
+                let h = compute_horizontal_error(ep.position_ecef, t);
+                let _ = writeln!(f, "{} {} {:.6}", tow, ep.quality, h);
+            }
+        }
+        eprintln!("[ERRDUMP] wrote {}", path);
     }
     (h_errs, d3_errs, fix_count)
 }
@@ -247,13 +264,13 @@ fn evaluate_dataset_spec(spec: &DatasetSpec) -> String {
 
     let fwd_opt = make_post_process_options(spec, base_pos, rover_init_pos, klobuchar.as_ref(), false);
     if let Ok(fwd_res) = execute_post_process(&config, &ephemerides, selected_rover, Some(&base_epochs), imu_samples.as_deref(), &fwd_opt) {
-        let (h, d3, fix) = collect_trajectory_stats(&fwd_res.trajectory, &truth);
+        let (h, d3, fix) = collect_trajectory_stats(&fwd_res.trajectory, &truth, &format!("{}_fwd", spec.name));
         format_stats(&mut out, "Forward RTK Solution", h, d3, fix, selected_rover.len());
     }
 
     let smooth_opt = make_post_process_options(spec, base_pos, rover_init_pos, klobuchar.as_ref(), true);
     if let Ok(smooth_res) = execute_post_process(&config, &ephemerides, selected_rover, Some(&base_epochs), imu_samples.as_deref(), &smooth_opt) {
-        let (h, d3, fix) = collect_trajectory_stats(&smooth_res.trajectory, &truth);
+        let (h, d3, fix) = collect_trajectory_stats(&smooth_res.trajectory, &truth, &format!("{}_smooth", spec.name));
         format_stats(&mut out, "Bidirectional Smoothed PPK Solution", h, d3, fix, selected_rover.len());
     }
 
@@ -384,7 +401,7 @@ mod tests {
             quality: 1,
             n_satellites: 8,
         };
-        let (h, d3, fixes) = collect_trajectory_stats(&[ep1], &truth);
+        let (h, d3, fixes) = collect_trajectory_stats(&[ep1], &truth, "unit_test");
         assert_eq!(fixes, 1);
         assert_eq!(h.len(), 1);
         assert_eq!(d3.len(), 1);

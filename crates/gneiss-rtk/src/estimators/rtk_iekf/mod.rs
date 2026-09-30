@@ -327,6 +327,13 @@ impl GnssRtkIekf {
     }
 
     fn resolve_ar_candidate(&mut self, dd_meas: &formation::DdMeasurements) -> ar::ArResult {
+        // Diagnostic: force a pure float solution for every epoch so the same
+        // dataset can be evaluated with and without ambiguity resolution. The
+        // resulting per-epoch error series is the paired sample the Wilcoxon
+        // signed-rank test needs.
+        if std::env::var_os("GNEISS_NO_AR").is_some() {
+            return ar::float_result(&self.state);
+        }
         if self.min_ar_lock_epochs > 0 {
             let min_ep = self.min_ar_lock_epochs;
             let eligible: Vec<DoubleDiffKey> = self.pair_epochs.iter()
