@@ -617,3 +617,57 @@ adopting it, someone should establish why wide-lane fixing trades ~3 mm of p50
 for fix rate on short baselines; that trade may be correct for a kinematic rover
 and wrong for a static monument, in which case the right answer is a
 dynamics-dependent default rather than a blanket flag.
+
+---
+
+## 15. Retracting §13: AR on F9P does NOT produce false fixes (round 11)
+
+§13 concluded that enabling ambiguity resolution on F9P manufactures false fixes,
+because fix rate rose to 69.1% while p95 grew 0.469 -> 0.584 m. **That inference
+was wrong.** It attributed a p95 regression to fixed epochs without ever
+examining them.
+
+Bucketing the FIXED epochs by actual error, with GLONASS disabled:
+
+| fixed-epoch error | count | share | mean fwd/bwd separation | mean sats |
+|---|---:|---:|---:|---:|
+| < 5 cm | 568 | **94.8%** | 0.034 m | 25.8 |
+| 5–30 cm | 31 | 5.2% | 0.019 m | 23.9 |
+| 30 cm–1 m | 1 | 0.2% | — | 23.0 |
+| **> 1 m** | **0** | **0.0%** | — | — |
+
+**Not one fixed epoch exceeds 1 m**, and 94.8% are within 5 cm. Ambiguity
+resolution is working correctly on this dataset once GLONASS is out of the
+candidate set. There is no second false-fix source; §13's hypothesis about NLOS
+carrier on a patch antenna is not supported by the data.
+
+Since 94.8% of fixes are under 5 cm, the p95 of 0.584 m must come from the
+**float** population. That yields the real trade, which is the opposite of what
+§13 assumed:
+
+| F9P | fix rate | fixed-epoch quality | float p95 |
+|---|---:|---|---:|
+| `enable_glonass: true` | 0.0% | n/a | **0.469 m** |
+| `enable_glonass: false` | 69.1% | 94.8% under 5 cm | 0.584 m |
+
+**Removing GLONASS makes the FLOAT solution worse by 115 mm while making
+ambiguity resolution excellent.** GLONASS DD code is unusable for fixing (§11)
+yet appears to be *helping* the float solution, which is the opposite of what
+its 20 km residuals would suggest and is not yet explained. Candidate
+explanations to test next:
+
+1. GLONASS satellites improve the float geometry enough to outweigh their biased
+   code, with `robust_inflate` down-weighting the biased rows to near-zero so
+   they act as a free geometry/pseudorange-pool benefit.
+2. Removing them changes reference-satellite selection, altering the whole DD
+   set rather than merely deleting rows.
+3. The matched-epoch population differs between the two runs, so the comparison
+   is not like-for-like.
+
+Explanations 1 and 2 are testable without new data. Until this is understood, the
+honest statement of the F9P position is: **float is 0.469 m with GLONASS on;
+fixing is available and 5 cm-accurate with GLONASS off; the two cannot currently
+be had together.**
+
+The round-9 guard floor (fix rate < 5%) remains correct and remains red, because
+0% fixes is still the shipped state.
