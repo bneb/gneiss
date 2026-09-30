@@ -953,3 +953,49 @@ Wilcoxon answers "is one better per epoch?" and Weibull answers "how heavy is
 the tail?". Reporting either alone would have produced a wrong decision. Had
 only the Wilcoxon been run, the 1.4e-208 p-value would have been cited as proof
 that the AR work improved F9P.
+
+---
+
+## 21. Why float beats fixed on F9P: fixing helps the bulk, not the tail (round 14)
+
+Tested the section 20 hypothesis that fixed epochs leave over-tight covariance
+for float recovery. Partitioned the AR-on run's float epochs by whether the
+previous epoch was fixed.
+
+| population | n | p50 | p90 | p95 | p99 |
+|---|---:|---:|---:|---:|---:|
+| float preceded by a fix | 510 | 0.219 | 0.548 | 0.608 | 0.787 |
+| float NOT after a fix | 885 | 0.215 | 0.476 | 0.565 | 0.789 |
+| fixed epochs | 3109 | **0.167** | 0.466 | 0.586 | 0.828 |
+
+Three things follow, and the third is the one that matters.
+
+**1. The post-fix effect is real but small.** Float immediately after a fix is
+~0.07 m worse at p90 (0.548 vs 0.476). The hypothesis was directionally right and
+too weak to explain the effect.
+
+**2. Fixing does not improve the tail at all.** Fixed epochs are much better at
+the median (0.167 vs 0.217) but their p90 (0.466) and p95 (0.586) are
+indistinguishable from float's (0.503, 0.579). Ambiguity resolution is
+acquiring the epochs that were already well-determined and leaving the hard
+ones alone. **That is why the fix rate looks like progress and the p95 does
+not** — the two metrics are measuring disjoint populations.
+
+**3. Enabling AR degrades the float solution globally, not transiently.** With
+AR forced off, float reaches p90 = 0.376 — better than *any* subgroup in the AR
+run, including the best-conditioned float (0.476). A local post-fix effect
+cannot produce that. The conditioned positions are feeding the state
+propagation, and over ~3100 fixes the underlying float solution is dragged away
+from the solution it would otherwise have reached.
+
+This is the mechanism to attack, and it is a real design question rather than a
+bug: should a fixed epoch's integer-conditioned position be allowed to update
+the state that seeds the next epoch, given that the conditioned estimate is not
+independently more accurate than the float one? A candidate is to keep the
+ambiguities conditioned (which is the point of fixing) while *not* replacing the
+propagated position, or to relax the covariance to the float value after
+conditioning. Both change the filter's behaviour and neither is safe to adopt
+without the CDF check in section 20, which is what `eval_compare` now makes cheap.
+
+Verification: analysis performed on the existing GNEISS_ERR_DUMP output; no new
+code, no engine behaviour changed.
