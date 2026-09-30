@@ -16,8 +16,32 @@ from pathlib import Path
 BIN = Path("target/release/eval_qinertia_ppk")
 
 
-def ensure_binary() -> int:
+def _binary_is_stale() -> bool:
+    """True when the binary is missing or older than the crate it is built from.
+
+    Guard results are only meaningful for the build that produced the binary.
+    Previously this rebuilt only when the binary was *missing*, so a source
+    revert left the old binary in place and the guard silently reported
+    measurements of code that was no longer in the tree.
+    """
     if not BIN.exists():
+        return True
+    bin_mtime = BIN.stat().st_mtime
+    src_root = Path("crates/gneiss-rtk/src")
+    if not src_root.exists():
+        return False
+    newest = max(
+        (p.stat().st_mtime for p in src_root.rglob("*.rs")),
+        default=0.0,
+    )
+    manifest = Path("Cargo.toml")
+    if manifest.exists():
+        newest = max(newest, manifest.stat().st_mtime)
+    return bin_mtime < newest
+
+
+def ensure_binary() -> int:
+    if _binary_is_stale():
         r = subprocess.run(["cargo", "build", "--release", "--bin", "eval_qinertia_ppk"])
         if r.returncode != 0:
             print("FAIL: Failed to build eval_qinertia_ppk")
