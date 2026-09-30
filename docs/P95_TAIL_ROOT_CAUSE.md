@@ -540,3 +540,50 @@ tests still fail.
 3. Investigate why the smoothed pass (5.1%) fixes less than the forward pass
    (7.1%) — smoothing should not lose fixes, and the same inversion appears on
    the NGS forward 83.3% vs smoothed 100.0% in the other direction.
+
+---
+
+## 13. Enabling AR on F9P degrades p95 — the defect is false fixes, not zero fixes (round 9)
+
+Adding a fix-rate floor to `check_f9p_benchmark.py` (it previously passed while
+reporting 0% fixes) and then testing the floor with GLONASS disabled exposed the
+real shape of the problem:
+
+| F9P configuration | fix rate | p50 | p95 | RMS |
+|---|---:|---:|---:|---:|
+| `enable_glonass: true` (current) | 0.0% | 0.239 m | **0.469 m** | 0.279 m |
+| `enable_glonass: false` | **69.1%** | **0.187 m** | **0.584 m** | 0.287 m |
+
+p50 improves (0.239 -> 0.187 m) and 69% of epochs become fixed, but **p95 grows
+by 25% and breaches the 0.500 m budget**. RMS stays inside budget at 0.287 m.
+
+So the 0% fix rate is not simply a disabled capability waiting to be switched
+on. Once ambiguity resolution engages on this dataset, a minority of the integer
+vectors are wrong, and those wrong epochs are exactly what a p95 measures. The
+current zero-fix state is, perversely, protecting p95.
+
+This reframes §12.3. The goal is not "more fixes" but "**correct** fixes":
+p95 < 0.500 m *while* fix rate > 5%. Two defects must be fixed together —
+
+1. **GLONASS DD code is unusable** (§11, §12): wrong ephemeris time system,
+   FDMA channels, and a teqc RINEX 2 compact base mapping GLONASS onto the GPS
+   observation table. It poisons the candidate set.
+2. **Something produces false fixes on healthy constellations.** With GLONASS
+   fully excluded, false fixes still appear. On a low-cost patch antenna in a
+   kinematic drive, the prime suspects are carrier-phase tracking through NLOS
+   and antenna-phase-centre effects, which survive a ratio test because the
+   wrong integer is self-consistent for its own arc.
+
+Defect 2 is the harder one and is the same class of problem the UrbanNav
+campaign spent Sprints 40-59 on, applied to a receiver class the benchmark suite
+has not covered. Until it is characterised, any change that raises F9P fix rate
+must be validated on p95 as well as fix rate, which is precisely why the guard
+now checks both.
+
+### 13.1 Guard change
+
+`check_f9p_benchmark.py` now fails on `fix rate < 5%`, in addition to the
+existing p50/p95/RMS budgets. The floor is deliberately low: it asserts that
+ambiguity resolution is working at all, not a performance target. It is
+documented inline as a known, diagnosed defect so the failure is legible rather
+than mysterious.

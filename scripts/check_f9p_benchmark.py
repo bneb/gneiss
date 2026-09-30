@@ -60,6 +60,25 @@ def main() -> int:
     print(f"F9P Kinematic Results: N={total_count}, Fixed={fix_count}/{total_count} ({fix_rate:.1f}%), p50={p50:.3f}m, p95={p95:.3f}m, RMS={rms:.3f}m")
 
     failures = []
+    # Fix-rate floor. A benchmark that resolves no integer ambiguities cannot be
+    # quoted as RTK performance, however good its float accuracy is -- but it
+    # was passing silently because only position statistics were checked.
+    #
+    # THIS CHECK CURRENTLY FAILS. Root cause is established: every GLONASS DD
+    # code row on this dataset is out by 10-20 km (wrong ephemeris time system,
+    # UTC(SU)+3h rather than GPST, plus FDMA channel handling and a teqc
+    # RINEX 2 compact base that maps GLONASS onto the GPS observation table).
+    # Those rows veto 100% of valid fixes in the pseudorange residual screen.
+    # Setting enable_glonass: false recovers 84.6% / 69.1% forward/smoothed,
+    # but screening GLONASS out at the residual gate alone was tried and
+    # REJECTED: it admits false fixes and pushed p95 0.469 -> 0.507 m, over
+    # budget. See docs/P95_TAIL_ROOT_CAUSE.md section 12.
+    #
+    # The floor is deliberately low so it measures "is AR working at all", not
+    # a performance target. Raise it once the GLONASS path is repaired.
+    if fix_rate < 5.0:
+        failures.append(f"Integer fix rate {fix_rate:.1f}% < 5.0% (KNOWN DEFECT: GLONASS DD code residuals)")
+
     # Budgets from verified execution on real u-blox ZED-F9P dataset
     if p50 > 0.25:
         failures.append(f"Horizontal p50 {p50:.3f}m > 0.250m")
