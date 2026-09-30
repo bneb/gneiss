@@ -9,17 +9,34 @@
 
 ## 1. Measured Baseline vs. Commercial Tier-1 Target Matrix
 
-| Dataset & Environment | Current Gneiss ($p_{50}$ / $p_{95}$ / Fix %) | Fixed Subset $p_{95}$ | Commercial Tier-1 Spec (GrafNav / POSPac / Qinertia) | Target Milestone |
-|:---|:---:|:---:|:---:|:---:|
-| **Tokyo Odaiba** *(Suburban / Coastal Highway)* | $1.16\text{ m}$ / **$3.543\text{ m}$** / 13.8% | **$1.913\text{ m}$** *(Zero false fixes)* | $p_{50} < 0.03\text{ m}$, **$p_{95} < 0.08\text{ m}$**, Fix $> 95\%$ | **Open-Sky Parity**: $p_{95} < 0.15\text{ m}$, 0 false fixes |
-| **Tokyo Shinjuku** *(Skyscraper Canyon)* | $1.63\text{ m}$ / **$11.271\text{ m}$** / 6.1% | **$2.288\text{ m}$** | $p_{50} < 0.50\text{ m}$, **$p_{95} < 1.50\text{ m}$**, Fix $> 60\%$ | **Canyon Parity**: $p_{95} < 1.50\text{ m}$, RMS $< 1.0\text{ m}$ |
-| **Hong Kong TST1** *(Survey Splitter)* | $1.16\text{ m}$ / **$8.861\text{ m}$** / 6.0% | **$2.727\text{ m}$** | $p_{50} < 0.60\text{ m}$, **$p_{95} < 1.80\text{ m}$**, Fix $> 70\%$ | **Urban Splitter**: $p_{95} < 1.80\text{ m}$, 0 false fixes |
-| **Hong Kong Whampoa** *(Survey Splitter)* | $1.18\text{ m}$ / **$10.142\text{ m}$** / 12.8% | **$1.425\text{ m}$** | $p_{50} < 0.80\text{ m}$, **$p_{95} < 2.50\text{ m}$**, Fix $> 65\%$ | **Deep Canyon**: $p_{95} < 2.00\text{ m}$, RMS $< 3.0\text{ m}$ |
-| **Hong Kong Whampoa** *(Low-Cost Patch)* | $1.82\text{ m}$ / **$23.894\text{ m}$** / 2.6% | **$1.733\text{ m}$** | $p_{50} < 1.20\text{ m}$, **$p_{95} < 3.50\text{ m}$**, Fix $> 55\%$ | **Patch Robustness**: $p_{95} < 3.50\text{ m}$, RMS $< 5.0\text{ m}$ |
-| **Hong Kong TST1** *(Low-Cost Patch)* | $2.49\text{ m}$ / **$11.313\text{ m}$** / 0.9% | **$3.299\text{ m}$** | $p_{50} < 1.20\text{ m}$, **$p_{95} < 3.00\text{ m}$**, Fix $> 60\%$ | **Patch Robustness**: $p_{95} < 3.00\text{ m}$, RMS $< 4.0\text{ m}$ |
-| **NOAA CORS Network** *(15–50 km Baselines)* | $0.02\text{--}0.16\text{ m}$ / **$0.06\text{--}0.32\text{ m}$** | $< 0.05\text{ m}$ | $8\text{ mm} + 1\text{ ppm}$ H RMS, Fix $> 95\%$ | **Geodetic Parity**: $< 10\text{ mm}$ H @ 15 km |
-| **F9P Kinematic PPP vs CSRS-PPP** *(Commercial Parity)* | **$0.262\text{ m}$** / **$0.573\text{ m}$** / N/A | N/A | $p_{50} < 0.30\text{ m}$ (Canada Geodetic Service) | **PPP Parity**: Achieved ($0.262\text{ m}$) |
-| **F9P Kinematic PPP vs RTK Truth (Calibrated Tie)** | **$0.017\text{ m}$** / **$0.031\text{ m}$** / N/A | N/A | $p_{50} < 0.02\text{ m}$, RMS $< 0.02\text{ m}$ | **Datum Tie Parity**: Achieved ($1.7\text{ cm}$) |
+> **Reporting rule (added Sprint 61).** The headline number in this table is the
+> **raw all-epoch horizontal CDF**. Fixed-subset statistics are diagnostics: they
+> describe a conditioned subpopulation, not a trajectory anyone flies, and a
+> customer has no way to fly a "fixed subset". They appear in individual sprint
+> entries as supporting evidence and must not appear as a comparison figure.
+>
+> This table previously quoted fixed-subset $p_{95}$ (e.g. $1.913\text{ m}$ for
+> Odaiba) in a column adjacent to commercial all-epoch specs, which read as
+> though they were comparable quantities. They are not. All figures below are
+> all-epoch, Smooth PPK, from `eval_f9p_rover all`.
+
+| Dataset & Environment | Fix % | $p_{50}$ (H) | **$p_{95}$ (H)** | RMS (H) | Commercial Tier-1 Spec (GrafNav / POSPac / Qinertia) | Target Milestone |
+|:---|---:|---:|:---:|---:|:---|:---|
+| **Tokyo Odaiba** *(Suburban / Coastal Highway)* | 23.1% | $1.266\text{ m}$ | **$4.770\text{ m}$** | $2.786\text{ m}$ | $p_{50} < 0.03\text{ m}$, **$p_{95} < 0.08\text{ m}$**, Fix $> 95\%$ | **Open-Sky Parity**: $p_{95} < 0.15\text{ m}$, 0 false fixes |
+| **Hong Kong TST1** *(Survey Splitter)* | 7.1% | $1.417\text{ m}$ | **$8.185\text{ m}$** | $3.836\text{ m}$ | $p_{50} < 0.60\text{ m}$, **$p_{95} < 1.80\text{ m}$**, Fix $> 70\%$ | **Urban Splitter**: $p_{95} < 1.80\text{ m}$, 0 false fixes |
+| **Tokyo Shinjuku** *(Skyscraper Canyon)* | 7.0% | $1.582\text{ m}$ | **$22.927\text{ m}$** | $7.354\text{ m}$ | $p_{50} < 0.50\text{ m}$, **$p_{95} < 1.50\text{ m}$**, Fix $> 60\%$ | **Canyon Parity**: $p_{95} < 1.50\text{ m}$, RMS $< 1.0\text{ m}$ |
+| **Hong Kong Whampoa** *(Survey Splitter)* | 13.3% | $1.633\text{ m}$ | **$19.026\text{ m}$** | $8.699\text{ m}$ | $p_{50} < 0.80\text{ m}$, **$p_{95} < 2.50\text{ m}$**, Fix $> 65\%$ | **Deep Canyon**: $p_{95} < 2.00\text{ m}$, RMS $< 3.0\text{ m}$ |
+| **Hong Kong Whampoa** *(Low-Cost Patch)* | 9.8% | $1.895\text{ m}$ | **$24.715\text{ m}$** | $10.024\text{ m}$ | $p_{50} < 1.20\text{ m}$, **$p_{95} < 3.50\text{ m}$**, Fix $> 55\%$ | **Patch Robustness**: $p_{95} < 3.50\text{ m}$, RMS $< 5.0\text{ m}$ |
+| **Hong Kong TST1** *(Low-Cost Patch)* | 3.7% | $2.534\text{ m}$ | **$10.239\text{ m}$** | $4.820\text{ m}$ | $p_{50} < 1.20\text{ m}$, **$p_{95} < 3.00\text{ m}$**, Fix $> 60\%$ | **Patch Robustness**: $p_{95} < 3.00\text{ m}$, RMS $< 4.0\text{ m}$ |
+| **NOAA CORS Network** *(15–50 km Baselines)* | 89.1% | $0.014\text{ m}$ | **$0.028\text{ m}$** | $0.016\text{ m}$ | $8\text{ mm} + 1\text{ ppm}$ H RMS, Fix $> 95\%$ | **Geodetic Parity**: $< 10\text{ mm}$ H @ 15 km |
+| **F9P Kinematic PPP vs CSRS-PPP** *(Commercial Parity)* | N/A | $0.262\text{ m}$ | **$0.573\text{ m}$** | $0.327\text{ m}$ | $p_{50} < 0.30\text{ m}$ (Canada Geodetic Service) | **PPP Parity**: Achieved ($0.262\text{ m}$) |
+| **F9P Kinematic PPP vs RTK Truth (Calibrated Tie)** | N/A | $0.017\text{ m}$ | **$0.031\text{ m}$** | $0.019\text{ m}$ | $p_{50} < 0.02\text{ m}$, RMS $< 0.02\text{ m}$ | **Datum Tie Parity**: Achieved ($1.7\text{ cm}$) |
+
+**Gap summary.** The CORS/PPP/datum rows meet or exceed commercial Tier-1
+specification. The six urban-canyon rows do **not**, and are the entire remaining
+gap: $p_{95}$ of $4.8$–$24.7\text{ m}$ against targets of $0.15$–$3.50\text{ m}$,
+with fix rates of $3.7$–$23.1$%. Sprint 61 established that this tail is not
+false fixes and not outages — see [P95_TAIL_ROOT_CAUSE.md](./P95_TAIL_ROOT_CAUSE.md).
 
 ---
 
