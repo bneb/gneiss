@@ -324,3 +324,77 @@ A low-cost u-blox F9P benchmark that never resolves a single ambiguity cannot be
 quoted alongside commercial Tier-1 parity claims, even though its float accuracy
 is already strong. Until the kinematic AR path engages, the headline fix rate for
 the hardware most surveyors can actually afford is zero.
+
+---
+
+## 10. F9P zero-fix rate: resolved (round 6)
+
+Round 5's leading hypothesis was wrong. `resolve_ambiguities_screened` **is**
+called 13,563 times on F9P and returns a fixed solution **10,181 times (75%)**.
+The fixes are produced and then thrown away one layer up.
+
+### 10.1 Why round 5's instrumentation read zero
+
+The datasets are evaluated with `into_par_iter()` (rayon), and the round-5
+counter was a shared `Mutex` reset by `print_ar_trace` at the *start* of each
+dataset. Concurrent evaluation reset the counters before they were read, so a
+correct call counter reported zero. The contradiction was in the measurement,
+not the engine. All diagnostics below serialise the loop.
+
+### 10.2 Per-dataset AR behaviour
+
+| Dataset | AR calls | AR fixed | demoted by carrier screen | demoted by code screen | reported fix rate |
+|---|---:|---:|---:|---:|---:|
+| Odaiba (has `imu_file`) | 0 | 0 | 0 | 0 | 0.0% |
+| RTK Explorer F9P | 13,563 | 10,181 | **0** | **10,181** | **0.0%** |
+| NGS Geodetic | 900 | 800 | 0 | 0 | 83.3% |
+| NOAA CORS 15 km | 1,800 | 1,795 | 0 | 0 | 99.8% |
+
+Odaiba reaches the IEKF path zero times: `forward.rs:46` only selects
+`run_forward_iekf` when `imu_samples.is_none()`, and Odaiba sets
+`imu_file: Some("imu.csv")`, so it is routed to the SWFG estimator instead.
+That is a separate routing question, not an AR failure.
+
+**Every F9P fix is demoted by `screen_fixed_residuals` (mod.rs:364), and always
+by the pseudorange check, never the carrier check.** The carrier solution is
+clean; only the code residuals fail.
+
+### 10.3 Why the code check fails
+
+`validate_fixed_pseudorange_residuals` (update/robust.rs:318) passes only if
+`rms <= max_pr_rms_m` **and** `n_large <= (count/8).max(3)`, with kinematic
+limits `(6.0 m, 18.0 m)`.
+
+Observed at fixed positions:
+
+| Dataset | max per-epoch code RMS | mean `n_large` |
+|---|---:|---:|
+| **F9P** | **6343.256 m** | 0.28 |
+| NGS | 1.200 m | 0.00 |
+| CORS | 1.483 m | 0.00 |
+
+F9P's `n_large` is tiny — almost no rows exceed the 18 m cap — yet the RMS
+reaches 6.3 km. That is the signature of a **small number of catastrophically
+large residuals** (astronomical range/satellite errors on a few pairs), not of
+broadly biased code. Because the test uses a **plain RMS**, one pathological
+row out of dozens fails the whole epoch even though the remaining residuals are
+healthy.
+
+So the defect is a **non-robust acceptance statistic**: a strict zero-false-fix
+guard implemented in a way that a single outlier can veto, which on this dataset
+vetoes 100% of otherwise-valid fixes.
+
+### 10.4 Candidate fix (not yet applied)
+
+Make the acceptance statistic robust while keeping the hard outlier cap:
+
+- replace plain RMS with a trimmed/median-based scale, or bound the per-row
+  residual before it enters `sum_sq` (the `n_large` counter already caps how
+  many rows may exceed 18 m, so nothing is lost by not letting a single
+  6 km residual dominate the variance), **and**
+- investigate the upstream cause of the 6 km residuals themselves, since
+  masking a genuine 6 km code error is not acceptable.
+
+This must not be done without the upstream investigation: the guard is what
+guarantees zero false fixes, and relaxing it is exactly the trade this project
+has refused three times. Validate against TST1/Whampoa/Shinjuku before shipping.
