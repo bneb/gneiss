@@ -37,7 +37,11 @@ def main() -> int:
 
     log = r.stdout
     f9p_match = re.search(
-        r"Evaluating Dataset: RTK Explorer F9P.*?=== Qinertia-Grade Smoothed PPK Solution \(N=\d+, Fixed=(\d+)/(\d+) \[([\d.]+)%\]\) ===\s+Horizontal Error:\s+p50=([\d.]+)m,\s+p68=[\d.]+m,\s+p95=([\d.]+)m,\s+RMS=([\d.]+)m",
+        # Label must match eval_qinertia_ppk.rs's actual per-dataset heading.
+        # It previously read "Qinertia-Grade Smoothed PPK Solution", a string the
+        # binary has never printed, so this guard could never pass and was
+        # silently inert.
+        r"Evaluating Dataset: RTK Explorer F9P.*?=== Bidirectional Smoothed PPK Solution \(N=\d+, Fixed=(\d+)/(\d+) \[([\d.]+)%\]\) ===\s+Horizontal Error:\s+p50=([\d.]+)m,\s+p68=[\d.]+m,\s+p95=([\d.]+)m,\s+RMS=([\d.]+)m",
         log,
         re.DOTALL,
     )
