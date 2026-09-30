@@ -999,3 +999,69 @@ without the CDF check in section 20, which is what `eval_compare` now makes chea
 
 Verification: analysis performed on the existing GNEISS_ERR_DUMP output; no new
 code, no engine behaviour changed.
+
+---
+
+## 22. Section 21's mechanism is WRONG — the projection is the problem (round 15)
+
+Section 21 concluded that ambiguity resolution "degrades the float solution
+globally" because conditioned positions feed the propagation. **That is wrong,
+and it is testable rather than arguable.**
+
+Comparing the forward runs epoch by epoch on the epochs where the AR run stayed
+float:
+
+```
+AR-run float vs pure-float run, same epochs: n=696
+median |position difference| = 0.000000 m     max = 0.000000 m
+```
+
+**Bit-identical.** Ambiguity resolution does not touch the filter state at all.
+`fix_and_hold` (state conditioning) is off by default; `apply_fixed_iono_free`
+was bypassed via `GNEISS_NO_IFIX=1` and produced byte-identical output, so it is
+not on this path; `apply_widelane_feedback` is gated on `widelane_ar`, which F9P
+has off. Every candidate for state poisoning is eliminated.
+
+### 22.1 The actual problem: the integer-conditioned projection
+
+Forward pass, F9P:
+
+| population | n | p50 | p90 | p95 | p99 |
+|---|---:|---:|---:|---:|---:|
+| fixed epochs (projected) | 3808 | **0.152** | 0.420 | 0.526 | 0.667 |
+| float epochs (filter) | 696 | 0.253 | **0.376** | **0.456** | **0.586** |
+| pure float run | 4504 | 0.242 | 0.376 | 0.456 | 0.586 |
+
+The float epochs inside the AR run match the pure-float run exactly, so the
+filter is innocent. What the AR run *reports* is the integer-conditioned
+projection, and **that projection is tail-worse than the float position it
+replaces**:
+
+| | fixed vs float |
+|---|---|
+| p50 | 90 mm better |
+| p90 | 44 mm worse |
+| p95 | 70 mm worse |
+| p99 | 81 mm worse |
+
+Since 84.5% of forward epochs are reported from that projection, the AR run's
+whole CDF inherits its heavier tail. That is the entire mechanism behind
+sections 20 and 21, and it lives in the projection (`project_subset_fixed` in
+`ar.rs`), not in the motion model, the covariance, or the propagation.
+
+### 22.2 Why this is the right place to attack
+
+The fix is now local and testable. `project_subset_fixed` computes
+`x|N = x - P_xa P_aa^-1 (a - N)`. If `P_aa` is over-estimated, the correction is
+over-applied; if the fixed subset's `P_aa` is ill-conditioned, the correction is
+unstable and amplifies noise into the tail even though the median improves.
+
+The natural experiment is to damp or floor the projection gain, and then check
+the raw CDF -- which `eval_compare` now makes a single command. Unlike the
+previous six attempts this targets a component whose behaviour is directly
+observable, and it has an unambiguous success criterion: p95 must improve while
+p50 does not regress.
+
+Section 21's other two findings stand: fixing still acquires only the
+already-well-determined epochs, and the Wilcoxon still reports the bulk
+improvement that the CDF contradicts.
