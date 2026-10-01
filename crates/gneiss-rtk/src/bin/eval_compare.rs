@@ -106,7 +106,7 @@ fn main() {
 
     println!("\n=== bootstrap CDF band (paired, 2000 reps, 95% pointwise) ===");
     println!("negative diff = {la} better; '*' marks a level where the interval excludes zero");
-    println!("{:>5} {:>8} {:>8} {:>9} [{:>8}, {:>8}]  {}", "level", "a", "b", "a-b", "lo", "hi");
+    println!("{:>5} {:>8} {:>8} {:>9} [{:>8}, {:>8}]", "level", "a", "b", "a-b", "lo", "hi");
     if let Ok(band) = bootstrap_cdf_band_paired(&pa, &pb, &cdf_levels(), 2000, 0.95, 0x5EED) {
         for pt in band {
             let verdict = if pt.a_better() { "a better *" }
