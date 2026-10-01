@@ -1491,3 +1491,51 @@ failed the same way), do not pursue stable-NLOS-subset detection (refuted here),
 and do not pursue dead reckoning (round 28 showed the solution teleports rather
 than coasts). The tail is a mode-selection problem during geometric churn, and
 it needs a detector, not a filter.
+
+---
+
+## 32. Observation churn does not predict the transitions either (round 27)
+
+Section 31 nominated the concrete next test: if a wrong mode is entered during
+geometric instability, then per-epoch satellite-set churn should rise *before*
+the transition, making the 24 events foreseeable rather than post-hoc. Measured
+mean churn (1 - Jaccard against the previous epoch) in a window preceding each
+upward 5 m transition, against the dataset baseline. 2023 epochs, 22 transitions.
+
+| window before transition | mean churn | ratio to baseline |
+|---|---:|---:|
+| 1 epoch | 0.1524 | 1.00x |
+| 3 epochs | 0.1526 | 1.00x |
+| 5 epochs | 0.1526 | 1.00x |
+| 10 epochs | 0.1528 | 1.00x |
+| 20 epochs | 0.1526 | 1.00x |
+
+baseline = 0.1521
+
+**No signal at any horizon.** The observation set before a transition is
+statistically indistinguishable from the observation set at any other time.
+
+### 32.1 Where this leaves the search
+
+Four consecutive hypotheses have now been refuted by measurement, and they share
+a property: every one looked for the cause in the **observation stream**.
+
+| hypothesis | refuted by |
+|---|---|
+| stable NLOS subset carries the wrong mode | section 31 (set is *less* persistent inside wrong modes) |
+| observation set differs materially | section 30 (counts differ; direction of causation unresolved) |
+| reduced phase count causes the wrong mode | section 30/31 (reverse causality equally consistent) |
+| churn predicts the transition | this section (1.00x at every horizon) |
+
+The convergent implication is that **the discriminator is not in the
+observations.** Before a transition the observation stream looks ordinary. The
+signal that selects the wrong mode must live in the filter's internal state —
+the ambiguity values and their variances, which accumulate history the
+observation stream does not show.
+
+That is a concrete, testable direction, and it is the first one in nine rounds
+that is not a variant of screening or rejection. The specific measurement: log
+the ambiguity-block state (value spread, variance distribution, correlation
+condition) for the epochs leading into a transition and compare with calm epochs.
+Note that section 24 already showed ambiguity state is fully allocated and
+correctly sized — so the question is not allocation but the *values*.
