@@ -1243,3 +1243,51 @@ responds to screening pressure the way the fix rate suggests it should.
 
 No code change ships; the implementation was removed and the measurement
 recorded here.
+
+---
+
+## 27. Shinjuku's tail is the same divergence signature as Whampoa (round 22)
+
+Characterised what the 22.7 m epochs actually are, rather than adding another
+filter change. Tokyo Shinjuku, Smooth PPK, 2096 epochs:
+
+| threshold | epochs | share |
+|---|---:|---:|
+| > 2 m | 707 | 33.7% |
+| > 5 m | 301 | 14.4% |
+| > 10 m | 256 | 12.2% |
+| > 20 m | 139 | 6.6% |
+
+The > 5 m population forms **24 runs covering 301 epochs**, of which only 5 are
+singletons. The longest are **84, 77 and 51 epochs** — 84 to 51 seconds of
+continuous divergence — and 6 runs are 10 epochs or longer. Of the 256 epochs
+worse than 10 m, **none is fixed**; of the 1389 epochs better than 2 m, only
+133 (9.6%) are fixed.
+
+This is the same structure documented for Whampoa in section 3: a small number
+of very long contiguous episodes where the filter loses lock and drifts, then
+reconverges, with ambiguity resolution correctly refusing to fix throughout. It
+is categorically different from scattered outliers or broad bias.
+
+### 27.1 This reconnects to the round-1 diagnosis
+
+Section 1 established that `vel_ecef` is never written by any measurement, so
+`predict`'s constant-velocity propagation (`pos += vel * dt`) contributes no
+motion and the filter is a pure position-hold. The predicted signature — a
+filter that stands still while the vehicle moves during any uncorrected stretch —
+is exactly what a run of 84, 51 or 77 consecutive high-error epochs is.
+
+So Shinjuku and Whampoa are very likely **the same defect**, and it is the one
+identified in round 1, not any of the theories pursued in rounds 19–21.
+
+The fix named in round 1 — derive velocity from successive validated float
+position fixes and feed it as a pseudo-measurement so the existing
+constant-velocity model becomes functional — was never implemented. It was
+deferred when round 1's code-bias reframing appeared, and rounds 15–21 then
+spent six rounds on projection damping, screening pressure and phase gating, none
+of which addresses a filter that cannot coast.
+
+The three rules it must still obey, all learned later:
+- validate on the raw CDF first; fix rate alone is misleading (section 20)
+- do not weaken `robust_inflate` or any zero-false-fix guard (section 8.3)
+- gate the whole six-dataset sweep plus both guards before shipping (section 21)
