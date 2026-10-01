@@ -1208,3 +1208,38 @@ Three separate quantities were being conflated across rounds 8 and 19:
 
 The tail work is a screening problem at both stages, not a measurement-availability
 problem. That is a more tractable problem than the one round 18 assumed.
+
+---
+
+## 26. Phase gate attempt: mixed, reverted (round 21)
+
+Implemented the round-19 proposal: a per-epoch median-relative outlier test on
+carrier-phase innovations, mirroring the round-4 code gate but in cycles
+(`PHASE_REL_MIN_DEV_CYCLES = 0.15`, k = 3). Measured on the two worst datasets:
+
+| dataset | p50 before → after | p95 before → after | fix% |
+|---|---:|---:|---:|
+| Shinjuku | 1.582 → 1.585 | 22.927 → **22.703** (−1.0%) | 7.0 → 7.9 |
+| Whampoa Survey | 1.633 → **1.597** | 19.026 → **19.472** (+2.3%) | 13.3 → 12.2 |
+
+**Mixed, and reverted.** Shinjuku's p95 improves 1.0% while Whampoa Survey's
+degrades 2.3% and its fix rate falls. p95 is the metric that binds a survey
+contract, so a change that worsens it on one of the two worst datasets does not
+ship on the strength of a 1% gain elsewhere.
+
+The asymmetry identified in section 25.1 is therefore real but not by itself
+exploitable: carrier rows do lack the protection code rows have, and closing
+that gap does not improve the raw CDF. Either the rejected outliers were mostly
+legitimate (NLOS is not the dominant error in the carrier path on these
+datasets), or removing them costs more geometry than it saves in accuracy — the
+same bind seen in section 23, where damping the projection monotonically walked
+the solution back toward plain float.
+
+Both attempts to improve the tail by *screening more aggressively* have now
+failed the same way: TST1 Survey responded to the round-4 code gate (−40%) but
+Shinjuku did not (22.377 → 22.927), and the phase gate trades a 1% Shinjuku gain
+for a 2.3% Whampoa loss. Shinjuku and TST1 are not the same problem, and neither
+responds to screening pressure the way the fix rate suggests it should.
+
+No code change ships; the implementation was removed and the measurement
+recorded here.
