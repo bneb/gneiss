@@ -1445,3 +1445,49 @@ instrumentation job than remains this round.
 Honest status: this round produced a partial result that does not discriminate
 between the two readings. It is recorded as suggestive, not as support for
 multi-solution detection.
+
+---
+
+## 31. No stable NLOS subset carries the wrong mode (round 26)
+
+Section 30's decisive test: if a consistent set of NLOS-reflected satellites
+carries the wrong mode, the satellite set should be *more* persistent inside a
+wrong-mode episode than inside a good one. Measured per-epoch satellite identity
+over 2023 joined Shinjuku epochs.
+
+| | consecutive-epoch set overlap (Jaccard) |
+|---|---:|
+| inside wrong-mode episodes (> 10 m) | **0.704** |
+| inside good episodes (≤ 2 m) | **0.819** |
+
+**The hypothesis is refuted.** Satellite sets are *less* stable inside wrong
+modes, not more — 0.704 versus 0.819. Whatever holds the solution in a wrong
+mode is not a persistent contaminating subset.
+
+This strengthens the reverse-causality reading from section 30. The picture is
+now consistent across three independent measurements:
+
+1. Inside a wrong mode there are fewer DD pairs and a third fewer carrier rows.
+2. Satellite identity churns more, not less.
+3. Entry and exit are single 10–27 m steps.
+
+Together these say the wrong mode is entered during a period of **geometric
+instability** — satellites appearing and disappearing, constraints churning —
+rather than being maintained by a coherent NLOS conspiracy. Multi-solution
+detection keyed on a stable satellite subset is therefore the wrong tool, and
+section 29.1's framing should be dropped.
+
+What remains untested is whether instability itself is detectable *before* the
+solution commits: the open question is whether the per-epoch set churn predicts
+transition, which would make the 24 transitions foreseeable rather than merely
+post-hoc. That needs churn measured on a finer grid than 1 Hz, and is the
+concrete next measurement.
+
+### 31.1 What to stop doing
+
+For the record, because these have each consumed multiple rounds: do not
+attempt further *screening* or *rejecting* interventions (rounds 4, 21, 23, 26 all
+failed the same way), do not pursue stable-NLOS-subset detection (refuted here),
+and do not pursue dead reckoning (round 28 showed the solution teleports rather
+than coasts). The tail is a mode-selection problem during geometric churn, and
+it needs a detector, not a filter.
