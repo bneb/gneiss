@@ -1539,3 +1539,51 @@ the ambiguity-block state (value spread, variance distribution, correlation
 condition) for the epochs leading into a transition and compare with calm epochs.
 Note that section 24 already showed ambiguity state is fully allocated and
 correctly sized — so the question is not allocation but the *values*.
+
+---
+
+## 33. A predictive signal, in the filter state — first in nine rounds
+
+Section 32 concluded the discriminator is not in the observations and nominated
+the filter's internal ambiguity state. Tested it: ambiguity-block values and
+variances for epochs leading into a transition versus calm epochs. 2023 joined
+Shinjuku epochs, 22 transitions.
+
+| quantity | all epochs | calm (≤ 2 m) | ≤5 ep before transition | ratio vs calm |
+|---|---:|---:|---:|---:|
+| n_ambiguities | 26.55 | 27.14 | 24.54 | 0.90x |
+| std of ambiguity values | 50.90 | 51.08 | **35.74** | **0.70x** |
+| mean ambiguity variance | 710.7 | 615.7 | **1100.2** | **1.79x** |
+| max ambiguity variance | 9328 | 9028 | 11801 | 1.31x |
+| min ambiguity variance | 8.57 | 0.85 | **54.37** | **64x** |
+| mean ambiguity sigma | 12.94 | 10.98 | **20.28** | **1.85x** |
+
+**This is the first quantity found that separates the two populations.** Contrast
+with section 32, where satellite churn was 1.00x of baseline at every horizon.
+
+The signature is coherent and points at a specific failure: ambiguity values
+**collapse toward each other** (spread down 30%) while their variances
+**inflate** (mean sigma up 85%, and the least-constrained ambiguity up 64x). The
+filter is simultaneously losing the ability to distinguish ambiguities *and*
+losing confidence in them — which is what approaching a wrong fixed point looks
+like from the inside, and it is invisible in the observation stream.
+
+### 33.1 Concrete next step
+
+This is a detector, not a filter change, which is what sections 31-32 concluded
+was needed. The natural form: monitor the ratio of ambiguity-value spread to
+mean ambiguity sigma, and raise a warning when it falls below the calm-epoch
+distribution — a divergence indicator computed from quantities the filter
+already holds, with no new measurement model.
+
+Before building it, two things need checking, both cheap:
+
+1. **Discrimination.** The ratios above are means over ~110 epochs versus ~1300.
+   Verify the distributions actually separate rather than overlapping, and find
+   the false-alarm rate at a usable threshold.
+2. **Lead time.** The window here is 5 epochs. Establish how many epochs of
+   warning exist, since a detector is only useful if it fires before the 10-27 m
+   step that actually costs the trajectory.
+
+Neither requires touching the estimator, so both can be done without the
+six-dataset CDF sweep that any filter change would demand.
