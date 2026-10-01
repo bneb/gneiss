@@ -1411,3 +1411,37 @@ each other and disagree with the true mode. That points at multi-solution
 detection rather than single-epoch rejection, and it is the next thing to
 measure: for the epochs inside a wrong mode, whether the observation set differs
 systematically from the epochs outside it.
+
+---
+
+## 30. Observation composition inside a wrong mode — suggestive, not conclusive (round 25)
+
+Ran the comparison section 29.1 nominated: does the observation set differ
+systematically between good epochs and wrong-mode epochs? Shinjuku, 2023 joined
+epochs.
+
+| | DD pairs | usable phase rows |
+|---|---:|---:|
+| good (≤ 2 m) | 27.14 | 18.70 |
+| wrong mode (> 10 m) | 25.08 | **12.68** (−32%) |
+
+The sets do differ: about two fewer double differences and a third fewer carrier
+observations inside a wrong mode.
+
+**But this does not establish the hypothesis it was meant to test.** A
+consistent NLOS subset *carrying* the wrong mode predicts a specific *identity*
+pattern — the same satellites supporting the wrong mode across many epochs — not
+a difference in counts. What is observed is equally consistent with the reverse
+causality: the vehicle enters a canyon where signal is simply lost, carrier rows
+drop, the float solution loses its constraint, and it converges to the wrong
+mode. Under that reading the reduced phase count is a **consequence** of the
+wrong mode rather than its cause.
+
+Distinguishing the two requires satellite *identity* per epoch — which
+satellites are present, and whether the same set persists through a wrong-mode
+episode. That is the concrete next measurement, and it is a larger
+instrumentation job than remains this round.
+
+Honest status: this round produced a partial result that does not discriminate
+between the two readings. It is recorded as suggestive, not as support for
+multi-solution detection.
