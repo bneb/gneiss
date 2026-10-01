@@ -8,7 +8,7 @@
 //!
 //! Usage: eval_compare <a.txt> <b.txt> [label_a label_b]
 
-use gneiss_core::stats::{weibull_with_tail, wilcoxon_signed_rank};
+use gneiss_core::stats::{bootstrap_cdf_band_paired, cdf_levels, weibull_with_tail, wilcoxon_signed_rank};
 
 type Row = (u32, u8, f64);
 
@@ -94,7 +94,6 @@ fn main() {
     }
 
     // Paired test: align on epoch key, keep only shared epochs.
-    println!("\n=== Wilcoxon signed-rank (paired, shared epochs, smaller is better) ===");
     let bm: std::collections::HashMap<u32, f64> = b.iter().map(|r| (r.0, r.2)).collect();
     let mut pa = Vec::new();
     let mut pb = Vec::new();
@@ -104,6 +103,21 @@ fn main() {
             pb.push(other);
         }
     }
+
+    println!("\n=== bootstrap CDF band (paired, 2000 reps, 95% pointwise) ===");
+    println!("negative diff = {la} better; '*' marks a level where the interval excludes zero");
+    println!("{:>5} {:>8} {:>8} {:>9} [{:>8}, {:>8}]  {}", "level", "a", "b", "a-b", "lo", "hi");
+    if let Ok(band) = bootstrap_cdf_band_paired(&pa, &pb, &cdf_levels(), 2000, 0.95, 0x5EED) {
+        for pt in band {
+            let verdict = if pt.a_better() { "a better *" }
+                else if pt.b_better() { "b better *" } else { "no difference" };
+            println!("{:>5.2} {:>8.3} {:>8.3} {:>9.3} [{:>8.3}, {:>8.3}]  {}",
+                pt.level, pt.a, pt.b, pt.diff, pt.lo, pt.hi, verdict);
+        }
+    }
+
+
+    println!("\n=== Wilcoxon signed-rank (paired, shared epochs, smaller is better) ===");
     println!("shared epochs: {} of {}", pa.len(), a.len());
     match wilcoxon_signed_rank(&pa, &pb) {
         Ok(r) => {

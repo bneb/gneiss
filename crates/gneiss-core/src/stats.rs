@@ -279,6 +279,115 @@ pub fn weibull_with_tail(sample: &[f64]) -> Result<WeibullFit, &'static str> {
     Ok(fit)
 }
 
+
+/// One quantile level of a bootstrap CDF comparison.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CdfBandPoint {
+    /// Quantile level, e.g. 0.95.
+    pub level: f64,
+    /// Quantile of the reference sample `a`.
+    pub a: f64,
+    /// Quantile of sample `b`.
+    pub b: f64,
+    /// `a - b` at the observed samples; negative means `a` is better.
+    pub diff: f64,
+    /// Lower confidence bound on `a - b`.
+    pub lo: f64,
+    /// Upper confidence bound on `a - b`.
+    pub hi: f64,
+    /// True when the interval excludes zero, i.e. a real difference at this level.
+    pub significant: bool,
+}
+
+impl CdfBandPoint {
+    /// `true` when `a` is significantly better (interval wholly below zero).
+    pub fn a_better(&self) -> bool { self.hi < 0.0 }
+    /// `true` when `b` is significantly better (interval wholly above zero).
+    pub fn b_better(&self) -> bool { self.lo > 0.0 }
+}
+
+/// Deterministic xorshift64* PRNG, so a given seed always reproduces a band.
+struct XorShift(u64);
+impl XorShift {
+    fn next_u64(&mut self) -> u64 {
+        let mut x = self.0;
+        x ^= x >> 12;
+        x ^= x << 25;
+        x ^= x >> 27;
+        self.0 = x;
+        x.wrapping_mul(0x2545_F491_4F6C_DD1D)
+    }
+}
+
+fn quantile(sorted: &[f64], q: f64) -> f64 {
+    if sorted.is_empty() { return 0.0; }
+    let idx = ((sorted.len() as f64 * q).floor() as usize).min(sorted.len() - 1);
+    sorted[idx]
+}
+
+/// Paired bootstrap of the CDF difference between `a` and `b` over `levels`.
+///
+/// Resampling is **paired**: the same epoch indices are drawn for both samples,
+/// which is correct when `a` and `b` describe the same epochs evaluated two ways
+/// and yields much tighter intervals than independent resampling.
+///
+/// The returned bounds are pointwise percentile intervals at `conf`. This is the
+/// missing half of any CDF claim: without them, "p95 got worse by 81 mm" is an
+/// assertion about two noisy numbers, not a measurement.
+pub fn bootstrap_cdf_band_paired(
+    a: &[f64],
+    b: &[f64],
+    levels: &[f64],
+    reps: usize,
+    conf: f64,
+    seed: u64,
+) -> Result<Vec<CdfBandPoint>, &'static str> {
+    if a.len() != b.len() { return Err("paired samples must have equal length"); }
+    if a.len() < 8 { return Err("need at least 8 pairs for a bootstrap"); }
+    if reps < 100 { return Err("use at least 100 replicates"); }
+    let alpha = (1.0 - conf) / 2.0;
+    let n = a.len();
+    let sa: Vec<f64> = { let mut v = a.to_vec(); v.sort_by(|x, y| x.total_cmp(y)); v };
+    let sb: Vec<f64> = { let mut v = b.to_vec(); v.sort_by(|x, y| x.total_cmp(y)); v };
+    let mut rng = XorShift(seed | 1);
+    let mut draws: Vec<Vec<f64>> = Vec::with_capacity(levels.len());
+    for _ in 0..reps {
+        let mut ra = Vec::with_capacity(n);
+        let mut rb = Vec::with_capacity(n);
+        for _ in 0..n {
+            let i = (rng.next_u64() % n as u64) as usize;
+            ra.push(a[i]);
+            rb.push(b[i]);
+        }
+        ra.sort_by(|x, y| x.total_cmp(y));
+        rb.sort_by(|x, y| x.total_cmp(y));
+        draws.push(ra);
+        draws.push(rb);
+    }
+    let mut out = Vec::with_capacity(levels.len());
+    for &lv in levels {
+        let qa = quantile(&sa, lv);
+        let qb = quantile(&sb, lv);
+        let mut diffs: Vec<f64> = Vec::with_capacity(reps);
+        for r in 0..reps {
+            diffs.push(quantile(&draws[2 * r], lv) - quantile(&draws[2 * r + 1], lv));
+        }
+        diffs.sort_by(|x, y| x.total_cmp(y));
+        let lo = quantile(&diffs, alpha);
+        let hi = quantile(&diffs, 1.0 - alpha);
+        out.push(CdfBandPoint {
+            level: lv, a: qa, b: qb, diff: qa - qb, lo, hi,
+            significant: lo > 0.0 || hi < 0.0,
+        });
+    }
+    Ok(out)
+}
+
+/// Standard quantile grid used when reporting a CDF comparison.
+pub fn cdf_levels() -> Vec<f64> {
+    alloc::vec![0.10, 0.25, 0.50, 0.68, 0.75, 0.80, 0.90, 0.95, 0.99]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -316,6 +425,42 @@ mod tests {
         let b = vec![1.5, 2.5, 3.5, 4.5];
         let r = wilcoxon_signed_rank(&a, &b).expect("fit");
         assert!(r.probability_of_superiority > 0.5, "a is uniformly smaller");
+    }
+
+    #[test]
+    fn bootstrap_band_is_flat_for_identical_samples() {
+        let x: Vec<f64> = (1..=200).map(|i| i as f64).collect();
+        let p = bootstrap_cdf_band_paired(&x, &x, &[0.5, 0.95], 200, 0.95, 7).expect("band");
+        for pt in &p {
+            assert!(!pt.significant, "identical samples must never be significant");
+            assert!((pt.diff).abs() < 1e-9);
+        }
+    }
+
+    #[test]
+    fn bootstrap_band_detects_a_uniform_improvement() {
+        let b: Vec<f64> = (1..=400).map(|i| i as f64).collect();
+        // `a` is smaller everywhere: an unambiguous distributional win.
+        let a: Vec<f64> = b.iter().map(|v| v * 0.5).collect();
+        let p = bootstrap_cdf_band_paired(&a, &b, &cdf_levels(), 400, 0.95, 11).expect("band");
+        for pt in &p {
+            assert!(pt.a_better(), "level {} should favour a: {pt:?}", pt.level);
+        }
+    }
+
+    #[test]
+    fn bootstrap_band_leaves_noise_unmarked() {
+        let b: Vec<f64> = (1..=400).map(|i| i as f64).collect();
+        // `a` differs from `b` only by a single spike: a bulk-equivalent sample.
+        let mut a = b.clone();
+        a[0] = 1e6;
+        let p = bootstrap_cdf_band_paired(&a, &b, &[0.50, 0.95], 400, 0.95, 13).expect("band");
+        assert!(!p.iter().any(|x| x.a_better()), "a bulk-equivalent sample must not read as better");
+    }
+
+    #[test]
+    fn bootstrap_band_rejects_mismatched_lengths() {
+        assert!(bootstrap_cdf_band_paired(&[1.0; 10], &[1.0; 9], &[0.5], 200, 0.95, 1).is_err());
     }
 
     #[test]

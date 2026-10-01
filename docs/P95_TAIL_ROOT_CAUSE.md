@@ -1646,3 +1646,54 @@ requires a different kind of tool than more correlation on existing logs:
 either a controlled experiment that perturbs the state and observes whether a
 wrong mode is entered more often, or a simulation that reproduces the transition
 and can then be instrumented freely.
+
+---
+
+## 35. Bootstrap CDF band: the tail regression is real, and so is the bulk gain
+
+Section 23 concluded that fixing is a net negative on F9P by comparing raw CDF
+percentiles, and section 29.1 noted that no significance test was applied to
+those percentiles. That gap is now closed.
+
+Added `bootstrap_cdf_band_paired` to `gneiss_core::stats`: a **paired** bootstrap
+(the same epoch indices drawn for both samples, correct because the two runs
+share epochs) producing pointwise 95% intervals on the quantile difference
+across the whole distribution. Deterministic xorshift PRNG, so a seed reproduces
+a band exactly.
+
+RTK Explorer F9P, AR on (69.0% fixed) vs pure float, 4504 shared epochs:
+
+| level | AR on | float | diff | 95% interval | verdict |
+|---|---:|---:|---:|---:|---|
+| 0.10 | 0.034 | 0.116 | −0.081 | [−0.089, −0.076] | **AR better** |
+| 0.25 | 0.090 | 0.190 | −0.100 | [−0.108, −0.093] | **AR better** |
+| 0.50 | 0.187 | 0.242 | −0.055 | [−0.060, −0.051] | **AR better** |
+| 0.68 | 0.260 | 0.298 | −0.038 | [−0.047, −0.030] | **AR better** |
+| 0.75 | 0.322 | 0.308 | +0.014 | [+0.001, +0.021] | **float better** |
+| 0.80 | 0.343 | 0.325 | +0.018 | [+0.012, +0.025] | **float better** |
+| 0.90 | 0.487 | 0.376 | +0.111 | [+0.090, +0.124] | **float better** |
+| 0.95 | 0.584 | 0.456 | +0.129 | [+0.112, +0.142] | **float better** |
+| 0.99 | 0.809 | 0.582 | +0.227 | [+0.169, +0.270] | **float better** |
+
+**Every level is significant, and the signs cross between p68 and p75.** There is
+no ambiguity left to argue about:
+
+- The p95 regression is **signal, not noise** — +0.129 m, interval
+  [+0.112, +0.142], nowhere near zero.
+- The bulk improvement is equally real — p10 through p68 all significantly
+  favour fixing, by 38–100 mm.
+
+Section 23's "net negative" framing was too strong. The honest description is a
+**crossover at roughly p70**: fixing makes the bottom ~70% of the distribution
+substantially better and the top ~30% substantially worse.
+
+That is a product decision, not a statistical one, and it should be made on the
+contract rather than the metric. For a user who experiences typical accuracy, AR
+is a clear win — 100 mm better at p25, 55 mm at the median. For a contract
+specified on p95 or p99, it is a clear loss. What is no longer available is
+dismissing either half on the grounds that the other half exists.
+
+This also settles the methodological disagreement in the useful direction:
+gating on a single point percentile was wrong, but so was reading a bulk
+statistic alone. The crossover is only visible when the whole distribution is
+measured with intervals.
