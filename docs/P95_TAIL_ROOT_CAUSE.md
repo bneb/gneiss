@@ -1291,3 +1291,66 @@ The three rules it must still obey, all learned later:
 - validate on the raw CDF first; fix rate alone is misleading (section 20)
 - do not weaken `robust_inflate` or any zero-false-fix guard (section 8.3)
 - gate the whole six-dataset sweep plus both guards before shipping (section 21)
+
+---
+
+## 28. Not divergence either — gross single-epoch jumps (round 23)
+
+Section 22 concluded the long runs were position-hold divergence and pointed at
+the round-1 velocity defect. **That is wrong too.** Measured the error evolution
+*inside* the long runs rather than just their extent.
+
+Ramp into each run, first 10 epochs (metres):
+
+```
+ 29.8  29.6  29.6  30.3  30.1  28.9  28.1  27.4  27.2  27.1
+ 12.4  15.2  18.3  20.4  23.7  23.0  17.4  15.2  13.1  12.7
+  7.8  12.8  18.7  24.9  22.9  22.9  23.1  22.5  22.5  22.5
+  5.8  21.1  26.2  22.7  24.4  23.0  21.0  25.3   9.1  10.6
+ 10.4  12.4   6.1  10.7  25.5  21.2  19.5  19.2  19.2  19.8
+  5.4  12.9  27.0  24.9  26.0  31.0  27.4  28.4  29.5  26.8
+```
+
+| run length | mean abs change per epoch | error span |
+|---:|---:|---|
+| 77 | 0.13 m | 29.8 → 23.2 m |
+| 84 | 1.08 m | 10.4 → 20.2 m |
+| 51 | 1.58 m | 7.8 → 5.1 m |
+| 16 | 4.59 m | 5.8 → 13.5 m |
+| calm epochs | 0.45 m | — |
+
+Two facts rule out vehicle motion as the driver:
+
+1. **Errors jump 10–15 m in a single epoch** (5.8 → 21.1, 10.4 → 25.5,
+   5.4 → 27.0). At 1 Hz a road vehicle cannot move that far; the truth
+   displacement per epoch is ~2.5 m.
+2. **Inside the runs there is no drift.** The 77-epoch run goes 29.8 → 23.2 m,
+   and the 51-epoch run 7.8 → 5.1 m — both *decreasing*. A filter standing
+   still while the vehicle drove on would grow monotonically at vehicle speed.
+
+So the mechanism is **a gross outlier in a single update pulling the solution
+10–15 m, followed by slow re-convergence over 50–80 epochs.** Not drift, not
+incoherence, not bias.
+
+### 28.1 Why this explains the last six rounds
+
+| attempt | why it could not work |
+|---|---|
+| dead reckoning (round 1) | the failure is not coasting; the solution teleports |
+| code screening (round 4) | helped TST1 (a bias case), not Shinjuku (a jump case) |
+| projection damping (round 23) | only applies on fixed epochs; 0 of the >10 m epochs are fixed |
+| phase gate (round 21) | same — the corrupted update is in the *code* path |
+
+Every one of those addressed drift, bias or AR. None addressed a single-epoch
+gross update. The target is **per-epoch position-jump rejection**: detect a
+solution move that is physically impossible for the vehicle and refuse it,
+falling back to float propagation for that epoch.
+
+### 28.2 Process note
+
+This is the third tail diagnosis retracted in three rounds (21, 22, 28), each
+superseded by a more specific measurement. The pattern is consistent: inferring a
+*mechanism* from the *extent* of the tail — run lengths, percentiles, fix rates
+— repeatedly produced a wrong answer, while measuring the *evolution* of the
+error series produced the right one. The error time series was available from
+round 1; it should have been the first thing examined.
