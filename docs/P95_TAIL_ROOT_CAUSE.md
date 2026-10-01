@@ -1587,3 +1587,62 @@ Before building it, two things need checking, both cheap:
 
 Neither requires touching the estimator, so both can be done without the
 six-dataset CDF sweep that any filter change would demand.
+
+---
+
+## 34. The ambiguity signal is a group difference, not a usable detector (round 29)
+
+Section 33 found the first quantity separating calm from pre-transition epochs.
+Tested whether it actually works per-epoch, which is what a detector requires.
+
+Score = spread / mean sigma (low is suspicious), 2023 joined epochs:
+
+| | p05 | p25 | p50 | p75 | p95 |
+|---|---:|---:|---:|---:|---:|
+| calm (n=1347) | 2.05 | 3.42 | 5.00 | 7.52 | 15.51 |
+| pre-transition (n=91) | 0.00 | 1.42 | 2.76 | 4.06 | 6.58 |
+
+The distributions do overlap-shift, but the separation is weak:
+
+| threshold | detect | false-alarm |
+|---|---:|---:|
+| pre-transition median (2.76) | 49.5% | 13.2% |
+| pre-transition p25 (1.42) | 24.2% | 2.2% |
+
+Sweeping every candidate discriminator at a common 5% false-alarm rate:
+
+| candidate | detect @ ≤5% FA |
+|---|---:|
+| std of ambiguity values | **34.1%** |
+| min ambiguity variance | 3.3% |
+| max ambiguity variance | 2.2% |
+| spread / mean sigma | 0.0% |
+| mean ambiguity sigma | 0.0% |
+
+**No combination does better than the best single variable.** At an operable 5%
+false-alarm rate the strongest available detector fires on only a third of the
+epochs preceding a transition.
+
+### 34.1 Why this matters
+
+Section 33's table was a comparison of **means over 91 epochs versus 1347**. That
+separates the populations in aggregate and says nothing about whether an
+individual epoch can be flagged. This section makes the distinction explicit and
+the answer is no.
+
+**Do not build the detector proposed in section 33.** It would miss roughly two
+thirds of the transitions while alarming on one epoch in twenty — worse than
+useless, because it would generate confidence without providing warning.
+
+The honest summary of nine rounds of mechanism search: the transition is
+**visible in hindsight** across many weak correlates and **not visible in
+advance** from any of them. That is consistent with it being an emergent property
+of the filter's trajectory through state space rather than a condition that
+precedes it — which would make it a property of the search, not of any
+observation available at a single epoch.
+
+This is a genuine stopping point for this line of enquiry. Any further progress
+requires a different kind of tool than more correlation on existing logs:
+either a controlled experiment that perturbs the state and observes whether a
+wrong mode is entered more often, or a simulation that reproduces the transition
+and can then be instrumented freely.
