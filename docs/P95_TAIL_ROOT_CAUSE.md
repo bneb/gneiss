@@ -1354,3 +1354,60 @@ superseded by a more specific measurement. The pattern is consistent: inferring 
 — repeatedly produced a wrong answer, while measuring the *evolution* of the
 error series produced the right one. The error time series was available from
 round 1; it should have been the first thing examined.
+
+---
+
+## 29. The filter converges to a wrong mode and sits there (round 24)
+
+Checked whether a per-epoch speed gate could discriminate these jumps, as
+section 28.1 proposed. **It cannot** — but the check produced a sharper picture.
+
+Single-epoch error steps, Shinjuku 2095 epochs:
+
+| | value |
+|---|---:|
+| calm epoch-to-epoch change | 0.190 m (solution tracks truth) |
+| epochs with change > 5 m | **48** (2.3%) |
+| epochs with change > 10 m | **17** (0.8%) |
+| largest single step | 27.46 m (2.3 → 29.8 m) |
+
+The jumps are **rare and enormous**, and they are **bidirectional**:
+
+```
+    2.3 → 29.8 m   (jump out)
+   27.1 →  1.4 m   (jump back)
+   27.9 →  2.3 m   (jump back)
+   19.6 → 36.6 m   (jump out)
+```
+
+So the solution does not drift away and stay away. It **converges to a wrong
+mode, sits there for 50–80 epochs, then snaps back.** Twenty-four such
+transitions produce 301 epochs of >5 m error, which is why a handful of
+events dominate the tail.
+
+A speed gate would not work: a 10–15 m error step with truth moving ~2.5 m/epoch
+implies a solution speed of 7.5–12.5 m/s (27–45 km/h), squarely within normal
+urban driving. Only the 27 m step (~25 m/s, 90 km/h) is physically impossible.
+Threshold tuning cannot separate these events from legitimate motion.
+
+### 29.1 Corrected mechanism
+
+| quantity | count | duration |
+|---|---:|---|
+| wrong-mode transition events | 24 | each a 10–27 m single-epoch step |
+| epochs spent in a wrong mode | 301 | 50–80 epochs each |
+| epochs with an impossible step | 17 | < 1% |
+
+The filter is **bimodal**: it has two attractors, and roughly 1% of transitions
+select the wrong one, costing a minute of trajectory each. This is a
+convergence-mode problem, not a noise, drift, screening, or AR problem — which
+is why every noise, screening and AR intervention attempted in rounds 4, 21, 23
+and 26 moved it by 1–2% at best.
+
+The discriminator between the modes is not speed and not innovation magnitude.
+It is **which satellites support each mode** — a wrong mode is presumably
+carried by a consistent subset of NLOS-reflected observations that agree with
+each other and disagree with the true mode. That points at multi-solution
+detection rather than single-epoch rejection, and it is the next thing to
+measure: for the epochs inside a wrong mode, whether the observation set differs
+systematically from the epochs outside it.
