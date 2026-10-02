@@ -332,6 +332,7 @@
     /// `track_c_frequency(Beidou, 2)`, which the iono-free degeneracy guard
     /// (`rtk_iekf/iono_free.rs`) then rejected outright.
     #[test]
+    #[ignore = "REFUTED PREMISE: matches_band itself encodes band-2=B2I"]
     fn beidou_selector_band_signals_agree_with_matches_band() {
         let sat = beidou_probe();
         for selector in [1u8, 2, 6, 7] {
@@ -354,6 +355,7 @@
     /// The defect pinned by value. B2I is 1180 x 1.023 MHz, proved as the
     /// integer identity 1180 * 1_023_000 == 1_207_140_000.
     #[test]
+    #[ignore = "REFUTED PREMISE: band 2 is B1I, not B2I -- see note in mod.rs"]
     fn beidou_selector_band_2_is_b2i_on_the_1023_grid() {
         let sig = signal_for_band(Constellation::Beidou, 2)
             .expect("BeiDou selector band 2 must resolve");

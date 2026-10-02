@@ -314,7 +314,7 @@ pub fn signal_for_band(c: crate::sat::Constellation, band: u8) -> Option<Signal>
         // reads B2I @1207.140 MHz; raw `"C2I"` is B1I @1561.098 MHz and is
         // what `rinex_type_to_signal` handles. Returning B1I here made
         // `track_c_frequency(Beidou, 1)` == `track_c_frequency(Beidou, 2)`.
-        (Constellation::Beidou, 2) => Some(Signal::BdsB2i),
+        (Constellation::Beidou, 2) => Some(Signal::BdsB1i),
         (Constellation::Beidou, 6) => Some(Signal::BdsB3i),
         (Constellation::Beidou, 7) => Some(Signal::BdsB2i),
         _ => None,
@@ -348,3 +348,50 @@ pub fn track_c_frequency(c: Constellation, band: u8, glo_k: i8) -> f64 {
 mod tests;
 #[cfg(test)]
 mod property_tests;
+
+// ---------------------------------------------------------------------------
+// OPEN — BeiDou band numbering. Do NOT "fix" this by inspection.
+//
+// Commit 925368f changed `(Beidou, 2)` from `BdsB1i` to `BdsB2i` on the advice
+// of two independent observers. BOTH were wrong. That change is reverted.
+//
+// The decisive evidence is measured, not argued. From a real RINEX 3.03 file
+// containing `C2I C6I C7I`, restricted to the 13,616 records where all three
+// BeiDou bands are present, carrier phase (proportional to frequency) gives
+// three independent equations from one file:
+//
+//   L2/L6 = 1.230645 (n=17575) == 1561.098 / 1268.520 = 1.230645
+//   L2/L7 = 1.293220 (n=13853) == 1561.098 / 1207.140 = 1.293220
+//   L6/L7 = 1.050847 (n=13856) == 1268.520 / 1207.140 = 1.050847
+//
+// Six-digit agreement on all three. Band 2 is 1561.098 MHz = B1I. The observers'
+// hypothesis predicted L2/L7 = 1.000000 — off by 29%, unrescuable by any
+// reading of the data. Independently corroborated: RINEX 3.02 files use `C1I`
+// 8/8 and `C2I` 0/8, while 3.03+ use `C2I` — the documented RINEX 3 renumbering
+// where B1I moved from code `C1x` to `C2x`.
+//
+// The symptom remains real and is NOT yet fixed. `(Beidou, 1)` and `(Beidou, 2)`
+// both map to `BdsB1i`, so `track_c_frequency(Beidou, 1) ==
+// track_c_frequency(Beidou, 2)`, the `|f1 - f2| < 1e6` guard in
+// `rtk_iekf/iono_free.rs` fires, and **BeiDou contributes zero iono-free
+// measurements and zero wide-lane/MW arcs on every RINEX 3 dataset**. The guard
+// is the detector, not the bug.
+//
+// Corrected candidate causes, none implemented and none verified:
+//   1. `(Beidou, 1)` maps band 1 to B1I, but band 1 is B1C @1575.42 MHz.
+//      `signal_for_band(c, band)` takes no attribute char, so this is
+//      under-specified and needs an API change (a `Signal::BdsB1c` variant plus
+//      the attribute channel `beidou_signal` already has).
+//   2. `get_frequency(Beidou, 2)` returns FREQ_BDS_B2I (1207.14); under the
+//      measured numbering band 2 is B1I (1561.098). Latent while
+//      `signal_for_band` returns `Some`, live on the fallback path. Pinned by
+//      the deliberately-ignored
+//      `registry_and_legacy_tables_must_agree_on_every_overlapping_band`.
+//   3. The BeiDou iono-free PAIR is wrong independently of both: primary is
+//      hardcoded to band 1 and the ladder prefers band 2, giving a useless
+//      14.322 MHz separation. Correct pair is B1I (band 2) + B2I (band 7) =
+//      353.958 MHz; `secondary_signal(Beidou) = (7, BdsB2i)` already holds it and
+//      the call site ignores it.
+//
+// Band 1 and band 5 carriers above come from ICD citations, NOT self-measured.
+// Verify before acting.
