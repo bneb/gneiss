@@ -21,7 +21,13 @@ pub mod quality;
 pub mod sbet;
 pub mod screening;
 pub mod sidereal;
+#[cfg(test)]
+mod iekf_pass_tests;
 pub mod vrs;
+#[cfg(test)]
+mod network_adj_tests;
+#[cfg(test)]
+mod vrs_tests;
 
 use nalgebra::Vector3;
 

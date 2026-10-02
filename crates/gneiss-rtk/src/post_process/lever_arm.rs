@@ -154,4 +154,60 @@ mod tests {
         assert!((est.lever_arm_body[2] - true_arm[2]).abs() < 1e-4);
         assert!(est.epochs_used > 50);
     }
+
+    fn obs(omega: Vector3<f64>, alpha: Vector3<f64>, z: Vector3<f64>) -> LeverArmObservation {
+        LeverArmObservation {
+            omega_body: omega,
+            alpha_body: alpha,
+            accel_imu_body: Vector3::new(1.0, 0.0, 9.81),
+            accel_gnss_body: Vector3::new(1.0, 0.0, 9.81) + z,
+        }
+    }
+
+    #[test]
+    fn fewer_than_ten_epochs_cannot_resolve_three_lever_arm_components() {
+        let moving = obs(
+            Vector3::new(0.3, 0.1, 0.5),
+            Vector3::new(0.0, 0.2, 0.4),
+            Vector3::new(0.0, 0.0, 0.0),
+        );
+        let nine: Vec<_> = (0..9).map(|_| moving).collect();
+        assert!(LeverArmEstimator::estimate(&nine).is_none());
+    }
+
+    #[test]
+    fn a_static_interval_never_reaches_the_epoch_floor() {
+        // Ten epochs arrive, but each has |omega| < 0.05 AND |alpha| < 0.05
+        // rad(/s^2), so every one is filtered out and the count stays below
+        // the floor: a stationary receiver carries no lever-arm information.
+        let quiet = obs(Vector3::new(0.001, 0.0, 0.0), Vector3::new(0.0, 0.0, 0.002), Vector3::zeros());
+        let ten: Vec<_> = (0..10).map(|_| quiet).collect();
+        assert!(LeverArmEstimator::estimate(&ten).is_none());
+    }
+
+    #[test]
+    fn a_noise_free_fit_reports_a_zero_residual_and_positive_sigmas() {
+        let arm = Vector3::new(0.5, -0.2, -1.2);
+        let mut obs = Vec::new();
+        for i in 0..40 {
+            let t = i as f64 * 0.37;
+            let omega = Vector3::new(0.3 * t.cos(), 0.4 * (0.7 * t).sin(), 0.5 * t.sin());
+            let alpha = Vector3::new(-0.3 * t.sin(), 0.28 * (0.7 * t).cos(), 0.5 * t.cos());
+            let h = skew_symmetric(omega) * skew_symmetric(omega) + skew_symmetric(alpha);
+            obs.push(obs_of(omega, alpha, h * arm));
+        }
+        let est = LeverArmEstimator::estimate(&obs).expect("noise-free fit");
+        assert!(est.residual_rms < 1e-9, "rms {}", est.residual_rms);
+        assert!(est.std_body.iter().all(|v| v.is_finite() && *v >= 0.0));
+        assert_eq!(est.epochs_used, 40);
+    }
+
+    fn obs_of(omega: Vector3<f64>, alpha: Vector3<f64>, z: Vector3<f64>) -> LeverArmObservation {
+        LeverArmObservation {
+            omega_body: omega,
+            alpha_body: alpha,
+            accel_imu_body: Vector3::new(1.0, 0.0, 9.81),
+            accel_gnss_body: Vector3::new(1.0, 0.0, 9.81) + z,
+        }
+    }
 }

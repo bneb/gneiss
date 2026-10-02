@@ -5,6 +5,8 @@ pub mod robust;
 pub mod system;
 
 #[cfg(test)]
+mod robust_tests;
+#[cfg(test)]
 mod tests;
 
 use nalgebra::Vector3;

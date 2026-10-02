@@ -353,16 +353,5 @@ impl Factor for WidelaneConstraintFactor {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_elevation_variances() {
-        let el = std::f64::consts::FRAC_PI_2;
-        let v_pr = elevation_pr_variance(el);
-        let v_cp = elevation_cp_variance(el);
-        assert!(v_pr > 0.0);
-        assert!(v_cp > 0.0);
-        assert!(v_cp < v_pr);
-    }
-}
+#[path = "dd_factors_tests.rs"]
+mod tests;

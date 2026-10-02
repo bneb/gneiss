@@ -110,4 +110,76 @@ mod tests {
         assert_eq!(report.fix_rate_pct, 100.0);
         assert!(report.median_separation_m < 0.02);
     }
+
+    fn epoch(quality: u8, sep: f64, e: f64, n: f64, u: f64) -> SmoothedEpoch {
+        SmoothedEpoch {
+            time: GpsTime::new(2000, 100.0),
+            position_ecef: Vector3::zeros(),
+            velocity_ecef: None,
+            attitude: None,
+            cov_position: Matrix3::identity(),
+            std_east: e,
+            std_north: n,
+            std_up: u,
+            separation_3d: sep,
+            quality,
+            n_satellites: 8,
+        }
+    }
+
+    #[test]
+    fn every_quality_flag_lands_in_its_own_bucket() {
+        // 1 = fixed, 2 = float, 3 = DGPS, anything else = SPP.
+        let eps = vec![
+            epoch(1, 0.010, 0.02, 0.02, 0.05),
+            epoch(2, 0.020, 0.03, 0.03, 0.06),
+            epoch(3, 0.030, 0.04, 0.04, 0.07),
+            epoch(7, 0.040, 0.05, 0.05, 0.08),
+            epoch(255, 0.050, 0.06, 0.06, 0.09),
+        ];
+        let r = generate_quality_report(&eps);
+        assert_eq!(r.total_epochs, 5);
+        assert_eq!(r.fixed_epochs, 1);
+        assert_eq!(r.float_epochs, 1);
+        assert_eq!(r.dgps_epochs, 1);
+        assert_eq!(r.spp_epochs, 2);
+        assert_eq!(r.fix_rate_pct, 20.0);
+    }
+
+    #[test]
+    fn the_uncertainty_summary_uses_the_documented_quadrature() {
+        // h = sqrt(3^2 + 3^2) = sqrt(18) = 4.242640687119285
+        // 3d = sqrt(18 + 4^2) = sqrt(34) = 5.830951894845301
+        let eps = vec![epoch(1, 0.0, 3.0, 3.0, 4.0), epoch(2, 0.0, 3.0, 3.0, 4.0)];
+        let r = generate_quality_report(&eps);
+        assert!((r.median_std_horizontal_m - 18.0_f64.sqrt()).abs() < 1e-12);
+        assert!((r.median_std_3d_m - 34.0_f64.sqrt()).abs() < 1e-12);
+    }
+
+    #[test]
+    fn the_separation_percentiles_are_order_independent() {
+        let eps = vec![
+            epoch(1, 0.001, 0.0, 0.0, 0.0),
+            epoch(1, 0.003, 0.0, 0.0, 0.0),
+            epoch(1, 0.005, 0.0, 0.0, 0.0),
+            epoch(1, 0.007, 0.0, 0.0, 0.0),
+        ];
+        let shuffled = vec![eps[2].clone(), eps[0].clone(), eps[3].clone(), eps[1].clone()];
+        let a = generate_quality_report(&eps);
+        let b = generate_quality_report(&shuffled);
+        assert_eq!(a.median_separation_m, b.median_separation_m);
+        assert_eq!(a.p95_separation_m, b.p95_separation_m);
+        assert!(a.median_separation_m <= a.p95_separation_m);
+    }
+
+    #[test]
+    fn an_empty_trajectory_yields_a_zeroed_report() {
+        let r = generate_quality_report(&[]);
+        assert_eq!(r.total_epochs, 0);
+        assert_eq!(r.fix_rate_pct, 0.0);
+        assert_eq!(r.median_separation_m, 0.0);
+        assert_eq!(r.p95_separation_m, 0.0);
+        assert_eq!(r.median_std_horizontal_m, 0.0);
+        assert_eq!(r.median_std_3d_m, 0.0);
+    }
 }

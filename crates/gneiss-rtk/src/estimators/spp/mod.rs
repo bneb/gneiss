@@ -5,6 +5,8 @@ pub mod raim;
 pub mod solver;
 
 #[cfg(test)]
+mod fixture;
+#[cfg(test)]
 mod tests;
 
 use gneiss_core::atmosphere::KlobucharParams;

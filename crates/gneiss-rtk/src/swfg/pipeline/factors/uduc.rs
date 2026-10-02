@@ -340,4 +340,8 @@ impl Factor for SlantIonoRandomWalkFactor {
 #[path = "uduc_tests.rs"]
 mod uduc_tests;
 
+#[cfg(test)]
+#[path = "uduc_extra_tests.rs"]
+mod uduc_extra_tests;
+
 

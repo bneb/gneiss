@@ -194,6 +194,9 @@ fn cumulative_success_rate(d: &DVector<f64>) -> f64 {
 }
 
 #[cfg(test)]
+mod par_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 

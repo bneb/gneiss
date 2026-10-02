@@ -180,14 +180,20 @@ impl Factor for DualAntennaHeadingFactor {
         }
 
         let q = UnitQuaternion::from_scaled_axis(Vector3::new(p[3], p[4], p[5]));
-        let b_ecef = q * self.baseline_body;
+        let r_b2e = q.to_rotation_matrix().into_inner();
 
-        let skew_b_ecef = Matrix3::new(
-            0.0, -b_ecef.z, b_ecef.y,
-            b_ecef.z, 0.0, -b_ecef.x,
-            -b_ecef.y, b_ecef.x, 0.0,
+        // `d(R b)/d(dtheta)` under the solver's retraction `R_new = R *
+        // Exp(dtheta)` (swfg/solver/mod.rs:336) is `R (dtheta x b) =
+        // -R skew(b)`.  This is *not* `-skew(R b)`: rotation invariance of the
+        // cross product gives `skew(R b) = R skew(b) R^T`, so the two differ by
+        // a factor of `R^T` and coincide only at the identity attitude.
+        let b = &self.baseline_body;
+        let skew_b_body = Matrix3::new(
+            0.0, -b.z, b.y,
+            b.z, 0.0, -b.x,
+            -b.y, b.x, 0.0,
         );
-        let j_att = -skew_b_ecef;
+        let j_att = -r_b2e * skew_b_body;
 
         for k in 0..3 {
             for row in 0..3 {
@@ -223,146 +229,5 @@ fn sanitize_variance(v: f64) -> f64 {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::collections::BTreeMap;
-    use crate::swfg::variables::{VariableId, VariableKind, VariableNode};
-
-    fn build_test_values(
-        pose_val: &[f64; 6],
-        vel_val: &[f64; 3],
-    ) -> (VariableId, VariableId, VariableValues) {
-        let mut vars = BTreeMap::new();
-        let id_pose = VariableId::new(1);
-        let id_vel = VariableId::new(2);
-
-        let mut node_pose = VariableNode::new(id_pose, VariableKind::Pose { epoch: 1 });
-        node_pose.set_value(pose_val);
-        vars.insert(id_pose, node_pose);
-
-        let mut node_vel = VariableNode::new(id_vel, VariableKind::Velocity { epoch: 1 });
-        node_vel.set_value(vel_val);
-        vars.insert(id_vel, node_vel);
-
-        let values = VariableValues::build(&vars);
-        (id_pose, id_vel, values)
-    }
-
-    #[test]
-    fn test_odometer_velocity_factor_residual_zero_at_truth() {
-        let pose = [100.0, 200.0, 300.0, 0.0, 0.0, 0.0];
-        let vel = [10.0, 0.0, 0.0];
-        let (id_pose, id_vel, values) = build_test_values(&pose, &vel);
-
-        let factor = OdometerVelocityFactor::new(
-            id_pose,
-            id_vel,
-            Vector3::new(10.0, 0.0, 0.0),
-            Vector3::new(0.01, 0.01, 0.01),
-        );
-
-        let r = factor.residual(&values);
-        assert!(r.norm() < 1e-12);
-    }
-
-    #[test]
-    fn test_odometer_velocity_factor_numerical_jacobian() {
-        let pose = [100.0, 200.0, 300.0, 0.1, -0.2, 0.3];
-        let vel = [12.0, -3.0, 5.0];
-        let (id_pose, id_vel, values) = build_test_values(&pose, &vel);
-
-        let factor = OdometerVelocityFactor::new(
-            id_pose,
-            id_vel,
-            Vector3::new(10.0, 0.0, 0.0),
-            Vector3::new(0.01, 0.01, 0.01),
-        );
-
-        let j_analytic = factor.jacobian(&values);
-        let eps = 1e-7;
-
-        for comp in 0..3 {
-            let mut vel_p = vel;
-            vel_p[comp] += eps;
-            let (_, _, v_p) = build_test_values(&pose, &vel_p);
-            let r_p = factor.residual(&v_p);
-
-            let mut vel_m = vel;
-            vel_m[comp] -= eps;
-            let (_, _, v_m) = build_test_values(&pose, &vel_m);
-            let r_m = factor.residual(&v_m);
-
-            let j_num = (r_p - r_m) / (2.0 * eps);
-            let (s_vel, _) = values.index_of(id_vel).expect("index of vel");
-            for row in 0..3 {
-                let diff = (j_analytic[(row, s_vel + comp)] - j_num[row]).abs();
-                assert!(diff < 1e-5, "vel jacobian mismatch comp={comp}, row={row}, diff={diff}");
-            }
-        }
-    }
-
-    #[test]
-    fn test_dual_antenna_heading_factor_residual_and_jacobian() {
-        let pose = [100.0, 200.0, 300.0, 0.0, 0.0, 0.0];
-        let vel = [0.0, 0.0, 0.0];
-        let (id_pose, _, values) = build_test_values(&pose, &vel);
-
-        let q = UnitQuaternion::from_scaled_axis(Vector3::new(pose[3], pose[4], pose[5]));
-        let baseline_body = Vector3::new(1.0, 0.0, 0.0);
-        let measured_ecef = q * baseline_body;
-
-        let factor = DualAntennaHeadingFactor::new(
-            id_pose,
-            baseline_body,
-            measured_ecef,
-            Vector3::new(0.005, 0.005, 0.005),
-        );
-
-        let r = factor.residual(&values);
-        assert!(r.norm() < 1e-12);
-
-        let j_analytic = factor.jacobian(&values);
-        let eps = 1e-7;
-
-        for comp in 0..3 {
-            let mut pose_p = pose;
-            pose_p[3 + comp] += eps;
-            let (_, _, v_p) = build_test_values(&pose_p, &vel);
-            let r_p = factor.residual(&v_p);
-
-            let mut pose_m = pose;
-            pose_m[3 + comp] -= eps;
-            let (_, _, v_m) = build_test_values(&pose_m, &vel);
-            let r_m = factor.residual(&v_m);
-
-            let j_num = (r_p - r_m) / (2.0 * eps);
-            let (s_pose, _) = values.index_of(id_pose).expect("index of pose");
-            for row in 0..3 {
-                let diff = (j_analytic[(row, s_pose + 3 + comp)] - j_num[row]).abs();
-                assert!(diff < 1e-5, "attitude jacobian mismatch comp={comp}, row={row}, diff={diff}");
-            }
-        }
-    }
-
-    #[test]
-    fn test_aux_factors_nan_and_degenerate_handling() {
-        let pose_nan = [f64::NAN, 200.0, 300.0, 0.0, 0.0, 0.0];
-        let vel = [10.0, 0.0, 0.0];
-        let (id_pose, id_vel, values_nan) = build_test_values(&pose_nan, &vel);
-
-        let odo = OdometerVelocityFactor::new(
-            id_pose,
-            id_vel,
-            Vector3::new(10.0, 0.0, 0.0),
-            Vector3::new(f64::NAN, -1.0, 0.0),
-        );
-
-        assert_eq!(odo.residual(&values_nan), DVector::zeros(3));
-        assert_eq!(odo.jacobian(&values_nan), DMatrix::zeros(3, values_nan.total_dim()));
-
-        let info = odo.information();
-        assert!(info[(0, 0)].is_finite());
-        assert!(info[(1, 1)].is_finite());
-        assert!(info[(2, 2)].is_finite());
-    }
-}
+#[path = "aux_factors_tests.rs"]
+mod tests;

@@ -317,6 +317,9 @@ pub fn extract_subset(
 }
 
 #[cfg(test)]
+mod subset_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 

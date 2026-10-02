@@ -415,6 +415,9 @@ fn check_pair_slip(
 }
 
 #[cfg(test)]
+mod formation_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 

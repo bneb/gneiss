@@ -141,3 +141,115 @@
         println!("PPP test sol: {:?}", sol);
         assert!(sol.is_ok(), "PPP solve failed: {:?}", sol.err());
     }
+
+    /// 20 GPS ephemerides spread around the orbit at `time`.
+    fn gps_scene(time: GpsTime) -> Vec<Ephemeris> {
+        (1..=20)
+            .map(|prn| {
+                let m0 = (prn as f64 - 1.0) * std::f64::consts::TAU / 20.0;
+                make_gps_eph(SatelliteId { constellation: Constellation::Gps, prn }, time, m0)
+            })
+            .collect()
+    }
+
+    fn spp_engine(time: GpsTime) -> SwfgEngine {
+        let r = gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M;
+        let config = EngineConfig::Spp(SppConfig { initial_position: Some([r, 0.0, 0.0]), ..SppConfig::default() });
+        SwfgEngine::new(&config, gps_scene(time))
+    }
+
+    #[test]
+    fn current_position_defaults_to_the_earth_equator_before_any_epoch() {
+        let engine = spp_engine(GpsTime::new(2200, 100.0));
+        assert_eq!(
+            engine.get_current_position(),
+            Vector3::new(gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M, 0.0, 0.0)
+        );
+    }
+
+    #[test]
+    fn is_ppp_follows_the_selected_mode() {
+        let time = GpsTime::new(2200, 100.0);
+        let spp = SwfgEngine::new(&EngineConfig::Spp(SppConfig::default()), gps_scene(time));
+        assert!(!spp.is_ppp());
+        use crate::swfg::config::PppConfig;
+        let ppp = SwfgEngine::new(&EngineConfig::Ppp(PppConfig::default()), gps_scene(time));
+        assert!(ppp.is_ppp());
+    }
+
+    #[test]
+    fn engine_solves_a_sequence_of_epochs_and_keeps_the_solution_finite() {
+        // SPP runs a one-epoch window, so every epoch after the first also
+        // exercises marginalization of the epoch that just left the window.
+        let t0 = GpsTime::new(2200, 100.0);
+        let mut engine = spp_engine(t0);
+        for k in 0..12u32 {
+            let t = GpsTime::new(2200, 100.0 + f64::from(k));
+            let sol = engine.process_epoch(&make_epoch(t, 16)).unwrap_or_else(|e| panic!("epoch {k} failed: {e}"));
+            assert_eq!(sol.time, t, "solution must be stamped with the epoch time");
+            assert!(sol.n_satellites >= 4, "epoch {k} kept only {} satellites", sol.n_satellites);
+            assert!(sol.position_ecef.iter().all(|v| v.is_finite()), "epoch {k} produced {}", sol.position_ecef);
+            assert!(
+                (5.0e6..7.0e6).contains(&sol.position_ecef.norm()),
+                "epoch {k} position {} is not on Earth", sol.position_ecef.norm()
+            );
+        }
+        let final_pos = engine.get_current_position();
+        assert!((5.0e6..7.0e6).contains(&final_pos.norm()));
+    }
+
+    #[test]
+    fn rtk_engine_solves_a_sequence_of_epochs() {
+        use crate::swfg::config::RtkConfig;
+        let t0 = GpsTime::new(2200, 100.0);
+        let r = gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M;
+        let base_pos = Vector3::new(r, 0.0, 0.0);
+        let config = EngineConfig::Rtk(RtkConfig { initial_position: Some([r + 10.0, 10.0, 0.0]), ..RtkConfig::default() });
+        let mut engine = SwfgEngine::new(&config, gps_scene(t0));
+        for k in 0..8u32 {
+            let t = GpsTime::new(2200, 100.0 + f64::from(k));
+            let sol = engine
+                .process_rtk_epoch(&make_epoch(t, 16), &make_epoch(t, 16), base_pos)
+                .unwrap_or_else(|e| panic!("RTK epoch {k} failed: {e}"));
+            assert!(sol.position_ecef.iter().all(|v| v.is_finite()));
+            assert!((5.0e6..7.0e6).contains(&sol.position_ecef.norm()), "epoch {k}: {}", sol.position_ecef.norm());
+        }
+    }
+
+    #[test]
+    fn engine_couples_preintegrated_imu_into_an_rtk_epoch() {
+        use crate::swfg::config::RtkConfig;
+        use crate::swfg::imu_preintegration::ImuPreintegration;
+        let t0 = GpsTime::new(2200, 100.0);
+        let r = gneiss_core::constants::WGS84_SEMI_MAJOR_AXIS_M;
+        let base_pos = Vector3::new(r, 0.0, 0.0);
+        let config = EngineConfig::RtkIns(crate::swfg::config::RtkInsConfig {
+            rtk: RtkConfig { initial_position: Some([r + 10.0, 10.0, 0.0]), ..RtkConfig::default() },
+            imu: crate::swfg::config::ImuConfig::default(),
+        });
+        let mut engine = SwfgEngine::new(&config, gps_scene(t0));
+
+        // One second of rest: the accelerometer senses the specific force that
+        // cancels gravity, so a stationary platform integrates to zero.
+        let mut preint = ImuPreintegration::new();
+        preint.dt = 1.0;
+        preint.is_stationary = true;
+        for k in 0..4u32 {
+            let t = GpsTime::new(2200, 100.0 + f64::from(k));
+            let sol = engine
+                .process_rtk_epoch_with_imu(&make_epoch(t, 16), &make_epoch(t, 16), base_pos, Some(preint.clone()))
+                .unwrap_or_else(|e| panic!("INS epoch {k} failed: {e}"));
+            assert!(sol.position_ecef.iter().all(|v| v.is_finite()), "epoch {k}: {}", sol.position_ecef);
+            assert!((5.0e6..7.0e6).contains(&sol.position_ecef.norm()), "epoch {k}: {}", sol.position_ecef.norm());
+        }
+    }
+
+    #[test]
+    fn engine_rejects_an_epoch_with_too_few_usable_observations() {
+        // Fewer than four satellites cannot determine a position, and without
+        // IMU there is nothing to fall back on.
+        let t = GpsTime::new(2200, 100.0);
+        let mut engine = spp_engine(t);
+        let err = engine.process_epoch(&make_epoch(t, 2)).expect_err("two satellites must be rejected");
+        assert!(err.contains("too few observations"), "unexpected error: {err}");
+    }

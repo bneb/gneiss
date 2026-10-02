@@ -105,6 +105,9 @@ fn build_process_noise(state: &RtkState, dim: usize, dt: f64, q_accel: f64, reve
 }
 
 #[cfg(test)]
+mod predict_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use nalgebra::Vector3;

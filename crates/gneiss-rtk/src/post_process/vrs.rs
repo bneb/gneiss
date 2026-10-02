@@ -165,7 +165,12 @@ impl DelaunayAtmosphereModel {
         };
         let t_llh = ecef_to_llh(t_pos);
         let (az, el) = az_el(t_llh, t_pos, s_pos);
-        let (lat_ipp, lon_ipp) = compute_ipp(t_llh.x, t_llh.y, az, el);
+        // `ecef_to_llh` returns RADIANS; `compute_ipp` takes (and returns)
+        // DEGREES. Without this conversion the pierce point lands tens of
+        // degrees from the receiver, the barycentric mesh lookup misses, and
+        // the interpolation silently degrades to inverse-distance weighting.
+        let (lat_ipp, lon_ipp) =
+            compute_ipp(t_llh.x.to_degrees(), t_llh.y.to_degrees(), az, el);
         mesh.interpolate(delays, Point2D::new(lon_ipp, lat_ipp))
     }
 }
@@ -176,7 +181,19 @@ pub fn compute_ipp(rec_lat_deg: f64, rec_lon_deg: f64, az_rad: f64, el_rad: f64)
     let h = 350.0;
     let el = el_rad.max(0.05);
     let ratio = (re / (re + h) * libm::cos(el)).min(1.0);
-    let psi = (libm::asin(ratio) - (std::f64::consts::PI * 0.5 - el)).max(0.0);
+    // Earth-central angle subtended at the geocentre between the receiver
+    // radius and the pierce-point radius. In triangle (O = geocentre,
+    // R = receiver, P = pierce point) the angle at R is pi/2 + el (the ray
+    // leaves the receiver `el` above the horizon, i.e. pi/2 + el from the
+    // inward radius R->O) and the sine rule gives
+    //   sin(angle_P) = Re * cos(el) / (Re + h).
+    // The remaining angle at O is therefore
+    //   psi = pi/2 - el - asin(Re*cos(el)/(Re+h)),
+    // which is POSITIVE. Writing it as asin(..) - (pi/2 - el) yields its
+    // negation, and the following `.max(0.0)` then collapses every pierce
+    // point onto the receiver. Sanity: el = 90 deg -> psi = 0 (zenith ray),
+    // el = 30 deg -> psi ~ 4.82 deg, matching h/tan(el)/Re ~ 5.4 deg.
+    let psi = (std::f64::consts::PI * 0.5 - el - libm::asin(ratio)).max(0.0);
     let lat_r = rec_lat_deg.to_radians();
     let sin_ipp = lat_r.sin() * libm::cos(psi) + lat_r.cos() * libm::sin(psi) * libm::cos(az_rad);
     let ipp_lat = libm::asin(sin_ipp.clamp(-1.0, 1.0)).to_degrees();
@@ -267,7 +284,8 @@ fn collect_station_ipps(
         if let Some(e) = eph.iter().find(|e| e.sat() == sat_obs.sat) {
             let (sat_p, _, _, _) = e.position(epoch.time);
             let (az, el) = az_el(s_llh, st.pos_ecef, sat_p);
-            let (lat_ipp, lon_ipp) = compute_ipp(s_llh.x, s_llh.y, az, el);
+            let (lat_ipp, lon_ipp) =
+                compute_ipp(s_llh.x.to_degrees(), s_llh.y.to_degrees(), az, el);
             let delay = adj.as_ref()
                 .and_then(|a| a.station_atmospheres.get(&st.id))
                 .and_then(|at| at.iono_slant_m.get(&sat_obs.sat).copied())

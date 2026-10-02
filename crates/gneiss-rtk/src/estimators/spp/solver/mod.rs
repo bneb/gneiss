@@ -268,3 +268,6 @@ pub(crate) fn apply_height_constraint(
     dz_vector[row_idx] = 0.0;
     w_matrix[(row_idx, row_idx)] = 1.0 / HEIGHT_CONSTRAINT_VAR;
 }
+
+#[cfg(test)]
+mod tests;

@@ -479,6 +479,9 @@ mod tests {
 }
 
 #[cfg(test)]
+mod ar_more_tests;
+
+#[cfg(test)]
 mod canonical {
     //! Textbook verification of the integer-conditioning projection.
     //!

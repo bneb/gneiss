@@ -175,3 +175,7 @@ fn add_attitude_prior(solver: &mut SlidingWindowSolver, pose_id: VariableId, ini
     };
     solver.graph.add_factor(Box::new(att_prior));
 }
+
+#[cfg(test)]
+#[path = "setup_tests.rs"]
+mod tests;

@@ -23,6 +23,26 @@ pub struct UducFactorContext<'a> {
     pub rx_pos: Vector3<f64>,
 }
 
+/// Local geodetic unit vectors at `rx_pos` (ECEF), returned as
+/// `(up, north, east)`.
+///
+/// `up` is the *ellipsoidal* geodetic normal `(cosφcosλ, cosφsinλ, sinφ)`, not
+/// `normalize(rx_pos)`: on WGS84 the geocentric and geodetic latitudes differ
+/// by up to 0.19°, so the two are genuinely different vectors.
+///
+/// Ordering note: `(up, north, east)` is LEFT-handed — `up × north = -east`
+/// (verified by expansion in the tests).  Rows 1, 0, 2 of this triple are the
+/// `(north, east, down)` rows of `ecef_to_ned_matrix`.
+fn local_enu_basis(rx_pos: Vector3<f64>) -> (Vector3<f64>, Vector3<f64>, Vector3<f64>) {
+    let llh = gneiss_core::coords::ecef_to_llh(rx_pos);
+    let (sin_lat, cos_lat) = llh.x.sin_cos();
+    let (sin_lon, cos_lon) = llh.y.sin_cos();
+    let up = Vector3::new(cos_lat * cos_lon, cos_lat * sin_lon, sin_lat);
+    let north = Vector3::new(-sin_lat * cos_lon, -sin_lat * sin_lon, cos_lat);
+    let east = Vector3::new(-sin_lon, cos_lon, 0.0);
+    (up, north, east)
+}
+
 /// Build Undifferenced Uncombined (UDUC) factors for PPP-AR mode with slant ionosphere states.
 pub fn build_uduc_factors(
     solver: &mut SlidingWindowSolver,
@@ -30,15 +50,7 @@ pub fn build_uduc_factors(
     ctx: &mut UducFactorContext<'_>,
 ) {
     let (sun_pos, _) = gneiss_geodesy::tides::solar_lunar_positions(ctx.rover_time.tow, ctx.rover_time.week);
-    let ref_llh = gneiss_core::coords::ecef_to_llh(ctx.rx_pos);
-    let sin_lat = ref_llh.x.sin();
-    let cos_lat = ref_llh.x.cos();
-    let sin_lon = ref_llh.y.sin();
-    let cos_lon = ref_llh.y.cos();
-
-    let rx_up = Vector3::new(cos_lat * cos_lon, cos_lat * sin_lon, sin_lat);
-    let rx_north = Vector3::new(-sin_lat * cos_lon, -sin_lat * sin_lon, cos_lat);
-    let rx_east = Vector3::new(-sin_lon, cos_lon, 0.0);
+    let (rx_up, rx_north, rx_east) = local_enu_basis(ctx.rx_pos);
 
     for obs in corrected {
         let clock_id = solver
@@ -155,3 +167,11 @@ pub fn build_uduc_factors(
         }
     }
 }
+
+#[cfg(test)]
+#[path = "uduc_builder_tests.rs"]
+mod tests;
+
+#[cfg(test)]
+#[path = "uduc_builder_phase_tests.rs"]
+mod phase_tests;

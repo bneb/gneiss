@@ -292,24 +292,9 @@ fn extract_backward_imu_slice(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
+#[path = "backward_tests.rs"]
+mod tests;
 
-    #[test]
-    fn test_extract_backward_imu_slice_reverses_signs() {
-        let mut map = BTreeMap::new();
-        map.insert(100_000, vec![
-            ImuSample { accel: Vector3::new(1.0, 0.0, 0.0), gyro: Vector3::new(0.1, 0.0, 0.0), time_us: 100_000 },
-            ImuSample { accel: Vector3::new(1.0, 0.0, 0.0), gyro: Vector3::new(0.1, 0.0, 0.0), time_us: 200_000 },
-        ]);
-        let preint = extract_backward_imu_slice(100_000, &map);
-        assert!(preint.is_some());
-    }
-
-    #[test]
-    fn test_empty_backward_pass_runs() {
-        let config = EngineConfig::Spp(Default::default());
-        let results = run_backward_pass(&config, &[], None, &[], None, None, None, None, None, ProcessingDynamics::Static, false, false, None, None, false, None, None, None, None);
-        assert!(results.is_empty());
-    }
-}
+#[cfg(test)]
+#[path = "backward_cov_tests.rs"]
+mod cov_tests;

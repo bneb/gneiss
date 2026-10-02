@@ -1537,3 +1537,45 @@ use nalgebra::{DMatrix, DVector, Vector3};
         assert!(ms[0].is_iono_free, "Beidou dual-freq should be iono-free");
         assert_eq!(ms[0].freq_band, 6, "Beidou band 6 should be used");
     }
+
+// The per-constellation receiver clock slots are the whole point of a
+// multi-GNSS fix, so every branch of `get_cdt` is pinned: Galileo, BeiDou
+// and GLONASS each read their own bias, and everything else (GPS, QZSS,
+// SBAS, NavIC) reads the GPS bias.
+
+#[test]
+fn test_get_cdt_routes_each_constellation_to_its_own_bias_slot() {
+use gneiss_core::sat::Constellation;
+use nalgebra::Vector3;
+let s = SppState::new(
+    Coordinate::new(Vector3::new(1.0, 2.0, 3.0), Datum::WGS84, Frame::ECEF, GpsTime::new(2000, 0.0)),
+        1.0,   // GPS
+        2.0,   // Galileo
+        3.0,   // BeiDou
+        4.0,   // GLONASS
+    );
+    assert_eq!(s.get_cdt(Constellation::Gps), 1.0);
+    assert_eq!(s.get_cdt(Constellation::Galileo), 2.0);
+    assert_eq!(s.get_cdt(Constellation::Beidou), 3.0);
+    assert_eq!(s.get_cdt(Constellation::Glonass), 4.0);
+    // QZSS, SBAS and NavIC all ride the GPS bias.
+    assert_eq!(s.get_cdt(Constellation::Qzss), 1.0);
+    assert_eq!(s.get_cdt(Constellation::Sbas), 1.0);
+    assert_eq!(s.get_cdt(Constellation::Navic), 1.0);
+}
+
+#[test]
+fn test_default_config_matches_the_documented_estimator_settings() {
+    let c = SppConfig::default();
+    assert_eq!(c.max_iterations, 15);
+    assert_eq!(c.convergence_threshold, 1e-4);
+    assert_eq!(c.geometry_variance_threshold, 10000.0);
+    assert_eq!(c.min_measurements_init, 3);
+    assert_eq!(c.raim_outlier_m, 50.0);
+    assert_eq!(c.raim_mad_multiplier, 7.413);
+    // 15 deg elevation mask. The stored default 0.261799 is a rounded literal,
+    // 3.9e-7 rad below the exact 15 deg value, so the tolerance is that gap.
+    assert!((c.elevation_mask_rad - 15.0_f64.to_radians()).abs() < 1e-6);
+    // Atmospheric and relativistic corrections are opt-in.
+    assert!(!c.enable_sagnac && !c.enable_tropo && !c.enable_iono);
+}

@@ -156,6 +156,7 @@ impl Default for EstimationGraph {
 mod tests {
     use super::*;
     use crate::swfg::factor::PriorFactor;
+    use crate::swfg::graph::MarginalPriorFactor;
 
     #[test]
     fn graph_add_variable_assigns_sequential_ids() {
@@ -215,5 +216,112 @@ mod tests {
             information: DMatrix::identity(6, 6),
         }));
         assert!(g.validate_graph_structure().is_err());
+    }
+
+    #[test]
+    fn graph_default_is_an_empty_graph() {
+        let g = EstimationGraph::default();
+        assert_eq!(g.n_variables(), 0);
+        assert_eq!(g.n_factors(), 0);
+        assert_eq!(g.total_dim(), 0);
+        assert!(g.marginal_prior.is_none());
+        assert!(g.window.is_empty());
+        assert!(g.validate_graph_structure().is_ok(), "an empty graph is trivially valid");
+    }
+
+    #[test]
+    fn set_value_on_a_missing_variable_is_a_noop() {
+        let mut g = EstimationGraph::new();
+        g.set_value(VariableId::new(42), &[1.0]);
+        assert_eq!(g.n_variables(), 0, "setting a value must not create a state");
+    }
+
+    #[test]
+    fn clear_factors_keeps_variables_and_empties_edges() {
+        let mut g = EstimationGraph::new();
+        let id = g.add_variable(VariableKind::TropoZwd { epoch: 0 });
+        g.add_factor(Box::new(PriorFactor::new(id, DVector::from_element(1, 0.1), 1.0)));
+        assert_eq!(g.n_factors(), 1);
+        g.clear_factors();
+        assert_eq!(g.n_factors(), 0);
+        assert_eq!(g.n_variables(), 1, "clearing factors must not drop states");
+        assert!(
+            g.validate_graph_structure().is_err(),
+            "the state is now an orphan, which validation must report"
+        );
+    }
+
+    #[test]
+    fn removing_one_state_keeps_factors_that_touch_only_others() {
+        // A factor spanning two states must be kept when an unrelated third
+        // state is removed, and dropped only when one of its own two goes.
+        let mut g = EstimationGraph::new();
+        let a = g.add_variable(VariableKind::TropoZwd { epoch: 0 });
+        let b = g.add_variable(VariableKind::TropoZwd { epoch: 1 });
+        let c = g.add_variable(VariableKind::TropoZwd { epoch: 2 });
+        g.add_factor(Box::new(PriorFactor::new(a, DVector::from_element(1, 0.0), 1.0)));
+        g.add_factor(Box::new(crate::swfg::factor::RelativePoseFactor::new(
+            a, b, 1.0,
+        )));
+        assert_eq!(g.n_factors(), 2);
+
+        g.remove_variable(c);
+        assert_eq!(g.n_factors(), 2, "an unrelated removal must not drop the edge");
+        g.remove_variable(b);
+        assert_eq!(g.n_factors(), 1, "the edge dies with one of its endpoints");
+        assert!(!g.variables.contains_key(&b));
+    }
+
+    #[test]
+    fn marginal_prior_counts_as_connecting_its_variables() {
+        // A variable referenced only by the marginalized prior is connected:
+        // the information it carries survives in the Schur complement, so
+        // validation must not call it an orphan.
+        let mut g = EstimationGraph::new();
+        let a = g.add_variable(VariableKind::Pose { epoch: 0 });
+        let b = g.add_variable(VariableKind::TropoZwd { epoch: 0 });
+        g.add_factor(Box::new(PriorFactor::new(a, DVector::zeros(6), 1.0)));
+        assert!(g.validate_graph_structure().is_err(), "b has no factor yet");
+        g.marginal_prior = Some(MarginalPriorFactor {
+            variables: vec![(b, 1)],
+            hessian: DMatrix::from_element(1, 1, 4.0),
+            gradient: DVector::from_element(1, 0.0),
+            x0: DVector::from_element(1, 0.0),
+        });
+        assert!(g.validate_graph_structure().is_ok(), "the marginal prior connects b");
+    }
+
+    #[test]
+    fn ids_are_monotonic_even_after_removals() {
+        let mut g = EstimationGraph::new();
+        let a = g.add_variable(VariableKind::TropoZwd { epoch: 0 });
+        let b = g.add_variable(VariableKind::TropoZwd { epoch: 1 });
+        assert!(b.as_u64() > a.as_u64(), "ids must increase");
+        g.remove_variable(a);
+        let c = g.add_variable(VariableKind::TropoZwd { epoch: 2 });
+        assert!(c.as_u64() > b.as_u64(), "a removed id must never be reissued");
+    }
+
+    #[test]
+    fn total_dim_counts_every_variable_kind() {
+        let mut g = EstimationGraph::new();
+        for kind in [
+            VariableKind::Pose { epoch: 0 },
+            VariableKind::StaticPose,
+            VariableKind::Velocity { epoch: 0 },
+            VariableKind::Attitude { epoch: 0 },
+            VariableKind::ImuBias,
+            VariableKind::ClockBias { epoch: 0, constellation_id: 0 },
+            VariableKind::TropoZwd { epoch: 0 },
+            VariableKind::IfbGlonass,
+            VariableKind::Ambiguity { constellation_id: 0, satellite: 1, frequency: 1, arc: 0 },
+            VariableKind::DdAmbiguity { constellation_id: 0, satellite: 1, ref_satellite: 2, frequency: 1, arc: 0 },
+            VariableKind::IonosphereSlant { epoch: 0, constellation_id: 0, satellite: 1 },
+        ] {
+            g.add_variable(kind);
+        }
+        // 6 + 6 + 3 + 3 + 6 + 1 + 1 + 1 + 1 + 1 + 1 = 30
+        assert_eq!(g.total_dim(), 30);
+        assert_eq!(g.n_variables(), 11);
     }
 }

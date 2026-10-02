@@ -132,3 +132,89 @@ pub(crate) fn neu_to_ecef(neu: Vector3<f64>, llh_rad: Vector3<f64>) -> Vector3<f
 
     Vector3::new(dx, dy, dz)
 }
+
+#[cfg(test)]
+mod tests {
+    //! Golden vectors for the antenna-point typestate.
+    //!
+    //! `neu_to_ecef` is the transpose of the ECEF->NED basis, so at two
+    //! analytically exact sites it collapses to a pure axis permutation:
+    //!   lat = 0, lon = 0   (sin = 0, cos = 1): NED (n,e,u) -> ECEF (u, e, n)
+    //!   lat = 0, lon = 90  (s_lat 0, c_lat 1, s_lon 1, c_lon 0):
+    //!                        NED (n,e,u) -> ECEF (-e, u, n)
+    //! Both match the physical local basis: at (0,0) North=+x, East=+y,
+    //! Up=+z; at (0,90) North=+z, East=-x, Up=+y.
+
+    use super::*;
+    use crate::frames::realizations::Nad83_2011;
+    use core::f64::consts::FRAC_PI_2;
+
+    const LLH_EQ_PRIME: Vector3<f64> = Vector3::new(0.0, 0.0, 0.0);
+    const LLH_EQ_QUARTER: Vector3<f64> = Vector3::new(0.0, FRAC_PI_2, 0.0);
+
+    #[test]
+    fn station_without_velocity_does_not_move_between_epochs() {
+        // A monument with no published tectonic velocity is stationary: the
+        // `None` branch must return the position unchanged, not zero it.
+        let pos = EcefPos::<Nad83_2011>::new(Vector3::new(1_000.0, -2_000.0, 3_000.0));
+        let p = EpochPosition::<Nad83_2011, Arp>::new(pos, 2010.0, None);
+        let later = p.at_epoch(2025.0);
+        assert_eq!(*later.pos.coords(), Vector3::new(1_000.0, -2_000.0, 3_000.0));
+        assert!((later.epoch_yr - 2025.0).abs() < 1e-15);
+        assert_eq!(later.velocity_m_yr, None);
+        // Same epoch must be a bit-exact identity too.
+        assert_eq!(*p.at_epoch(2010.0).pos.coords(), Vector3::new(1_000.0, -2_000.0, 3_000.0));
+    }
+
+    #[test]
+    fn station_with_velocity_extrapolates_linearly() {
+        // p(2020) = p(2010) + v * 10 with v = (0.01, -0.02, 0.03) m/yr
+        //          = (1000 + 0.1, -2000 - 0.2, 3000 + 0.3)
+        let pos = EcefPos::<Nad83_2011>::new(Vector3::new(1_000.0, -2_000.0, 3_000.0));
+        let v = Vector3::new(0.01, -0.02, 0.03);
+        let p = EpochPosition::<Nad83_2011, Arp>::new(pos, 2010.0, Some(v));
+        let got = *p.at_epoch(2020.0).pos.coords();
+        let expect = Vector3::new(1_000.1, -2_000.2, 3_000.3);
+        assert!((got - expect).norm() < 1e-12, "got {got:?}");
+        // Going back in time is the exact negative increment.
+        let back = *p.at_epoch(2000.0).pos.coords();
+        assert!((back - Vector3::new(999.9, -1_999.8, 2_999.7)).norm() < 1e-12);
+    }
+
+    #[test]
+    fn neu_to_ecef_at_the_equator_prime_meridian_is_a_permutation() {
+        let got = neu_to_ecef(Vector3::new(11.0, 22.0, 33.0), LLH_EQ_PRIME);
+        assert!((got - Vector3::new(33.0, 22.0, 11.0)).norm() < 1e-12, "got {got:?}");
+    }
+
+    #[test]
+    fn neu_to_ecef_at_the_equator_quarter_meridian_is_a_permutation() {
+        let got = neu_to_ecef(Vector3::new(11.0, 22.0, 33.0), LLH_EQ_QUARTER);
+        assert!((got - Vector3::new(-22.0, 33.0, 11.0)).norm() < 1e-12, "got {got:?}");
+    }
+
+    #[test]
+    fn arp_to_apc_offset_follows_the_local_ned_basis() {
+        // PCO of (1, 2, 3) m in NED at the equator / prime meridian must add
+        // exactly ECEF (3, 2, 1) m to the ARP.
+        let arp = EpochPosition::<Nad83_2011, Arp>::new(
+            EcefPos::new(Vector3::new(0.0, 0.0, 0.0)),
+            2010.0,
+            None,
+        );
+        let apc = arp.to_apc::<5>(Vector3::new(1_000.0, 2_000.0, 3_000.0), LLH_EQ_PRIME);
+        assert!((apc.pos.into_vector() - Vector3::new(3.0, 2.0, 1.0)).norm() < 1e-9,
+            "got {:?}", apc.pos.into_vector());
+        // Converting back must undo it exactly.
+        let back = apc.to_arp(Vector3::new(1_000.0, 2_000.0, 3_000.0), LLH_EQ_PRIME);
+        assert!((back.pos.into_vector().norm()) < 1e-9, "got {:?}", back.pos.into_vector());
+    }
+
+    #[test]
+    fn antenna_reference_names_are_distinct_per_marker() {
+        use crate::frames::AntennaReference;
+        assert_eq!(<Arp as AntennaReference>::NAME, "ARP");
+        assert_eq!(<Apc<1> as AntennaReference>::NAME, "APC");
+        assert_eq!(<GroundMonument as AntennaReference>::NAME, "Monument");
+    }
+}

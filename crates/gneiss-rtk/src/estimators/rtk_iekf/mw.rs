@@ -462,6 +462,9 @@ fn compute_upd_residuals(
 }
 
 #[cfg(test)]
+mod mw_tests;
+
+#[cfg(test)]
 mod upd_tests {
     use super::*;
 

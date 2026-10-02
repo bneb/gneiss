@@ -310,4 +310,179 @@ mod tests {
         let mut out = combine_trajectories(&[fwd], &map, false, ProcessingDynamics::Static);
         assert_eq!(out.remove(0).quality, 1);
     }
+
+    /// Epoch with an explicit pass identity.
+    fn pass(tow: f64, pos: Vector3<f64>, var: f64, q: u8, fixed: bool, vel: Option<Vector3<f64>>) -> FilteredEpoch {
+        FilteredEpoch {
+            time: GpsTime::new(2000, tow),
+            position_ecef: pos,
+            velocity_ecef: vel,
+            attitude: None,
+            cov_position: Matrix3::identity() * var,
+            n_satellites: 7,
+            quality: q,
+            is_fixed: fixed,
+        }
+    }
+
+    #[test]
+    fn formal_sigma_is_the_isotropic_equivalent_of_the_trace() {
+        // sigma = sqrt(trace/3). Identity * 0.25 -> trace 0.75 -> 0.25 -> 0.5.
+        assert!((formal_sigma_m(&(Matrix3::identity() * 0.25)) - 0.5).abs() < 1e-12);
+        // diag(1, 4, 9): trace 14 -> 14/3 -> 2.160246899469287
+        let d = Matrix3::new(1.0, 0.0, 0.0, 0.0, 4.0, 0.0, 0.0, 0.0, 9.0);
+        assert!((formal_sigma_m(&d) - (14.0_f64 / 3.0).sqrt()).abs() < 1e-12);
+        // A covariance that is not positive definite contributes nothing
+        // usable, so the magnitude is clamped at zero rather than NaN.
+        let neg = Matrix3::identity() * -1.0;
+        assert_eq!(formal_sigma_m(&neg), 0.0);
+    }
+
+    #[test]
+    fn velocities_fuse_by_a_plain_average_and_survive_one_sided_absence() {
+        let a = Vector3::new(1.0, 2.0, 3.0);
+        let b = Vector3::new(3.0, 6.0, 9.0);
+        assert_eq!(fused_velocity(Some(a), Some(b)), Some(Vector3::new(2.0, 4.0, 6.0)));
+        assert_eq!(fused_velocity(Some(a), None), Some(a));
+        assert_eq!(fused_velocity(None, Some(b)), Some(b));
+        assert_eq!(fused_velocity(None, None), None);
+    }
+
+    #[test]
+    fn a_backward_only_epoch_is_left_untouched() {
+        // No backward match: the epoch is reported verbatim, with a zero
+        // separation (nothing was compared) and the forward quality.
+        let fwd = pass(100.0, Vector3::new(1.0, 2.0, 3.0), 0.04, 1, true, None);
+        let out = combine_trajectories(std::slice::from_ref(&fwd), &BTreeMap::new(), true, ProcessingDynamics::Static);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].position_ecef, fwd.position_ecef);
+        assert_eq!(out[0].cov_position, fwd.cov_position);
+        assert_eq!(out[0].quality, 1);
+        assert_eq!(out[0].separation_3d, 0.0);
+        assert_eq!(out[0].n_satellites, 7);
+    }
+
+    #[test]
+    fn epochs_are_matched_on_the_millisecond_tow_key() {
+        // tow 100.0004 and tow 100.00049 both round to 100 000 ms and pair up;
+        // tow 100.001 is 100 001 ms and must NOT match tow 100.000.
+        let fwd = pass(100.0000, Vector3::new(0.0, 0.0, 0.0), 0.01, 2, false, None);
+        let near = pass(100.0004, Vector3::new(0.05, 0.0, 0.0), 0.01, 2, false, None);
+        let far = pass(100.0010, Vector3::new(5.0, 0.0, 0.0), 0.01, 2, false, None);
+        let mut map = BTreeMap::new();
+        map.insert(100_000_u64, near);
+        let out = combine_trajectories(std::slice::from_ref(&fwd), &map, true, ProcessingDynamics::Static);
+        assert!(out[0].separation_3d > 0.0, "a matched pair must report a separation");
+
+        let mut map2 = BTreeMap::new();
+        map2.insert(100_001_u64, far);
+        let out2 = combine_trajectories(std::slice::from_ref(&fwd), &map2, true, ProcessingDynamics::Static);
+        assert_eq!(out2[0].separation_3d, 0.0, "a 1 ms key mismatch must not pair up");
+    }
+
+    #[test]
+    fn two_fixed_passes_beyond_the_fuse_window_keep_the_tighter_one() {
+        // sep 0.60 m > the 0.20 m both-fixed fuse window, so the passes are
+        // NOT averaged; the side with the smaller covariance trace wins whole.
+        let mut fwd = pass(100.0, Vector3::new(0.0, 0.0, 0.0), 0.04, 1, true, None);
+        let bwd = pass(100.0, Vector3::new(0.6, 0.0, 0.0), 0.01, 1, true, None);
+        let bwd_pos = bwd.position_ecef;
+        let bwd_cov = bwd.cov_position;
+        let mut map = BTreeMap::new();
+        map.insert(100_000_u64, bwd);
+        let out = combine_trajectories(std::slice::from_ref(&fwd), &map, true, ProcessingDynamics::Static);
+        assert_eq!(out[0].position_ecef, bwd_pos, "tighter pass must win whole");
+        assert_eq!(out[0].cov_position, bwd_cov);
+        // Reversing the variances reverses the winner: the tie-break is the
+        // covariance trace, not the epoch order.
+        fwd.cov_position = Matrix3::identity() * 0.0001;
+        let loose = pass(100.0, Vector3::new(0.6, 0.0, 0.0), 0.04, 1, true, None);
+        let mut map2 = BTreeMap::new();
+        map2.insert(100_000_u64, loose);
+        let out2 = combine_trajectories(std::slice::from_ref(&fwd), &map2, true, ProcessingDynamics::Static);
+        assert_eq!(out2[0].position_ecef, fwd.position_ecef);
+    }
+
+    #[test]
+    fn two_fixed_passes_inside_the_window_are_actually_fused() {
+        let fwd = pass(100.0, Vector3::new(0.0, 0.0, 0.0), 0.04, 1, true, None);
+        let bwd = pass(100.0, Vector3::new(0.1, 0.0, 0.0), 0.04, 1, true, None);
+        let mut map = BTreeMap::new();
+        map.insert(100_000_u64, bwd);
+        let out = combine_trajectories(&[fwd], &map, true, ProcessingDynamics::Static);
+        assert!((out[0].position_ecef.x - 0.05).abs() < 1e-9, "equal weights must average");
+        assert!(out[0].cov_position[(0, 0)] < 0.04);
+        assert_eq!(out[0].quality, 1);
+    }
+
+    #[test]
+    fn a_lone_fixed_claim_is_taken_whole_but_still_honest_gated() {
+        // Only the forward pass claims a fix. Its position is taken whole
+        // (never averaged with the dissenting float pass), but the honesty
+        // gate still applies: a one-sided claim gets the wider
+        // max(strict_m, 2.2) = 2.2 m budget, and a 50 m disagreement is far
+        // beyond it, so the claim is downgraded to float quality.
+        let fwd = pass(100.0, Vector3::new(0.0, 0.0, 0.0), 0.04, 1, true, None);
+        let bwd = pass(100.0, Vector3::new(50.0, 0.0, 0.0), 0.04, 2, false, None);
+        let mut map = BTreeMap::new();
+        map.insert(100_000_u64, bwd);
+        let gated = combine_trajectories(std::slice::from_ref(&fwd), &map, true, ProcessingDynamics::Static);
+        assert_eq!(gated[0].quality, 2, "50 m of disagreement voids the lone fix");
+        // With the gate off the fix stands unchallenged.
+        let open = combine_trajectories(std::slice::from_ref(&fwd), &map, false, ProcessingDynamics::Static);
+        assert_eq!(open[0].quality, 1);
+
+        // Inside the one-sided 2.2 m budget the lone fix survives: 1.0 m
+        // apart keeps quality 1 even though the float pass disagrees.
+        let bwd_near = pass(100.0, Vector3::new(1.0, 0.0, 0.0), 0.04, 2, false, None);
+        let fwd2 = pass(100.0, Vector3::new(0.0, 0.0, 0.0), 0.04, 1, true, None);
+        let mut map2 = BTreeMap::new();
+        map2.insert(100_000_u64, bwd_near);
+        let kept = combine_trajectories(&[fwd2], &map2, true, ProcessingDynamics::Static);
+        assert_eq!(kept[0].quality, 1);
+        assert_eq!(kept[0].position_ecef, Vector3::new(0.0, 0.0, 0.0));
+    }
+
+    #[test]
+    fn a_backward_only_fix_is_the_one_that_survives() {
+        // Mirror image of the previous case: the fixed side is the backward
+        // pass, so its position must be taken whole even when the forward
+        // float pass sits far away.
+        let fwd_f = pass(100.0, Vector3::new(-9.0, 0.0, 0.0), 0.04, 2, false, None);
+        let bwd_f = pass(100.0, Vector3::new(3.0, 0.0, 0.0), 0.04, 1, true, None);
+        let mut map = BTreeMap::new();
+        map.insert(100_000_u64, bwd_f);
+        let out = combine_trajectories(&[fwd_f], &map, false, ProcessingDynamics::Static);
+        assert_eq!(out[0].position_ecef, Vector3::new(3.0, 0.0, 0.0));
+        assert_eq!(out[0].quality, 1);
+    }
+
+    #[test]
+    fn two_float_passes_fuse_only_while_they_stay_close() {
+        let fwd = pass(100.0, Vector3::new(0.0, 0.0, 0.0), 0.04, 2, false, None);
+        let near = pass(100.0, Vector3::new(0.2, 0.0, 0.0), 0.04, 2, false, None);
+        let mut map = BTreeMap::new();
+        map.insert(100_000_u64, near);
+        let fused = combine_trajectories(std::slice::from_ref(&fwd), &map, true, ProcessingDynamics::Static);
+        assert!((fused[0].position_ecef.x - 0.1).abs() < 1e-9, "0.2 m apart must average");
+
+        let far = pass(100.0, Vector3::new(40.0, 0.0, 0.0), 0.04, 2, false, None);
+        let mut map2 = BTreeMap::new();
+        map2.insert(100_000_u64, far);
+        let split = combine_trajectories(std::slice::from_ref(&fwd), &map2, true, ProcessingDynamics::Static);
+        assert_eq!(split[0].position_ecef, Vector3::new(0.0, 0.0, 0.0));
+        assert_eq!(split[0].quality, 2, "merged quality never claims a fix");
+    }
+
+    #[test]
+    fn the_satellite_count_is_the_larger_of_the_two_passes() {
+        let mut fwd = pass(100.0, Vector3::new(0.0, 0.0, 0.0), 0.04, 2, false, None);
+        let mut bwd = pass(100.0, Vector3::new(0.0, 0.0, 0.0), 0.04, 2, false, None);
+        fwd.n_satellites = 5;
+        bwd.n_satellites = 11;
+        let mut map = BTreeMap::new();
+        map.insert(100_000_u64, bwd);
+        let out = combine_trajectories(&[fwd], &map, true, ProcessingDynamics::Static);
+        assert_eq!(out[0].n_satellites, 11);
+    }
 }

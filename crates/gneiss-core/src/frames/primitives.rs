@@ -438,3 +438,8 @@ pub type NedCovariance = SpatialCovariance<Ned>;
 pub type EnuCovariance = SpatialCovariance<Enu>;
 pub type BodyCovariance = SpatialCovariance<BodyFrd>;
 
+// Tests live in a sibling file because this module is already at the 500-LOC
+// ceiling; `mod tests` is still compiled only under cfg(test).
+#[cfg(test)]
+mod tests;
+

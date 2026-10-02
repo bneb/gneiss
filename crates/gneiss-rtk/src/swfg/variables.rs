@@ -286,4 +286,93 @@ mod tests {
         assert!(!VariableKind::Ambiguity { constellation_id: 0, satellite: 0, frequency: 0, arc: 0 }.is_per_epoch());
         assert!(!VariableKind::DdAmbiguity { constellation_id: 0, satellite: 1, ref_satellite: 0, frequency: 1, arc: 0 }.is_per_epoch());
     }
+
+    /// Every per-epoch kind must report the epoch it was created for; the
+    /// session-wide kinds must report none.
+    #[test]
+    fn epoch_accessor_matches_the_per_epoch_classification() {
+        let per_epoch = [
+            (VariableKind::Pose { epoch: 3 }, 3),
+            (VariableKind::Velocity { epoch: 7 }, 7),
+            (VariableKind::Attitude { epoch: 9 }, 9),
+            (VariableKind::ClockBias { epoch: 4, constellation_id: 1 }, 4),
+            (VariableKind::TropoZwd { epoch: 5 }, 5),
+            (VariableKind::IonosphereSlant { epoch: 6, constellation_id: 0, satellite: 2 }, 6),
+        ];
+        for (kind, epoch) in per_epoch {
+            assert_eq!(kind.epoch(), Some(epoch), "{kind:?} must report its epoch");
+            assert!(kind.is_per_epoch(), "{kind:?} must be per-epoch");
+        }
+        let session = [
+            VariableKind::ImuBias,
+            VariableKind::IfbGlonass,
+            VariableKind::StaticPose,
+            VariableKind::Ambiguity { constellation_id: 0, satellite: 1, frequency: 1, arc: 2 },
+            VariableKind::DdAmbiguity { constellation_id: 0, satellite: 1, ref_satellite: 2, frequency: 1, arc: 2 },
+        ];
+        for kind in session {
+            assert_eq!(kind.epoch(), None, "{kind:?} must not report an epoch");
+            assert!(!kind.is_per_epoch(), "{kind:?} must survive the whole session");
+        }
+    }
+
+    #[test]
+    fn static_pose_is_six_dimensional() {
+        let node = VariableNode::new(VariableId::new(0), VariableKind::StaticPose);
+        assert_eq!(node.kind.dim(), VariableDim::Vector6);
+        assert_eq!(node.value.len(), 6);
+    }
+
+    #[test]
+    fn packed_state_reflects_the_latest_node_values() {
+        // VariableValues is a snapshot: later edits to the nodes must not be
+        // visible until it is rebuilt, and the rebuild must pick them up.
+        let mut vars = BTreeMap::new();
+        let a = VariableId::new(0);
+        let mut node = VariableNode::new(a, VariableKind::TropoZwd { epoch: 0 });
+        node.set_value(&[0.5]);
+        vars.insert(a, node);
+
+        let snapshot = VariableValues::build(&vars);
+        assert_eq!(snapshot.total_dim(), 1);
+        assert_eq!(snapshot.index_of(a), Some((0, 1)));
+        assert!((snapshot.get(a).unwrap()[0] - 0.5).abs() < 1e-15);
+        assert!((snapshot.state()[0] - 0.5).abs() < 1e-15, "state() is the packed view");
+
+        vars.get_mut(&a).unwrap().set_value(&[-0.25]);
+        assert!((snapshot.get(a).unwrap()[0] - 0.5).abs() < 1e-15, "the snapshot is immutable");
+        let rebuilt = VariableValues::build(&vars);
+        assert!((rebuilt.get(a).unwrap()[0] + 0.25).abs() < 1e-15, "a rebuild sees the new value");
+    }
+
+    #[test]
+    #[should_panic(expected = "expected 6 elements, got 3")]
+    fn set_value_rejects_a_slice_of_the_wrong_length() {
+        // A silently truncated state would corrupt every downstream index.
+        let mut node = VariableNode::new(VariableId::new(0), VariableKind::Pose { epoch: 0 });
+        node.set_value(&[1.0, 2.0, 3.0]);
+    }
+
+    #[test]
+    fn multi_dimensional_states_are_laid_out_in_id_order_without_gaps() {
+        // pose (6) | velocity (3) | ambiguity (1) -> indices 0, 6, 9.
+        let mut vars = BTreeMap::new();
+        let specs: [(VariableId, VariableKind, &[f64]); 3] = [
+            (VariableId::new(7), VariableKind::Pose { epoch: 0 }, &[1.0, 2.0, 3.0, 0.0, 0.0, 0.0]),
+            (VariableId::new(2), VariableKind::Velocity { epoch: 0 }, &[4.0, 5.0, 6.0]),
+            (VariableId::new(9), VariableKind::Ambiguity { constellation_id: 0, satellite: 1, frequency: 1, arc: 0 }, &[7.0]),
+        ];
+        for (id, kind, value) in specs {
+            let mut node = VariableNode::new(id, kind);
+            node.set_value(value);
+            vars.insert(id, node);
+        }
+        let values = VariableValues::build(&vars);
+        assert_eq!(values.total_dim(), 10);
+        // BTreeMap orders by VariableId: 2, 7, 9.
+        assert_eq!(values.index_of(VariableId::new(2)), Some((0, 3)));
+        assert_eq!(values.index_of(VariableId::new(7)), Some((3, 6)));
+        assert_eq!(values.index_of(VariableId::new(9)), Some((9, 1)));
+        assert!((values.get(VariableId::new(9)).unwrap()[0] - 7.0).abs() < 1e-15);
+    }
 }

@@ -428,62 +428,9 @@ pub fn execute_calibrated_post_process(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use nalgebra::UnitQuaternion;
+#[path = "calibration_tests.rs"]
+mod tests;
 
-    #[test]
-    fn test_static_imu_bias_estimation() {
-        let mut samples = Vec::new();
-        for i in 0..60 {
-            samples.push(ImuSample {
-                accel: Vector3::new(0.01, -0.02, 9.85),
-                gyro: Vector3::new(0.005, -0.002, 0.001),
-                time_us: i * 50_000,
-            });
-        }
-        let (ba, bg) = estimate_static_imu_biases(&samples);
-        let gyro = bg.expect("gyro bias estimated");
-        assert!((gyro.x - 0.005).abs() < 1e-4);
-        assert!((gyro.y + 0.002).abs() < 1e-4);
-        let accel = ba.expect("accel bias estimated");
-        assert!((accel.z - (9.85 - 9.80665)).abs() < 1e-3);
-    }
-
-    #[test]
-    fn test_convergence_criteria() {
-        let crit = CalibrationConvergenceCriteria::default();
-        let p1 = CalibrationParameters {
-            lever_arm_body: Some(Vector3::new(0.50, 0.20, -0.10)),
-            ..Default::default()
-        };
-        let p2 = CalibrationParameters {
-            lever_arm_body: Some(Vector3::new(0.502, 0.201, -0.101)),
-            ..Default::default()
-        };
-        let (conv, d_arm, _, _) = check_convergence(&p1, &p2, &crit);
-        assert!(conv);
-        assert!(d_arm < 0.005);
-    }
-
-    #[test]
-    fn test_apply_calibration_to_trajectory() {
-        let mut traj = vec![SmoothedEpoch {
-            time: gneiss_core::time::GpsTime::new(2000, 100.0),
-            position_ecef: Vector3::new(100.0, 200.0, 300.0),
-            velocity_ecef: Some(Vector3::new(10.0, 0.0, 0.0)),
-            attitude: Some(UnitQuaternion::identity()),
-            cov_position: Matrix3::identity(),
-            std_east: 0.01,
-            std_north: 0.01,
-            std_up: 0.02,
-            separation_3d: 0.01,
-            quality: 1,
-            n_satellites: 8,
-        }];
-        apply_calibration_to_trajectory(&mut traj, Vector3::new(1.0, 0.5, -0.2));
-        assert!((traj[0].position_ecef.x - 99.0).abs() < 1e-4);
-        assert!((traj[0].position_ecef.y - 199.5).abs() < 1e-4);
-        assert!((traj[0].position_ecef.z - 300.2).abs() < 1e-4);
-    }
-}
+#[cfg(test)]
+#[path = "calibration_pipeline_tests.rs"]
+mod pipeline_tests;

@@ -303,3 +303,7 @@ fn extract_imu_slice(
         None
     }
 }
+
+#[cfg(test)]
+#[path = "forward_tests.rs"]
+mod tests;

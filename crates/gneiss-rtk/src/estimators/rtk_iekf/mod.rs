@@ -13,6 +13,8 @@ pub mod ref_sat;
 pub mod sat_pco;
 pub mod sat_pos;
 pub mod satpos;
+#[cfg(test)]
+mod satpos_tests;
 pub mod screen;
 pub mod smoother;
 pub mod state;

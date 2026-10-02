@@ -133,9 +133,11 @@ impl BatchFactorGraph {
             clock_offsets.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
             let median_clk = clock_offsets[clock_offsets.len() / 2];
             
-            // Seed the clock variable to prevent robust estimators from completely downweighting everything
+            // Seed the clock variable to prevent robust estimators from completely downweighting everything.
+            // `VariableKind::ClockBias` is `VariableDim::Scalar` (variables.rs:84), so the node holds
+            // exactly one element; writing three panics inside `VariableNode::set_value`.
             if let Some(node) = self.graph.variables.get_mut(&clock_id) {
-                node.set_value(&[median_clk, 0.0, 0.0]);
+                node.set_value(&[median_clk]);
             }
         }
 
@@ -175,7 +177,10 @@ impl BatchFactorGraph {
     /// Add a smooth kinematic motion prior between consecutive pose variables.
     pub fn add_smoothness_factors(&mut self, max_velocity_m_s: f64, dt_s: f64) {
         let var_m = (max_velocity_m_s * dt_s).powi(2);
-        for i in 0..(self.pose_ids.len() - 1) {
+        // `saturating_sub`: a batch with fewer than two epochs simply has no
+        // links to add, while `len() - 1` on a `usize` underflows before the
+        // loop ever runs.
+        for i in 0..self.pose_ids.len().saturating_sub(1) {
             let p1 = self.pose_ids[i];
             let p2 = self.pose_ids[i + 1];
             let factor = crate::swfg::factor::RelativePoseFactor::new(p1, p2, var_m);
@@ -222,39 +227,9 @@ impl BatchFactorGraph {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use gneiss_core::sat::{Constellation, SatelliteId};
+#[path = "smoothing_tests.rs"]
+mod tests;
 
-    fn make_test_obs(time: GpsTime) -> EpochObs {
-        use gneiss_core::obs::{ObsCode, ObsType, Observation, SatObs, SignalCode};
-        let mut obs = EpochObs {
-            time,
-            satellites: Vec::new(),
-        };
-        for prn in 1..=5 {
-            let sat = SatelliteId { constellation: Constellation::Gps, prn };
-            obs.satellites.push(SatObs {
-                sat,
-                observations: vec![Observation {
-                    code: ObsCode { obs_type: ObsType::Pseudorange, signal: SignalCode { freq_band: 1, attribute: 'C' } },
-                    value: 20_000_000.0 + (prn as f64) * 100.0,
-                    lock_time: None,
-                    lli: None,
-                }],
-            });
-        }
-        obs
-    }
-
-    #[test]
-    fn test_batch_smoothing_scaffolding() {
-        let config = BatchSmoothingConfig::default();
-        let mut batch = BatchFactorGraph::new(config, Vec::new());
-        let t0 = GpsTime::new(2000, 100.0);
-        let obs0 = make_test_obs(t0);
-        let p0 = batch.add_epoch(0, &obs0, None, None);
-        assert_eq!(batch.pose_ids.len(), 1);
-        assert_eq!(batch.pose_ids[0], p0);
-    }
-}
+#[cfg(test)]
+#[path = "smoothing_solve_tests.rs"]
+mod solve_tests;
