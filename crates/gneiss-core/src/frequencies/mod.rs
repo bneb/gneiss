@@ -320,3 +320,5 @@ pub fn track_c_frequency(c: Constellation, band: u8, glo_k: i8) -> f64 {
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod property_tests;

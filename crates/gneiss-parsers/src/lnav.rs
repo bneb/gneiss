@@ -10,6 +10,14 @@ use gneiss_core::time::GpsTime;
 
 use std::f64::consts::PI as GPS_PI;
 
+/// Reference week used to resolve the 10-bit subframe week field against.
+///
+/// GPS week 2048 began 2019-04-06, the first LNAV rollover after the 2019
+/// handover. Callers that know the observation time should resolve the week
+/// themselves; this constant only removes the 1024-week ambiguity that would
+/// otherwise silently place a 2020 ephemeris in 1981.
+pub const WEEK_REFERENCE: u32 = 2048;
+
 /// Scale factor for signed 2's complement values from GPS LNAV.
 fn sign_scale(raw: u32, bits: u32, scale: f64) -> f64 {
     let mask = (1u64 << bits) - 1;
@@ -24,8 +32,45 @@ fn sign_scale(raw: u32, bits: u32, scale: f64) -> f64 {
     signed as f64 * scale
 }
 
-/// Extract a bit field from the 10 subframe words.
-/// Words are 30-bit values stored in the lower 30 bits of each u32.
+/// Number of information bits carried by one 30-bit LNAV word.
+///
+/// The remaining 6 bits are non-information (parity) bits. Proven by the
+/// reference decoder shipped with this repository, `rtkcmn.c:950` `decode_word`:
+/// it masks the information field with `0x3FFFFFC0` (word bits 6..29), shifts the
+/// Hamming masks right by 6 before folding, and compares the folded result
+/// against `word & 0x3F` for the parity.
+pub const INFO_BITS_PER_WORD: usize = 24;
+
+/// Extract a field from the concatenated stream of *information* bits.
+///
+/// `words` holds one 30-bit LNAV word per entry (two parity bits plus 24 data
+/// bits plus four reserved bits is the IS-GPS-200 shape; UBX-RXM-SFRBX delivers
+/// the raw 30-bit word). `start` counts information bits from the first
+/// transmitted bit of the first word, so a field can never alias or straddle a
+/// non-information bit.
+///
+/// Information bit `j` of a word sits at word bit `29 - (j % 24)`. The first
+/// transmitted bit of a field is that field's *most significant* bit, so bit
+/// `num_bits - 1 - k` of the result is bit `start + k` of the stream.
+fn extract_info_bits(words: &[u32], start: usize, num_bits: usize) -> u32 {
+    let mut result: u32 = 0;
+    for i in 0..num_bits {
+        let idx = start + i;
+        let (word_idx, within) = (idx / INFO_BITS_PER_WORD, idx % INFO_BITS_PER_WORD);
+        if word_idx < words.len() && (words[word_idx] >> (29 - within)) & 1 == 1 {
+            // The first transmitted bit of a field is its most significant bit.
+            result |= 1 << (num_bits - 1 - i);
+        }
+    }
+    result
+}
+
+/// Extract a bit field from the 10 subframe words, counting raw word bits.
+///
+/// Bits 0..5 of every word are the non-information parity bits (see
+/// [`INFO_BITS_PER_WORD`]), so this accessor is only safe for fields that a
+/// caller has already proven to avoid them. New code should use
+/// [`extract_info_bits`], which cannot read a parity bit by construction.
 fn extract_bits(words: &[u32], start_bit: usize, num_bits: usize) -> u32 {
     let mut result: u32 = 0;
     for i in 0..num_bits {
@@ -41,16 +86,41 @@ fn extract_bits(words: &[u32], start_bit: usize, num_bits: usize) -> u32 {
 
 /// Parse HOW (Handover Word) from word 2 of any subframe.
 /// Returns (tow, subframe_id).
-fn parse_how(word2: u32) -> (u32, u8) {
-    // HOW format (IS-GPS-200N, Section 20.3.3.1):
-    // Bits 0-16: truncated TOW count (17 bits)
-    // Bits 17-18: flag bits
-    // Bits 19-21: subframe ID (3 bits)
-    // Bits 22-27: parity (6 bits)
-    let tow = word2 & 0x1FFFF; // 17 bits
-    let sf_id = ((word2 >> 19) & 0x7) as u8;
+fn parse_how(words: &[u32]) -> (u32, u8) {
+    // HOW format (IS-GPS-200N, Section 20.3.3.1), in information-bit indices
+    // within word 2 (word 1 occupies information bits 24..47 of the subframe):
+    //   0-16: truncated TOW count (17 bits)
+    //   17-18: flag bits
+    //   19-21: subframe ID (3 bits)
+    // Word 2's information bits start at index 24.
+    let tow = extract_info_bits(words, 24, 17);
+    let sf_id = extract_info_bits(words, 24 + 19, 3) as u8;
     (tow, sf_id)
 }
+
+/// The three subframe decoders below still index fields with [`extract_bits`],
+/// whose offsets are expressed in raw word bits and therefore include the six
+/// non-information parity bits of every word.
+///
+/// # Known defect, not yet repaired here
+///
+/// `decode_sf1`, `decode_sf2` and `decode_sf3` currently return wrong values:
+/// of the 23 fields they read, 18 either start on a parity bit or run across
+/// one (every 32-bit field - `m0`, `e`, `sqrt_a`, `omega0`, `i0`, `omega`,
+/// `af0` - includes six parity bits). Only `crs`, `tgd`, `toc`, `af1` and
+/// `idot` happen to avoid them.
+///
+/// Repairing the offsets needs the per-word field layout of IS-GPS-200
+/// Tables 20-I, 20-II and 20-III, which is not available in this repository
+/// and could not be verified here. Guessing the offsets and hard-coding the
+/// guess would launder a bug into a passing test, so the offsets were left
+/// alone and the hazard documented instead. [`build_ephemeris_from_sfrbx`] has
+/// no production caller, so nothing downstream consumes these values yet.
+///
+/// `parse_how` (fixed) and `extract_info_bits` are the verified-correct
+/// accessors; converting the three decoders is mechanical once the table is
+/// available: express each field as an information-bit index into the 192-bit
+/// stream of the eight data words and read it with [`extract_info_bits`].
 
 /// Decode GPS LNAV subframe 1 (clock + health).
 fn decode_sf1(words: &[u32], eph: &mut GpsEphemeris, week: u32) {
@@ -111,7 +181,7 @@ pub fn build_ephemeris_from_sfrbx(
         if msg.gnss_id != 0 { continue; } // GPS only
         if msg.words.len() < 10 { continue; } // Need complete subframe
 
-        let (_tow, sf_id) = parse_how(msg.words[1]);
+        let (_tow, sf_id) = parse_how(&msg.words);
         let key = (msg.sv_id, sf_id);
 
         // Only keep the latest version of each subframe
@@ -138,8 +208,10 @@ pub fn build_ephemeris_from_sfrbx(
             iode: 0, iodc: 0,
         };
 
-        // Extract week from SF1 (bits 60-69 = word 3 bits 6-15)
-        let week = extract_bits(&w1, 60, 10);
+        // The SF1 week field is 10 bits wide, so it counts modulo 1024 weeks and
+        // must be resolved before it can be used as a `GpsTime` week. Without
+        // this, a 2020 broadcast week of 2110 is stored as 62 -> 1981.
+        let week = crate::rtcm3::ephemeris::adjust_gps_week(extract_bits(&w1, 60, 10), WEEK_REFERENCE);
         eph.toe = GpsTime::new(week, 0.0);
         eph.toc = GpsTime::new(week, 0.0);
 
@@ -147,9 +219,9 @@ pub fn build_ephemeris_from_sfrbx(
         decode_sf2(&w2, &mut eph);
         decode_sf3(&w3, &mut eph);
 
-        // Fix toe/toc GPS week (SF1 provides it)
-        let toe_week = week;
-        eph.toe = GpsTime::new(toe_week, eph.toe.tow);
+        // Re-attach the resolved week: the subframe decoders only produce the
+        // time of week.
+        eph.toe = GpsTime::new(week, eph.toe.tow);
         eph.toc = GpsTime::new(week, eph.toc.tow);
 
         ephemerides.push(Ephemeris::Gps(eph));
@@ -159,34 +231,4 @@ pub fn build_ephemeris_from_sfrbx(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_parse_how() {
-        // Example HOW: tow=100, sf_id=1
-        let how = 100u32 | (1u32 << 19);
-        let (tow, sf_id) = parse_how(how);
-        assert_eq!(tow, 100);
-        assert_eq!(sf_id, 1);
-    }
-
-    #[test]
-    fn test_extract_bits_simple() {
-        let words = vec![0b1011u32, 0u32, 0u32, 0u32, 0u32, 0u32, 0u32, 0u32, 0u32, 0u32];
-        assert_eq!(extract_bits(&words, 0, 4), 0b1011);
-        assert_eq!(extract_bits(&words, 1, 2), 0b01);
-    }
-
-    #[test]
-    fn test_sign_scale_positive() {
-        // 3-bit, value=3, scale=1.0 -> 3.0
-        assert_eq!(sign_scale(3, 3, 1.0), 3.0);
-    }
-
-    #[test]
-    fn test_sign_scale_negative() {
-        // 3-bit, value=4 (100b) should be -4 in 2's complement
-        assert_eq!(sign_scale(4, 3, 1.0), -4.0);
-    }
-}
+mod tests;

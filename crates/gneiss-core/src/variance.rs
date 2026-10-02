@@ -336,3 +336,7 @@ mod tests {
         0.24421021
     }
 }
+
+#[cfg(test)]
+#[path = "variance_tests.rs"]
+mod variance_property;

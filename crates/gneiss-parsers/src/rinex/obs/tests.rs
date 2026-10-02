@@ -881,4 +881,3 @@ G01  25140323.324   125140323.324        2514.032
         assert_eq!(obs.code.obs_type, ObsType::Pseudorange);
         assert_eq!(obs.code.signal.freq_band, 1);
     }
-

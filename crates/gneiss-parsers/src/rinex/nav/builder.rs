@@ -187,3 +187,102 @@ fn build_qzss_ephemeris(
         },
     ))
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    /// GLONASS field mapping, checked against the reference decoder
+    /// (RTKLIB rinex.cc:1170-1176, `decode_geph`):
+    ///
+    /// ```c
+    /// geph->pos[0]=data[3]*1E3; geph->pos[1]=data[7]*1E3; geph->pos[2]=data[11]*1E3;
+    /// geph->vel[0]=data[4]*1E3; geph->vel[1]=data[8]*1E3; geph->vel[2]=data[12]*1E3;
+    /// geph->acc[0]=data[5]*1E3; geph->acc[1]=data[9]*1E3; geph->acc[2]=data[13]*1E3;
+    /// geph->svh   =(int)data[ 6];
+    /// geph->frq   =(int)data[10];
+    /// ```
+    ///
+    /// `data[0..3]` are the three values of the record's first line and
+    /// `data[3..15]` the four values of each continuation line, so
+    /// `data[3+k] == vals[k]` for k in 0..12. The builder must therefore read
+    /// X/Y/Z from vals[0]/vals[4]/vals[8], V from 1/5/9, A from 2/6/10 and the
+    /// frequency number from vals[7].
+    #[test]
+    fn glonass_fields_follow_the_reference_decoder_mapping() {
+        let mut vals = [0.0; 32];
+        vals[0] = -1.184028808594E+03;
+        vals[1] = -2.155310630798E+00;
+        vals[4] = 1.322943017578E+04;
+        vals[5] = -2.060539245605E+00;
+        vals[7] = 1.0;
+        vals[8] = 2.176970068359E+04;
+        vals[9] = 1.135528564453E+00;
+        vals[10] = -1.862645149231E-09;
+        let sat = SatelliteId {
+            constellation: Constellation::Glonass,
+            prn: 1,
+        };
+        let Ephemeris::Glonass(g) = build_ephemeris(
+            Constellation::Glonass,
+            sat,
+            GpsTime::new(2137, 0.0),
+            1.0,
+            2.0,
+            3.0,
+            &vals,
+        )
+        .unwrap() else {
+            panic!("expected GLONASS");
+        };
+        assert!((g.x - -1184028.808594).abs() < 1e-3);
+        assert!((g.y - 13229430.17578).abs() < 1e-3);
+        assert!((g.z - 21769700.68359).abs() < 1e-3);
+        assert!((g.vx - -2155.310630798).abs() < 1e-6);
+        assert!((g.vy - -2060.539245605).abs() < 1e-6);
+        assert!((g.vz - 1135.528564453).abs() < 1e-6);
+        assert!((g.az - -1.862645149231E-06).abs() < 1e-15);
+        assert_eq!(g.freq_num, 1);
+        assert_eq!((g.tau_n, g.gamma_n, g.delta_tau_n), (1.0, 2.0, 3.0));
+    }
+
+    /// GPS broadcast field mapping, checked against the real record at the top
+    /// of datasets/wtzr_ppp_1224/BRDC00IGS_R_20203590000_01D_MN.rnx. RINEX 3
+    /// puts three values on the first line and four on each of seven
+    /// continuations, so vals[0..4] are IODE/Crs/delta-n/M0, vals[4..8] are
+    /// Cuc/e/Cus/sqrt(A), vals[8..12] toe/Cic/Omega0/Cis, and the last four
+    /// rows carry IDOT (vals[16]), TGD (vals[22]) and IODC (vals[23]).
+    #[test]
+    fn gps_fields_follow_the_broadcast_record_order() {
+        let mut vals = [0.0; 32];
+        vals[0] = 51.0;
+        vals[5] = 1.020454068203E-02;
+        vals[7] = 5153.695047379;
+        vals[8] = 345600.0;
+        vals[12] = 9.828138365184E-01;
+        vals[15] = -7.690320332710E-09;
+        vals[16] = 1.207193141583E-10;
+        vals[22] = 5.122274160385E-09;
+        vals[23] = 51.0;
+        let sat = SatelliteId {
+            constellation: Constellation::Gps,
+            prn: 1,
+        };
+        let toc = GpsTime::new(2137, 345600.0);
+        let Ephemeris::Gps(g) =
+            build_ephemeris(Constellation::Gps, sat, toc, 0.0, 0.0, 0.0, &vals).unwrap()
+        else {
+            panic!("expected GPS");
+        };
+        assert_eq!(g.iode, 51);
+        assert_eq!(g.iodc, 51);
+        assert!((g.e - 1.020454068203E-02).abs() < 1e-15);
+        assert!((g.sqrt_a - 5153.695047379).abs() < 1e-9);
+        assert!((g.i0 - 9.828138365184E-01).abs() < 1e-13);
+        assert!((g.omega_dot - -7.690320332710E-09).abs() < 1e-20);
+        assert!((g.idot - 1.207193141583E-10).abs() < 1e-22);
+        assert!((g.tgd - 5.122274160385E-09).abs() < 1e-20);
+        assert_eq!((g.toe.week, g.toe.tow), (2137, 345600.0));
+    }
+}

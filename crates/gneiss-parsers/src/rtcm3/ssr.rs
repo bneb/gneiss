@@ -1,3 +1,24 @@
+//! RTCM 3 State Space Representation (SSR) parsing.
+//!
+//! ## Scope
+//!
+//! The per-satellite record layout is constellation dependent and only the GPS
+//! shape is implemented here. Verified against the reference decoder RTKLIB
+//! `rtcm3.c`, which dispatches by message number and then applies per-system
+//! field widths:
+//!
+//! | message | system | header sat-count | epoch field | orbit record | clock record |
+//! |---------|--------|------------------|-------------|--------------|--------------|
+//! | 1057/58/59 | GPS    | 6 bits | 20-bit TOW | 135 bits (6 PRN, 8 IODE) | 76 bits (6 PRN) |
+//! | 1063/64/65 | GLONASS| 6 bits | 17-bit TOD, `adjday_glot` | 133 bits (5 PRN, 8 IODE) | 75 bits (5 PRN) |
+//! | 1083/84/85 | Galileo| 6 bits | 20-bit TOW | 137 bits (6 PRN, 10 IODE) | 76 bits (6 PRN) |
+//! | 1088/89/90 | QZSS   | 4 bits | 20-bit TOW | 133 bits (4 PRN, 8 IODE) | 74 bits (4 PRN) |
+//! | 1091/92/93 | BeiDou | 6 bits | 20-bit BDT  | 161 bits (6 PRN, 10 IODE, 24 IOD CRC) | 76 bits (6 PRN) |
+//!
+//! The public entry points therefore **reject** every message number other than
+//! the three GPS ones, instead of silently applying GPS field widths to a
+//! Galileo, GLONASS, QZSS or BeiDou message and returning plausible nonsense.
+
 use super::{sign_extend_i32, RtcmParseError};
 use bitvec::prelude::*;
 
@@ -80,8 +101,26 @@ pub fn parse_ssr_header(
     Ok((&bits[68..], header))
 }
 
+/// The only SSR orbit message this decoder understands (GPS, type 1057).
+const GPS_SSR_ORBIT: u16 = 1057;
+/// The only SSR clock message this decoder understands (GPS, type 1058).
+const GPS_SSR_CLOCK: u16 = 1058;
+/// The only SSR code-bias message this decoder understands (GPS, type 1059).
+const GPS_SSR_CODE_BIAS: u16 = 1059;
+
+fn check_message_number(bits: &BitSlice<u8, Msb0>, expected: u16) -> Result<(), RtcmParseError> {
+    if bits.len() < 12 {
+        return Err(RtcmParseError::Incomplete);
+    }
+    if bits[0..12].load_be::<u16>() != expected {
+        return Err(RtcmParseError::UnsupportedMsmType);
+    }
+    Ok(())
+}
+
 pub fn parse_ssr_orbit(payload: &[u8]) -> Result<(SsrHeader, Vec<SsrOrbitSat>), RtcmParseError> {
     let bits = payload.view_bits::<Msb0>();
+    check_message_number(bits, GPS_SSR_ORBIT)?;
     let (mut bits, header) = parse_ssr_header(bits)?;
 
     let mut sats = Vec::with_capacity(header.num_satellites as usize);
@@ -122,6 +161,7 @@ fn parse_orbit_sat(
 
 pub fn parse_ssr_clock(payload: &[u8]) -> Result<(SsrHeader, Vec<SsrClockSat>), RtcmParseError> {
     let bits = payload.view_bits::<Msb0>();
+    check_message_number(bits, GPS_SSR_CLOCK)?;
     let (mut bits, header) = parse_ssr_header(bits)?;
 
     let mut sats = Vec::with_capacity(header.num_satellites as usize);
@@ -155,6 +195,7 @@ pub fn parse_ssr_code_bias(
     payload: &[u8],
 ) -> Result<(SsrHeader, Vec<SsrCodeBiasSat>), RtcmParseError> {
     let bits = payload.view_bits::<Msb0>();
+    check_message_number(bits, GPS_SSR_CODE_BIAS)?;
     let (mut bits, header) = parse_ssr_header(bits)?;
 
     let mut sats = Vec::with_capacity(header.num_satellites as usize);
@@ -201,229 +242,4 @@ fn parse_code_bias_sat(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Pack (num_bits, value) pairs into a byte buffer in Msb0 order.
-    fn pack_bits(pairs: &[(usize, u64)]) -> Vec<u8> {
-        let total_bits: usize = pairs.iter().map(|(b, _)| *b).sum();
-        let mut bytes = vec![0u8; total_bits.div_ceil(8)];
-        let mut pos = 0;
-        for &(bits, val) in pairs {
-            for i in 0..bits {
-                if (val >> (bits - 1 - i)) & 1 != 0 {
-                    bytes[pos / 8] |= 1 << (7 - (pos % 8));
-                }
-                pos += 1;
-            }
-        }
-        bytes
-    }
-
-    // -----------------------------------------------------------------------
-    // parse_ssr_header
-    // -----------------------------------------------------------------------
-    #[test]
-    fn test_parse_ssr_header_incomplete() {
-        let bits = [0u8; 8].view_bits::<Msb0>(); // 64 bits < 68
-        let result = parse_ssr_header(bits);
-        assert!(matches!(result, Err(RtcmParseError::Incomplete)));
-    }
-
-    #[test]
-    fn test_parse_ssr_header_valid() {
-        let payload = pack_bits(&[
-            (12, 1057),   // message_number = SSR Orbit Correction (GPS)
-            (20, 123456), // epoch_time
-            (4, 5),       // update_interval = 5 sec
-            (1, 1),       // multiple_message_indicator
-            (1, 0),       // satellite_reference_datum
-            (4, 8),       // iod_ssr
-            (16, 42),     // provider_id
-            (4, 3),       // solution_id
-            (6, 12),      // num_satellites = 12
-        ]);
-        let bits = payload.view_bits::<Msb0>();
-        let (remaining, header) = parse_ssr_header(bits).unwrap();
-        assert_eq!(header.message_number, 1057);
-        assert_eq!(header.epoch_time, 123456);
-        assert_eq!(header.update_interval, 5);
-        assert!(header.multiple_message_indicator);
-        assert!(!header.satellite_reference_datum);
-        assert_eq!(header.iod_ssr, 8);
-        assert_eq!(header.provider_id, 42);
-        assert_eq!(header.solution_id, 3);
-        assert_eq!(header.num_satellites, 12);
-        assert_eq!(remaining.len(), bits.len() - 68);
-    }
-
-    // -----------------------------------------------------------------------
-    // parse_ssr_orbit
-    // -----------------------------------------------------------------------
-    #[test]
-    fn test_parse_ssr_orbit_empty() {
-        // Header with num_satellites = 0, no orbit data
-        let payload = pack_bits(&[
-            (12, 1057), (20, 0), (4, 0), (1, 0), (1, 0), (4, 0), (16, 0), (4, 0), (6, 0),
-        ]);
-        let (header, sats) = parse_ssr_orbit(&payload).unwrap();
-        assert_eq!(header.num_satellites, 0);
-        assert!(sats.is_empty());
-    }
-
-    #[test]
-    fn test_parse_ssr_orbit_one_sat() {
-        // Single pack_bits call: 68 header + 135 sat = 203 bits = 26 bytes = 208 virtual
-        let payload = pack_bits(&[
-            (12, 1057), (20, 100), (4, 1), (1, 0), (1, 0), (4, 2), (16, 1), (4, 1), (6, 1),
-            (6, 5), (8, 17), (22, 100), (20, 200), (20, (-50i32 as u64) & 0xFFFFF),
-            (21, 10), (19, 5), (19, (-3i32 as u64) & 0x7FFFF),
-        ]);
-        let (_header, sats) = parse_ssr_orbit(&payload).unwrap();
-        assert_eq!(sats.len(), 1);
-        assert_eq!(sats[0].sat_id, 5);
-        assert_eq!(sats[0].iode, 17);
-    }
-
-    #[test]
-    fn test_parse_ssr_orbit_two_sats() {
-        // Single pack_bits: 68 header + 135 + 135 = 338 bits = 43 bytes
-        let payload = pack_bits(&[
-            (12, 1057), (20, 100), (4, 1), (1, 0), (1, 0), (4, 2), (16, 1), (4, 1), (6, 2),
-            (6, 1), (8, 10), (22, 50), (20, 100), (20, 30), (21, 5), (19, 2), (19, 1),
-            (6, 2), (8, 20), (22, 60), (20, 110), (20, 40), (21, 6), (19, 3), (19, 2),
-        ]);
-        let (_header, sats) = parse_ssr_orbit(&payload).unwrap();
-        assert_eq!(sats.len(), 2);
-        assert_eq!(sats[0].sat_id, 1);
-        assert_eq!(sats[1].sat_id, 2);
-        assert_eq!(sats[0].iode, 10);
-        assert_eq!(sats[1].iode, 20);
-    }
-
-    #[test]
-    fn test_parse_ssr_orbit_incomplete() {
-        // Header (68 bits) with num_satellites=1, no orbit data.
-        // Total = 68 bits = 9 bytes = 72 bits virtual -> remaining after header = 4 bits
-        // parse_orbit_sat checks for 135 bits -> fails
-        let payload = pack_bits(&[
-            (12, 1057), (20, 0), (4, 0), (1, 0), (1, 0), (4, 0), (16, 0), (4, 0), (6, 1),
-        ]);
-        let result = parse_ssr_orbit(&payload);
-        assert!(result.is_err());
-    }
-
-    // -----------------------------------------------------------------------
-    // parse_ssr_clock
-    // -----------------------------------------------------------------------
-    #[test]
-    fn test_parse_ssr_clock_empty() {
-        let payload = pack_bits(&[
-            (12, 1058), (20, 0), (4, 0), (1, 0), (1, 0), (4, 0), (16, 0), (4, 0), (6, 0),
-        ]);
-        let (header, sats) = parse_ssr_clock(&payload).unwrap();
-        assert_eq!(header.message_number, 1058);
-        assert!(sats.is_empty());
-    }
-
-    #[test]
-    fn test_parse_ssr_clock_one_sat() {
-        // Single pack_bits: 68 header + 76 clock = 144 bits = 18 bytes = 144 virtual
-        let payload = pack_bits(&[
-            (12, 1058), (20, 200), (4, 2), (1, 0), (1, 0), (4, 3), (16, 1), (4, 1), (6, 1),
-            (6, 7), (22, 500), (21, 10), (27, 5),
-        ]);
-        let (_header, sats) = parse_ssr_clock(&payload).unwrap();
-        assert_eq!(sats.len(), 1);
-        assert_eq!(sats[0].sat_id, 7);
-        let expected_c0 = sign_extend_i32(500, 22) as f64 * RES_CLOCK_C0;
-        let expected_c1 = sign_extend_i32(10, 21) as f64 * RES_CLOCK_C1;
-        let expected_c2 = sign_extend_i32(5, 27) as f64 * RES_CLOCK_C2;
-        assert!((sats[0].delta_clock_c0 - expected_c0).abs() < 1e-12);
-        assert!((sats[0].delta_clock_c1 - expected_c1).abs() < 1e-12);
-        assert!((sats[0].delta_clock_c2 - expected_c2).abs() < 1e-12);
-    }
-
-    #[test]
-    fn test_parse_ssr_clock_incomplete() {
-        // Header (68 bits) with num_satellites=1, no sat data = 9 bytes = 72 bits virtual
-        // parse_clock_sat checks for 76 bits -> fails
-        let payload = pack_bits(&[
-            (12, 1058), (20, 0), (4, 0), (1, 0), (1, 0), (4, 0), (16, 0), (4, 0), (6, 1),
-        ]);
-        let result = parse_ssr_clock(&payload);
-        assert!(result.is_err());
-    }
-
-    // -----------------------------------------------------------------------
-    // parse_ssr_code_bias
-    // -----------------------------------------------------------------------
-    #[test]
-    fn test_parse_ssr_code_bias_empty() {
-        let payload = pack_bits(&[
-            (12, 1059), (20, 0), (4, 0), (1, 0), (1, 0), (4, 0), (16, 0), (4, 0), (6, 0),
-        ]);
-        let (header, sats) = parse_ssr_code_bias(&payload).unwrap();
-        assert_eq!(header.message_number, 1059);
-        assert!(sats.is_empty());
-    }
-
-    #[test]
-    fn test_parse_ssr_code_bias_one_sat() {
-        // Single pack_bits: 68 header + 11 sat_header + 19*2 biases = 117 bits = 15 bytes = 120 virtual
-        let payload = pack_bits(&[
-            (12, 1059), (20, 300), (4, 1), (1, 0), (1, 0), (4, 1), (16, 1), (4, 1), (6, 1),
-            (6, 3), (5, 2),
-            (5, 1), (14, 50),
-            (5, 2), (14, (-30i32 as u64) & 0x3FFF),
-        ]);
-        let (_header, sats) = parse_ssr_code_bias(&payload).unwrap();
-        assert_eq!(sats.len(), 1);
-        assert_eq!(sats[0].sat_id, 3);
-        assert_eq!(sats[0].num_biases, 2);
-        assert_eq!(sats[0].biases.len(), 2);
-        assert_eq!(sats[0].biases[0].signal_and_tracking_mode, 1);
-        assert!((sats[0].biases[0].bias - 50.0 * 0.01).abs() < 1e-12);
-        assert_eq!(sats[0].biases[1].signal_and_tracking_mode, 2);
-        assert!((sats[0].biases[1].bias - (-30.0 * 0.01)).abs() < 1e-12);
-    }
-
-    #[test]
-    fn test_parse_ssr_code_bias_incomplete_header() {
-        // 68 header bits only -> 9 bytes (72 bits virtual).
-        // After header: 4 bits remaining. parse_code_bias_sat needs 11 -> Err
-        let payload = pack_bits(&[
-            (12, 1059), (20, 0), (4, 0), (1, 0), (1, 0), (4, 0), (16, 0), (4, 0), (6, 1),
-        ]);
-        let result = parse_ssr_code_bias(&payload);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_parse_ssr_code_bias_incomplete_bias() {
-        // 68 header + 11 sat_header + 10 bias_start = 89 bits = 12 bytes (96 virtual)
-        // After header (68): 28 bits. After sat_header (11): 17 bits.
-        // Bias check: 17 < 19 = true -> Err
-        let payload = pack_bits(&[
-            (12, 1059), (20, 0), (4, 0), (1, 0), (1, 0), (4, 0), (16, 0), (4, 0), (6, 1),
-            (6, 1), (5, 1),
-            (10, 0),
-        ]);
-        let result = parse_ssr_code_bias(&payload);
-        assert!(result.is_err());
-    }
-
-    // -----------------------------------------------------------------------
-    // SSR message number constants
-    // -----------------------------------------------------------------------
-    #[test]
-    fn test_ssr_parse_orbit_with_update_interval_0() {
-        // update_interval = 0 is valid (single epoch)
-        let payload = pack_bits(&[
-            (12, 1057), (20, 0), (4, 0), (1, 0), (1, 0), (4, 0), (16, 0), (4, 0), (6, 1),
-            (6, 1), (8, 0), (22, 0), (20, 0), (20, 0), (21, 0), (19, 0), (19, 0),
-        ]);
-        let (_, sats) = parse_ssr_orbit(&payload).unwrap();
-        assert_eq!(sats.len(), 1);
-    }
-}
+mod tests;

@@ -80,6 +80,9 @@ pub fn sign_extend_i32(value: u32, bits: u32) -> i32 {
     (value << shift) as i32 >> shift
 }
 
+#[cfg(test)]
+mod tests;
+
 pub mod ephemeris;
 pub mod msm;
 pub mod ssr;

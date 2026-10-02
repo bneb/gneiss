@@ -13,6 +13,9 @@
 //! the phase observation, mirroring the phase-windup convention.
 
 use crate::antex::{AntennaPcv, AntexDatabase, FrequencyPcv};
+use nalgebra::Vector3;
+
+type Vec3 = Vector3<f64>;
 
 /// Preferred ANTEX frequency code for GPS L1 receiver calibrations.
 const L1_PRIMARY: &str = "G01";
@@ -99,25 +102,35 @@ impl ReceiverPcv {
 
     /// Interpolate PCV (mm) at azimuth and zenith angles (degrees).
     ///
-    /// Uses 2D bilinear interpolation if an azimuth grid is present;
-    /// otherwise falls back to 1D elevation-dependent interpolation.
+    /// Uses 2D bilinear interpolation if a well-formed azimuth grid is
+    /// present; otherwise falls back to 1D elevation-dependent
+    /// interpolation, which is also the fallback for a truncated grid.
     pub fn interpolate_az_zen(&self, az_deg: f64, zen_deg: f64) -> f64 {
         if let Some(ref azi) = self.azi_grid_mm {
-            if self.dazi_deg > 0.0 && !azi.is_empty() && self.zen_step_deg > 0.0 {
-                return self.interpolate_2d_az_zen(azi, az_deg, zen_deg);
+            if self.dazi_deg > 0.0 && self.zen_step_deg > 0.0 {
+                if let Some(v) = self.az_zen_grid_mm(azi, az_deg, zen_deg) {
+                    return v;
+                }
             }
         }
         self.interpolate(zen_deg)
     }
 
-    fn interpolate_2d_az_zen(&self, azi: &[Vec<f64>], az_deg: f64, zen_deg: f64) -> f64 {
-        let az_norm = az_deg.rem_euclid(360.0);
+    /// Bilinear sample of the RO-AZI grid, or `None` when the grid cannot
+    /// be indexed safely.
+    ///
+    /// `None` covers an empty grid and rows of unequal length: a short row
+    /// would make `azi[az_i][zen_i]` read past its end, and the RO-AZI
+    /// table is then less trustworthy than the NOAZI table, so the caller
+    /// degrades to the elevation-only model instead of guessing.
+    fn az_zen_grid_mm(&self, azi: &[Vec<f64>], az_deg: f64, zen_deg: f64) -> Option<f64> {
         let n_azi = azi.len();
-        let n_zen = azi[0].len();
-        if n_zen == 0 {
-            return self.interpolate(zen_deg);
+        let n_zen = azi.first()?.len();
+        if n_zen == 0 || azi.iter().any(|row| row.len() != n_zen) {
+            return None;
         }
 
+        let az_norm = az_deg.rem_euclid(360.0);
         let az_pos = az_norm / self.dazi_deg;
         let az_i = (az_pos.floor() as usize) % n_azi;
         let az_next = (az_i + 1) % n_azi;
@@ -129,15 +142,9 @@ impl ReceiverPcv {
         let zen_next = (zen_i + 1).min(n_zen - 1);
         let zen_frac = zen_pos - zen_i as f64;
 
-        let v00 = azi[az_i][zen_i];
-        let v01 = azi[az_i][zen_next];
-        let v10 = azi[az_next][zen_i];
-        let v11 = azi[az_next][zen_next];
-
-        let v0 = v00 * (1.0 - zen_frac) + v01 * zen_frac;
-        let v1 = v10 * (1.0 - zen_frac) + v11 * zen_frac;
-
-        v0 * (1.0 - az_frac) + v1 * az_frac
+        let v0 = azi[az_i][zen_i] * (1.0 - zen_frac) + azi[az_i][zen_next] * zen_frac;
+        let v1 = azi[az_next][zen_i] * (1.0 - zen_frac) + azi[az_next][zen_next] * zen_frac;
+        Some(v0 * (1.0 - az_frac) + v1 * az_frac)
     }
 
     /// Compute DIFFERENTIAL DD correction in metres:
@@ -146,6 +153,13 @@ impl ReceiverPcv {
     /// Returns the correction to subtract from carrier-phase observations.
     /// Same-type antennas cancel to ~0; cross-type pairs differ by the
     /// millimetre-scale antenna signature.
+    ///
+    /// SAFETY: the four angles are bare `f64`s, so a caller can pass a
+    /// geometrically impossible pair (a reference satellite below the
+    /// horizon at one station and above it at the other, or sat/ref
+    /// swapped between rover and base). Prefer
+    /// [`Self::dd_correction_from_geometry`], which derives all four from
+    /// shared satellite positions and cannot represent that state.
     pub fn dd_correction_m(
         rov: &ReceiverPcv,
         bas: &ReceiverPcv,
@@ -161,34 +175,20 @@ impl ReceiverPcv {
 
     /// DD correction derived from shared satellite geometry.
     ///
-    /// Zenith and azimuth angles are computed internally from station and satellite
-    /// positions, making inconsistent geometry unrepresentable.
+    /// Zenith and azimuth angles are computed internally from station and
+    /// satellite positions, making inconsistent geometry unrepresentable.
+    /// `*_llh` are geodetic radians + ellipsoidal height; `sat_pos` and
+    /// `ref_sat_pos` are ECEF metres.
     pub fn dd_correction_from_geometry(
         rov: &ReceiverPcv,
         bas: &ReceiverPcv,
-        rov_llh: nalgebra::Vector3<f64>,
-        bas_llh: nalgebra::Vector3<f64>,
-        sat_pos: nalgebra::Vector3<f64>,
-        ref_sat_pos: nalgebra::Vector3<f64>,
+        rov_llh: Vec3,
+        bas_llh: Vec3,
+        sat_pos: Vec3,
+        ref_sat_pos: Vec3,
     ) -> f64 {
-        use gneiss_core::coords::az_el;
-        let (az_rov_sat, el_rov_sat) = az_el(rov_llh, rov_llh, sat_pos);
-        let (az_rov_ref, el_rov_ref) = az_el(rov_llh, rov_llh, ref_sat_pos);
-        let (az_bas_sat, el_bas_sat) = az_el(bas_llh, bas_llh, sat_pos);
-        let (az_bas_ref, el_bas_ref) = az_el(bas_llh, bas_llh, ref_sat_pos);
-
-        let zen_rov_sat = (90.0 - el_rov_sat.to_degrees()).max(0.0);
-        let zen_rov_ref = (90.0 - el_rov_ref.to_degrees()).max(0.0);
-        let zen_bas_sat = (90.0 - el_bas_sat.to_degrees()).max(0.0);
-        let zen_bas_ref = (90.0 - el_bas_ref.to_degrees()).max(0.0);
-
-        let az_rov_sat_deg = az_rov_sat.to_degrees().rem_euclid(360.0);
-        let az_rov_ref_deg = az_rov_ref.to_degrees().rem_euclid(360.0);
-        let az_bas_sat_deg = az_bas_sat.to_degrees().rem_euclid(360.0);
-        let az_bas_ref_deg = az_bas_ref.to_degrees().rem_euclid(360.0);
-
-        let rov_diff_mm = rov.interpolate_az_zen(az_rov_sat_deg, zen_rov_sat) - rov.interpolate_az_zen(az_rov_ref_deg, zen_rov_ref);
-        let bas_diff_mm = bas.interpolate_az_zen(az_bas_sat_deg, zen_bas_sat) - bas.interpolate_az_zen(az_bas_ref_deg, zen_bas_ref);
+        let rov_diff_mm = receiver_dd_mm(rov, rov_llh, sat_pos, ref_sat_pos);
+        let bas_diff_mm = receiver_dd_mm(bas, bas_llh, sat_pos, ref_sat_pos);
         (rov_diff_mm - bas_diff_mm) / MM_PER_M
     }
 
@@ -217,8 +217,29 @@ impl ReceiverPcv {
     }
 }
 
-/// Match a stored `TYPE / SERIAL NO` string against family + radome.
+/// PCV difference (mm) between the observation satellite and the
+/// reference satellite, seen from one station.
 ///
+/// `llh` supplies the local ENU basis and `sat`/`ref_sat` are ECEF. The
+/// two frames are different objects: `gneiss_core::coords::az_el` needs
+/// the geodetic position *and* the ECEF position, so the ECEF origin is
+/// derived here from the single `llh` argument rather than being passed
+/// as a parallel vector that could disagree with it.
+fn receiver_dd_mm(pcv: &ReceiverPcv, llh: Vec3, sat: Vec3, ref_sat: Vec3) -> f64 {
+    let ecef = gneiss_core::coords::llh_to_ecef(llh);
+    let (az_s, zen_s) = az_zen_deg(llh, ecef, sat);
+    let (az_r, zen_r) = az_zen_deg(llh, ecef, ref_sat);
+    pcv.interpolate_az_zen(az_s, zen_s) - pcv.interpolate_az_zen(az_r, zen_r)
+}
+
+/// Azimuth (deg, [0, 360)) and zenith angle (deg) of `sat` as seen from a
+/// station given in both geodetic and ECEF coordinates.
+fn az_zen_deg(llh: Vec3, ecef: Vec3, sat: Vec3) -> (f64, f64) {
+    let (az, el) = gneiss_core::coords::az_el(llh, ecef, sat);
+    (az.to_degrees().rem_euclid(360.0), (90.0 - el.to_degrees()).max(0.0))
+}
+
+/// Match a stored `TYPE / SERIAL NO` string against family + radome.
 /// Receiver blocks store `"FAMILY  RADOME"`; single-token entries
 /// (e.g. `"AOAD/M_T"`) denote unradomed calibrations and resolve for the
 /// radome codes `"NONE"` or `""`.

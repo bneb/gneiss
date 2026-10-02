@@ -15,6 +15,8 @@ pub mod sat_pos;
 pub mod satpos;
 #[cfg(test)]
 mod satpos_tests;
+#[cfg(test)]
+mod sprint_tests;
 pub mod screen;
 pub mod smoother;
 pub mod state;

@@ -169,3 +169,86 @@ pub(crate) fn parse_rinex_3_obs_types_list<I: Iterator<Item = String>>(
     }
     Ok(types)
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    /// RINEX 2 header whose MARKER NAME record is truncated to 33 bytes.
+    /// Columns 1-60 carry the marker name, so a 33-byte record still names
+    /// the site: everything before the trailing spaces is "P12".
+    const V2_SHORT_MARKER: &str = concat!(
+        "     2.11           O: GPS OBS DATA    M: Mixed            RINEX VERSION / TYPE\n",
+        "P12                              MARKER NAME\n",
+        "     2    C1    L1                                              # / TYPES OF OBSERV\n",
+        "                                                            END OF HEADER\n",
+    );
+
+    /// MARKER NAME shorter than 60 bytes must not panic: header.rs slices
+    /// `current_line[0..60]`, which is an out-of-bounds byte-index panic for
+    /// any record that does not physically carry all 60 name columns.
+    #[test]
+    fn rinex2_short_marker_name_record_does_not_panic() {
+        let mut lines = V2_SHORT_MARKER.lines().map(str::to_string);
+        let first = lines.next().unwrap();
+        let (types, header) = parse_rinex_2_header(first, &mut lines).unwrap();
+        assert_eq!(types, vec!["C1".to_string(), "L1".to_string()]);
+        assert_eq!(header.marker_name.as_deref(), Some("P12"));
+    }
+
+    /// A SYS / # / OBS TYPES record whose mandatory columns 4-6 do not hold a
+    /// number must not be accepted. `count` falls back to 0
+    /// (`current_line[3..6]...unwrap_or(0)`), so the constellation is still
+    /// inserted with an EMPTY observation-type list, `const_obs_types` is
+    /// non-empty, and the caller never learns the header was unreadable -
+    /// every satellite of that constellation then comes back with zero
+    /// observations. There is no valid header behind this line, so the only
+    /// acceptable outcome is an error.
+    #[test]
+    fn rinex3_obs_types_record_without_count_is_an_error() {
+        let data = concat!(
+            "     3.04           OBSERVATION DATA    M: MIXED            RINEX VERSION / TYPE\n",
+            "SYS / # / OBS TYPES\n",
+            "                                                            END OF HEADER\n",
+        );
+        let mut lines = data.lines().map(str::to_string);
+        let first = lines.next().unwrap();
+        assert!(parse_rinex_3_header(first, &mut lines).is_err());
+    }
+
+    /// Same defect on the RINEX 3 marker record: header.rs:122 also slices
+    /// `current_line[0..60]`.
+    #[test]
+    fn rinex3_short_marker_name_record_does_not_panic() {
+        let data = concat!(
+            "     3.04           OBSERVATION DATA    M: MIXED            RINEX VERSION / TYPE\n",
+            "WTZR                              MARKER NAME\n",
+            "G    1 C1C                                                    SYS / # / OBS TYPES\n",
+            "                                                            END OF HEADER\n",
+        );
+        let mut lines = data.lines().map(str::to_string);
+        let first = lines.next().unwrap();
+        let (types, header) = parse_rinex_3_header(first, &mut lines).unwrap();
+        assert_eq!(types.get(&Constellation::Gps).map(Vec::len), Some(1));
+        assert_eq!(header.marker_name.as_deref(), Some("WTZR"));
+    }
+
+    /// Golden vector for the 60-column marker-name field, taken verbatim from
+    /// datasets/cors_baseline/rover_p123.obs line 21 (71 bytes: 60 name
+    /// columns + "MARKER NAME" label). Columns 1-60 are "P123" + padding.
+    #[test]
+    fn rinex2_marker_name_takes_columns_1_to_60() {
+        let line = "P123                                                        MARKER NAME";
+        assert_eq!(line.len(), 71);
+        let rest = vec![
+            "     2    C1    L1                                              # / TYPES OF OBSERV"
+                .to_string(),
+            "                                                            END OF HEADER"
+                .to_string(),
+        ];
+        let (_types, header) =
+            parse_rinex_2_header(line.to_string(), &mut rest.into_iter()).unwrap();
+        assert_eq!(header.marker_name.as_deref(), Some("P123"));
+    }
+}

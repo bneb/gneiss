@@ -423,3 +423,7 @@ mod tests {
         assert!(k2 > k1);
     }
 }
+
+#[cfg(test)]
+#[path = "epoch_tests.rs"]
+mod epoch_property;

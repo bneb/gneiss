@@ -15,6 +15,12 @@
 pub mod tc_ambiguity;
 pub mod tc_ppp;
 pub mod tc_rtk;
+#[cfg(test)]
+mod retraction_sprint_tests;
+#[cfg(test)]
+mod tc_rtk_sprint_tests;
+#[cfg(test)]
+mod sprint_tests;
 
 use nalgebra::{UnitQuaternion, Vector3};
 

@@ -98,7 +98,7 @@ fn exact_w_plus_p(w_plus: f64, n: usize) -> f64 {
         .filter(|(w, _)| (*w as f64 - mean).abs() >= obs_dev - 1e-9)
         .map(|(_, &c)| c)
         .sum();
-    (tail / (2f64).powi(n as i32)).min(1.0)
+    (tail / libm::pow(2.0, n as f64)).min(1.0)
 }
 
 /// Normal approximation with tie and continuity correction.
@@ -111,7 +111,7 @@ fn normal_approx_p(w_plus: f64, w_minus: f64, n: usize, tie_sum: f64) -> f64 {
     }
     let diff = w_plus - w_minus;
     let cont = if diff >= 0.0 { 1.0 } else { -1.0 };
-    let z = ((diff.abs() - cont) / var.sqrt()).max(0.0);
+    let z = libm::fmax((diff.abs() - cont) / libm::sqrt(var), 0.0);
     // Two-sided normal tail via erfc.
     let p = libm::erfc(z / core::f64::consts::SQRT_2);
     p.min(1.0)
@@ -216,7 +216,7 @@ pub struct WeibullFit {
 impl WeibullFit {
     /// Quantile of the fitted distribution.
     pub fn quantile(&self, p: f64) -> f64 {
-        self.scale * (-libm::log(1.0 - p.clamp(0.0, 0.9999999))).powf(1.0 / self.shape)
+        self.scale * libm::pow(-libm::log(1.0 - p.clamp(0.0, 0.9999999)), 1.0 / self.shape)
     }
 }
 
@@ -242,30 +242,30 @@ pub fn weibull_mle(sample: &[f64]) -> Result<WeibullFit, &'static str> {
     // to get subtly wrong. The search is cheap, bounded, and always converges.
     let s1: f64 = lnx.iter().sum();
     let prof = |k: f64| -> f64 {
-        let b: f64 = x.iter().map(|v| v.powf(k)).sum::<f64>() / n_f;
+        let b: f64 = x.iter().map(|v| libm::pow(*v, k)).sum::<f64>() / n_f;
         if b <= 0.0 || !b.is_finite() {
             return f64::NEG_INFINITY;
         }
         let ln_lambda = libm::log(b) / k;
         n_f * libm::log(k) - n_f * k * ln_lambda + (k - 1.0) * s1 - n_f
     };
-    let (mut lo, mut hi) = (core::f64::consts::LN_2 * 0.05, core::f64::consts::LN_2 * 100.0);
+    let (mut lo, mut hi) = (libm::log(0.05f64), libm::log(100.0f64));
     for _ in 0..200 {
         let m1 = lo + (hi - lo) / 3.0;
         let m2 = hi - (hi - lo) / 3.0;
-        if prof(m1.exp()) < prof(m2.exp()) {
+        if prof(libm::exp(m1)) < prof(libm::exp(m2)) {
             lo = m1;
         } else {
             hi = m2;
         }
     }
-    let k = ((lo + hi) / 2.0).exp();
-    let xk: Vec<f64> = x.iter().map(|v| v.powf(k)).collect();
+    let k = libm::exp((lo + hi) / 2.0);
+    let xk: Vec<f64> = x.iter().map(|v| libm::pow(*v, k)).collect();
     let mean_xk: f64 = xk.iter().sum::<f64>() / n as f64;
     if mean_xk <= 0.0 {
         return Err("degenerate sample");
     }
-    let lambda = mean_xk.powf(1.0 / k);
+    let lambda = libm::pow(mean_xk, 1.0 / k);
     if !lambda.is_finite() || lambda <= 0.0 || !k.is_finite() || k <= 0.0 {
         return Err("Weibull fit did not converge to a valid parameter pair");
     }
@@ -321,7 +321,7 @@ impl XorShift {
 
 fn quantile(sorted: &[f64], q: f64) -> f64 {
     if sorted.is_empty() { return 0.0; }
-    let idx = ((sorted.len() as f64 * q).floor() as usize).min(sorted.len() - 1);
+    let idx = (libm::floor(sorted.len() as f64 * q) as usize).min(sorted.len() - 1);
     sorted[idx]
 }
 

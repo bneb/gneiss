@@ -164,4 +164,95 @@ mod tests {
         assert!((arp.ecef_z - 3000.0).abs() < 1e-4);
         assert_eq!(arp.antenna_height, Some(1.524));
     }
+
+    /// Writes a signed `width`-bit two's-complement field at bit `off`.
+    fn store_signed(bits: &mut bitvec::vec::BitVec<u8, Msb0>, off: usize, width: usize, v: i64) {
+        let mask = (1i128 << width) - 1;
+        let raw = (v as i128 & mask) as u64;
+        bits[off..off + width].store_be(raw);
+    }
+
+    /// Field layout of message 1005/1006, payload-relative, read off the
+    /// reference decoder `rtcm3.c` `decode_type1005` / `decode_type1006`:
+    /// station id 12, ITRF year 6, four constellation/indicator bits, then
+    /// three 38-bit coordinates separated by 2-bit gaps, plus a 16-bit antenna
+    /// height on 1006. 12+12+6+4+38+2+38+2+38 = 152 bits; +16 = 168 for 1006.
+    #[test]
+    fn golden_vector_from_the_documented_layout() {
+        let mut bits = bitvec![u8, Msb0; 0; 168];
+        bits[0..12].store_be(1006_u16);
+        bits[12..24].store_be(4095_u16); // largest station id
+        bits[24..30].store_be(63_u8); // largest ITRF year
+        // X = +1,234,567.8901 m -> 12345678901 in 1e-4 m units, fits in 38 bits
+        // (38-bit range is +/- 549,755,813,887 m in these units).
+        store_signed(&mut bits, 34, 38, 12_345_678_901i64);
+        store_signed(&mut bits, 74, 38, -4_000_000_000); // -400000.0000 m
+        store_signed(&mut bits, 114, 38, 0); // exactly the ECEF origin
+        bits[152..168].store_be(65_535_u16); // 6.5535 m
+
+        let arp = parse_station_arp(&bits.clone().into_vec()).expect("well-formed 1006");
+        assert_eq!(arp.message_number, 1006);
+        assert_eq!(arp.station_id, 4095);
+        assert_eq!(arp.itrf_epoch_year, 63);
+        assert!((arp.ecef_x - 1_234_567.890_1).abs() < 1e-9);
+        assert!((arp.ecef_y - (-400_000.0)).abs() < 1e-9);
+        assert!((arp.ecef_z - 0.0).abs() < 1e-12);
+        assert!((arp.antenna_height.unwrap() - 6.5535).abs() < 1e-12);
+    }
+
+    /// Sign extension must be exact at the 38-bit limits: 2^37-1 and -2^37.
+    #[test]
+    fn coordinates_sign_extend_exactly_at_the_38_bit_limits() {
+        // 2^37 - 1 = 137438953471 units of 1e-4 m -> 13743895.3471 m.
+        let hi = (1i64 << 37) - 1;
+        let lo = -(1i64 << 37); // -137438953472 units -> -13743895.3472 m
+        for (raw, expected) in [(hi, 13_743_895.347_1_f64), (lo, -13_743_895.347_2_f64)] {
+            let mut bits = bitvec![u8, Msb0; 0; 152];
+            bits[0..12].store_be(1005_u16);
+            store_signed(&mut bits, 34, 38, raw);
+            let arp = parse_station_arp(&bits.into_vec()).expect("must decode");
+            assert!((arp.ecef_x - expected).abs() < 1e-6, "raw {raw} -> {}", arp.ecef_x);
+        }
+    }
+
+    /// A 1005 needs 152 payload bits and a 1006 needs 168; a shorter buffer must
+    /// be rejected rather than silently returning the coordinates it has.
+    #[test]
+    fn rejects_truncated_arp_messages() {
+        let mut bits = bitvec![u8, Msb0; 0; 168];
+        bits[0..12].store_be(1005_u16);
+        // The parser takes whole bytes, so truncation is exercised per byte.
+        let full = bits.clone().into_vec();
+        for len in 0..19usize {
+            assert_eq!(
+                parse_station_arp(&full[..len]),
+                Err(RtcmParseError::Incomplete),
+                "1005 with {len} payload bytes must be rejected"
+            );
+        }
+        let full_1005 = bits.clone().into_vec();
+        assert!(parse_station_arp(&full_1005[..19]).is_ok());
+
+        // A 1006 payload cut short must not fall back to a height-less 1005.
+        bits[0..12].store_be(1006_u16);
+        let full_1006 = bits.clone().into_vec();
+        assert_eq!(
+            parse_station_arp(&full_1006[..19]),
+            Err(RtcmParseError::Incomplete),
+            "1006 with 152 bits has no antenna height and must be rejected"
+        );
+    }
+
+    #[test]
+    fn rejects_foreign_message_numbers() {
+        for num in [1004u16, 1007, 1019, 0] {
+            let mut bits = bitvec![u8, Msb0; 0; 168];
+            bits[0..12].store_be(num);
+            assert_eq!(
+                parse_station_arp(&bits.into_vec()),
+                Err(RtcmParseError::UnsupportedMsmType),
+                "message {num} must not decode as an ARP message"
+            );
+        }
+    }
 }

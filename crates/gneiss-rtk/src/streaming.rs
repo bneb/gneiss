@@ -196,3 +196,8 @@ mod tests {
         assert!(base_matched.is_none());
     }
 }
+
+#[cfg(test)]
+#[path = "streaming_sprint_tests.rs"]
+mod sprint_tests;
+

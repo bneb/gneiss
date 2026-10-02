@@ -129,6 +129,10 @@ pub fn moon_position_ecef(t: GpsTime) -> Vector3<f64> {
 mod tests {
     use super::*;
 
+    /// Snapshots below were regenerated after `DAYS_GPS_TO_J2000` was
+    /// corrected from 7292.5 to 7300.5 (JD 2451545.0 - JD 2444244.5). The new
+    /// literals were derived independently in python3 from the same
+    /// expressions in this file, not copied from the compiler.
     #[test]
     fn test_sun_position_ecef_snapshot() {
         let t1 = GpsTime::new(0, 0.0);
@@ -137,13 +141,21 @@ mod tests {
         let t2 = GpsTime::new(2000, 86400.0);
         let pos2 = sun_position_ecef(t2);
 
-        assert!((pos1.x - -130361764502.90057).abs() < 1e-4);
-        assert!((pos1.y - -52655996731.87905).abs() < 1e-4);
-        assert!((pos1.z - -43390603069.40688).abs() < 1e-4);
+        assert!((pos1.x - -135597507694.73482).abs() < 1e-4);
+        assert!((pos1.y - -13740496573.789288).abs() < 1e-4);
+        assert!((pos1.z - -55344428833.01687).abs() < 1e-4);
 
-        assert!((pos2.x - -10056354437.039314).abs() < 1e-4);
-        assert!((pos2.y - -145030993652.9578).abs() < 1e-4);
-        assert!((pos2.z - 41587067139.174736).abs() < 1e-4);
+        assert!((pos2.x - 12362295039.416313).abs() < 1e-4);
+        assert!((pos2.y - -144798221383.71008).abs() < 1e-4);
+        assert!((pos2.z - 40771655745.26374).abs() < 1e-4);
+        // The heliocentric distance must stay near 1 AU at both epochs.
+        for p in [pos1, pos2] {
+            let r = libm::sqrt(p.x * p.x + p.y * p.y + p.z * p.z);
+            assert!(
+                (r - crate::constants::ASTRONOMICAL_UNIT_M).abs() < 0.02 * crate::constants::ASTRONOMICAL_UNIT_M,
+                "|r_sun| = {r} m"
+            );
+        }
     }
 
     #[test]
@@ -154,12 +166,20 @@ mod tests {
         let t2 = GpsTime::new(2000, 86400.0);
         let pos2 = moon_position_ecef(t2);
 
-        assert!((pos1.x - -235680777.45259964).abs() < 1e-4);
-        assert!((pos1.y - 286919902.5195386).abs() < 1e-4);
-        assert!((pos1.z - -104315553.52824344).abs() < 1e-4);
+        assert!((pos1.x - 284424790.47359174).abs() < 1e-4);
+        assert!((pos1.y - 269748539.5802001).abs() < 1e-4);
+        assert!((pos1.z - 87477815.36211377).abs() < 1e-4);
 
-        assert!((pos2.x - -358772193.8753879).abs() < 1e-4);
-        assert!((pos2.y - 38572485.482881606).abs() < 1e-4);
-        assert!((pos2.z - 78820686.42981544).abs() < 1e-4);
+        assert!((pos2.x - 54448207.77963483).abs() < 1e-4);
+        assert!((pos2.y - 378929368.2473105).abs() < 1e-4);
+        assert!((pos2.z - -129853732.51390523).abs() < 1e-4);
+        // The Moon's geocentric distance must stay in a physical range.
+        for p in [pos1, pos2] {
+            let r = libm::sqrt(p.x * p.x + p.y * p.y + p.z * p.z);
+            assert!(
+                r > 3.5e8 && r < 4.1e8,
+                "|r_moon| = {r} m"
+            );
+        }
     }
 }

@@ -61,3 +61,94 @@ pub(crate) fn split_rinex_code(code: &str) -> Option<(u8, char)> {
     let attribute = chars.next()?;
     Some((band, attribute))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Transcribes the MSM signal-and-tracking-mode tables from the reference
+    /// decoder RTKLIB `rtcm3.c` (`msm_sig_gps`, `msm_sig_glo`, `msm_sig_gal`,
+    /// `msm_sig_qzs`, lines 64-87), whose entries are annotated `/* 1-12 */` ..
+    /// `/* 25-32 */` so that array index equals the RTCM signal and tracking
+    /// mode number and index 0 is unused. Signal and tracking mode 1 is
+    /// "GPS L1 C/A", so index 1 must be `1C`.
+    const REF_GPS: [&str; 32] = [
+        "", "1C", "1P", "1W", "1Y", "1M", "", "2C", "2P", "2W", "2Y", "2M",
+        "", "", "2S", "2L", "2X", "", "", "", "", "5I", "5Q", "5X",
+        "", "", "", "", "", "1S", "1L", "1X",
+    ];
+    const REF_GLO: [&str; 32] = [
+        "", "1C", "1P", "", "", "", "", "2C", "2P", "", "3I", "3Q",
+        "3X", "", "", "", "", "", "", "", "", "", "", "",
+        "", "", "", "", "", "", "", "",
+    ];
+    const REF_GAL: [&str; 32] = [
+        "", "1C", "1A", "1B", "1X", "1Z", "", "6C", "6A", "6B", "6X", "6Z",
+        "", "7I", "7Q", "7X", "", "8I", "8Q", "8X", "", "5I", "5Q", "5X",
+        "", "", "", "", "", "", "", "",
+    ];
+    const REF_QZS: [&str; 32] = [
+        "", "1C", "", "", "", "", "", "", "6S", "6L", "6X", "",
+        "", "", "2S", "2L", "2X", "", "", "", "", "5I", "5Q", "5X",
+        "", "", "", "", "", "1S", "1L", "1X",
+    ];
+
+    fn check(sys: Constellation, reference: &[&str; 32]) {
+        for (id, expected) in reference.iter().enumerate() {
+            assert_eq!(
+                msm_signal_rinex_code(sys, id as u8),
+                if expected.is_empty() { None } else { Some(*expected) },
+                "{sys:?} MSM signal and tracking mode {id}"
+            );
+        }
+    }
+
+    #[test]
+    fn gps_tables_match_the_reference() {
+        check(Constellation::Gps, &REF_GPS);
+    }
+
+    #[test]
+    fn glonass_tables_match_the_reference() {
+        check(Constellation::Glonass, &REF_GLO);
+    }
+
+    #[test]
+    fn galileo_tables_match_the_reference() {
+        check(Constellation::Galileo, &REF_GAL);
+    }
+
+    #[test]
+    fn qzss_tables_match_the_reference() {
+        check(Constellation::Qzss, &REF_QZS);
+    }
+
+    /// Signal id 0 and 32+ are out of range for every constellation.
+    #[test]
+    fn out_of_range_signal_ids_are_rejected() {
+        for id in [0u8, 32, 33, 255] {
+            assert_eq!(msm_signal_rinex_code(Constellation::Gps, id), None);
+            assert_eq!(msm_signal_rinex_code(Constellation::Galileo, id), None);
+        }
+    }
+
+    /// Every constellation outside the supported set must return None rather
+    /// than fall through to another system's table.
+    #[test]
+    fn unsupported_constellations_have_no_mapping() {
+        for sys in [Constellation::Sbas, Constellation::Navic] {
+            assert_eq!(msm_signal_rinex_code(sys, 1), None);
+        }
+    }
+
+    #[test]
+    fn split_rinex_code_separates_band_and_attribute() {
+        assert_eq!(split_rinex_code("1C"), Some((1, 'C')));
+        assert_eq!(split_rinex_code("5X"), Some((5, 'X')));
+        // Zero-length and one-character codes cannot yield both parts.
+        assert_eq!(split_rinex_code(""), None);
+        assert_eq!(split_rinex_code("1"), None);
+        // A non-numeric band is not a valid RINEX observation code.
+        assert_eq!(split_rinex_code("AC"), None);
+    }
+}
