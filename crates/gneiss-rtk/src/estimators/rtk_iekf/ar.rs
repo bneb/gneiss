@@ -477,3 +477,114 @@ mod tests {
         assert!(last_ambs.is_empty());
     }
 }
+
+#[cfg(test)]
+mod canonical {
+    //! Textbook verification of the integer-conditioning projection.
+    //!
+    //! Reference: conditional update of a joint Gaussian
+    //!   E[x | a = N] = x_hat - P_xa Q_aa^-1 (a_hat - N)
+    //!   P(x | a = N) = P_xx - P_xa Q_aa^-1 P_ax
+    //! (Anderson & Moore, *Optimal Filtering*; Brown & Hwang, *Introduction to
+    //! Random Signals*; Kay, *Fundamentals of Statistical Signal Processing I*,
+    //! conditional/constrained update). The same form is the standard GNSS
+    //! integer-conditioning step in Teunissen's least-squares ambiguity
+    //! decorrelation framework.
+    //!
+    //! These fixtures use an analytic answer worked out by hand, so a sign error,
+    //! an offset error in the covariance indexing, or a transpose error fails
+    //! loudly rather than silently skewing every fixed epoch.
+    use super::*;
+    use crate::estimators::rtk_iekf::state::DoubleDiffKey;
+    use crate::estimators::rtk_iekf::state::RtkState;
+    use gneiss_core::time::GpsTime;
+    use nalgebra::Vector3;
+
+    /// One-ambiguity state with hand-chosen block covariances.
+    /// Returns `(state, relative indices, a_float, Q_aa)`.
+    fn fixture() -> (RtkState, Vec<usize>, DVector<f64>, DMatrix<f64>) {
+        let mut state = RtkState::new(Vector3::new(10.0, 20.0, 30.0), GpsTime::new(2000, 100.0));
+        let key = DoubleDiffKey { constellation_id: 0, sat: 2, ref_sat: 1, freq_band: 1 };
+        state.ensure_ambiguity(key, 3.7, 4.0); // a_hat = 3.7, Q_aa = 4.0
+        let px = [[4.0, 1.0, 2.0], [1.0, 9.0, 3.0], [2.0, 3.0, 16.0]];
+        for (r, vals) in px.iter().enumerate() {
+            for (c, v) in vals.iter().enumerate() {
+                state.cov[(r, c)] = *v;
+            }
+        }
+        // P_xa = [2, 0, 3] into the single ambiguity column, both triangles.
+        let off = state.amb_offset();
+        state.cov[(0, off)] = 2.0;
+        state.cov[(2, off)] = 3.0;
+        state.cov[(off, 0)] = 2.0;
+        state.cov[(off, 2)] = 3.0;
+        state.cov[(off, off)] = 4.0;
+        (state, vec![0], DVector::from_element(1, 3.7), DMatrix::from_element(1, 1, 4.0))
+    }
+
+    #[test]
+    fn conditioned_position_matches_hand_computation() {
+        // P_xx = [[4,1],[1,9]], P_xa = [[2],[3]] (x,z), Q_aa = [4]
+        // x_hat = (10,20,30), a_hat = 3.7, N = 4
+        //   x|N = x_hat - P_xa * Q_aa^-1 * (a_hat - N)
+        //       = (10,20,30) - [2,0,3] * 0.25 * (-0.3)
+        //       = (10,20,30) + [2,0,3] * 0.075
+        //       = (10.15, 20.0, 30.225)
+        let (state, idx, n_int, q) = fixture();
+        let (pos, _cov) = project_subset_fixed(&state, &n_int, &DVector::from_element(1, 4.0), &q, &idx)
+            .expect("projection");
+        assert!((pos.x - 10.15).abs() < 1e-12, "x got {}", pos.x);
+        assert!((pos.y - 20.0).abs() < 1e-12, "y got {}", pos.y);
+        assert!((pos.z - 30.225).abs() < 1e-12, "z got {}", pos.z);
+    }
+
+    #[test]
+    fn conditioned_covariance_matches_hand_computation() {
+        // P_xx|N = P_xx - P_xa Q_aa^-1 P_ax = P_xx - (1/4) * [[2],[3]] * [[2,3]]
+        let (state, idx, n_int, q) = fixture();
+        let (_pos, cov) = project_subset_fixed(&state, &n_int, &DVector::from_element(1, 4.0), &q, &idx)
+            .expect("projection");
+        // P_xx|N = P_xx - (1/4) * [2,0,3]^T [2,0,3]
+        let expect = [
+            [3.0, 1.0, 0.5],
+            [1.0, 9.0, 3.0],
+            [0.5, 3.0, 13.75],
+        ];
+        for r in 0..3 {
+            for c in 0..3 {
+                assert!((cov[(r, c)] - expect[r][c]).abs() < 1e-12, "P[{r},{c}] = {}", cov[(r, c)]);
+            }
+        }
+    }
+
+    #[test]
+    fn integer_equal_to_float_is_a_null_operation() {
+        // Conditioning on the value the float solution already holds must not
+        // move the position: the correction is proportional to (a_hat - N).
+        let (state, idx, n_int, q) = fixture();
+        let (pos, _) = project_subset_fixed(&state, &n_int, &n_int, &q, &idx)
+            .expect("projection");
+        assert!((pos - Vector3::new(10.0, 20.0, 30.0)).norm() < 1e-12);
+    }
+
+    #[test]
+    fn conditioning_shrinks_only_where_position_correlates_with_ambiguity() {
+        // Information is gained only along P_xa. The y axis is uncorrelated with
+        // the ambiguity (P_xa = [2, 0, 3]), so its variance must be UNCHANGED --
+        // asserting a uniform shrink would be asserting something the conditional
+        // update does not and should not do.
+        let (state, idx, n_int, q) = fixture();
+        let (_p, cov) = project_subset_fixed(&state, &n_int, &n_int, &q, &idx).expect("projection");
+        assert!(cov[(0, 0)] < state.cov[(0, 0)], "x should shrink");
+        assert!(cov[(2, 2)] < state.cov[(2, 2)], "z should shrink");
+        assert!((cov[(1, 1)] - state.cov[(1, 1)]).abs() < 1e-12, "y is uncorrelated, must not change");
+    }
+
+    #[test]
+    fn conditioned_covariance_stays_positive_definite() {
+        let (state, idx, n_int, q) = fixture();
+        let (_p, cov) = project_subset_fixed(&state, &n_int, &n_int, &q, &idx).expect("projection");
+        let e = nalgebra::linalg::SymmetricEigen::new(cov).eigenvalues;
+        assert!(e.min() > 0.0, "conditioned covariance must stay positive definite");
+    }
+}
