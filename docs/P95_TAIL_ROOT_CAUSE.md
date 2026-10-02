@@ -1697,3 +1697,70 @@ This also settles the methodological disagreement in the useful direction:
 gating on a single point percentile was wrong, but so was reading a bulk
 statistic alone. The crossover is only visible when the whole distribution is
 measured with intervals.
+
+---
+
+## 36. Testing the "fall back to float on the bad 30%" proposal
+
+Section 35 showed a crossover at ~p70: fixing is significantly better from p10
+through p68 and significantly worse from p75 up. The obvious remedy is a
+per-epoch fallback — accept the fix only where it helps, float the rest — which
+would be a Pareto improvement if the two cases could be told apart. The engine
+has both positions at run time (float and integer-conditioned), so no truth is
+needed.
+
+Tested the most natural run-time predictor: the **magnitude of the
+integer-conditioned displacement**, |fix_pos − float_pos|, which is available
+the moment the fix is accepted. F9P smoothed pass, 2514 fixed epochs:
+
+| | value |
+|---|---:|
+| mean displacement | 0.453 m |
+| mean displacement / float sigma | 0.74 |
+| **AR improved** | **1232 (49%)** |
+| **AR worsened** | **1282 (51%)** |
+
+The near-perfect 50/50 split is the strongest argument *for* the proposal: half
+of all accepted fixes make things worse, so a perfect selector would be a large
+Pareto win. But the displacement predictor is weak:
+
+| displacement quartile | epochs where AR beat float |
+|---|---:|
+| Q1 (0.193 m) | 57.6% |
+| Q2 (0.343 m) | 47.6% |
+| Q3 (0.491 m) | 45.1% |
+| Q4 (0.781 m) | 45.7% |
+
+The best quartile is only 57.6% correct — barely above chance. Selecting on it
+(disp ≤ 0.281 m, accepting 14% of epochs as fixed):
+
+| policy | p50 | p90 | p95 | p99 |
+|---|---:|---:|---:|---:|
+| AR everywhere | **0.187** | 0.487 | 0.584 | 0.809 |
+| float everywhere | 0.242 | **0.376** | **0.456** | **0.582** |
+| selective (disp ≤ Q1) | 0.242 | 0.388 | 0.468 | 0.640 |
+
+**The selective policy is worse than simply never fixing**, at every tail level,
+and surrenders the entire median gain. It is strictly dominated.
+
+### 36.1 What this settles
+
+A selector has to beat the alternative it replaces. "Float everywhere" is a
+free, zero-risk policy with p95 = 0.456; the selective policy needs to be
+materially better than 57.6% accurate to be worth its error, and at that accuracy
+it is worse.
+
+The proposal is **not** wrong in principle — the 49/51 split means per-epoch
+selection has real value, and a sufficiently good selector would deliver the
+Pareto improvement it promises. This particular selector is not that selector.
+
+Note also the compounding problem: on the smoothed pass an epoch's position is
+coupled to its neighbours by RTS smoothing, so a per-epoch accept/float decision
+is not actually local even if the per-epoch decision were correct. Any selector
+needs to be evaluated on the forward pass, where epochs are independent.
+
+The next attempt at a selector should target what section 35 makes visible:
+the crossover is at ~p70, so the decision is not "is this fix good" but "is this
+fix in the part of the trajectory where fixing wins". That requires a
+*trajectory-level* statistic rather than a per-epoch one — which is a different
+and more tractable problem than per-epoch detection.
