@@ -129,13 +129,22 @@ fn a_band_without_observations_yields_nothing() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn the_secondary_band_follows_the_priority_2_then_7_then_6() {
-    let mk = |b: u8| gps(2, vec![obs(b, ObsType::CarrierPhase, 1.0e8)]);
-    assert_eq!(select_secondary_phase_band(&mk(2), &mk(2)), 2);
-    assert_eq!(select_secondary_phase_band(&mk(7), &mk(7)), 7);
-    assert_eq!(select_secondary_phase_band(&mk(6), &mk(6)), 6);
-    // Nothing secondary: E5a (5) is the documented fallback.
-    assert_eq!(select_secondary_phase_band(&mk(5), &mk(5)), 5);
+fn the_secondary_band_follows_the_constellation_ladder() {
+    let mk_gps = |b: u8| gps(2, vec![obs(b, ObsType::CarrierPhase, 1.0e8)]);
+    assert_eq!(select_secondary_phase_band(Constellation::Gps, &mk_gps(2), &mk_gps(2)), Some(2));
+    assert_eq!(select_secondary_phase_band(Constellation::Gps, &mk_gps(5), &mk_gps(5)), Some(5));
+    assert_eq!(select_secondary_phase_band(Constellation::Gps, &mk_gps(7), &mk_gps(7)), None);
+
+    let mk_bds = |b: u8| {
+        gneiss_core::obs::SatObs {
+            sat: SatelliteId { constellation: Constellation::Beidou, prn: 6 },
+            observations: vec![obs(b, ObsType::CarrierPhase, 1.0e8)],
+        }
+    };
+    // BeiDou secondary priority: 7 (B2I), then 6 (B3I). Never 2.
+    assert_eq!(select_secondary_phase_band(Constellation::Beidou, &mk_bds(7), &mk_bds(7)), Some(7));
+    assert_eq!(select_secondary_phase_band(Constellation::Beidou, &mk_bds(6), &mk_bds(6)), Some(6));
+    assert_eq!(select_secondary_phase_band(Constellation::Beidou, &mk_bds(2), &mk_bds(2)), None);
 }
 
 #[test]
@@ -143,7 +152,7 @@ fn a_secondary_band_seen_by_only_one_receiver_is_refused() {
     let both = gps(2, vec![obs(2, ObsType::CarrierPhase, 1.0e8)]);
     let none = gps(2, Vec::new());
     // L2 phase exists on the rover only: it cannot form a double difference.
-    assert_eq!(select_secondary_phase_band(&both, &none), 5);
+    assert_eq!(select_secondary_phase_band(Constellation::Gps, &both, &none), None);
 }
 
 // ---------------------------------------------------------------------------
@@ -199,4 +208,27 @@ fn the_geometry_term_follows_the_range_derivative_with_sign() {
         "geometry must track the range rate, delta = {} (want -100000)",
         b - a
     );
+}
+
+#[test]
+fn beidou_phase_widelane_records_valid_wavelength_and_finite_cycles() {
+    let t0 = gneiss_core::time::GpsTime::new(2000, 0.0);
+    let mut iekf = GnssRtkIekf::new(Vector3::zeros(), t0, 1.0);
+    let sat_id = SatelliteId { constellation: Constellation::Beidou, prn: 6 };
+    let sat_pos = Vector3::new(2.0e7, 0.0, 0.0);
+    let ref_pos = Vector3::new(0.0, 2.0e7, 0.0);
+    let base_pos = Vector3::new(100.0, 0.0, 0.0);
+
+    for _ in 0..12 {
+        iekf.update_phase_wl(sat_id, sat_pos, 1, ref_pos, base_pos, 100.0, 80.0, 7, 0, false);
+    }
+    let key = DoubleDiffKey {
+        constellation_id: Constellation::Beidou as u8,
+        sat: 6,
+        ref_sat: 1,
+        freq_band: 1,
+    };
+    let (mean, count) = iekf.pw_tracker.arc_means().get(&key).copied().expect("arc must be tracked");
+    assert_eq!(count, 12);
+    assert!(mean.is_finite(), "PW mean must be finite, got {mean}");
 }

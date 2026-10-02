@@ -114,14 +114,12 @@ impl SatObs {
     /// `pub(crate)` so `crate::frequencies::signal_for_band` can be tested
     /// against this definition directly: the selector band a caller passes and
     /// the wavelength it must be paired with are one contract, and the two
-    /// halves live in different modules. BeiDou collapses selector bands 2 and
-    /// 7 onto one arm (B2I); see `frequencies/tests.rs`.
+    /// halves live in different modules. BeiDou maps primary band 1 to B1I
+    /// (either RINEX 2/3.02 C1I or RINEX 3.03+ C2I).
     pub(crate) fn matches_band(&self, o_band: u8, o_attr: char, req_band: u8) -> bool {
         if self.sat.constellation == crate::sat::Constellation::Beidou {
             match req_band {
                 1 => o_band == 1 || (o_band == 2 && o_attr == 'I'),
-                2 | 7 => o_band == 7 || (o_band == 2 && o_attr != 'I'),
-                6 => o_band == 6,
                 _ => o_band == req_band,
             }
         } else {
@@ -345,10 +343,10 @@ mod tests {
                 Observation { code: ObsCode::from_str("L7I").unwrap(), value: 84_000_002.0, lock_time: None, lli: None },
             ],
         };
-        // Band 1 must return B1I (from C2I), Band 7 must return B2I (from C7I)
+        // Band 1 must return B1I (from C2I), Band 2 returns B1I (from C2I), Band 7 returns B2I (from C7I)
         assert_eq!(obs_303.get_observable(1), Some(21_000_001.0));
+        assert_eq!(obs_303.get_observable(2), Some(21_000_001.0));
         assert_eq!(obs_303.get_observable(7), Some(21_000_002.0));
-        assert_eq!(obs_303.get_observable(2), Some(21_000_002.0)); // fallback to B2I
         assert_ne!(obs_303.get_observable(1), obs_303.get_observable(7));
     }
 

@@ -5,7 +5,7 @@ use std::collections::HashMap;
 
 use gneiss_core::constants::SPEED_OF_LIGHT_M_S;
 use gneiss_core::obs::SatObs;
-use gneiss_core::sat::SatelliteId;
+use gneiss_core::sat::{Constellation, SatelliteId};
 
 use super::state::DoubleDiffKey;
 
@@ -203,7 +203,6 @@ pub fn mw_dd_cycles(
     Some(((dd(phi1) - dd(phi2)) - rn / lambda_wl, f2_hz / (f1_hz - f2_hz)))
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -304,8 +303,10 @@ fn band_quad(r_s: &SatObs, r_r: &SatObs, b_s: &SatObs, b_r: &SatObs, b: u8) -> O
     ))
 }
 
-fn select_secondary_quad_band(quad: &[&SatObs; 4], b1: u8) -> Option<u8> {
-    [2, 7, 6, 5].into_iter().find(|&b| b != b1 && quad.iter().all(|o| o.get_observable_phase(b).is_some() && o.get_observable(b).is_some()))
+fn select_secondary_quad_band(c: Constellation, quad: &[&SatObs; 4], b1: u8) -> Option<u8> {
+    super::formation::secondary_bands_for_constellation(c).iter().copied().find(|&b| {
+        b != b1 && quad.iter().all(|o| o.get_observable_phase(b).is_some() && o.get_observable(b).is_some())
+    })
 }
 
 fn select_primary_quad_band(quad: &[&SatObs; 4]) -> Option<u8> {
@@ -320,7 +321,7 @@ pub fn update_tracker_from_obs(
     glo_k: i8, external_slip: bool,
 ) {
     let quad = [rov_s, bas_s, rov_ref, bas_ref];
-    let (Some(b1), Some(b2)) = (select_primary_quad_band(&quad), select_secondary_quad_band(&quad, 1)) else { return };
+    let (Some(b1), Some(b2)) = (select_primary_quad_band(&quad), select_secondary_quad_band(sat_id.constellation, &quad, 1)) else { return };
     let key = DoubleDiffKey {
         constellation_id: sat_id.constellation as u8,
         sat: sat_id.prn as u16,

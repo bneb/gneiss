@@ -1579,6 +1579,26 @@ All ongoing sprints are re-scoped to eradicate false fixes and collapse the $p_{
     - Zero `unwrap()` in production code.
     - All files $< 500$ LOC (`main.rs`: 474, `odaiba_helpers.rs`: 214), all functions $\le 32$ LOC, nesting depth $< 3$.
 
+- [x] **BeiDou Multi-Band Frequency & Observable Resolution (COMPLETED 2026-10-02)**
+  - **Carrier Phase Empirical Verification**: Grounded in empirical carrier phase ratio $L_2 / L_7 = 1.293220 = 1561.098\text{ MHz} / 1207.140\text{ MHz}$ on RINEX 3.03+ datasets ($C2I, C6I, C7I$), proving RINEX band 2 is B1I (1561.098 MHz), NOT B2I.
+  - **Band Mapping Alignment**:
+    - Fixed legacy fallback `get_frequency(Beidou, 2)` to return `FREQ_BDS_B1I` (1561.098 MHz), matching `signal_for_band(Beidou, 2)`.
+    - Un-ignored and verified `registry_and_legacy_tables_must_agree_on_every_overlapping_band`.
+    - Cleaned `SatObs::matches_band` for BeiDou: band 1 accepts RINEX 2/3.02 $C1I$ or RINEX 3.03+ $C2I$ ($o\_band == 1 \lor (o\_band == 2 \land o\_attr == 'I')$), while $req\_band$ matches $o\_band == req\_band$ directly, eliminating erroneous aliasing of band 2 to band 7.
+  - **Constellation-Aware Secondary Band Ladder (`secondary_bands_for_constellation`)**:
+    - RTK estimators (`formation.rs`, `mw.rs`, `iono_free.rs`, `epoch.rs`) now query constellation-specific secondary bands:
+      - GPS/QZSS: `&[2, 5]` (L2 @ 1227.60 MHz, L5 @ 1176.45 MHz)
+      - Galileo: `&[7, 5]` (E5b @ 1207.14 MHz, E5a @ 1176.45 MHz)
+      - BeiDou: `&[7, 6]` (B2I @ 1207.14 MHz, B3I @ 1268.52 MHz)
+      - GLONASS: `&[2]` (L2 FDMA)
+    - Eliminates false degeneracy guard aborts ($|f_1 - f_2| < 1\text{ MHz}$), unlocking valid BeiDou iono-free, wide-lane, and Melbourne-Wübbena tracking across the full constellation.
+  - **Standards & CI Compliance**:
+    - All workspace tests pass.
+    - Zero compiler and clippy warnings.
+    - Zero `unwrap()` in production code.
+    - All files $< 500$ LOC (`formation.rs`: 491, `mw.rs`: 498, `epoch.rs`: 488).
+    - Dual CI smoke guards pass: `check_network_benchmark.py --smoke`, `check_multignss_benchmark.py --smoke`.
+
 ## Key Lessons Learned
 
 1. **Guard Against Reward Hacking**: Never name a test `sub_centimeter` if the assertion is `< 3.0m` or if the position was synthetically offset by 2 mm. Tests must test actual estimator output against ground truth.
@@ -1588,3 +1608,4 @@ All ongoing sprints are re-scoped to eradicate false fixes and collapse the $p_{
 5. **Frame safety matters**: most bugs were missing frame distinctions, not algorithmic errors.
 6. **External dependencies dominate**: accurate satellite phase bias (OSB) and differential code bias (DCB) ingestion are required to bridge the gap to commercial-grade PPP engines.
 7. **RTKLIB is a floor, not a ceiling**: beating it proves the core is sound; exceeding it requires adopting techniques from commercial-grade implementations.
+8. **Corroboration is not confirmation**: Two independent agents can converge on the same incorrect conclusion when reasoning from the same flawed premise or comment. Ground all physical constants in empirical carrier phase measurements and primary ICD specifications.

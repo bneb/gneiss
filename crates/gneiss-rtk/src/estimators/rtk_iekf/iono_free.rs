@@ -54,9 +54,7 @@ pub struct IonoFreeMeasurement {
     pub dgrad_e_rov: f64,
 }
 
-/// Secondary-band candidates in preference order: L2 (2), E5b/B2I (7),
-/// B3I (6), E5a/L5 (5).
-const SECONDARY_BANDS: [u8; 4] = [2, 7, 6, 5];
+
 
 /// Minimum `|f1 - f2|` for a usable iono-free combination. The combination
 /// divides by `f1 - f2`, so a degenerate pair is not merely inaccurate — it
@@ -76,7 +74,7 @@ fn usable_secondary_band(
     glo_k: i8,
 ) -> Option<(u8, f64)> {
     let f1 = gneiss_core::frequencies::track_c_frequency(c, 1, glo_k);
-    SECONDARY_BANDS.into_iter().find_map(|band| {
+    super::formation::secondary_bands_for_constellation(c).iter().copied().find_map(|band| {
         let observed = stations.iter().all(|s| s.get_observable_phase(band).is_some());
         let f2 = gneiss_core::frequencies::track_c_frequency(c, band, glo_k);
         let usable = f1 > 0.0 && f2 > 0.0 && (f1 - f2).abs() >= MIN_IF_SEPARATION_HZ;

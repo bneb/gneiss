@@ -34,6 +34,16 @@ pub fn canonical_bands_for_constellation(c: Constellation) -> &'static [u8] {
     }
 }
 
+/// Canonical secondary frequency bands in preference order per constellation.
+pub fn secondary_bands_for_constellation(c: Constellation) -> &'static [u8] {
+    match c {
+        Constellation::Gps | Constellation::Qzss => &[2, 5],
+        Constellation::Galileo => &[7, 5],
+        Constellation::Beidou => &[7, 6],
+        _ => &[2],
+    }
+}
+
 /// Per-epoch double-difference measurement set (per-band + iono-free).
 pub(super) struct DdMeasurements {
     pub dd: Vec<DoubleDiffMeasurement>,
@@ -181,9 +191,10 @@ impl GnssRtkIekf {
                 glo_freq_num(ephems, sat_id), is_wl_slip,
             );
         }
-        let b2 = select_secondary_phase_band(rs, bs);
-        if let (Some(&cp1), Some(&cp2)) = (pair_cp.get(&1), pair_cp.get(&b2)) {
-            self.update_phase_wl(sat_id, sat_pos, ref_sat_id, ref_pos, base_pos, cp1, cp2, b2, glo_freq_num(ephems, sat_id), is_wl_slip);
+        if let Some(b2) = select_secondary_phase_band(sat_id.constellation, rs, bs) {
+            if let (Some(&cp1), Some(&cp2)) = (pair_cp.get(&1), pair_cp.get(&b2)) {
+                self.update_phase_wl(sat_id, sat_pos, ref_sat_id, ref_pos, base_pos, cp1, cp2, b2, glo_freq_num(ephems, sat_id), is_wl_slip);
+            }
         }
     }
 
@@ -340,13 +351,10 @@ fn filter_constellation_sats(sat_info: &[(SatelliteId, Vector3<f64>)], const_id:
     }).copied().collect()
 }
 
-fn select_secondary_phase_band(rov_s: &SatObs, bas_s: &SatObs) -> u8 {
-    for b in [2, 7, 6] {
-        if rov_s.get_observable_phase(b).is_some() && bas_s.get_observable_phase(b).is_some() {
-            return b;
-        }
-    }
-    5
+pub(crate) fn select_secondary_phase_band(c: Constellation, rov_s: &SatObs, bas_s: &SatObs) -> Option<u8> {
+    secondary_bands_for_constellation(c).iter().copied().find(|&b| {
+        rov_s.get_observable_phase(b).is_some() && bas_s.get_observable_phase(b).is_some()
+    })
 }
 
 fn raw_dd_observables(

@@ -48,11 +48,11 @@ fn extract_broadcast_sat(
 ) -> Option<RawObservation> {
     let eph = select_best_ephemeris(ephemerides, sat_obs.sat, rover.time)?;
     let (f1, f2) = gneiss_core::signal::satellite_frequencies(sat_obs.sat, eph.freq_num());
-    let p1_band = match sat_obs.sat.constellation {
-        gneiss_core::sat::Constellation::Beidou => 2,
-        _ => 1,
+    let p2_band = match sat_obs.sat.constellation {
+        gneiss_core::sat::Constellation::Beidou => 7,
+        _ => 2,
     };
-    let pr_m = match sat_obs.get_observable(p1_band) {
+    let pr_m = match sat_obs.get_observable(1) {
         Some(pr) if pr > 1e6 => pr,
         _ => return None,
     };
@@ -67,10 +67,10 @@ fn extract_broadcast_sat(
     let (variance_m2, cp_variance_m2, sin_el) = compute_obs_noise(el_rad, snr);
     Some(RawObservation {
         satellite: sat_obs.sat.prn as u16, constellation_id: sat_obs.sat.constellation as u8,
-        pr_l1: pr_m, pr_l2: sat_obs.get_observable(2),
+        pr_l1: pr_m, pr_l2: sat_obs.get_observable(p2_band),
         cp_l1: sat_obs.get_observable_phase_lli(1).map(|(cp, _)| cp),
         cp_l1_lli: sat_obs.get_observable_phase_lli(1).and_then(|(_, lli)| lli),
-        cp_l2: sat_obs.get_observable_phase(2),
+        cp_l2: sat_obs.get_observable_phase(p2_band),
         doppler: sat_obs.get_doppler(1).unwrap_or(0.0), snr_dbhz: snr,
         sat_pos_ecef: sat_pos, sat_vel_ecef: sat_vel, sat_clock_m, f1, f2,
         freq_num: eph.freq_num(), elevation_rad: el_rad, azimuth_rad: az_rad,

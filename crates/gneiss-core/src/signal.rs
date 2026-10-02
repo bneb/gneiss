@@ -40,7 +40,7 @@ pub fn get_frequency(sat: SatelliteId, freq_band: u8, freq_num: i8) -> f64 {
             match sat.constellation {
                 Constellation::Gps | Constellation::Qzss => FREQ_GPS_L2,
                 Constellation::Galileo => FREQ_GAL_E5B,
-                Constellation::Beidou => FREQ_BDS_B2I, // BDS-2 B2I (1207.14 MHz)
+                Constellation::Beidou => FREQ_BDS_B1I, // BDS B1I (RINEX 3.03+ band 2, 1561.098 MHz)
                 Constellation::Glonass => {
                     FREQ_GLO_L2_NOMINAL + (freq_num as f64) * FREQ_GLO_L2_DELTA
                 }
@@ -124,7 +124,7 @@ mod tests {
         (Constellation::Galileo, 6, 1_278_750_000.0, "Gal E6"),
         (Constellation::Galileo, 7, 1_207_140_000.0, "Gal E5b"),
         (Constellation::Beidou, 1, 1_561_098_000.0, "BDS B1I (RINEX2 band 1)"),
-        (Constellation::Beidou, 2, 1_207_140_000.0, "BDS B2I (RINEX2 band 2)"),
+        (Constellation::Beidou, 2, 1_561_098_000.0, "BDS B1I (RINEX 3.03+ band 2)"),
         (Constellation::Beidou, 6, 1_268_520_000.0, "BDS B3I"),
         (Constellation::Beidou, 7, 1_207_140_000.0, "BDS B2I"),
     ];

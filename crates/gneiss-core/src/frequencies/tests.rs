@@ -323,16 +323,9 @@
         }
     }
 
-    /// The band number callers pass to `SatObs::get_observable*` is a
-    /// *selector* band, not a raw RINEX 3 code digit. `SatObs::matches_band`
-    /// (obs.rs:119) collapses BeiDou selector bands 2 and 7 onto one arm that
-    /// reads B2I, so `signal_for_band(Beidou, 2)` must be `BdsB2i` — pairing
-    /// 1561.098 MHz with a 1207.140 MHz measurement is a 353.958 MHz
-    /// wavelength error, and made `track_c_frequency(Beidou, 1)` equal to
-    /// `track_c_frequency(Beidou, 2)`, which the iono-free degeneracy guard
-    /// (`rtk_iekf/iono_free.rs`) then rejected outright.
+    /// For every modelled BeiDou selector band, the signal selected by
+    /// `SatObs::matches_band` must agree with `signal_for_band`.
     #[test]
-    #[ignore = "REFUTED PREMISE: matches_band itself encodes band-2=B2I"]
     fn beidou_selector_band_signals_agree_with_matches_band() {
         let sat = beidou_probe();
         for selector in [1u8, 2, 6, 7] {
@@ -352,21 +345,31 @@
         }
     }
 
-    /// The defect pinned by value. B2I is 1180 x 1.023 MHz, proved as the
-    /// integer identity 1180 * 1_023_000 == 1_207_140_000.
+    /// BeiDou carrier frequencies are exact integer multiples of 1.023 MHz:
+    /// - B1I (bands 1 & 2): 1526 x 1.023 MHz = 1561.098 MHz
+    /// - B3I (band 6): 1240 x 1.023 MHz = 1268.520 MHz
+    /// - B2I (band 7): 1180 x 1.023 MHz = 1207.140 MHz
     #[test]
-    #[ignore = "REFUTED PREMISE: band 2 is B1I, not B2I -- see note in mod.rs"]
-    fn beidou_selector_band_2_is_b2i_on_the_1023_grid() {
-        let sig = signal_for_band(Constellation::Beidou, 2)
-            .expect("BeiDou selector band 2 must resolve");
-        assert_eq!(sig, Signal::BdsB2i, "band 2 is the B2I arm, not B1I");
-        assert_on_1023_grid(sig.base_freq_hz(), 1180, "B2I");
-        assert_on_1023_grid(Signal::BdsB1i.base_freq_hz(), 1526, "B1I");
-        assert_ne!(sig.base_freq_hz(), Signal::BdsB1i.base_freq_hz());
-        // Consequence: the iono-free denominator must not degenerate. B1I -
-        // B2I = (1526 - 1180) x 1.023 MHz = 353.958 MHz.
+    fn beidou_selector_bands_are_on_the_1023_grid() {
+        let b1 = signal_for_band(Constellation::Beidou, 1).expect("band 1");
+        let b2 = signal_for_band(Constellation::Beidou, 2).expect("band 2");
+        let b6 = signal_for_band(Constellation::Beidou, 6).expect("band 6");
+        let b7 = signal_for_band(Constellation::Beidou, 7).expect("band 7");
+        assert_eq!(b1, Signal::BdsB1i);
+        assert_eq!(b2, Signal::BdsB1i);
+        assert_eq!(b6, Signal::BdsB3i);
+        assert_eq!(b7, Signal::BdsB2i);
+        assert_on_1023_grid(b1.base_freq_hz(), 1526, "B1I");
+        assert_on_1023_grid(b6.base_freq_hz(), 1240, "B3I");
+        assert_on_1023_grid(b7.base_freq_hz(), 1180, "B2I");
+        // Non-degenerate dual-frequency combinations:
+        // B1I - B2I separation: (1526 - 1180) x 1.023 MHz = 353.958 MHz
         let f1 = track_c_frequency(Constellation::Beidou, 1, 0);
-        let f2 = track_c_frequency(Constellation::Beidou, 2, 0);
-        assert_eq!(f1 - f2, 346.0 * 1_023_000.0, "B1I - B2I separation");
-        assert!((f1 - f2).abs() > 1.0e6, "degenerate iono-free denominator");
+        let f7 = track_c_frequency(Constellation::Beidou, 7, 0);
+        assert_eq!(f1 - f7, 346.0 * 1_023_000.0, "B1I - B2I separation");
+        assert!((f1 - f7).abs() > 1.0e6, "degenerate iono-free denominator");
+        // B1I - B3I separation: (1526 - 1240) x 1.023 MHz = 292.578 MHz
+        let f6 = track_c_frequency(Constellation::Beidou, 6, 0);
+        assert_eq!(f1 - f6, 286.0 * 1_023_000.0, "B1I - B3I separation");
+        assert!((f1 - f6).abs() > 1.0e6, "degenerate iono-free denominator");
     }

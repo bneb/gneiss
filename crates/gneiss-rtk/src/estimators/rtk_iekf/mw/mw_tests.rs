@@ -6,6 +6,7 @@
 use gneiss_core::constants::SPEED_OF_LIGHT_M_S;
 use gneiss_core::obs::{ObsCode, ObsType, Observation, SatObs, SignalCode};
 use gneiss_core::sat::{Constellation, SatelliteId};
+use gneiss_core::signal::{FREQ_BDS_B1I, FREQ_BDS_B2I, FREQ_BDS_B3I};
 
 use super::*;
 
@@ -339,4 +340,62 @@ fn an_empty_input_yields_the_default_solution() {
     let lambda_wl = SPEED_OF_LIGHT_M_S / (F1 - F2);
     assert!(lambda_wl > 0.8 && lambda_wl < 0.9, "lambda_wl = {lambda_wl} m");
     assert!((F2 / (F1 - F2) - 3.529).abs() < 0.01);
+}
+
+fn bds_dual_sat(prn: u8, b2: u8) -> SatObs {
+    let mut o = Vec::new();
+    for b in [1u8, b2] {
+        o.push(obs(b, ObsType::CarrierPhase, 2.05e8 + f64::from(b) * 1.0e5));
+        o.push(obs(b, ObsType::Pseudorange, 2.05e7 + f64::from(b) * 1.0e5));
+    }
+    SatObs { sat: SatelliteId { constellation: Constellation::Beidou, prn }, observations: o }
+}
+
+#[test]
+fn beidou_observations_form_valid_melbourne_wubbena_on_bands_1_and_7() {
+    let s = bds_dual_sat(6, 7);
+    let r = bds_dual_sat(1, 7);
+    let mut t = WidelaneTracker::default();
+    update_tracker_from_obs(&mut t, s.sat, 1, &s, &s, &r, &r, 0, false);
+    let k = DoubleDiffKey {
+        constellation_id: Constellation::Beidou as u8,
+        sat: 6,
+        ref_sat: 1,
+        freq_band: 1,
+    };
+    let expected_nl = FREQ_BDS_B2I / (FREQ_BDS_B1I - FREQ_BDS_B2I);
+    let actual_nl = t.nl_scale(&k).expect("BeiDou band 1 + 7 MW track must exist");
+    assert!((actual_nl - expected_nl).abs() < 1e-12, "nl_scale = {actual_nl}, expected {expected_nl}");
+}
+
+#[test]
+fn beidou_observations_form_valid_melbourne_wubbena_on_bands_1_and_6() {
+    let s = bds_dual_sat(6, 6);
+    let r = bds_dual_sat(1, 6);
+    let mut t = WidelaneTracker::default();
+    update_tracker_from_obs(&mut t, s.sat, 1, &s, &s, &r, &r, 0, false);
+    let k = DoubleDiffKey {
+        constellation_id: Constellation::Beidou as u8,
+        sat: 6,
+        ref_sat: 1,
+        freq_band: 1,
+    };
+    let expected_nl = FREQ_BDS_B3I / (FREQ_BDS_B1I - FREQ_BDS_B3I);
+    let actual_nl = t.nl_scale(&k).expect("BeiDou band 1 + 6 MW track must exist");
+    assert!((actual_nl - expected_nl).abs() < 1e-12, "nl_scale = {actual_nl}, expected {expected_nl}");
+}
+
+#[test]
+fn beidou_with_only_bands_1_and_2_skips_mw_tracker_because_both_are_b1i() {
+    let s = bds_dual_sat(6, 2);
+    let r = bds_dual_sat(1, 2);
+    let mut t = WidelaneTracker::default();
+    update_tracker_from_obs(&mut t, s.sat, 1, &s, &s, &r, &r, 0, false);
+    let k = DoubleDiffKey {
+        constellation_id: Constellation::Beidou as u8,
+        sat: 6,
+        ref_sat: 1,
+        freq_band: 1,
+    };
+    assert_eq!(t.nl_scale(&k), None, "bands 1 & 2 are both B1I: must not form MW");
 }
