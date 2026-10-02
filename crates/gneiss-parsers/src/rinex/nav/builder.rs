@@ -4,7 +4,56 @@ use gneiss_core::ephemeris::Ephemeris;
 use gneiss_core::sat::{Constellation, SatelliteId};
 use gneiss_core::time::GpsTime;
 
+/// Closed-form range of the broadcast sqrt(A) parameter.
+///
+/// The propagator takes `a = sqrt_a * sqrt_a` as the semi-major axis **in
+/// metres**, so the quoted sqrt(A) is sqrt(a) with a in metres. GNSS broadcast
+/// orbits run from 25 510 km (GLONASS) to 42 164 km (IGSO / geostationary),
+/// i.e. sqrt(a) from sqrt(25 510 000) = 5051.7 to sqrt(42 164 000) = 6493.4.
+/// The bounds below are rounded outward from those, so a record is rejected
+/// only when its semi-major axis is unambiguously not an orbit.
+const SQRT_A_MIN: f64 = 5000.0;
+const SQRT_A_MAX: f64 = 6600.0;
+
+/// Rejects a Keplerian ephemeris whose semi-major axis is not physical.
+///
+/// A RINEX record whose value columns are unreadable decodes to zeros rather
+/// than failing, and a zero semi-major axis propagates to the Earth's centre
+/// rather than raising - exactly the "confident garbage" this guards against.
+fn sqrt_a_is_physical(sqrt_a: f64) -> bool {
+    sqrt_a.is_finite() && (SQRT_A_MIN..=SQRT_A_MAX).contains(&sqrt_a)
+}
+
 pub(crate) fn build_ephemeris(
+    constellation: Constellation,
+    sat: SatelliteId,
+    toc: GpsTime,
+    af0: f64,
+    af1: f64,
+    af2: f64,
+    vals: &[f64; 32],
+) -> Option<Ephemeris> {
+    let built = build_typed(constellation, sat, toc, af0, af1, af2, vals)?;
+    match broadcast_sqrt_a(&built) {
+        // GLONASS carries a PZ-90 state vector, not a Keplerian orbit.
+        None => Some(built),
+        Some(sqrt_a) if sqrt_a_is_physical(sqrt_a) => Some(built),
+        Some(_) => None,
+    }
+}
+
+/// The broadcast sqrt(A) of a Keplerian ephemeris, or `None` for GLONASS.
+fn broadcast_sqrt_a(e: &Ephemeris) -> Option<f64> {
+    match e {
+        Ephemeris::Gps(g) => Some(g.sqrt_a),
+        Ephemeris::Galileo(g) => Some(g.sqrt_a),
+        Ephemeris::Beidou(b) => Some(b.sqrt_a),
+        Ephemeris::Qzss(q) => Some(q.sqrt_a),
+        Ephemeris::Glonass(_) => None,
+    }
+}
+
+fn build_typed(
     constellation: Constellation,
     sat: SatelliteId,
     toc: GpsTime,
@@ -211,29 +260,20 @@ mod tests {
     /// frequency number from vals[7].
     #[test]
     fn glonass_fields_follow_the_reference_decoder_mapping() {
+        //            X           Vx        Y           Vy        Z           Vz        Az        frq
         let mut vals = [0.0; 32];
-        vals[0] = -1.184028808594E+03;
-        vals[1] = -2.155310630798E+00;
-        vals[4] = 1.322943017578E+04;
-        vals[5] = -2.060539245605E+00;
-        vals[7] = 1.0;
-        vals[8] = 2.176970068359E+04;
-        vals[9] = 1.135528564453E+00;
-        vals[10] = -1.862645149231E-09;
+        vals[0..12].copy_from_slice(&[
+            -1.184028808594E+03, -2.155310630798E+00, 0.0, 0.0,
+            1.322943017578E+04, -2.060539245605E+00, 0.0, 1.0,
+            2.176970068359E+04, 1.135528564453E+00, -1.862645149231E-09, 0.0,
+        ]);
         let sat = SatelliteId {
             constellation: Constellation::Glonass,
             prn: 1,
         };
-        let Ephemeris::Glonass(g) = build_ephemeris(
-            Constellation::Glonass,
-            sat,
-            GpsTime::new(2137, 0.0),
-            1.0,
-            2.0,
-            3.0,
-            &vals,
-        )
-        .unwrap() else {
+        let toc = GpsTime::new(2137, 0.0);
+        let eph = build_ephemeris(Constellation::Glonass, sat, toc, 1.0, 2.0, 3.0, &vals);
+        let Ephemeris::Glonass(g) = eph.unwrap() else {
             panic!("expected GLONASS");
         };
         assert!((g.x - -1184028.808594).abs() < 1e-3);

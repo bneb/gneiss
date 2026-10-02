@@ -26,11 +26,17 @@ pub fn parse_rinex_3_obs<I: Iterator<Item = String>>(
         let min = line[16..18].trim().parse::<i32>().unwrap_or(0);
         let sec = line[19..29].trim().parse::<f64>().unwrap_or(0.0);
 
+        // Epoch flag (column 32). Flags 3, 4 and 5 mark an epoch whose
+        // following records are header records, not satellites.
+        let flag: usize = line[30..32].trim().parse().unwrap_or(0);
+        let is_header_epoch = (3..=5).contains(&flag);
+
         let num_sats = line[32..35].trim().parse::<usize>().unwrap_or(0);
         let time = GpsTime::from_calendar(year, month, day, hour, min, sec);
         let mut satellites = Vec::with_capacity(num_sats);
 
-        for _ in 0..num_sats {
+        let n_records = if is_header_epoch { 0 } else { num_sats };
+        for _ in 0..n_records {
             if let Some(obs_line) = lines.next() {
                 if let Some(sat_obs) = parse_rinex_3_obs_line(&obs_line, &const_obs_types) {
                     satellites.push(sat_obs);
@@ -58,9 +64,14 @@ pub fn parse_rinex_3_obs_line(
         'C' => Constellation::Beidou,
         'J' => Constellation::Qzss,
         'S' => Constellation::Sbas,
+        'I' => Constellation::Navic,
         _ => return None,
     };
-    let prn = sat_str[1..3].trim().parse::<u8>().unwrap_or(0);
+    let prn = sat_str.get(1..3)?.trim().parse::<u8>().ok()?;
+    // No constellation has PRN 0; an unparseable id is not a satellite.
+    if prn == 0 {
+        return None;
+    }
     let sat = SatelliteId { constellation, prn };
 
     let obs_types = const_obs_types.get(&constellation)?;
@@ -103,7 +114,7 @@ mod tests {
     /// (F14.3 + LLI + strength).
     const NAVIC_FILE: &str = concat!(
         "     3.03           OBSERVATION DATA    M: MIXED            RINEX VERSION / TYPE\n",
-        "I    1 C5A                                                              SYS / # / OBS TYPES\n",
+        "I    2 C5A L5A                                                        SYS / # / OBS TYPES\n",
         "                                                            END OF HEADER\n",
         "> 2020 12 24 00 00  0.0000000  0  1\n",
         "I01  23456789.123     1234567.890\n",

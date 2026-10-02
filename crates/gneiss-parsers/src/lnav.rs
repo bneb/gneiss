@@ -121,7 +121,7 @@ fn parse_how(words: &[u32]) -> (u32, u8) {
 /// accessors; converting the three decoders is mechanical once the table is
 /// available: express each field as an information-bit index into the 192-bit
 /// stream of the eight data words and read it with [`extract_info_bits`].
-
+///
 /// Decode GPS LNAV subframe 1 (clock + health).
 fn decode_sf1(words: &[u32], eph: &mut GpsEphemeris, week: u32) {
     // IS-GPS-200N Table 20-I

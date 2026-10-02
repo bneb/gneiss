@@ -108,7 +108,15 @@ pub struct SatObs {
 }
 
 impl SatObs {
-    fn matches_band(&self, o_band: u8, o_attr: char, req_band: u8) -> bool {
+    /// True when an observation code `(freq_band digit, attribute)` satisfies a
+    /// *selector* band request made by [`Self::get_observable`] and friends.
+    ///
+    /// `pub(crate)` so `crate::frequencies::signal_for_band` can be tested
+    /// against this definition directly: the selector band a caller passes and
+    /// the wavelength it must be paired with are one contract, and the two
+    /// halves live in different modules. BeiDou collapses selector bands 2 and
+    /// 7 onto one arm (B2I); see `frequencies/tests.rs`.
+    pub(crate) fn matches_band(&self, o_band: u8, o_attr: char, req_band: u8) -> bool {
         if self.sat.constellation == crate::sat::Constellation::Beidou {
             match req_band {
                 1 => o_band == 1 || (o_band == 2 && o_attr == 'I'),

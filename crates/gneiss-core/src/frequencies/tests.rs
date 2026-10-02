@@ -1,6 +1,7 @@
 #![allow(clippy::unwrap_used)]
 
     use super::*;
+    use alloc::vec::Vec;
     use crate::signal::{
         FREQ_BDS_B1I, FREQ_GAL_E5B, FREQ_GLO_L1_DELTA, FREQ_GLO_L1_NOMINAL, FREQ_GLO_L2_DELTA,
         FREQ_GLO_L2_NOMINAL, FREQ_GPS_L1, FREQ_GPS_L2, FREQ_GPS_L5,
@@ -281,4 +282,89 @@
             signal_for_band(Constellation::Galileo, 5),
             signal_for_band(Constellation::Galileo, 6)
         );
+    }
+
+    // ---------------------------------------------------------------------
+    // BeiDou selector-band contract (`SatObs::matches_band` is the spec).
+    // ---------------------------------------------------------------------
+
+    /// Exact 1.023 MHz-base identity by integer cross-multiplication, with no
+    /// float tolerance: `f_hz == k * 1_023_000`. Every CDMA carrier in this
+    /// registry sits on that grid; GLONASS FDMA deliberately does not (base
+    /// 1602.0 MHz plus per-channel 562.5 kHz offsets).
+    fn assert_on_1023_grid(f_hz: f64, k: i64, what: &str) {
+        assert_eq!(f_hz.fract(), 0.0, "{what}: {f_hz} Hz is not whole hertz");
+        let hz = f_hz as i64;
+        assert_eq!(hz, k * 1_023_000, "{what}: {hz} Hz != {k} x 1.023 MHz");
+    }
+
+    /// Every BeiDou observable actually present in `datasets/`, as
+    /// (RINEX 3 band digit, attribute, physical signal this registry models).
+    /// Evidence — `SYS / # / OBS TYPES` rows:
+    ///   `wtzr_ppp_1224/WTZR00DEU_R_20203590000_01D_30S_MO.rnx`  C2I C6I C7I
+    ///   `joze/JOZE00XXX_R_20253310800_50M_01S_MO.rnx`            C1P C2I C5P C6I C7I
+    ///   `urbannav/hk_tst1/rover_f9p.obs`                        C2I C7I
+    /// `None` = no variant in this registry (B1C, B2a); such an observation
+    /// has no wavelength here and callers must not pair one with a guess.
+    const BEIDOU_OBS: [(u8, char, Option<Signal>); 7] = [
+        (1, 'I', Some(Signal::BdsB1i)), // C1I  B1I  1561.098
+        (1, 'P', None),                  // C1P  B1C  1575.42
+        (1, 'X', None),                  // C1X  B1C  1575.42
+        (2, 'I', Some(Signal::BdsB1i)), // C2I  B1I  1561.098 (RINEX 3 spelling)
+        (5, 'P', None),                  // C5P  B2a  1176.75
+        (6, 'I', Some(Signal::BdsB3i)), // C6I  B3I  1268.52
+        (7, 'I', Some(Signal::BdsB2i)), // C7I  B2I  1207.14
+    ];
+
+    fn beidou_probe() -> crate::obs::SatObs {
+        crate::obs::SatObs {
+            sat: crate::sat::SatelliteId { constellation: Constellation::Beidou, prn: 1 },
+            observations: Vec::new(),
+        }
+    }
+
+    /// The band number callers pass to `SatObs::get_observable*` is a
+    /// *selector* band, not a raw RINEX 3 code digit. `SatObs::matches_band`
+    /// (obs.rs:119) collapses BeiDou selector bands 2 and 7 onto one arm that
+    /// reads B2I, so `signal_for_band(Beidou, 2)` must be `BdsB2i` — pairing
+    /// 1561.098 MHz with a 1207.140 MHz measurement is a 353.958 MHz
+    /// wavelength error, and made `track_c_frequency(Beidou, 1)` equal to
+    /// `track_c_frequency(Beidou, 2)`, which the iono-free degeneracy guard
+    /// (`rtk_iekf/iono_free.rs`) then rejected outright.
+    #[test]
+    fn beidou_selector_band_signals_agree_with_matches_band() {
+        let sat = beidou_probe();
+        for selector in [1u8, 2, 6, 7] {
+            let want = signal_for_band(Constellation::Beidou, selector)
+                .expect("every modelled BeiDou selector band must resolve");
+            let selected: Vec<Signal> = BEIDOU_OBS
+                .iter()
+                .filter(|&&(o_band, o_attr, _)| sat.matches_band(o_band, o_attr, selector))
+                .filter_map(|&(_, _, sig)| sig)
+                .collect();
+            assert!(!selected.is_empty(), "selector band {selector} reads no BeiDou observation");
+            assert!(
+                selected.iter().all(|s| *s == want),
+                "Beidou selector band {selector}: signal_for_band = {want:?}, but the \
+                 matches_band arm reads {selected:?}"
+            );
+        }
+    }
+
+    /// The defect pinned by value. B2I is 1180 x 1.023 MHz, proved as the
+    /// integer identity 1180 * 1_023_000 == 1_207_140_000.
+    #[test]
+    fn beidou_selector_band_2_is_b2i_on_the_1023_grid() {
+        let sig = signal_for_band(Constellation::Beidou, 2)
+            .expect("BeiDou selector band 2 must resolve");
+        assert_eq!(sig, Signal::BdsB2i, "band 2 is the B2I arm, not B1I");
+        assert_on_1023_grid(sig.base_freq_hz(), 1180, "B2I");
+        assert_on_1023_grid(Signal::BdsB1i.base_freq_hz(), 1526, "B1I");
+        assert_ne!(sig.base_freq_hz(), Signal::BdsB1i.base_freq_hz());
+        // Consequence: the iono-free denominator must not degenerate. B1I -
+        // B2I = (1526 - 1180) x 1.023 MHz = 353.958 MHz.
+        let f1 = track_c_frequency(Constellation::Beidou, 1, 0);
+        let f2 = track_c_frequency(Constellation::Beidou, 2, 0);
+        assert_eq!(f1 - f2, 346.0 * 1_023_000.0, "B1I - B2I separation");
+        assert!((f1 - f2).abs() > 1.0e6, "degenerate iono-free denominator");
     }

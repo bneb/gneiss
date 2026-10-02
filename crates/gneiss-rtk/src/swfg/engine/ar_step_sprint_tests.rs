@@ -17,7 +17,7 @@ use crate::swfg::pipeline::dd_factors::DdCarrierPhaseFactor;
 use crate::swfg::solver::SlidingWindowSolver;
 use crate::swfg::variables::{VariableId, VariableKind, VariableValues};
 
-use super::sprint_common::{BASE, LAMBDA_L1, TRUE_POS};
+use super::sprint_tests::{BASE, LAMBDA_L1, TRUE_POS};
 
 // ===========================================================================
 // execute_ar_step through a real factor graph

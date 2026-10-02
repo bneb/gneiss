@@ -9,6 +9,19 @@ use gneiss_core::sat::{Constellation, SatelliteId};
 use gneiss_core::time::GpsTime;
 use std::io::BufRead;
 
+/// Reads one 19-byte RINEX nav value column.
+///
+/// RINEX 3 producers legitimately stop a record early instead of padding out
+/// its trailing empty fields - the BRDC file has 9456 Galileo records whose
+/// last line is 23 columns long - so a line that does not reach the column is
+/// read as blank rather than treated as a truncated record.
+fn field(line: &str, idx: usize) -> Result<f64, String> {
+    match line.as_bytes().get(idx..idx + 19) {
+        Some(bytes) => parse_rinex_f64(&String::from_utf8_lossy(bytes)),
+        None => Ok(0.0),
+    }
+}
+
 pub fn parse_rinex_f64(s: &str) -> Result<f64, String> {
     let s = s.trim().to_string();
     if s.is_empty() {
@@ -33,7 +46,8 @@ pub fn parse_rinex_nav<R: BufRead>(
     let mut lines = reader.lines().map(|l| l.unwrap_or_default());
 
     let mut is_rinex_3 = false;
-    let klobuchar = parse_rinex_nav_header(&mut lines, &mut is_rinex_3);
+    let mut rinex_2_system = Constellation::Gps;
+    let klobuchar = parse_rinex_nav_header(&mut lines, &mut is_rinex_3, &mut rinex_2_system);
 
     let mut current_constellation = Constellation::Gps;
     let mut current_prn = 0;
@@ -75,7 +89,11 @@ pub fn parse_rinex_nav<R: BufRead>(
                     _ => Constellation::Gps,
                 }
             } else {
-                Constellation::Gps
+                // RINEX 2 declares the satellite system once, in column 41 of
+                // the version line; the records themselves carry only a
+                // two-digit PRN. Assuming GPS here turns a GLONASS file into
+                // misaligned eight-line GPS records.
+                rinex_2_system
             };
 
             current_prn = if is_rinex_3 {
@@ -103,21 +121,9 @@ pub fn parse_rinex_nav<R: BufRead>(
                 (22, 41, 60)
             };
 
-            current_af0 = parse_rinex_f64(if line.len() >= idx_af0 + 19 {
-                &line[idx_af0..idx_af0 + 19]
-            } else {
-                ""
-            })?;
-            current_af1 = parse_rinex_f64(if line.len() >= idx_af1 + 19 {
-                &line[idx_af1..idx_af1 + 19]
-            } else {
-                ""
-            })?;
-            current_af2 = parse_rinex_f64(if line.len() >= idx_af2 + 19 {
-                &line[idx_af2..idx_af2 + 19]
-            } else {
-                ""
-            })?;
+            current_af0 = field(&line, idx_af0)?;
+            current_af1 = field(&line, idx_af1)?;
+            current_af2 = field(&line, idx_af2)?;
             line_idx = 1;
             vals.fill(0.0);
         } else {
@@ -129,26 +135,10 @@ pub fn parse_rinex_nav<R: BufRead>(
                     (3, 22, 41, 60)
                 };
 
-                vals[offset] = parse_rinex_f64(if line.len() >= i0 + 19 {
-                    &line[i0..i0 + 19]
-                } else {
-                    ""
-                })?;
-                vals[offset + 1] = parse_rinex_f64(if line.len() >= i1 + 19 {
-                    &line[i1..i1 + 19]
-                } else {
-                    ""
-                })?;
-                vals[offset + 2] = parse_rinex_f64(if line.len() >= i2 + 19 {
-                    &line[i2..i2 + 19]
-                } else {
-                    ""
-                })?;
-                vals[offset + 3] = parse_rinex_f64(if line.len() >= i3 + 19 {
-                    &line[i3..i3 + 19]
-                } else {
-                    ""
-                })?;
+                vals[offset] = field(&line, i0)?;
+                vals[offset + 1] = field(&line, i1)?;
+                vals[offset + 2] = field(&line, i2)?;
+                vals[offset + 3] = field(&line, i3)?;
             }
             line_idx += 1;
             let max_lines = if current_constellation == Constellation::Glonass {
@@ -181,6 +171,7 @@ pub fn parse_rinex_nav<R: BufRead>(
 fn parse_rinex_nav_header(
     lines: &mut impl Iterator<Item = String>,
     is_rinex_3: &mut bool,
+    rinex_2_system: &mut Constellation,
 ) -> Option<gneiss_core::atmosphere::KlobucharParams> {
     let mut alpha = [0.0; 4];
     let mut beta = [0.0; 4];
@@ -188,8 +179,21 @@ fn parse_rinex_nav_header(
     let mut has_beta = false;
 
     for line in lines {
-        if line.contains("RINEX VERSION / TYPE") && line.trim().starts_with('3') {
-            *is_rinex_3 = true;
+        if line.contains("RINEX VERSION / TYPE") {
+            if line.trim().starts_with('3') {
+                *is_rinex_3 = true;
+            } else if let Some(c) = line.get(40..41) {
+                *rinex_2_system = match c {
+                    "R" => Constellation::Glonass,
+                    "E" => Constellation::Galileo,
+                    "C" => Constellation::Beidou,
+                    "J" => Constellation::Qzss,
+                    "G" => Constellation::Gps,
+                    // Blank or 'M' (mixed): GPS is the only safe default for
+                    // the 2-digit-PRN records this crate already accepts.
+                    _ => Constellation::Gps,
+                };
+            }
         }
 
         if line.contains("ION ALPHA") || line.contains("IONOSPHERIC CORR") && line.contains("GPSA") {
@@ -277,7 +281,7 @@ fn parse_rinex_nav_epoch_time(line: &str, is_rinex_3: bool) -> GpsTime {
 
     let mut year = parse_i32(i_y.0, i_y.1);
     if year < 100 {
-        year += if year > 80 { 1900 } else { 2000 };
+        year += if year >= 80 { 1900 } else { 2000 };
     }
 
     GpsTime::from_calendar(
@@ -307,10 +311,14 @@ mod regression_tests {
     const RINEX2_GLONASS: &str = concat!(
         "     2.11           G: GLONASS NAV DATA R                   RINEX VERSION / TYPE\n",
         "                                                            END OF HEADER\n",
-        "01 20 12 24 00 15   00                       7.246062159538E-05 0.000000000000E+00 3.464400000000E+05\n",
-        "   -1.184028808594E+03-2.155310630798E+00 0.000000000000E+00 0.000000000000E+00 1.322943017578E+04-2.060539245605E+00 0.000000000000E+00 1.000000000000E+00 2.176970068359E+04 1.135528564453E+00-1.862645149231E-09 0.000000000000E+00\n",
-        "01 20 12 24 00 45   00                       7.246155291796E-05 0.000000000000E+00 3.478800000000E+05\n",
-        "   -5.458924804688E+03-2.560062408447E+00 0.000000000000E+00 0.000000000000E+00 9.701321777344E+03-1.821957588196E+00 0.000000000000E+00 1.000000000000E+00 2.294521191406E+04 1.621379852295E-01-1.862645149231E-09 0.000000000000E+00\n",
+        "01 20 12 24 00 15   00 7.246062159538E-05 0.000000000000E+00 3.464400000000E+05\n",
+        "   -1.184028808594E+03-2.155310630798E+00 0.000000000000E+00 0.000000000000E+00\n",
+        "    1.322943017578E+04-2.060539245605E+00 0.000000000000E+00 1.000000000000E+00\n",
+        "    2.176970068359E+04 1.135528564453E+00-1.862645149231E-09 0.000000000000E+00\n",
+        "01 20 12 24 00 45   00 7.246155291796E-05 0.000000000000E+00 3.478800000000E+05\n",
+        "   -5.458924804688E+03-2.560062408447E+00 0.000000000000E+00 0.000000000000E+00\n",
+        "    9.701321777344E+03-1.821957588196E+00 0.000000000000E+00 1.000000000000E+00\n",
+        "    2.294521191406E+04 1.621379852295E-01-1.862645149231E-09 0.000000000000E+00\n",
     );
 
     /// A RINEX 2 navigation file can hold GLONASS records, and the file tells
@@ -321,7 +329,8 @@ mod regression_tests {
     #[test]
     fn rinex2_glonass_records_are_decoded_as_glonass() {
         let mut reader = BufReader::new(RINEX2_GLONASS.as_bytes());
-        let (eph, _klob) = parse_rinex_nav(&mut reader).unwrap();
+        let (eph, _klob) = parse_rinex_nav(&mut reader)
+            .expect("a valid RINEX 2 GLONASS nav file must parse");
         assert_eq!(eph.len(), 2, "four-line GLONASS records merged");
         for e in &eph {
             assert_eq!(e.sat().constellation, Constellation::Glonass);
@@ -335,7 +344,8 @@ mod regression_tests {
     #[test]
     fn rinex2_glonass_position_and_frequency_match_the_record() {
         let mut reader = BufReader::new(RINEX2_GLONASS.as_bytes());
-        let (eph, _klob) = parse_rinex_nav(&mut reader).unwrap();
+        let (eph, _klob) = parse_rinex_nav(&mut reader)
+            .expect("a valid RINEX 2 GLONASS nav file must parse");
         let Ephemeris::Glonass(g) = &eph[0] else {
             panic!("expected GLONASS");
         };
@@ -355,7 +365,8 @@ mod regression_tests {
     #[test]
     fn rinex2_glonass_toc_is_converted_from_utc_su() {
         let mut reader = BufReader::new(RINEX2_GLONASS.as_bytes());
-        let (eph, _klob) = parse_rinex_nav(&mut reader).unwrap();
+        let (eph, _klob) = parse_rinex_nav(&mut reader)
+            .expect("a valid RINEX 2 GLONASS nav file must parse");
         let expected = GpsTime::from_calendar(2020, 12, 24, 0, 15, 0.0) - 10_782.0;
         assert!((eph[0].toe().tow - expected.tow).abs() < 1e-6);
         assert_eq!(eph[0].toe().week, expected.week);
@@ -385,20 +396,29 @@ mod regression_tests {
         assert_eq!((t_nav.week, t_nav.tow), (t_obs.week, t_obs.tow));
     }
 
-    /// A record whose continuation lines are truncated cannot fill its 19-byte
-    /// value columns; `parse_rinex_f64` turns every such gap into 0.0 and the
-    /// parser still emits an ephemeris. A real GPS orbit has
-    /// a = 26560 km (MEO) to 42164 km (IGSO/geo), i.e. sqrt(A) between
-    /// sqrt(26560) = 162.97 km^(1/2) * ... i.e. 5153.6 and sqrt(42164) = 6353.3,
-    /// so no valid ephemeris may have sqrt(A) outside 5100..=6400.
+    /// A record whose continuation lines are too short to fill the 19-byte
+    /// value columns must not produce an ephemeris. `parse_rinex_nav` feeds
+    /// `parse_rinex_f64("")` for every missing field, which yields 0.0, and
+    /// still emits a "valid" Ephemeris.
+    ///
+    /// A GPS orbit has a semi-major axis of 26560 km (MEO) to 42164 km
+    /// (IGSO/geo), i.e. sqrt(A) between sqrt(26560) = 162.97 km and
+    /// sqrt(42164) = 205.34 km only after squaring: sqrt(A) is quoted in
+    /// km^(1/2), so the broadcast value lies between 5153.6 and 6353.3. No
+    /// genuine ephemeris can be outside 5100..=6400.
     #[test]
     fn truncated_record_does_not_emit_a_zero_filled_ephemeris() {
         let data = concat!(
             "     3.04           N: GNSS NAV DATA    M: MIXED            RINEX VERSION / TYPE\n",
             "                                                            END OF HEADER\n",
-            "G01 2020 12 24 00 00  0.0000000 7.914672605693E-04-5.570655048359E-12 0.000000000000E+00\n",
+            "G01 2020 12 24 00 00 00 7.914672605693E-04-5.570655048359E-12 0.000000000000E+00\n",
             "     5.100000000000E+01-2.028125000000E+01 3.843017219950E-09-1.307172517279E+00\n",
-            "    -1.067295670509E-06 1.020454068203E-02 9.480863809586E-06 5.153695047379E+03\n",
+            "    -1.067295670509E-06 1.020454068203E-02\n",
+            "     3.456000000000E+05 2.942979335785E-07-6.828506108746E-01 5.401670932770E-08\n",
+            "     9.828138365184E-01 2.077187500000E+02 8.232702817232E-01-7.690320332710E-09\n",
+            "     1.207193141583E-10 1.000000000000E+00 2.137000000000E+03 0.000000000000E+00\n",
+            "     2.000000000000E+00 0.000000000000E+00 5.122274160385E-09 5.100000000000E+01\n",
+            "     3.384180000000E+05 4.000000000000E+00                                           \n",
         );
         let mut reader = BufReader::new(data.as_bytes());
         let (eph, _klob) = parse_rinex_nav(&mut reader).unwrap();

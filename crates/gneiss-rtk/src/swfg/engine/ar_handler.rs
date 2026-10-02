@@ -11,19 +11,6 @@ use crate::swfg::engine::builder::CpMeasurementRecord;
 use crate::swfg::solver::SlidingWindowSolver;
 use crate::swfg::variables::{VariableId, VariableValues};
 
-#[cfg(test)]
-#[path = "ar_step_sprint_tests.rs"]
-mod ar_step_sprint_tests;
-#[cfg(test)]
-#[path = "component_sprint_tests.rs"]
-mod component_sprint_tests;
-#[cfg(test)]
-#[path = "sprint_common.rs"]
-mod sprint_common;
-#[cfg(test)]
-#[path = "sprint_tests.rs"]
-mod sprint_tests;
-
 thread_local! {
     static PPP_MW_TRACKER: std::cell::RefCell<Option<crate::ambiguity::ppp_ar::PppMwTracker>> = const { std::cell::RefCell::new(None) };
 }

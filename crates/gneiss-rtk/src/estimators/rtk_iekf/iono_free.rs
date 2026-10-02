@@ -13,7 +13,7 @@ use nalgebra::{DMatrix, DVector, Matrix3, Vector3};
 
 use gneiss_core::constants::SPEED_OF_LIGHT_M_S;
 use gneiss_core::obs::SatObs;
-use gneiss_core::sat::SatelliteId;
+use gneiss_core::sat::{Constellation, SatelliteId};
 
 use super::ar::ArResult;
 use super::state::{DoubleDiffKey, RtkState};
@@ -54,6 +54,36 @@ pub struct IonoFreeMeasurement {
     pub dgrad_e_rov: f64,
 }
 
+/// Secondary-band candidates in preference order: L2 (2), E5b/B2I (7),
+/// B3I (6), E5a/L5 (5).
+const SECONDARY_BANDS: [u8; 4] = [2, 7, 6, 5];
+
+/// Minimum `|f1 - f2|` for a usable iono-free combination. The combination
+/// divides by `f1 - f2`, so a degenerate pair is not merely inaccurate — it
+/// divides by (nearly) zero.
+const MIN_IF_SEPARATION_HZ: f64 = 1.0e6;
+
+/// Pick the first secondary band that is BOTH observed by all four stations
+/// and non-degenerate against `f1`, together with its frequency.
+///
+/// Each candidate is rejected on its own merits before the next is tried. A
+/// candidate that is present but degenerate — one that resolves to the primary's
+/// own frequency — must not abort the search, or a single unusable band
+/// discards every other frequency the receiver actually tracked.
+fn usable_secondary_band(
+    stations: [&SatObs; 4],
+    c: Constellation,
+    glo_k: i8,
+) -> Option<(u8, f64)> {
+    let f1 = gneiss_core::frequencies::track_c_frequency(c, 1, glo_k);
+    SECONDARY_BANDS.into_iter().find_map(|band| {
+        let observed = stations.iter().all(|s| s.get_observable_phase(band).is_some());
+        let f2 = gneiss_core::frequencies::track_c_frequency(c, band, glo_k);
+        let usable = f1 > 0.0 && f2 > 0.0 && (f1 - f2).abs() >= MIN_IF_SEPARATION_HZ;
+        (observed && usable).then_some((band, f2))
+    })
+}
+
 /// Form the iono-free DD phase for a pair when both L1 and secondary band are observed.
 #[allow(clippy::too_many_arguments)] // same obs bundle as build_single_dd_pair
 pub fn form_iono_free_dd(
@@ -69,35 +99,9 @@ pub fn form_iono_free_dd(
     key: DoubleDiffKey,
     glo_k: i8,
 ) -> Option<IonoFreeMeasurement> {
-    let f1 = gneiss_core::frequencies::track_c_frequency(sat_id.constellation, 1, glo_k);
-    // Secondary band: L2 (2), E5b/B2I (7), B3I (6), or E5a (5).
-    // All four stations must observe phase on it.
-    let b2 = if rov_s.get_observable_phase(2).is_some()
-        && bas_s.get_observable_phase(2).is_some()
-        && rov_ref.get_observable_phase(2).is_some()
-        && bas_ref.get_observable_phase(2).is_some()
-    {
-        2
-    } else if rov_s.get_observable_phase(7).is_some()
-        && bas_s.get_observable_phase(7).is_some()
-        && rov_ref.get_observable_phase(7).is_some()
-        && bas_ref.get_observable_phase(7).is_some()
-    {
-        7
-    } else if rov_s.get_observable_phase(6).is_some()
-        && bas_s.get_observable_phase(6).is_some()
-        && rov_ref.get_observable_phase(6).is_some()
-        && bas_ref.get_observable_phase(6).is_some()
-    {
-        6
-    } else {
-        5
-    };
-    let f2 = gneiss_core::frequencies::track_c_frequency(sat_id.constellation, b2, glo_k);
-
-    if f1 <= 0.0 || f2 <= 0.0 || (f1 - f2).abs() < 1e6 {
-        return None;
-    }
+    let c = sat_id.constellation;
+    let (b2, f2) = usable_secondary_band([rov_s, bas_s, rov_ref, bas_ref], c, glo_k)?;
+    let f1 = gneiss_core::frequencies::track_c_frequency(c, 1, glo_k);
     let (p1_rs, p2_rs) = (rov_s.get_observable_phase(1)?, rov_s.get_observable_phase(b2)?);
     let (p1_rr, p2_rr) = (rov_ref.get_observable_phase(1)?, rov_ref.get_observable_phase(b2)?);
     let (p1_bs, p2_bs) = (bas_s.get_observable_phase(1)?, bas_s.get_observable_phase(b2)?);
@@ -283,153 +287,4 @@ fn solve_position_lsq(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use gneiss_core::time::GpsTime;
-
-    const F1: f64 = 1575.42e6;
-    const F2: f64 = 1227.60e6;
-
-    fn make_key(sat: u16) -> DoubleDiffKey {
-        DoubleDiffKey { constellation_id: 0, sat, ref_sat: 1, freq_band: 1 }
-    }
-
-    #[test]
-    fn test_iono_free_cancels_ionosphere_exactly() {
-        let range = 23_000_000.0;
-        let n1 = 5.0;
-        let n2 = -3.0;
-        let iono_m = 0.25; // L1 path iono delay (m)
-        // Phase iono is an advance: -iono/λ on each band, L2 scaled by (f1/f2)^2.
-        let phi1 = range * F1 / SPEED_OF_LIGHT_M_S + n1 - iono_m * F1 / SPEED_OF_LIGHT_M_S;
-        let phi2 = range * F2 / SPEED_OF_LIGHT_M_S + n2 - iono_m * (F1 / F2).powi(2) * F2 / SPEED_OF_LIGHT_M_S;
-
-        let phi_if = combine_iono_free(F1, F2, phi1, phi2);
-        let n_if = (F1 * n1 - F2 * n2) / (F1 - F2);
-        let expect = range / lambda_iono_free(F1, F2) + n_if;
-        assert!((phi_if - expect).abs() < 1e-9, "IF combination must cancel iono, got {:.12e}", phi_if - expect);
-    }
-
-    #[test]
-    fn test_fixed_iono_free_position_recovers_truth_with_iono() {
-        let true_pos = Vector3::new(100.0, 200.0, 300.0);
-        let base_pos = Vector3::new(0.0, 0.0, 0.0);
-        let state = RtkState::new(true_pos + Vector3::new(0.8, -0.4, 0.2), GpsTime::new(2000, 100.0));
-
-        let sats: [(Vector3<f64>, f64, f64, f64); 6] = [
-            (Vector3::new(10_000.0, 20_000.0, 20_000.0), 1.0, 2.0, 0.30),
-            (Vector3::new(25_000.0, 5_000.0, 18_000.0), 3.0, -1.0, 0.22),
-            (Vector3::new(8_000.0, 30_000.0, 12_000.0), -2.0, 4.0, 0.18),
-            (Vector3::new(20_000.0, 12_000.0, 25_000.0), 2.0, 0.0, 0.26),
-            (Vector3::new(15_000.0, 22_000.0, 15_000.0), 0.0, -2.0, 0.20),
-            (Vector3::new(22_000.0, 18_000.0, 22_000.0), 4.0, 1.0, 0.24),
-        ];
-        let ref_pos = Vector3::new(30_000.0, 5_000.0, 10_000.0);
-
-        let mut meas = Vec::new();
-        for (i, (sat_pos, n1, n2, iono_m)) in sats.iter().enumerate() {
-            let base_dd = (sat_pos - base_pos).norm() - (ref_pos - base_pos).norm();
-            let geom = (sat_pos - true_pos).norm() - (ref_pos - true_pos).norm() - base_dd;
-            let lambda1 = SPEED_OF_LIGHT_M_S / F1;
-            let lambda2 = SPEED_OF_LIGHT_M_S / F2;
-            let iono_l2 = iono_m * (F1 / F2).powi(2);
-            let dd1 = geom / lambda1 + n1 - iono_m / lambda1;
-            let dd2 = geom / lambda2 + n2 - iono_l2 / lambda2;
-            meas.push(IonoFreeMeasurement {
-                key: make_key(2 + i as u16),
-                sat_pos: *sat_pos,
-                ref_pos,
-                base_pos,
-                lambda_if: lambda_iono_free(F1, F2),
-                b2: 2,
-                f1_hz: F1,
-                f2_hz: F2,
-                dd_phase_if_cycles: combine_iono_free(F1, F2, dd1, dd2),
-                variance_cycles2: 1e-4,
-                baseline_m: (base_pos - true_pos).norm() + 1000.0,
-                dgrad_n_rov: 0.0,
-                dgrad_e_rov: 0.0,
-            });
-        }
-        let fixed: Vec<(DoubleDiffKey, f64)> = sats.iter().enumerate()
-            .flat_map(|(i, (_, n1, n2, _))| vec![(make_key(2 + i as u16), *n1), (DoubleDiffKey { freq_band: 2, ..make_key(2 + i as u16) }, *n2)])
-            .collect();
-        let ar = ArResult {
-            position_ecef: true_pos,
-            cov_position: Matrix3::identity(),
-            ratio: 3.0,
-            is_fixed: true,
-            num_ambiguities: 10,
-            fixed_ambiguities: fixed,
-        };
-
-        let (pos, _) = match apply_fixed_iono_free(&state, &meas, &ar) {
-            IonoFreeOutcome::Solution(p, c) => (p, c),
-            _ => panic!("IF stage should produce a solution"),
-        };
-        let err = (pos - true_pos).norm();
-        assert!(err < 0.01, "IF fixed position should recover truth under iono, got {:.4}m", err);
-    }
-
-    #[test]
-    fn test_rejected_when_integers_shifted_by_common_mode_slip() {
-        // Same fixture as above but every N1 and N2 shifted +1: the common
-        // mode cancels in N1-N2 (widelane-blind) yet biases the iono-free
-        // combination by a full cycle, which the residual gate must reject.
-        let true_pos = Vector3::new(100.0, 200.0, 300.0);
-        let base_pos = Vector3::new(0.0, 0.0, 0.0);
-        let state = RtkState::new(true_pos, GpsTime::new(2000, 100.0));
-
-        let sats: [(Vector3<f64>, f64, f64); 6] = [
-            (Vector3::new(10_000.0, 20_000.0, 20_000.0), 1.0, 2.0),
-            (Vector3::new(25_000.0, 5_000.0, 18_000.0), 3.0, -1.0),
-            (Vector3::new(8_000.0, 30_000.0, 12_000.0), -2.0, 4.0),
-            (Vector3::new(20_000.0, 12_000.0, 25_000.0), 2.0, 0.0),
-            (Vector3::new(15_000.0, 22_000.0, 15_000.0), 0.0, -2.0),
-            (Vector3::new(22_000.0, 18_000.0, 22_000.0), 4.0, 1.0),
-        ];
-        let ref_pos = Vector3::new(30_000.0, 5_000.0, 10_000.0);
-        let lambda1 = SPEED_OF_LIGHT_M_S / F1;
-        let lambda2 = SPEED_OF_LIGHT_M_S / F2;
-
-        let mut meas = Vec::new();
-        for (i, (sat_pos, n1, n2)) in sats.iter().enumerate() {
-            let geom = (*sat_pos - true_pos).norm() - (ref_pos - true_pos).norm();
-            let dd1 = geom / lambda1; // integer-free phases: truth-consistent
-            let dd2 = geom / lambda2;
-            meas.push((make_key(2 + i as u16), *sat_pos, combine_iono_free(F1, F2, dd1, dd2), *n1 + 1.0, *n2 + 1.0));
-        }
-        let if_meas: Vec<IonoFreeMeasurement> = meas.iter().map(|(k, sat_pos, phase_if, _, _)| {
-            IonoFreeMeasurement {
-                key: *k,
-                sat_pos: *sat_pos,
-                ref_pos,
-                base_pos,
-                lambda_if: lambda_iono_free(F1, F2),
-                b2: 2,
-                f1_hz: F1,
-                f2_hz: F2,
-                dd_phase_if_cycles: *phase_if,
-                variance_cycles2: 1e-4,
-                dgrad_n_rov: 0.0,
-                dgrad_e_rov: 0.0,
-                baseline_m: 1000.0,
-            }
-        }).collect();
-        let fixed: Vec<(DoubleDiffKey, f64)> = meas.iter()
-            .flat_map(|(k, _, _, n1, n2)| vec![(*k, *n1), (DoubleDiffKey { freq_band: 2, ..*k }, *n2)])
-            .collect();
-        let ar = ArResult {
-            position_ecef: true_pos,
-            cov_position: Matrix3::identity(),
-            ratio: 3.0,
-            is_fixed: true,
-            num_ambiguities: 12,
-            fixed_ambiguities: fixed,
-        };
-        assert!(matches!(
-            apply_fixed_iono_free(&state, &if_meas, &ar),
-            IonoFreeOutcome::Rejected
-        ));
-    }
-}
+mod iono_free_tests;

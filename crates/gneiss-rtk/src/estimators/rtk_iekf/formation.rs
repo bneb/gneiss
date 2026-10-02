@@ -456,4 +456,28 @@ mod tests {
         pair_epochs.insert(key, 0);
         assert_eq!(*pair_epochs.get(&key).unwrap(), 0, "pair_epochs must reset to 0 upon cycle slip");
     }
+
+    /// Reachability guard for the known-wrong BeiDou B2a constant.
+    ///
+    /// `gneiss_core::signal::get_frequency(Beidou, 5)` returns GPS L5
+    /// (1176.450 MHz) where BDS-3 B2a is 1176.750 MHz — off by 300 kHz, and B2a
+    /// is not even on the 1.023 MHz grid. That constant is shipped only because
+    /// no path can ask for BeiDou band 5. This pins the load-bearing half of
+    /// that claim: the DD band list.
+    ///
+    /// If band 5 is ever added to the BeiDou list, the 300 kHz error becomes
+    /// live and `beidou_band_5_is_b2a_which_is_not_l5` in gneiss-core must be
+    /// revisited in the same commit.
+    #[test]
+    fn beidou_band_list_excludes_the_unimplemented_b2a() {
+        let bands = canonical_bands_for_constellation(Constellation::Beidou);
+        assert_eq!(bands, &[1, 6, 7]);
+        assert!(
+            !bands.contains(&5),
+            "B2a (band 5) has no frequency variant; adding it here makes the 300 kHz L5 substitution live"
+        );
+        // The registry must also keep band 5 unmapped, so the legacy fallback
+        // is what a future band-5 arc would silently inherit.
+        assert!(gneiss_core::frequencies::signal_for_band(Constellation::Beidou, 5).is_none());
+    }
 }

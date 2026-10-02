@@ -426,4 +426,10 @@ impl SwfgEngine {
 
 
 #[cfg(test)]
+mod ar_step_sprint_tests;
+#[cfg(test)]
+mod component_sprint_tests;
+#[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod sprint_tests;

@@ -22,6 +22,11 @@ pub struct RinexObsHeader {
     pub approx_position: Option<[f64; 3]>,
     pub antenna_delta: Option<[f64; 3]>,
     pub marker_name: Option<String>,
+    /// Number of observation types the file declares in its
+    /// `# / TYPES OF OBSERV` record. The printed codes may be fewer than this
+    /// (a continuation line can be missing), and the declared count is what
+    /// fixes how many observation records each satellite occupies.
+    pub num_obs_declared: Option<usize>,
 }
 
 /// Parse a RINEX 14-char float field. Returns None on parse failure or blank.
@@ -56,9 +61,11 @@ pub(crate) fn parse_rinex_obs_lli(obs_line: &str, start: usize) -> Option<u8> {
     if start + 14 >= obs_line.len() {
         return None;
     }
-    let lli_char = obs_line[start + 14..start + 15]
-        .chars()
-        .next()
+    // `get` rather than `[]`: a record containing one multi-byte character
+    // makes these byte offsets land inside that character.
+    let lli_char = obs_line
+        .get(start + 14..start + 15)
+        .and_then(|s| s.chars().next())
         .unwrap_or(' ');
     if lli_char == ' ' {
         return None;

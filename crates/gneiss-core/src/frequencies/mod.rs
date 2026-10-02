@@ -272,11 +272,26 @@ pub fn primary_signal(c: crate::sat::Constellation) -> Option<Signal> {
 }
 
 
-/// Resolve a RINEX band number to its Signal for a constellation.
+/// Resolve an observation *selector* band to its [`Signal`] for a constellation.
 ///
-/// This is the authoritative band→signal mapping; callers reading phase
-/// from band N MUST pair it with this signal's wavelength, independent
-/// of any preferred-secondary policy.
+/// `band` is NOT the RINEX 3 code digit. It is the band number a caller hands
+/// to [`crate::obs::SatObs::get_observable`], `get_observable_phase`,
+/// `get_doppler` and friends — the selector [`crate::obs::SatObs::matches_band`]
+/// (obs.rs:119) resolves against each observation code. The two only coincide
+/// for most constellations; BeiDou deliberately collapses selector bands 2 and
+/// 7 onto one arm that reads B2I, while raw `"C2I"` is B1I. Contrast
+/// [`rinex_type_to_signal`], which parses raw RINEX type strings instead.
+///
+/// This is the authoritative selector-band → signal mapping; callers reading
+/// phase from selector band N MUST pair it with this signal's wavelength,
+/// independent of any preferred-secondary policy.
+///
+/// # Invariant
+///
+/// For every selector band this function maps, it must return the signal
+/// `SatObs::matches_band` actually selects for that arm — otherwise the phase
+/// is differenced against the wrong wavelength. Pinned by
+/// `beidou_selector_band_signals_agree_with_matches_band` in `tests.rs`.
 pub fn signal_for_band(c: crate::sat::Constellation, band: u8) -> Option<Signal> {
     use crate::sat::Constellation;
     match (c, band) {
@@ -293,19 +308,30 @@ pub fn signal_for_band(c: crate::sat::Constellation, band: u8) -> Option<Signal>
         (Constellation::Galileo, 6) => Some(Signal::GalE6Cs),
         (Constellation::Galileo, 7) => Some(Signal::GalE5b),
         (Constellation::Beidou, 1) => Some(Signal::BdsB1i),
-        (Constellation::Beidou, 2) => Some(Signal::BdsB1i),
+        // NOT a mirror of `beidou_signal`: `band` here is the *selector* band
+        // `SatObs::matches_band` resolves, not a raw RINEX 3 code digit.
+        // BeiDou selector bands 2 and 7 share one arm (obs.rs:119), which
+        // reads B2I @1207.140 MHz; raw `"C2I"` is B1I @1561.098 MHz and is
+        // what `rinex_type_to_signal` handles. Returning B1I here made
+        // `track_c_frequency(Beidou, 1)` == `track_c_frequency(Beidou, 2)`.
+        (Constellation::Beidou, 2) => Some(Signal::BdsB2i),
         (Constellation::Beidou, 6) => Some(Signal::BdsB3i),
         (Constellation::Beidou, 7) => Some(Signal::BdsB2i),
         _ => None,
     }
 }
 
-/// Frequency for a constellation's band through the Track C registry
+/// Frequency for a constellation's selector band through the Track C registry
 /// (`signal_for_band` + `frequency_for`), falling back to the legacy
 /// per-band table (`crate::signal::get_frequency`) for the
 /// constellation/band combinations `signal_for_band` doesn't cover yet.
-/// See this module's doc comment: both paths must agree wherever they
-/// overlap, so the fallback is deliberate, not a workaround to remove.
+///
+/// The fallback exists because the two tables do NOT overlap where
+/// `signal_for_band` is deliberately unmapped (Galileo band 2); it is not a
+/// workaround for the two disagreeing. The real invariant is upstream of both:
+/// the value returned here must be the frequency of the signal
+/// `SatObs::matches_band` selects for that selector band, which is what
+/// `signal_for_band`'s own documentation requires and its tests pin.
 pub fn track_c_frequency(c: Constellation, band: u8, glo_k: i8) -> f64 {
     match signal_for_band(c, band) {
         Some(sig) => frequency_for(c, sig, glo_k),

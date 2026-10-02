@@ -12,6 +12,9 @@ pub fn parse_rinex_2_obs<I: Iterator<Item = String>>(
 ) -> Result<(Vec<EpochObs>, RinexObsHeader), String> {
     let mut epochs = Vec::new();
     let (obs_types, header) = parse_rinex_2_header(first_line, lines)?;
+    // The declared count, not the number of codes that happened to be printed,
+    // fixes how many observation records each satellite occupies.
+    let n_types = header.num_obs_declared.unwrap_or(obs_types.len()).max(obs_types.len());
 
     while let Some(line) = lines.next() {
         if line.trim().is_empty() || line.len() < 32 {
@@ -42,6 +45,7 @@ pub fn parse_rinex_2_obs<I: Iterator<Item = String>>(
         }
 
         let num_sats = line[29..32].trim().parse::<usize>().unwrap_or(0);
+
         let mut sat_list = Vec::new();
         let mut sat_str = if line.len() > 32 {
             line[32..].to_string()
@@ -57,11 +61,7 @@ pub fn parse_rinex_2_obs<I: Iterator<Item = String>>(
             }
             if sat_list.len() < num_sats {
                 if let Some(next_line) = lines.next() {
-                    sat_str = if next_line.len() > 32 {
-                        next_line[32..].to_string()
-                    } else {
-                        next_line.to_string()
-                    };
+                    sat_str = next_line.get(32..).unwrap_or("").to_string();
                 } else {
                     break;
                 }
@@ -72,7 +72,7 @@ pub fn parse_rinex_2_obs<I: Iterator<Item = String>>(
         let mut satellites = Vec::new();
 
         for sat_id_str in sat_list {
-            if let Some(sat_obs) = parse_rinex_2_obs_sat(&sat_id_str, &obs_types, lines) {
+            if let Some(sat_obs) = parse_rinex_2_obs_sat(&sat_id_str, &obs_types, n_types, lines) {
                 satellites.push(sat_obs);
             }
         }
@@ -84,10 +84,21 @@ pub fn parse_rinex_2_obs<I: Iterator<Item = String>>(
 fn parse_rinex_2_obs_sat<I: Iterator<Item = String>>(
     sat_id_str: &str,
     obs_types: &[String],
+    n_types: usize,
     lines: &mut I,
 ) -> Option<SatObs> {
+    // Columns 33.. are padded with blank 3-character fields; they are padding,
+    // not satellites. A blank field or an unparseable PRN must never become a
+    // satellite, because each phantom entry then consumes one observation
+    // record and desynchronises the rest of the file.
+    if sat_id_str.trim().is_empty() {
+        return None;
+    }
     let constellation_char = sat_id_str.chars().next().unwrap_or('G');
-    let prn = sat_id_str[1..3].trim().parse::<u8>().unwrap_or(0);
+    let prn = sat_id_str.get(1..3)?.trim().parse::<u8>().ok()?;
+    if prn == 0 {
+        return None;
+    }
     let constellation = match constellation_char {
         'G' | ' ' => Constellation::Gps,
         'R' => Constellation::Glonass,
@@ -100,7 +111,7 @@ fn parse_rinex_2_obs_sat<I: Iterator<Item = String>>(
     let sat = SatelliteId { constellation, prn };
 
     let mut observations = Vec::new();
-    let num_val_lines = (obs_types.len() as f64 / 5.0).ceil() as usize;
+    let num_val_lines = (n_types as f64 / 5.0).ceil() as usize;
     let mut val_idx = 0;
 
     for _ in 0..num_val_lines {

@@ -31,11 +31,13 @@ pub fn parse_rinex_2_header<I: Iterator<Item = String>>(
             }
         }
         if current_line.contains("MARKER NAME") {
-            header.marker_name = Some(current_line[0..60].trim().to_string());
+            // Columns 1-60 hold the name; a truncated record is still legal
+            // input, so take whatever of the 60 columns is present.
+            header.marker_name = Some(marker_name_field(&current_line));
         }
         if current_line.contains("# / TYPES OF OBSERV") {
             if num_obs == 0 {
-                num_obs = current_line[0..6].trim().parse::<usize>().unwrap_or(0);
+                num_obs = current_line.get(0..6).unwrap_or("").trim().parse::<usize>().unwrap_or(0);
             }
             if current_line.len() >= 60 {
                 let types_str = &current_line[6..60];
@@ -60,6 +62,9 @@ pub fn parse_rinex_2_header<I: Iterator<Item = String>>(
     if obs_types.is_empty() {
         return Err("No observation types found in header".into());
     }
+    if num_obs > 0 {
+        header.num_obs_declared = Some(num_obs);
+    }
     Ok((obs_types, header))
 }
 
@@ -81,6 +86,7 @@ pub fn parse_rinex_3_header<I: Iterator<Item = String>>(
                 'C' => Constellation::Beidou,
                 'J' => Constellation::Qzss,
                 'S' => Constellation::Sbas,
+                'I' => Constellation::Navic,
                 _ => {
                     if let Some(next_line) = lines.next() {
                         current_line = next_line;
@@ -91,7 +97,7 @@ pub fn parse_rinex_3_header<I: Iterator<Item = String>>(
                 }
             };
 
-            let count = current_line[3..6].trim().parse::<usize>().unwrap_or(0);
+            let count = parse_obs_type_count(&current_line)?;
             let mut types_str = if current_line.len() >= 60 {
                 current_line[7..60].to_string()
             } else {
@@ -119,7 +125,9 @@ pub fn parse_rinex_3_header<I: Iterator<Item = String>>(
             }
         }
         if current_line.contains("MARKER NAME") {
-            header.marker_name = Some(current_line[0..60].trim().to_string());
+            // Columns 1-60 hold the name; a truncated record is still legal
+            // input, so take whatever of the 60 columns is present.
+            header.marker_name = Some(marker_name_field(&current_line));
         }
         if current_line.contains("END OF HEADER") {
             break;
@@ -135,6 +143,28 @@ pub fn parse_rinex_3_header<I: Iterator<Item = String>>(
         return Err("No observation types found in RINEX 3 header".into());
     }
     Ok((const_obs_types, header))
+}
+
+/// Columns 1-60 of a `MARKER NAME` record hold the name. A record that does
+/// not physically carry all 60 columns is still legal input, so take whatever
+/// is present up to the label rather than indexing past the end.
+fn marker_name_field(line: &str) -> String {
+    match line.get(0..60) {
+        Some(name) => name.trim().to_string(),
+        None => line.split("MARKER NAME").next().unwrap_or("").trim().to_string(),
+    }
+}
+
+/// Reads the mandatory "number of observation types" from columns 4-6 of a
+/// `SYS / # / OBS TYPES` record. A record that does not carry a number cannot
+/// be delimited, so accepting it would insert the constellation with an empty
+/// type list and silently produce satellites with no observations.
+fn parse_obs_type_count(line: &str) -> Result<usize, String> {
+    line.get(3..6)
+        .ok_or_else(|| "SYS / # / OBS TYPES record is shorter than 6 columns".to_string())?
+        .trim()
+        .parse::<usize>()
+        .map_err(|_| format!("SYS / # / OBS TYPES record has no type count: {line:?}"))
 }
 
 pub(crate) fn parse_rinex_3_obs_types_list<I: Iterator<Item = String>>(

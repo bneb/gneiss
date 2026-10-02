@@ -49,7 +49,9 @@ pub fn get_frequency(sat: SatelliteId, freq_band: u8, freq_num: i8) -> f64 {
         }
         5 => match sat.constellation {
             Constellation::Gps | Constellation::Qzss | Constellation::Galileo => FREQ_GPS_L5,
-            Constellation::Beidou => FREQ_GPS_L5, // BDS-3 B2a shares L5
+            // KNOWN WRONG: BDS-3 B2a is 1176.750 MHz, not L5. See the test
+            // `beidou_band_5_is_b2a_which_is_not_l5` below for the full proof.
+            Constellation::Beidou => FREQ_GPS_L5,
             _ => FREQ_GPS_L5,
         },
         6 => match sat.constellation {
@@ -247,5 +249,48 @@ mod tests {
             let sat = SatelliteId { constellation: cons, prn: 9 };
             assert_eq!(get_wavelength(sat, band, k), c / get_frequency(sat, band, k));
         }
+    }
+
+    /// BDS B2a (BDS-3, RINEX 3 band 5, e.g. JOZE's `C5P`) is **not** GPS L5.
+    ///
+    /// Exact integer arithmetic, no float tolerance:
+    ///   L5   = 1176.450 MHz = 1150 x 1.023 MHz exactly (1150 * 1_023_000 = 1_176_450_000)
+    ///   B2a  = 1176.750 MHz; 1150 * 1_023_000 = 1_176_450_000, and
+    ///          1_176_750_000 - 1_176_450_000 = 300_000 Hz remainder — B2a is
+    ///          NOT on the 1.023 MHz grid, so it cannot share L5's grid point.
+    /// Separation is therefore exactly 300 kHz (relative error 2.55e-4).
+    ///
+    /// CONFIRMED DEFECT, DELIBERATELY NOT FIXED — `get_frequency` has no B2a
+    /// variant and returns L5 for BeiDou band 5. Asserting the correct value
+    /// makes this test fail with `left: 1176450000.0, right: 1176750000.0`;
+    /// that measurement is the reason the value is still shipped. The
+    /// "shares L5" claim in `get_frequency` is simply false, and is corrected
+    /// in the comment there rather than in behaviour.
+    ///
+    /// B2a band 5 is NOT reachable by any engine path on any dataset in the
+    /// corpus, which is the brief's condition for leaving it alone:
+    ///   * `canonical_bands_for_constellation(Beidou) = [1, 6, 7]` — the DD
+    ///     filter never forms a band-5 arc (pinned by
+    ///     `beidou_band_list_excludes_the_unimplemented_b2a` in gneiss-rtk);
+    ///   * `mw.rs` and `iono_free.rs` both scan `[2, 7, 6, 5]` and take the
+    ///     first match; all 26 BeiDou files in `datasets/` that carry band 5
+    ///     carry 2/6/7 as well, so 5 is never selected;
+    ///   * the RTCM MSM BeiDou table (`gneiss-parsers/src/rtcm3/msm/signals.rs`)
+    ///     has no band-5 entry at all — only `1I/1Q/1X`, `6I/6Q/6X`, `7I/7Q/7X`.
+    ///
+    /// If any of those ever changes, the second assertion below flips and the
+    /// constant must be corrected in the same commit.
+    #[test]
+    fn beidou_band_5_is_b2a_which_is_not_l5() {
+        const L5_HZ: i64 = 1150 * 1_023_000; // 1_176_450_000
+        const B2A_HZ: i64 = 1_176_750_000;
+        assert_eq!(L5_HZ, 1_176_450_000, "L5 is exactly 1150 x 1.023 MHz");
+        assert_eq!(B2A_HZ % 1_023_000, 300_000, "B2a is off the 1.023 MHz grid");
+        assert_eq!(B2A_HZ - L5_HZ, 300_000, "B2a sits 300 kHz above L5");
+        assert_eq!(FREQ_GPS_L5, L5_HZ as f64, "the constant under test is L5");
+        // KNOWN WRONG by 300 kHz, unreachable today: asserted so the defect
+        // stays visible and a future reachability change trips this test.
+        let sat = SatelliteId { constellation: Constellation::Beidou, prn: 1 };
+        assert_eq!(get_frequency(sat, 5, 0), FREQ_GPS_L5, "known-wrong B2a fallback");
     }
 }

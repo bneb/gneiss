@@ -230,47 +230,44 @@ use super::*;
         }
     }
 
-    /// KNOWN CONFLICT - deliberately failing, kept out of the gate.
+    /// The registry path (`track_c_frequency` = `signal_for_band` plus its
+    /// legacy fallback) and the legacy table (`crate::signal::get_frequency`)
+    /// are two routes to one number, so they must return the SAME frequency
+    /// for every (constellation, selector band) the engine feeds in.
     ///
-    /// The module doc promises that the registry path (`track_c_frequency`)
-    /// and the legacy path (`crate::signal::get_frequency`) "must agree
-    /// wherever they overlap". They do not, for two (constellation, band)
-    /// pairs:
+    /// Both rows below were in conflict. BeiDou band 2 was the live defect:
+    /// `signal_for_band` returned B1I (1561.098 MHz) where the legacy table
+    /// returned B2I (1207.14 MHz), so `track_c_frequency(Beidou, 1)` equalled
+    /// `track_c_frequency(Beidou, 2)` and the iono-free degeneracy guard in
+    /// `rtk_iekf/iono_free.rs` dropped every BeiDou RINEX 3 pair. Band 2 now
+    /// resolves to B2I = 1180 x 1.023 MHz — the signal `SatObs::matches_band`
+    /// actually selects for that arm (obs.rs:119).
     ///
-    ///   Galileo band 2: `rinex_type_to_signal` resolves the legacy slot to
-    ///     E5a (1176.45 MHz), but `signal_for_band` returns `None`, so
-    ///     `track_c_frequency` falls back to the legacy E5b (1207.14 MHz).
-    ///   BeiDou band 2: `signal_for_band` returns B1I (1561.098 MHz) while
-    ///     `get_frequency` returns B2I (1207.14 MHz).
+    /// The expected column is what `track_c_frequency` must return, NOT what
+    /// `rinex_type_to_signal` returns. The two answer different questions, and
+    /// conflating them is why this test also failed on Galileo: band 2 is
+    /// deliberately unmapped in the registry and falls back to legacy E5b
+    /// (1207.14 MHz), the documented divergence pinned by
+    /// `galileo_band2_falls_back_to_legacy_e5b_value` in
+    /// `gneiss-parsers/tests/frequency_parity.rs`.
     ///
-    /// The Galileo case is documented. The BeiDou case is NOT, and it is
-    /// reachable: `form_iono_free_dd` prefers band 2 as the secondary, so a
-    /// RINEX-3 BeiDou file (where B1I *is* band 2) makes
-    /// `track_c_frequency(BeiDou, 1) == track_c_frequency(BeiDou, 2)`; the
-    /// `|f1 - f2| < 1e6` guard there then silently drops the observation.
-    ///
-    /// Re-enable once the RINEX-2 vs RINEX-3 BeiDou band-2 policy is decided
-    /// and the two tables are made to agree.
+    /// Exact equality, no tolerance: both centres are whole hertz well under
+    /// 2^53, so `track_c_frequency` returns them bit-exactly.
     #[test]
-    #[ignore = "known unresolved RINEX-version band-2 policy conflict; see comment"]
     fn registry_and_legacy_tables_must_agree_on_every_overlapping_band() {
         let pairs = [
-            (Constellation::Galileo, 2u8, 1_176_450_000.0, "Galileo L2 slot"),
-            (Constellation::Beidou, 2, 1_561_098_000.0, "BeiDou band 2"),
+            (Constellation::Galileo, 2u8, 1_207_140_000.0, "Galileo L2 slot"),
+            (Constellation::Beidou, 2, 1_207_140_000.0, "BeiDou band 2"),
         ];
         let mut conflicts = 0;
-        for (c, band, registry_want, what) in pairs {
+        for (c, band, want, what) in pairs {
             let registry = track_c_frequency(c, band, 0);
             let legacy = crate::signal::get_frequency(
                 crate::sat::SatelliteId { constellation: c, prn: 0 },
                 band,
                 0,
             );
-            if (registry - registry_want).abs() > 1.0 {
-                panic!(
-                    "{what} ({c:?} band {band}): registry {registry} != expected {registry_want}"
-                );
-            }
+            assert_eq!(registry, want, "{what} ({c:?} band {band})");
             if legacy != registry {
                 conflicts += 1;
             }

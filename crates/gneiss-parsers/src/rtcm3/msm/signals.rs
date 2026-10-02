@@ -65,6 +65,7 @@ pub(crate) fn split_rinex_code(code: &str) -> Option<(u8, char)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::BTreeSet;
 
     /// Transcribes the MSM signal-and-tracking-mode tables from the reference
     /// decoder RTKLIB `rtcm3.c` (`msm_sig_gps`, `msm_sig_glo`, `msm_sig_gal`,
@@ -150,5 +151,27 @@ mod tests {
         assert_eq!(split_rinex_code("1"), None);
         // A non-numeric band is not a valid RINEX observation code.
         assert_eq!(split_rinex_code("AC"), None);
+    }
+
+    /// The band handed to `push_carrier_phase_obs` -> `track_c_frequency` is
+    /// parsed out of the MSM code string, not the raw MSM signal id
+    /// (decoder.rs:155-156). The BeiDou table yields only bands `{1, 6, 7}` —
+    /// it has no band-2 entry at all.
+    ///
+    /// This is what makes the BeiDou band-2 frequency change inert on the RTCM
+    /// MSM path: no BeiDou MSM message can ask for band 2, so the frequency
+    /// `track_c_frequency` returns there cannot change. Exhaustive over all 32
+    /// signal ids, not a hand-picked subset.
+    #[test]
+    fn beidou_msm_table_can_never_select_band_2() {
+        let bands: BTreeSet<u8> = (0u8..32)
+            .filter_map(|id| msm_signal_rinex_code(Constellation::Beidou, id))
+            .filter_map(|code| split_rinex_code(code).map(|(band, _)| band))
+            .collect();
+        assert!(
+            !bands.contains(&2),
+            "MSM must never reach BeiDou band 2; a new code entry would do it"
+        );
+        assert_eq!(bands, BTreeSet::from([1u8, 6, 7]));
     }
 }
