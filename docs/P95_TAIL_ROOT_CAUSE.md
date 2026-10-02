@@ -1764,3 +1764,43 @@ the crossover is at ~p70, so the decision is not "is this fix good" but "is this
 fix in the part of the trajectory where fixing wins". That requires a
 *trajectory-level* statistic rather than a per-epoch one — which is a different
 and more tractable problem than per-epoch detection.
+
+---
+
+## 37. The crossover is NOT the fix/float boundary
+
+A natural reading of section 35: F9P fixes 69.0% of epochs and the bootstrap band
+changes sign between p68 and p75, so perhaps the "crossover" is simply where the
+sorted trajectory runs out of fixed epochs and becomes float epochs. Tested
+directly by sorting all 4504 epochs by error and locating the two populations.
+
+| | rank |
+|---|---:|
+| first **float** epoch | 28 / 4504 (**0.6%**) |
+| last **fixed** epoch | 4504 / 4504 (**100%**) |
+
+**Refuted.** 3082 of the 3109 fixed epochs appear *after* the first float epoch.
+The two populations overlap almost completely rather than segregating. If the
+crossover were a population boundary, fixed and float would separate cleanly.
+
+The tail ordering is the opposite of what the hypothesis predicts:
+
+| population | n | p50 | p90 | p95 | p99 | max |
+|---|---:|---:|---:|---:|---:|---:|
+| fixed | 3109 | **0.167** | 0.466 | 0.586 | 0.828 | **1.375** |
+| float | 1395 | 0.217 | 0.503 | 0.579 | 0.789 | **1.167** |
+
+Fixed epochs have a *heavier* tail than float epochs. Fixing does not select the
+easy epochs — fixed epochs span the entire error range including the worst, and
+they are what produces the 1.375 m maximum.
+
+So the numerical coincidence between the fix rate (69.0%) and the crossover
+(~p70) is just a coincidence. The sign change in section 35 remains real — every
+level of the band was significant — but it is a distributional property of what
+fixing does across the error range, not an artefact of two populations meeting.
+
+This also explains why section 36's selector failed: the question is not "fixed
+or float epoch", because that is not a distinction the error distribution makes.
+It is genuinely "how far into the tail does this fix sit", which is a per-fix
+judgement rather than a membership test — and the displacement magnitude turned
+out to carry little of it.
