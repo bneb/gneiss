@@ -236,11 +236,14 @@ fn extract_errors(
             eprintln!("[ERRDUMP] cannot open {path}");
             return (Vec::new(), Vec::new(), 0);
         };
-        let _ = writeln!(f, "# tow quality h_err_m");
+        let _ = writeln!(f, "# tow quality h_err_m std_e std_n std_u");
         for ep in traj {
             if let Some(t_pt) = find_closest_truth(truth, ep.time.tow) {
                 let (h, _) = compute_errors(ep.position_ecef, truth_antenna_pos(&t_pt, lever_arm));
-                let _ = writeln!(f, "{:.0} {} {:.6}", ep.time.tow, ep.quality, h);
+                let _ = writeln!(
+                    f, "{:.0} {} {:.6} {:.6} {:.6} {:.6}",
+                    ep.time.tow, ep.quality, h, ep.std_east, ep.std_north, ep.std_up
+                );
             }
         }
         eprintln!("[ERRDUMP] wrote {path}");
