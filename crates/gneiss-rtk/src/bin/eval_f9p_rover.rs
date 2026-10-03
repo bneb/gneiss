@@ -478,7 +478,7 @@ fn run_all_benchmarks(target: &str, max_epochs: Option<usize>) {
 
 fn main() {
     tracing_subscriber::fmt()
-        .with_env_filter("warn")
+        .with_env_filter(std::env::var("GNEISS_LOG").unwrap_or_else(|_| "warn".to_string()))
         .with_target(false)
         .without_time()
         .try_init()

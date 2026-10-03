@@ -98,6 +98,65 @@ was correct but mis-attributed: the selector had no signal to select on. `qualit
 binary across a 130× error range and σ does not separate. **The tail cannot be fixed by
 gating; it must be fixed at the source, by preventing the confidently-wrong state.**
 
+## Round 2 — internal instrumentation: root cause found
+
+The gating analysis above is correct but incomplete. Instrumenting `GnssRtkIekf::process_epoch`
+directly (temporary, reverted) and joining the filter's own ECEF positions to `reference.csv`
+truth identifies the mechanism.
+
+**The excursion is a constant ECEF position offset, not divergence.**
+
+During tow 282060–282075 (rover stationary), the ECEF error vector `(pos − truth)` is:
+
+```
+(-10.0, +37.4, +14.2) m,  |b| = 41.2 m
+angular deviation from the mean direction: p50 = 0.1 deg, p95 = 0.3 deg
+```
+
+A fixed vector to within 0.3° for ~90 s. The prior window (282036–282050) shows the
+transition: the bias grows 11.9 → 50.9 m over 8 epochs, then holds.
+
+This single fact explains every previously puzzling observation:
+
+| observation | explanation |
+|---|---|
+| error grows at ≈ vehicle speed | a constant bias accumulates as the vehicle drives away from it |
+| error frozen while stationary | the bias does not move, and neither does the vehicle |
+| σ_h p50 = 0.235 m while 22 m wrong | the wrong state is *self-consistent* — small innovations, high information |
+| instant recovery on motion resume | geometry change breaks the wrong state |
+| DD count steady at 27–31 | no satellite is lost; the solution is not starved |
+
+This is the **DD float ambiguity–position degeneracy**: position and double-difference
+ambiguities are only weakly separable under the geometry present here, and the filter
+settles into a mutually consistent wrong pair.
+
+### Hypotheses tested and eliminated this round
+
+| hypothesis | result |
+|---|---|
+| Phase-innovation slip gate re-seeding ambiguities (`mod.rs:243-263`) | **0 events** in 800 epochs; `widelane_ar` is enabled so the path is live |
+| Gross-error screen rejecting satellites (`screen.rs:41`) | **0 events** in 800 epochs |
+| Satellite dropout at onset | rover BeiDou/GPS counts *rise* at tow 282035 (6→7→8 GPS) |
+| Raw filter σ_p as a gate | **falsified** — as the threshold rises the fraction of bad epochs kept *increases*, 28% → 50%; error 8 epochs after a σ firing has p50 only 3.2 m |
+| Filter lag / dead reckoning | **falsified** — filter moved 95 m over 12 epochs vs ~66 m of truth; it overshoots, and the error vector is direction-stable |
+
+Note on the σ_p result: σ_p does rise 0.082 → 0.311 four epochs before the position
+departs, which looks like early warning, but it is not usable — most σ firings are
+benign, so it has no precision as a gate.
+
+### Practical implication
+
+Because the wrong state is *self-consistent*, no residual- or covariance-based detector
+can see it: the filter's own evidence supports it. Detection has to come from a
+**different** source — cross-epoch position consistency (a stationary rover's position
+must not translate) or an independent solution (PPP, or a second reference satellite set).
+
+The principled long-term cure is partial ambiguity resolution: fixing only the
+well-constrained ambiguities (long arc, high elevation, low variance) pins the position
+and destroys the degeneracy by construction. The repository already has the machinery
+(`mw/`, `ar_subsets/`, `widelane.rs`) but does not apply it at these epochs — every
+excursion epoch reports `quality == 2` (float).
+
 ## Related defects found while tracing this
 
 - `SwfgSolution` (`swfg/engine/mod.rs:406-409`) hardcodes `clock_bias_m: 0.0`,
@@ -107,9 +166,20 @@ gating; it must be fixed at the source, by preventing the confidently-wrong stat
 - `screen.rs:84` uses `.max_by(|(_, a), (_, b)| a.abs().total_cmp(&b.abs()))`. NaN
   ordering in `total_cmp` is the reason a single non-finite observation is currently
   masked rather than rejected — consistent with defect C4.
+- `eval_f9p_rover.rs` hardcoded `with_env_filter("warn")`, ignoring `RUST_LOG`. Now
+  reads `GNEISS_LOG`, defaulting to `warn`.
 
 ## Next step
 
-Attack the ambiguity degeneracy directly — detect the confidently-wrong float state
-(small residuals, large position drift) and break it, rather than gating on a signal
-that has been measured not to exist.
+Break the degeneracy at its source. Candidate detectors that do **not** rely on the
+filter's own (demonstrably unreliable) residuals:
+
+1. **Stationarity consistency** — while the rover is stationary, the estimated position
+   must not translate. Run 1 is stationary for 70 s with a 41 m static offset; this is
+   directly observable without truth.
+2. **Cross-epoch position-rate consistency** — an implied ground speed inconsistent
+   with the Doppler-derived speed is a model-inconsistency signal.
+3. **Partial ambiguity resolution** during kinematic float epochs.
+
+(1) is cheapest and needs no truth, but must not misfire on genuine motion; (3) is the
+principled fix.
